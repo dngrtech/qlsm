@@ -4,6 +4,14 @@ import Notification from './Notification';
 // Create a context for notifications
 const NotificationContext = createContext();
 
+function createNotificationId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `notification-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // Custom hook to use the notification context
 export function useNotification() {
   const context = useContext(NotificationContext);
@@ -18,7 +26,7 @@ export function NotificationProvider({ children }) {
 
   // Add a new notification
   const addNotification = useCallback((message, variant = 'info', autoClose = true, autoCloseDelay = 6000) => { // Reverted autoClose and autoCloseDelay to defaults
-    const id = crypto.randomUUID(); // Use crypto.randomUUID() for unique IDs
+    const id = createNotificationId();
     setNotifications(prev => [...prev, { id, message, variant, autoClose, autoCloseDelay }]);
     return id;
   }, []);
