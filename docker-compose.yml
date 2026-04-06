@@ -12,7 +12,7 @@
 
 x-app: &app
   # Pull pre-built image; fall back to building from source if image isn't available
-  image: ghcr.io/dngrtech/qlds-ui:latest
+  image: ghcr.io/dngrtech/qlsm:latest
   build: .
   env_file: .env
   environment:

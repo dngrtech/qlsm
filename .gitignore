@@ -6,6 +6,9 @@
 !.gitignore
 !.env.example
 !.dockerignore
+!qlsm-install.sh
+!.github/
+!.github/**
 !README.md
 !requirements.txt
 !pytest.ini

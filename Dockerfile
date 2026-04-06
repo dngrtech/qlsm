@@ -33,8 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # SHA-256 verified against HashiCorp's published checksums to prevent
 # supply-chain substitution on a compromised CDN or MITM.
 ARG TERRAFORM_VERSION=1.14.5
+ARG TARGETARCH
 RUN set -eux; \
-    tf_zip="terraform_${TERRAFORM_VERSION}_linux_amd64.zip"; \
+    tf_zip="terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip"; \
     tf_zip_path="/tmp/${tf_zip}"; \
     curl -fsSL \
       "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/${tf_zip}" \

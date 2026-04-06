@@ -1,0 +1,110 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    branches:
+      - main-docker    # Auto-deploy on merge to default branch
+    tags:
+      - "v*"           # Trigger on version tags: v1.0.0, v1.2.3, etc.
+    paths:
+      # Application source
+      - "ui/**"
+      - "frontend-react/**"
+      - "rcon_service/**"
+      - "migrations/**"
+      # Python dependencies
+      - "requirements.txt"
+      # Container entrypoint & server config
+      - "entrypoint.sh"
+      - "gunicorn.conf.py"
+      # Automation code baked into image
+      - "ansible/**"
+      - "ansible.cfg"
+      - "terraform/**"
+      # Game assets & bootstrap data
+      - "ql-assets/**"
+      - "configs/presets/default/**"
+      # Build definition itself
+      - "Dockerfile"
+      - ".dockerignore"
+  workflow_dispatch:   # Allow manual trigger from GitHub Actions UI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: dngrtech/qlsm
+
+jobs:
+  build-and-push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # Required to push to GHCR
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Preserve previous image as rollback target
+        if: github.ref == 'refs/heads/main-docker'
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || true
+          docker tag  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+                      ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous || true
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous || true
+
+      - name: Extract Docker metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to production
+    needs: build-and-push
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main-docker'
+    timeout-minutes: 15
+
+    steps:
+      - name: Pull and deploy new image
+        run: |
+          docker compose -f /opt/qlsm/docker-compose.yml pull
+          docker compose -f /opt/qlsm/docker-compose.yml up -d --wait
+
+      - name: Auto-rollback on failure
+        if: failure()
+        run: |
+          echo "Deploy failed — rolling back to previous image"
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous
+          docker tag  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous \
+                      ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker compose -f /opt/qlsm/docker-compose.yml up -d
+
+      - name: Report status
+        run: docker compose -f /opt/qlsm/docker-compose.yml ps

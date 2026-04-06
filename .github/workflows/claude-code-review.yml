@@ -1,0 +1,85 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    env:
+      PR_BASE: ${{ github.event.pull_request.base.ref }}
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin "${PR_BASE}:${PR_BASE}"
+
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: '--model claude-sonnet-4-6 --max-turns 30 --allowedTools "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(gh pr:*)" "Read" "Glob" "Grep" "Write"'
+          show_full_output: true
+          prompt: |
+            Review this PR and post your review as follows:
+            1. Run `git diff ${{ env.PR_BASE }}...HEAD` to read the changes
+            2. Write the full review to `review.md` using the Write tool
+            3. Post it: `gh pr review --body-file review.md`
+
+            Use `git diff ${{ env.PR_BASE }}...HEAD` to read the changes, then review against this checklist:
+
+            **Code Quality:** Separation of concerns, error handling, DRY, edge cases
+            **Architecture:** Design decisions, scalability, performance, security
+            **Testing:** Real logic tests, edge cases, integration tests
+            **Production Readiness:** Migrations, backward compatibility, no obvious bugs
+            **Security (OWASP Top 10):** Check for:
+            - A01 Broken Access Control: missing authz checks, IDOR, path traversal
+            - A02 Cryptographic Failures: hardcoded secrets, weak algorithms, unencrypted sensitive data
+            - A03 Injection: SQL/NoSQL/command/LDAP injection, unsanitized inputs
+            - A04 Insecure Design: missing rate limiting, no threat modeling for sensitive flows
+            - A05 Security Misconfiguration: debug flags, default creds, overly permissive CORS/headers
+            - A06 Vulnerable Components: new dependencies added — flag for review
+            - A07 Auth Failures: broken session management, weak passwords, missing MFA hooks
+            - A08 Software/Data Integrity: unsigned artifacts, unsafe deserialization
+            - A09 Logging Failures: sensitive data in logs, missing audit trail for critical actions
+            - A10 SSRF: user-controlled URLs used in server-side requests
+            ## Output Format
+
+            ### Strengths
+            [What's well done? file:line references.]
+
+            ### Issues
+
+            #### Critical (Must Fix)
+            [Bugs, security issues, data loss risks]
+
+            #### Important (Should Fix)
+            [Architecture problems, missing error handling, test gaps]
+
+            #### Minor (Nice to Have)
+            [Style, optimizations, docs]
+
+            For each issue: file:line, what's wrong, why it matters, how to fix.
+
+            ### Assessment
+            **Ready to merge?** [Yes/No/With fixes]
+            **Reasoning:** [1-2 sentences]
+
+            ## Rules
+            - Categorize by actual severity
+            - Be specific (file:line, not vague)
+            - Explain WHY issues matter
+            - Give a clear verdict
