@@ -1,0 +1,37 @@
+---
+- name: Setup QLFilter
+  hosts: "{{ target_host }}"
+  become: yes
+  vars:
+    qlfilter_base_dir: "/opt/qlfilter"
+    qlfilter_script_name: "setup-qlfilter.sh"
+    qlfilter_c_file_name: "qlfilter.c"
+  tasks:
+    - name: Ensure QLFilter base directory exists
+      ansible.builtin.file:
+        path: "{{ qlfilter_base_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy QLFilter C source file
+      ansible.builtin.copy:
+        src: "../../ql-assets/qlfilter/{{ qlfilter_c_file_name }}"
+        dest: "{{ qlfilter_base_dir }}/{{ qlfilter_c_file_name }}"
+        mode: '0644'
+
+    - name: Copy QLFilter setup script
+      ansible.builtin.copy:
+        src: "../../ql-assets/qlfilter/{{ qlfilter_script_name }}"
+        dest: "{{ qlfilter_base_dir }}/{{ qlfilter_script_name }}"
+        mode: '0755' # Set executable permission
+
+    - name: Run QLFilter installation script
+      ansible.builtin.command:
+        cmd: "{{ qlfilter_base_dir }}/{{ qlfilter_script_name }}"
+        chdir: "{{ qlfilter_base_dir }}"
+      register: qlfilter_setup_result
+      changed_when: qlfilter_setup_result.rc == 0 # Consider it changed if script runs successfully
+
+    - name: Display QLFilter setup script output
+      ansible.builtin.debug:
+        var: qlfilter_setup_result.stdout_lines

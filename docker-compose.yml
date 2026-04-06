@@ -1,0 +1,177 @@
+# QLDS UI — Docker Compose
+#
+# USAGE:
+#   Core stack:          docker compose up -d
+#   With logging:        docker compose --profile logging up -d
+#   Update:              docker compose pull && docker compose up -d
+#   First login:         admin/admin (or DEFAULT_ADMIN_USER/admin)
+#   Password change:     required on first login
+#
+# CONFIGURATION:
+#   Copy .env.example to .env and set SITE_ADDRESS, REDIS_PASSWORD, VULTR_API_KEY.
+
+x-app: &app
+  # Pull pre-built image; fall back to building from source if image isn't available
+  image: ghcr.io/dngrtech/qlds-ui:latest
+  build: .
+  env_file: .env
+  environment:
+    FLASK_ENV: docker-production
+    DATABASE_URL: sqlite:////app/data/qlds_ui.db
+    # Keep password out of URL; app injects REDIS_PASSWORD internally.
+    REDIS_URL: redis://redis:6379/0
+    LOG_FORMAT: json
+  volumes:
+    # Admin-facing data — bind mounts for direct filesystem access.
+    # Shared across all app containers. See docs/docker-volume-concurrency.md
+    - ./data:/app/data
+    - ./terraform/ssh-keys:/app/terraform/ssh-keys
+    - ./terraform/vultr-root/terraform.tfstate.d:/app/terraform/vultr-root/terraform.tfstate.d
+    - ./ansible/inventory:/app/ansible/inventory
+    - ./configs:/app/configs
+    - ./logs:/app/logs
+  restart: unless-stopped
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    # REDIS_PASSWORD is interpolated from .env by Docker Compose at startup
+    # Exposed on loopback only so dev (run-dev.sh) can reach it alongside prod (DB 0).
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ── Web (Flask / Gunicorn + SocketIO) ──────────────────────────────────────
+  web:
+    <<: *app
+    environment:
+      FLASK_ENV: docker-production
+      DATABASE_URL: sqlite:////app/data/qlds_ui.db
+      # Keep password out of URL; app injects REDIS_PASSWORD internally.
+      REDIS_URL: redis://redis:6379/0
+      LOG_FORMAT: json
+      RUN_MIGRATIONS: "true"
+    command:
+      - gunicorn
+      - --config=gunicorn.conf.py
+      - --workers=1
+      - --threads=12
+      - --bind=0.0.0.0:5001
+      - --timeout=120
+      - --capture-output
+      - --log-level=debug
+      - ui:create_app()
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/instances/ping')"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── RQ Worker (Terraform / Ansible background tasks) ───────────────────────
+  worker:
+    <<: *app
+    command: flask rq worker
+    deploy:
+      replicas: 2
+
+  # ── RCON Service (WebSocket game server chat) ───────────────────────────────
+  rcon:
+    <<: *app
+    command: python -m rcon_service
+    # RCON only needs Redis; no DB volumes required but inheriting all is harmless
+
+  # ── Status Poller (game server status polling) ─────────────────────────────
+  poller:
+    <<: *app
+    command: flask run-status-poller
+
+  # ── Caddy (reverse proxy + automatic TLS) ─────────────────────────────────
+  # SITE_ADDRESS controls TLS behaviour (set in .env):
+  #   Domain → automatic HTTPS:  SITE_ADDRESS=qlds.example.com
+  #   HTTP only:                 SITE_ADDRESS=:80
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Loki (log aggregation) ─────────────────────── profile: logging ─────────
+  loki:
+    image: grafana/loki:3.4.2
+    profiles: ["logging"]
+    volumes:
+      - ./logging-stack/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Promtail (log shipping — reads Docker container logs) ── profile: logging
+  promtail:
+    image: grafana/promtail:3.4.2
+    profiles: ["logging"]
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./logging-stack/promtail/promtail-docker-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Grafana (dashboards) ───────────────────────── profile: logging ─────────
+  grafana:
+    image: grafana/grafana:11.5.2
+    profiles: ["logging"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - ./logging-stack/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+volumes:
+  # Internal service data — named volumes (no admin access needed)
+  redis-data:
+  caddy-data:
+  caddy-config:
+  loki-data:
+  grafana-data:

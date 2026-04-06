@@ -1,0 +1,170 @@
+---
+- name: Manage QLDS systemd service
+  hosts: all # Changed from "{{ target_host }}" - Use -l limit instead
+  become: yes
+  gather_facts: no # Usually not needed for service management
+
+  vars:
+    # Default values - can be overridden with --extra-vars
+    service_action: manage # Renamed from 'action' (reserved keyword)
+    service_state: started
+    service_enabled: yes
+    # Required variables to be passed via --extra-vars:
+    # id: The QLDS instance ID (e.g., 1) - still passed for potential other uses or consistency
+    # port: The QLDS instance game port (e.g., 27960) - used for service and path naming
+    # qlds_args: The string of command-line arguments (only needed if state is not 'status' and action is 'manage')
+    #            (e.g., "+set net_port 27960 +set sv_hostname \"My Server\"")
+    #
+    # Optional override for service_state:
+    # service_state: started | stopped | restarted | status (default: started)
+    game_port: "{{ port }}" # Define game_port from passed 'port'
+
+  tasks:
+    # Removed: Render QLDS systemd service file (now handled by deploy playbook)
+
+    #######################################################################
+    # Re-apply LAN rate configuration when starting (if enabled)
+    #######################################################################
+    - name: Ensure route_localnet is enabled (for LAN rate on start)
+      sysctl:
+        name: "{{ item }}"
+        value: 1
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - net.ipv4.conf.all.route_localnet
+        - net.ipv4.conf.default.route_localnet
+        - net.ipv4.conf.lo.route_localnet
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+
+    - name: Check if INPUT SNAT rule exists (required for NAT on start)
+      command: iptables -t nat -C INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      register: input_snat_check
+      failed_when: false
+      changed_when: false
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+
+    - name: Add INPUT SNAT rule (required for NAT on start)
+      command: iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+        - input_snat_check.rc != 0
+
+    - name: Check if PREROUTING DNAT rule exists (on start)
+      command: iptables -t nat -C PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      register: prerouting_check
+      failed_when: false
+      changed_when: false
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+
+    - name: Add PREROUTING DNAT rule (on start)
+      command: iptables -t nat -A PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+        - prerouting_check.rc != 0
+
+    - name: Check if POSTROUTING SNAT rule exists (on start)
+      command: iptables -t nat -C POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      register: postrouting_check
+      failed_when: false
+      changed_when: false
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+
+    - name: Add POSTROUTING SNAT rule (on start)
+      command: iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+        - postrouting_check.rc != 0
+
+    - name: Persist iptables rules after NAT changes (on start)
+      shell: iptables-save > /etc/iptables/rules.v4
+      when:
+        - lan_rate_enabled | default(false)
+        - service_state == 'started'
+
+    - name: Ensure QLDS service state is managed (start/stop/restart)
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: "{{ service_state }}"
+        # Removed: enabled parameter (should be handled by deploy playbook)
+      when:
+        - service_state != 'status' # Only manage state if not just querying
+        - service_action == 'manage' # Use renamed variable
+      async: 60 # Timeout in seconds
+      poll: 5 # Check status every 5 seconds
+
+    # --- Delete Action Tasks ---
+    - name: Stop QLDS service (delete action)
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: stopped
+      when: service_action == 'delete' # Use renamed variable
+      ignore_errors: yes # Ignore if service doesn't exist or is already stopped
+
+    - name: Disable QLDS service (delete action)
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        enabled: no
+      when: service_action == 'delete' # Use renamed variable
+      ignore_errors: yes # Ignore if service doesn't exist
+
+    - name: Remove QLDS systemd service file (delete action)
+      ansible.builtin.file:
+        path: /etc/systemd/system/qlds@{{ game_port }}.service
+        state: absent
+      when: service_action == 'delete' # Use renamed variable
+
+    - name: Reload systemd daemon after removing service file (delete action)
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      when: service_action == 'delete' # Use renamed variable
+
+    - name: Remove QLDS instance directory (delete action)
+      ansible.builtin.file:
+        path: /home/ql/qlds-{{ game_port }} # Use game_port for directory path
+        state: absent
+      when: service_action == 'delete' # Use renamed variable
+    # --- End Delete Action Tasks ---
+
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+      when: service_action == 'manage' # Use renamed variable
+
+    - name: Display status of the managed service
+      ansible.builtin.debug:
+        msg: "Service qlds@{{ game_port }} status: {{ ansible_facts.services['qlds@' + (game_port | string) + '.service'].state | default('not found') }}, enabled: {{ ansible_facts.services['qlds@' + (game_port | string) + '.service'].status | default('not found') }}"
+      when:
+        - service_action == 'manage' # Use renamed variable
+        - "'qlds@' + (game_port | string) + '.service' in ansible_facts.services"
+
+    - name: Display message if service not found in facts
+      ansible.builtin.debug:
+        msg: "Service qlds@{{ game_port }} not found in service facts."
+      when:
+        - service_action == 'manage' # Use renamed variable
+        - "'qlds@' + (game_port | string) + '.service' not in ansible_facts.services"
+
+  handlers:
+    - name: reload systemd daemon
+      listen: "reload systemd and restart service if needed" # Listen to the notify event
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: restart qlds service conditionally
+      listen: "reload systemd and restart service if needed" # Listen to the same notify event
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: restarted
+      when: service_state == 'started' or service_state == 'restarted' # Only restart if the desired state is running

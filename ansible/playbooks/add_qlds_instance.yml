@@ -1,0 +1,270 @@
+---
+- name: Add QLDS Instance to Pre-Configured Host (Using Copy)
+  hosts: all # Target host will be specified by the calling task
+  become: yes
+  gather_facts: false # Basic facts should already be known or irrelevant
+
+  vars:
+    # Instance specific vars (passed via -e)
+    qlds_id: "{{ id }}" # Expecting 'id' from the task call - used for config sourcing
+    host_name: "{{ host_name }}" # Expecting 'host_name' for config path
+    game_port: "{{ port }}" # Expecting 'port' from task call, aliasing to game_port for clarity
+
+    # Instance directory
+    qlds_dir: "/home/ql/qlds-{{ game_port }}"
+
+    # Shared locations (should match setup_host.yml)
+    qlds_base_dir: "/home/ql/qlds-base"
+    minqlx_shared_dir: "/home/ql/minqlx-shared"
+    common_assets_dir: "/home/ql/assets/common"
+
+  pre_tasks:
+    - name: Abort if instance directory already exists
+      stat:
+        path: "{{ qlds_dir }}"
+      register: qlds_stat
+
+    - name: Stop play if instance path exists
+      fail:
+        msg: "QLDS instance directory {{ qlds_dir }} already exists."
+      when: qlds_stat.stat.exists
+
+  tasks:
+  #######################################################################
+  # 0.  Ensure route_localnet is enabled (only if LAN rate mode is enabled)
+  #######################################################################
+    - name: Ensure route_localnet is enabled
+      sysctl:
+        name: "{{ item }}"
+        value: 1
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - net.ipv4.conf.all.route_localnet
+        - net.ipv4.conf.default.route_localnet
+        - net.ipv4.conf.lo.route_localnet
+      when: lan_rate_enabled | default(false)
+
+  #######################################################################
+  # 0b. Add NAT iptables rules for LAN rate (only if enabled)
+  #######################################################################
+    - name: Check if INPUT SNAT rule exists (required for NAT)
+      command: iptables -t nat -C INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      register: input_snat_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_enabled | default(false)
+
+    - name: Add INPUT SNAT rule (required for NAT)
+      command: iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - input_snat_check.rc != 0
+
+    - name: Check if PREROUTING DNAT rule exists
+      command: iptables -t nat -C PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      register: prerouting_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_enabled | default(false)
+
+    - name: Add PREROUTING DNAT rule
+      command: iptables -t nat -A PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - prerouting_check.rc != 0
+
+    - name: Check if POSTROUTING SNAT rule exists
+      command: iptables -t nat -C POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      register: postrouting_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_enabled | default(false)
+
+    - name: Add POSTROUTING SNAT rule
+      command: iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - postrouting_check.rc != 0
+
+    - name: Persist iptables rules after NAT changes
+      shell: iptables-save > /etc/iptables/rules.v4
+      when: lan_rate_enabled | default(false)
+
+  #######################################################################
+  # 1. Create Instance Directory Structure
+  #######################################################################
+    - name: Create instance folders
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - "{{ qlds_dir }}"
+        - "{{ qlds_dir }}/baseq3"
+
+  #######################################################################
+  # 2. Copy Shared Resources into Instance Directory
+  #######################################################################
+    - name: Copy contents of base QLDS installation into instance directory
+      ansible.builtin.copy:
+        src: "{{ qlds_base_dir }}/" # Trailing slash copies contents
+        dest: "{{ qlds_dir }}/"
+        owner: ql
+        group: ql
+        mode: preserve # Preserve permissions from source
+        remote_src: yes
+
+    - name: Copy contents of shared minqlx directory into instance directory
+      ansible.builtin.copy:
+        src: "{{ minqlx_shared_dir }}/" # Trailing slash copies contents
+        dest: "{{ qlds_dir }}/"          # Destination is instance root
+        owner: ql
+        group: ql
+        mode: preserve
+        remote_src: yes
+      # This single task replaces the previous two separate tasks for minqlx files and package.
+      # It will copy minqlx.x64.so, run_server_x64_minqlx.sh, the minqlx/ dir,
+      # and optional scripts if they exist in the source, directly into the instance dir.
+
+    - name: Create minqlx-plugins directory
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/minqlx-plugins"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Copy scripts into instance baseq3 directory (excluding factories)
+      ansible.builtin.shell: |
+        rsync -a --exclude='*.factories' {{ common_assets_dir }}/scripts/ {{ qlds_dir }}/baseq3/scripts/
+        chown -R ql:ql {{ qlds_dir }}/baseq3/scripts/
+      args:
+        executable: /bin/bash
+
+  #######################################################################
+  # 3. Sync Instance-Specific Configs
+  #######################################################################
+    - name: Sync instance-specific configs from UI server
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: yes
+        recursive: yes
+        rsync_path: "sudo -u ql rsync" 
+        # Note: src paths are relative to the playbook file location on control node
+      loop:
+        # Sync instance-specific configs from the directory created by the UI
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/server.cfg",  dest: "{{ qlds_dir }}/baseq3/server.cfg" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/mappool.txt", dest: "{{ qlds_dir }}/baseq3/mappool.txt" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/access.txt",  dest: "{{ qlds_dir }}/baseq3/access.txt" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/workshop.txt", dest: "{{ qlds_dir }}/baseq3/workshop.txt" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/workshop.txt", dest: "{{ qlds_dir }}/baseq3/workshop.txt" }
+
+      delegate_to: localhost # Synchronize runs from the control node perspective
+      become: false
+
+    - name: Sync instance-specific scripts (minqlx plugins) from UI server
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/scripts/"
+        dest: "{{ qlds_dir }}/minqlx-plugins/"
+        archive: yes
+        recursive: yes
+        rsync_path: "sudo -u ql rsync"
+        delete: yes
+      delegate_to: localhost
+      become: false
+
+    - name: Copy common minqlx-plugins to instance directory
+      ansible.builtin.copy:
+        src: "{{ common_assets_dir }}/minqlx-plugins/"
+        dest: "{{ qlds_dir }}/minqlx-plugins/"
+        owner: ql
+        group: ql
+        mode: preserve
+        remote_src: yes
+
+    - name: Remove existing factory files before syncing (ensures only selected factories remain)
+      ansible.builtin.shell: |
+        find {{ qlds_dir }}/baseq3/scripts/ -maxdepth 1 -name '*.factories' -type f -delete
+      args:
+        warn: false
+      ignore_errors: yes  # Directory may not exist on first run
+
+    - name: Sync instance-specific factory files from UI server
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/factories/"
+        dest: "{{ qlds_dir }}/baseq3/scripts/" # Factories go into baseq3/scripts
+        archive: yes
+        recursive: yes
+        rsync_path: "sudo -u ql rsync"
+        delete: no # Don't delete non-factory files (like map scripts)
+      delegate_to: localhost
+      become: false
+
+  #######################################################################
+  # 4. Install Instance-Specific Dependencies (if any)
+  #######################################################################
+    - name: Check if instance-specific requirements.txt exists
+      ansible.builtin.stat:
+        path: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
+      register: minqlx_req_stat_result
+
+    - name: Install instance-specific plugin Python deps if present
+      pip:
+        requirements: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
+        executable: pip3
+        extra_args: --break-system-packages
+      when: minqlx_req_stat_result.stat.exists
+
+  #######################################################################
+  # 5. Ensure Ownership and Permissions
+  #######################################################################
+    - name: Ensure correct ownership of instance directory
+      file:
+        path: "{{ qlds_dir }}"
+        owner: ql
+        group: ql
+        recurse: yes
+        state: directory # Ensure directory exists
+
+  #######################################################################
+  # 6. Register and Start Service
+  #######################################################################
+    - name: Render QLDS systemd service file
+      ansible.builtin.template:
+        src: ../templates/qlds@.service.j2 # Path relative to this playbook
+        dest: /etc/systemd/system/qlds@{{ game_port }}.service
+        owner: root
+        group: root
+        mode: '0644'
+      # Uses 'qlds_args' passed as extra var from task logic
+      notify: reload systemd and start service # Notify the combined handler
+
+    - name: Flush handlers to ensure daemon_reload runs before enabling/starting
+      ansible.builtin.meta: flush_handlers
+
+    - name: Ensure QLDS service is enabled and started
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: started
+        enabled: yes
+      # Consider adding async/poll if start is slow, but maybe not needed now
+      # async: 60
+      # poll: 5
+
+  handlers:
+    # Combined handler for systemd reload and service start
+    - name: reload systemd and start service
+      listen: "reload systemd and start service" # Listen for the notification topic
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: reload systemd and start service # Same name ensures it runs after reload if notified
+      listen: "reload systemd and start service" # Listen for the notification topic
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: started # Ensure it's started

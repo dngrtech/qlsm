@@ -1,0 +1,119 @@
+# Ignore everything
+*
+.*
+
+# ── Root files ────────────────────────────────────────────────────────────────
+!.gitignore
+!.env.example
+!.dockerignore
+!README.md
+!requirements.txt
+!pytest.ini
+!docker-compose.yml
+!Dockerfile
+!entrypoint.sh
+!gunicorn.conf.py
+!run-dev.sh
+!run_dev.py
+!install.sh
+!Caddyfile
+!redis.conf
+!ansible.cfg
+
+# ── Backend ───────────────────────────────────────────────────────────────────
+!ui/
+!ui/**
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+!frontend-react/
+frontend-react/*
+!frontend-react/src/
+!frontend-react/src/**
+!frontend-react/public/
+!frontend-react/public/**
+!frontend-react/index.html
+!frontend-react/package.json
+!frontend-react/pnpm-lock.yaml
+!frontend-react/eslint.config.js
+!frontend-react/postcss.config.js
+!frontend-react/tailwind.config.js
+!frontend-react/vite.config.js
+!frontend-react/README.md
+!frontend-react/tools/
+!frontend-react/tools/**
+
+# ── Ansible ───────────────────────────────────────────────────────────────────
+!ansible/
+ansible/*
+!ansible/playbooks/
+!ansible/playbooks/**
+!ansible/templates/
+!ansible/templates/**
+!ansible/files/
+!ansible/files/**
+
+# ── Terraform ─────────────────────────────────────────────────────────────────
+!terraform/
+terraform/*
+!terraform/modules/
+!terraform/modules/**
+!terraform/startup_scripts/
+!terraform/startup_scripts/**
+!terraform/templates/
+!terraform/templates/**
+!terraform/vultr-root/
+terraform/vultr-root/*
+!terraform/vultr-root/main.tf
+!terraform/vultr-root/.terraform.lock.hcl
+
+# ── Migrations ────────────────────────────────────────────────────────────────
+!migrations/
+!migrations/**
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+!tests/
+!tests/**
+
+# ── RCON ──────────────────────────────────────────────────────────────────────
+!rcon_service/
+!rcon_service/**
+!rcon_debug/
+!rcon_debug/**
+
+# ── Scripts ───────────────────────────────────────────────────────────────────
+!scripts/
+!scripts/**
+
+# ── Configs (default preset only) ────────────────────────────────────────────
+!configs/
+configs/*
+!configs/presets/
+configs/presets/*
+!configs/presets/default/
+!configs/presets/default/**
+
+# ── Logging stack ─────────────────────────────────────────────────────────────
+!logging-stack/
+logging-stack/*
+!logging-stack/docker-compose.yml
+!logging-stack/docker-compose.dev.yml
+!logging-stack/grafana/
+!logging-stack/grafana/**
+!logging-stack/loki/
+!logging-stack/loki/**
+!logging-stack/promtail/
+!logging-stack/promtail/**
+
+# ── Docs (selected only) ──────────────────────────────────────────────────────
+!docs/
+docs/*
+!docs/setup.md
+!docs/technical.md
+!docs/architecture.md
+
+# ── Re-ignore runtime artifacts inside included dirs ──────────────────────────
+__pycache__/
+*.pyc
+ui/qlds.db
+ui/tasks.py.backup
+ui/tasks.py.new

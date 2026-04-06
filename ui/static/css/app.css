@@ -1,0 +1,5 @@
+/* ui/static/css/app.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* Any global custom styles can also go here or be imported */

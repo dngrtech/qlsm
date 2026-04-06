@@ -1,0 +1,24 @@
+[
+{
+"id": "12rg",
+"title":"RG 12 LG 160",
+"author":"BOGDOG",
+"description":"RG 12 LG 160",
+"basegt":"ca",
+"cvars":{
+"dmflags": "28",
+"g_startingWeapons": "255",
+"g_startingAmmo_sg": "50",
+"g_startingAmmo_mg": "100",
+"g_startingAmmo_lg": "160",
+"g_startingAmmo_gl": "25",
+"g_startingAmmo_rl": "50",
+"g_startingAmmo_pg": "100",
+"g_startingAmmo_rg": "12",
+"g_startingHealth": "200",
+"g_startingArmor": "100",
+"g_startingHealthBonus": "0",
+"g_overtime": "0"
+}
+}
+]

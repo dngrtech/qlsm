@@ -1,0 +1,80 @@
+---
+- name: Configure Auto-Restart Schedule via Systemd Timer
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure systemd directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system
+        state: directory
+        mode: '0755'
+
+    - name: Ensure workshop update script is deployed
+      ansible.builtin.copy:
+        src: "../files/update_ql_workshops.sh"
+        dest: "/usr/local/bin/update_ql_workshops.sh"
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Deploy auto-restart service file
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/host-auto-restart.service
+        content: |
+          [Unit]
+          Description=Host Auto-Restart (Updates workshops then reboots)
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/update_ql_workshops.sh
+          ExecStart=/sbin/reboot
+        mode: '0644'
+      when: on_calendar is defined
+
+    - name: Deploy auto-restart timer file
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/host-auto-restart.timer
+        content: |
+          [Unit]
+          Description=Timer for Host Auto-Restart
+
+          [Timer]
+          OnCalendar={{ on_calendar }}
+
+          [Install]
+          WantedBy=timers.target
+        mode: '0644'
+      when: on_calendar is defined
+      register: timer_deployed
+
+    - name: Remove auto-restart timer file
+      ansible.builtin.file:
+        path: /etc/systemd/system/host-auto-restart.timer
+        state: absent
+      when: on_calendar is not defined
+      register: timer_removed
+
+    - name: Remove auto-restart service file
+      ansible.builtin.file:
+        path: /etc/systemd/system/host-auto-restart.service
+        state: absent
+      when: on_calendar is not defined
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Enable and start the timer
+      ansible.builtin.systemd:
+        name: host-auto-restart.timer
+        enabled: yes
+        state: started
+      when: on_calendar is defined
+
+    - name: Stop and disable the timer
+      ansible.builtin.systemd:
+        name: host-auto-restart.timer
+        enabled: no
+        state: stopped
+      when: on_calendar is not defined
+      ignore_errors: yes

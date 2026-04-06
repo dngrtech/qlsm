@@ -1,0 +1,4 @@
+services:
+  promtail:
+    volumes:
+      - /home/rage/qlds-ui/logs/dev:/var/log/dev:ro

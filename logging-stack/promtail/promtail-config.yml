@@ -1,0 +1,149 @@
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # --- Dev: tail log files written by run-dev.sh ---
+  - job_name: dev-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: qlds-ui
+          env: dev
+          __path__: /var/log/dev/*.log
+    pipeline_stages:
+      # Extract service name from filename and normalize flask -> web
+      - regex:
+          expression: '(?P<raw_service>flask|worker|rcon|poller)'
+          source: filename
+      - template:
+          source: service
+          template: '{{ if eq .raw_service "flask" }}web{{ else }}{{ .raw_service }}{{ end }}'
+      - labels:
+          service:
+      # JSON log lines (structured logs from Flask, rcon, poller)
+      - match:
+          selector: '{job="qlds-ui", env="dev"} |~ "^\\{"'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  module: module
+            - labels:
+                level:
+                module:
+      # Re-label rcon-related modules (in Flask process) → service=rcon
+      - match:
+          selector: '{job="qlds-ui", env="dev", module=~"redis_listener|socketio_events"}'
+          stages:
+            - static_labels:
+                service: rcon
+      # Plain-text Ansible output from worker — derive level from content
+      # Uses regex+template to avoid "last match wins" bug (Loki #2721, #7065)
+      - match:
+          selector: '{job="qlds-ui", env="dev", service="worker"} !~ "^\\{"'
+          stages:
+            - regex:
+                expression: '(?i)(?P<err_match>fatal:|FAILED!|UNREACHABLE!)'
+            - regex:
+                expression: '(?P<warn_match>\[WARNING\]|DEPRECATION WARNING|\.\.\.ignoring)'
+            - regex:
+                expression: '(?P<changed_match>\bchanged:)'
+            - regex:
+                expression: '(?P<ok_match>\bok:)'
+            - regex:
+                expression: '(?P<skipped_match>\bskipping:|\bskipped=\d+)'
+            - regex:
+                expression: '(?P<task_match>TASK \[|PLAY \[|PLAY RECAP)'
+            - regex:
+                expression: '(?P<ansible_status>.*)'
+            - template:
+                source: ansible_status
+                template: >-
+                  {{ if .err_match }}failed{{ else if .warn_match }}warning{{ else if .changed_match }}changed{{ else if .ok_match }}ok{{ else if .skipped_match }}skipped{{ else if .task_match }}task{{ else }}info{{ end }}
+            - template:
+                source: level
+                template: >-
+                  {{ if .err_match }}error{{ else if .warn_match }}warning{{ else if .changed_match }}info{{ else if .ok_match }}debug{{ else if .skipped_match }}debug{{ else }}info{{ end }}
+            - labels:
+                ansible_status:
+                level:
+
+  # --- Prod: read systemd journal ---
+  - job_name: prod-journal
+    journal:
+      path: /var/log/journal
+      labels:
+        job: qlds-ui
+        env: prod
+    relabel_configs:
+      # Normalize systemd unit names to short service labels
+      - source_labels: ["__journal__systemd_unit"]
+        regex: "qlds-ui-web\\.service"
+        target_label: service
+        replacement: web
+      - source_labels: ["__journal__systemd_unit"]
+        regex: "qlds-ui-(worker\\d+)\\.service"
+        target_label: service
+        replacement: "$1"
+      - source_labels: ["__journal__systemd_unit"]
+        regex: "rcon-service\\.service"
+        target_label: service
+        replacement: rcon
+      - source_labels: ["__journal__systemd_unit"]
+        regex: "qlds-status-poller\\.service"
+        target_label: service
+        replacement: poller
+    pipeline_stages:
+      # JSON log lines (when LOG_FORMAT=json)
+      - match:
+          selector: '{job="qlds-ui", env="prod"} |~ "^\\{"'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  module: module
+            - labels:
+                level:
+                module:
+      # Re-label rcon-related modules (in Flask/web process) → service=rcon
+      - match:
+          selector: '{job="qlds-ui", env="prod", module=~"redis_listener|socketio_events"}'
+          stages:
+            - static_labels:
+                service: rcon
+      # Plain-text Ansible output from worker services — derive level from content
+      - match:
+          selector: '{job="qlds-ui", env="prod", service=~"worker.*"} !~ "^\\{"'
+          stages:
+            - regex:
+                expression: '(?i)(?P<err_match>fatal:|FAILED!|UNREACHABLE!)'
+            - regex:
+                expression: '(?P<warn_match>\[WARNING\]|DEPRECATION WARNING|\.\.\.ignoring)'
+            - regex:
+                expression: '(?P<changed_match>\bchanged:)'
+            - regex:
+                expression: '(?P<ok_match>\bok:)'
+            - regex:
+                expression: '(?P<skipped_match>\bskipping:|\bskipped=\d+)'
+            - regex:
+                expression: '(?P<task_match>TASK \[|PLAY \[|PLAY RECAP)'
+            - regex:
+                expression: '(?P<ansible_status>.*)'
+            - template:
+                source: ansible_status
+                template: >-
+                  {{ if .err_match }}failed{{ else if .warn_match }}warning{{ else if .changed_match }}changed{{ else if .ok_match }}ok{{ else if .skipped_match }}skipped{{ else if .task_match }}task{{ else }}info{{ end }}
+            - template:
+                source: level
+                template: >-
+                  {{ if .err_match }}error{{ else if .warn_match }}warning{{ else if .changed_match }}info{{ else if .ok_match }}debug{{ else if .skipped_match }}debug{{ else }}info{{ end }}
+            - labels:
+                ansible_status:
+                level:

@@ -1,0 +1,22 @@
+[
+{
+"id": "ROFO",
+"title":"ROFaceOff",
+"author":"BOGDOG",
+"description":"Rockets Only Face Off",
+"basegt":"ca",
+"cvars":{
+"roundlimit": "10",
+"roundtimelimit": "9000",
+"dmflags": "28",
+"g_friendlyFire": "1",
+"g_startingArmor": "200",
+"g_startingHealthBonus": "0",
+"g_startingHealth": "200",
+"g_startingAmmo_rl": "50",
+"g_damage_rl": "100",
+"g_splashdamage_rl": "1",
+"g_startingWeapons": "17"
+}
+}
+]

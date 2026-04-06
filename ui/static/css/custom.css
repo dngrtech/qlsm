@@ -1,0 +1,103 @@
+/* Container for fixed bottom flash messages */
+#flash-message-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1050; /* Ensure it's above most content, adjust if needed */
+  padding: 1rem; /* Add some padding around the messages */
+  pointer-events: none; /* Allow clicks to pass through the container */
+  display: flex; /* Use flexbox to stack alerts */
+  flex-direction: column; /* Stack vertically */
+  align-items: center; /* Center alerts horizontally */
+}
+
+/* Style individual alerts within the container */
+#flash-message-container .alert {
+  pointer-events: auto; /* Re-enable pointer events for the alerts themselves */
+  margin-bottom: 0.5rem; /* Space between stacked alerts */
+  width: auto; /* Allow alert to size to content */
+  max-width: 80%; /* Prevent alerts from being excessively wide */
+}
+
+
+/* Keyframes for sliding in from the bottom */
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Class to apply the slide-in animation */
+.alert-slide-up {
+  animation-name: slideInUp;
+  animation-duration: 0.4s; /* Adjust duration for desired speed */
+  animation-timing-function: ease-out; /* Optional: make it ease out */
+  animation-fill-mode: both;
+}
+
+/* Keyframes for sliding out to the bottom */
+@keyframes slideOutDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* Class to apply the slide-out animation */
+.alert-slide-down {
+  animation-name: slideOutDown;
+  animation-duration: 0.4s; /* Match slide-in duration */
+  animation-timing-function: ease-in; /* Optional: make it ease in */
+  animation-fill-mode: forwards; /* Keep the final state */
+}
+
+/* Custom CodeMirror Syntax Highlighting for qlcfg mode */
+/* Targeting default CodeMirror theme (.cm-s-default) for light mode */
+.cm-s-default .cm-keyword { color: #D169C0; } /* For 'set' keyword - darker magenta */
+.cm-s-default .cm-variable-2 { color: #007ACC; } /* For qlcfg variable names after 'set' - darker blue */
+.cm-s-default .cm-string { color: #6f42c1; } /* For qlcfg quoted strings - purple */
+.cm-s-default .cm-comment { color: #228B22; } /* For '//' and '#' comments - forest green */
+.cm-s-default .cm-number { color: #cc5500; } /* For numbers (e.g., SteamID, level in qlaccess) - burnt orange */
+
+/* Mode-specific styles */
+/* qlcfg */
+/* (keyword, variable-2, string already styled above or by default) */
+
+/* qlmappool & qlaccess */
+.cm-s-default .cm-variable { color: #005999; } /* For mappool map names - distinct blue */
+.cm-s-default .cm-operator { color: #333333; font-weight: bold; } /* For '|' separator - bold dark gray */
+.cm-s-default .cm-string-2 { color: #008080; } /* For mappool factory IDs - teal */
+
+/* Common error styling for all modes */
+.cm-s-default .cm-error { 
+  color: #D8000C; /* Red color for errors */
+  text-decoration: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #D8000C; /* Wavy red underline */
+}
+
+/* Adjust CodeMirror editor height */
+.CodeMirror {
+  height: 600px; /* Default height, increased for more space */
+  min-height: 200px; /* Minimum resizable height */
+  resize: vertical; /* Allow vertical resizing */
+  border: 1px solid #ced4da; /* Optional: match Bootstrap form control border */
+}
+
+/* Hide original textareas meant for CodeMirror to prevent FOUC */
+#server-cfg-editor,
+#mappool-editor,
+#access-editor,
+#workshop-editor {
+  display: none;
+}

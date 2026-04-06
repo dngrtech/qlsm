@@ -1,0 +1,40 @@
+---
+- name: Sync Only Config Files
+  hosts: all
+  become: yes
+  gather_facts: true
+
+  tasks:
+
+    - name: Synchronize common config files
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: yes
+        recursive: yes
+      with_items:
+        - { src: "../../ql-assets/common/workshop.txt", dest: "/home/ql/qlds/workshop.txt" }
+        - { src: "../../configs/{{ target_host }}/mappool.txt", dest: "/home/ql/qlds/mappool.txt" }
+        - { src: "../../ql-assets/common/redis.conf", dest: "/home/ql/qlds/redis.conf" }
+
+    - name: Synchronize server-specific config files (server*.cfg)
+      synchronize:
+        src: "{{ item }}" # with_fileglob provides the full path
+        dest: "/home/ql/qlds/" # Destination directory
+        archive: yes
+        recursive: yes # Although syncing single files, good practice
+      with_fileglob:
+        - "../../configs/{{ inventory_hostname }}/server*.cfg"
+
+    - name: Set ownership for /home/ql and all subdirectories
+      file:
+        path: /home/ql
+        owner: ql
+        group: ql
+        recurse: yes
+
+    - name: Restart all containers using docker-compose
+      ansible.builtin.shell:
+        cmd: "docker-compose -f /home/ql/qlds/docker-compose.yml restart"
+      args:
+        chdir: /home/ql/qlds

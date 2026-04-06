@@ -1,0 +1,165 @@
+---
+- name: Install Docker and Deploy Quake Live containers
+  hosts: "{{ target_host }}"
+  become: yes
+  gather_facts: true
+
+  tasks:
+
+    - name: Configure sshd to use key-based authentication only
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?{{ item.option }}'
+        line: '{{ item.option }} {{ item.value }}'
+        state: present
+      with_items:
+        - { option: 'PasswordAuthentication', value: 'no' }
+        - { option: 'ChallengeResponseAuthentication', value: 'no' }
+        - { option: 'PubkeyAuthentication', value: 'yes' }
+      notify: restart sshd
+
+    - name: Install aptitude
+      apt:
+        name: aptitude
+        state: latest
+        update_cache: true
+
+    - name: Set timezone to New York (EST)
+      ansible.builtin.command: timedatectl set-timezone America/New_York
+
+    - name: Set hostname
+      hostname:
+        name: "{{ target_host }}"
+
+    - name: Update and upgrade all packages to the latest version
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - net-tools
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+        state: latest
+        update_cache: true
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker's APT repository
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable
+        state: present
+
+    - name: Update apt and install docker-ce
+      apt:
+        name: docker-ce
+        state: latest
+        update_cache: true
+
+    - name: Add Docker group
+      ansible.builtin.group:
+        name: docker
+        state: present
+
+    - name: Enable and start Docker services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - docker.service
+        - containerd.service
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: 'u+x,g+x'
+
+    - name: Change ownership of docker-compose binary
+      file:
+        path: /usr/local/bin/docker-compose
+        owner: root
+        group: docker
+        mode: "0755"
+
+    - name: Create ql user
+      user:
+        name: ql
+        state: present
+        shell: /bin/bash
+        system: yes
+        createhome: yes
+
+    - name: Add ql user to docker group
+      user:
+        name: ql
+        groups: docker
+        append: yes
+
+    - name: Create directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        force: yes
+      with_items:
+        - "/home/ql/qlds"
+        - "/home/ql/qlds/data"
+
+    - name: Synchronize files and folders
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: yes
+        recursive: yes
+      with_items:
+        - { src: "../server_data_and_configs/data/minqlx-plugins", dest: "/home/ql/qlds/data" }
+        - { src: "../server_data_and_configs/data/scripts", dest: "/home/ql/qlds/data" }
+        - { src: "../server_data_and_configs/data/steamapps", dest: "/home/ql/qlds/data" }
+        - { src: "../server_data_and_configs/common/workshop.txt", dest: "/home/ql/qlds/workshop.txt" }
+        - { src: "../server_data_and_configs/common/mappool.txt", dest: "/home/ql/qlds/mappool.txt" }
+        - { src: "../server_data_and_configs/common/redis.conf", dest: "/home/ql/qlds/redis.conf" }
+        - { src: "../server_data_and_configs/{{ target_host }}/server1.cfg", dest: "/home/ql/qlds/server1.cfg" }
+        - { src: "../server_data_and_configs/{{ target_host }}/docker-compose.yml", dest: "/home/ql/qlds/docker-compose.yml" }
+
+    - name: Set ownership for /home/ql and all subdirectories
+      file:
+        path: /home/ql
+        owner: ql
+        group: ql
+        recurse: yes
+
+    - name: Create Docker volume for Redis
+      docker_volume:
+        name: redis-data
+
+    # - name: Block access to Redis port 6379
+    #   become: yes
+    #   iptables:
+    #     chain: INPUT
+    #     protocol: tcp
+    #     destination_port: 6379
+    #     jump: DROP
+    #   when: ansible_service_mgr == "systemd"
+
+    - name: Run Docker Compose
+      become: yes
+      become_user: ql
+      command: docker-compose -f /home/ql/qlds/docker-compose.yml up -d
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.service:
+        name: ssh
+        state: restarted

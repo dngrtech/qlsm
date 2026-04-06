@@ -1,0 +1,54 @@
+---
+- name: Rename Host
+  hosts: "{{ target_host }}"
+  become: yes
+  gather_facts: true
+
+  vars:
+    new_hostname: "{{ new_host_name }}"
+
+  tasks:
+    - name: Validate new hostname is provided
+      fail:
+        msg: "new_host_name variable must be provided"
+      when: new_hostname is not defined or new_hostname | trim == ""
+
+    - name: Get current hostname
+      command: hostname
+      register: current_hostname
+      changed_when: false
+
+    - name: Debug - Show hostname change
+      debug:
+        msg: "Changing hostname from '{{ current_hostname.stdout }}' to '{{ new_hostname }}'"
+
+    - name: Set hostname using hostname module
+      hostname:
+        name: "{{ new_hostname }}"
+
+    - name: Update /etc/hosts - replace old hostname with new
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ new_hostname }}"
+        state: present
+
+    - name: Update /etc/hostname file
+      copy:
+        content: "{{ new_hostname }}\n"
+        dest: /etc/hostname
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Verify new hostname is set
+      command: hostname
+      register: verify_hostname
+      changed_when: false
+
+    - name: Assert hostname was changed successfully
+      assert:
+        that:
+          - verify_hostname.stdout == new_hostname
+        fail_msg: "Hostname was not changed successfully. Expected '{{ new_hostname }}', got '{{ verify_hostname.stdout }}'"
+        success_msg: "Hostname successfully changed to '{{ new_hostname }}'"

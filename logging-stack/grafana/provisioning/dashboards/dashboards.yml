@@ -1,0 +1,18 @@
+apiVersion: 1
+
+providers:
+  - name: default
+    folder: ""
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/root
+  - name: dev
+    folder: "Dev"
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/dev
+  - name: prod
+    folder: "Prod"
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json/prod

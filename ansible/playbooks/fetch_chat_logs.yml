@@ -1,0 +1,36 @@
+---
+- name: Fetch QLDS Chat Logs
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    game_port: "{{ port }}"
+    # Number of lines to filter (tail)
+    log_lines: "{{ lines | default(500) }}"
+    # Specific log filename (default to chat.log)
+    log_filename: "{{ filename | default('chat.log') }}"
+    # Log location
+    log_file: "/home/ql/qlds-{{ game_port }}/chatlogs/{{ log_filename }}"
+
+  tasks:
+    - name: Check if chat log file exists
+      ansible.builtin.stat:
+        path: "{{ log_file }}"
+      register: log_stat
+
+    - name: Fetch chat logs using tail
+      ansible.builtin.command:
+        cmd: "tail -n {{ log_lines }} {{ log_file }}"
+      register: tail_output
+      changed_when: false
+      failed_when: false
+      when: log_stat.stat.exists
+
+    - name: Set output variable
+      ansible.builtin.set_fact:
+        chat_logs_output: "{{ tail_output.stdout if log_stat.stat.exists else '-- Chat log file not found --' }}"
+
+    - name: Output logs to stdout for capture
+      ansible.builtin.debug:
+        msg: "{{ chat_logs_output if chat_logs_output | length > 0 else '-- No entries --' }}"

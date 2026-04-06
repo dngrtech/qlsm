@@ -1,0 +1,44 @@
+*filter
+:INPUT DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+:FORWARD DROP [0:0]
+
+# Allow loopback & established sessions
+-A INPUT -i lo -j ACCEPT
+-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# SSH
+-A INPUT -p tcp --dport {{ ssh_port }} -j ACCEPT
+
+# Quake Live game ports (open all game ports for both LAN rate and non-LAN rate instances)
+{% for p in game_udp_ports %}
+-A INPUT -p udp --dport {{ p }} -j ACCEPT
+{% endfor %}
+
+# RCON ports
+{% for p in rcon_tcp_ports %}
+-A INPUT -p tcp --dport {{ p }} -j ACCEPT
+{% endfor %}
+
+COMMIT
+
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+# NAT rules for LAN rate ports only
+# These are added/removed dynamically per-instance by update_instance_lan_rate.yml
+{% if lan_rate_ports is defined and lan_rate_ports | length > 0 %}
+# Required INPUT NAT rule for LAN rate
+-A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+
+# Game port NAT rules (only for LAN rate enabled instances)
+{% for p in lan_rate_ports %}
+-A POSTROUTING -p udp -d 127.0.0.1 --dport {{ p }} -j SNAT --to-source 127.0.0.1
+-A PREROUTING -p udp --dport {{ p }} -j DNAT --to-destination 127.0.0.1
+{% endfor %}
+{% endif %}
+
+COMMIT

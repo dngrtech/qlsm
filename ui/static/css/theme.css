@@ -1,0 +1,483 @@
+:root {
+  /* Light Theme Variables */
+  --bg-color-light: #ffffff;
+  --text-color-light: #212529;
+  --navbar-bg-light: #f8f9fa;
+  --navbar-text-light: #000000;
+  --link-color-light: #0d6efd;
+  --link-hover-color-light: #0a58ca;
+  --button-bg-light: #0d6efd;
+  --button-text-light: #ffffff;
+  --button-hover-bg-light: #0b5ed7;
+
+  /* Light theme specific button colors */
+  --button-secondary-bg-light: #6c757d; /* Bootstrap default secondary */
+  --button-secondary-text-light: #ffffff;
+  --button-secondary-hover-bg-light: #5a6268;
+  --button-warning-bg-light: #ffc107; /* Bootstrap default warning */
+  --button-warning-text-light: #000000;
+  --button-warning-hover-bg-light: #ffca2c;
+  --button-info-bg-light: #0dcaf0; /* Bootstrap default info */
+  --button-info-text-light: #000000;
+  --button-info-hover-bg-light: #39d4f3;
+
+
+  --table-border-light: #dee2e6;
+  --table-header-bg-light: #e9ecef;
+  --card-bg-light: #ffffff;
+  --card-border-light: rgba(0, 0, 0, 0.175);
+  --input-bg-light: #ffffff;
+  --input-border-light: #ced4da;
+  --input-text-light: #495057;
+  --flash-success-bg-light: #d1e7dd;
+  --flash-success-text-light: #0f5132;
+  --flash-error-bg-light: #f8d7da;
+  --flash-error-text-light: #842029;
+  --flash-info-bg-light: #cff4fc;
+  --flash-info-text-light: #055160;
+
+  /* Dark Theme Variables */
+  --bg-color-dark: #212529;
+  --text-color-dark: #f8f9fa;
+  --navbar-bg-dark: #343a40;
+  --navbar-text-dark: #f8f9fa;
+  --link-color-dark: #60a5fa; /* Lighter blue for dark mode */
+  --link-hover-color-dark: #93c5fd;
+  --button-bg-dark: #60a5fa;
+  --button-text-dark: #111827; /* Darker text for light blue button */
+  --button-hover-bg-dark: #3b82f6;
+
+  /* Dark theme specific button colors */
+  --button-secondary-bg-dark: #545b62; /* Darker than default secondary */
+  --button-secondary-text-dark: #ffffff;
+  --button-secondary-hover-bg-dark: #43484d;
+  --button-info-bg-dark: #0dcaf0;
+  --button-info-text-dark: #000000;
+  --button-info-hover-bg-dark: #39d4f3;
+  --button-danger-bg-dark: #B02A37; /* Darker red */
+  --button-danger-text-dark: #FFFFFF;
+  --button-danger-hover-bg-dark: #90232F;
+
+  /* Dark theme specific badge colors */
+  --badge-success-bg-dark: #198754; /* Standard success green */
+  --badge-success-text-dark: #ffffff;
+  --badge-info-bg-dark: #0dcaf0;
+  --badge-info-text-dark: #000000;
+  --badge-secondary-bg-dark: #545b62;
+  --badge-secondary-text-dark: #ffffff;
+
+
+  --table-border-dark: #495057;
+  --table-header-bg-dark: #343a40;
+  --card-bg-dark: #2c3034; /* Slightly lighter than body bg */
+  --card-border-dark: #495057;
+  --input-bg-dark: #343a40;
+  --input-border-dark: #495057;
+  --input-text-dark: #f8f9fa;
+  --flash-success-bg-dark: #143625;
+  --flash-success-text-dark: #a3cfbb;
+  --flash-error-bg-dark: #58151c;
+  --flash-error-text-dark: #f1b4b8;
+  --flash-info-bg-dark: #0c394a;
+  --flash-info-text-dark: #9eeaf9;
+}
+
+body.theme-light {
+  background-color: var(--bg-color-light);
+  color: var(--text-color-light);
+}
+
+body.theme-dark {
+  background-color: var(--bg-color-dark);
+  color: var(--text-color-dark);
+}
+
+/* Navbar Theming */
+.navbar.theme-light {
+  background-color: var(--navbar-bg-light) !important;
+}
+.navbar.theme-light .navbar-brand,
+.navbar.theme-light .nav-link {
+  color: var(--navbar-text-light) !important;
+}
+.navbar.theme-light .nav-link:hover {
+  color: var(--link-hover-color-light) !important;
+}
+
+.navbar.theme-dark {
+  background-color: var(--navbar-bg-dark) !important;
+}
+.navbar.theme-dark .navbar-brand,
+.navbar.theme-dark .nav-link {
+  color: var(--navbar-text-dark) !important;
+}
+.navbar.theme-dark .nav-link:hover {
+  color: var(--link-hover-color-dark) !important;
+}
+
+
+/* General Link Theming */
+body.theme-light a {
+  color: var(--link-color-light);
+}
+body.theme-light a:hover {
+  color: var(--link-hover-color-light);
+}
+body.theme-dark a {
+  color: var(--link-color-dark);
+}
+body.theme-dark a:hover {
+  color: var(--link-hover-color-dark);
+}
+
+/* Button Theming */
+body.theme-light .btn-primary {
+  background-color: var(--button-bg-light);
+  border-color: var(--button-bg-light);
+  color: var(--button-text-light);
+}
+body.theme-light .btn-primary:hover {
+  background-color: var(--button-hover-bg-light);
+  border-color: var(--button-hover-bg-light);
+}
+
+body.theme-light .btn-secondary {
+  background-color: var(--button-secondary-bg-light);
+  border-color: var(--button-secondary-bg-light);
+  color: var(--button-secondary-text-light);
+}
+body.theme-light .btn-secondary:hover {
+  background-color: var(--button-secondary-hover-bg-light);
+  border-color: var(--button-secondary-hover-bg-light);
+}
+body.theme-light .btn-info {
+  background-color: var(--button-info-bg-light);
+  border-color: var(--button-info-bg-light);
+  color: var(--button-info-text-light);
+}
+body.theme-light .btn-info:hover {
+  background-color: var(--button-info-hover-bg-light);
+  border-color: var(--button-info-hover-bg-light);
+}
+body.theme-light .btn-warning {
+  background-color: var(--button-warning-bg-light);
+  border-color: var(--button-warning-bg-light);
+  color: var(--button-warning-text-light);
+}
+body.theme-light .btn-warning:hover {
+  background-color: var(--button-warning-hover-bg-light);
+  border-color: var(--button-warning-hover-bg-light);
+}
+
+
+body.theme-dark .btn-primary {
+  background-color: var(--button-bg-dark);
+  border-color: var(--button-bg-dark);
+  color: var(--button-text-dark);
+}
+body.theme-dark .btn-primary:hover {
+  background-color: var(--button-hover-bg-dark);
+  border-color: var(--button-hover-bg-dark);
+}
+/* Add other button types (btn-danger, btn-success, etc.) if needed */
+body.theme-light .btn-danger {
+    background-color: #dc3545; /* Bootstrap default */
+    border-color: #dc3545;
+    color: #fff;
+}
+body.theme-light .btn-danger:hover {
+    background-color: #bb2d3b;
+    border-color: #b02a37;
+}
+body.theme-dark .btn-danger {
+    background-color: #e65252; /* Lighter red for dark mode */
+    border-color: #e65252;
+    color: #111827;
+}
+body.theme-dark .btn-danger:hover {
+    background-color: #d63333;
+    border-color: #c93030;
+}
+
+body.theme-dark .btn-secondary {
+  background-color: var(--button-secondary-bg-dark);
+  border-color: var(--button-secondary-bg-dark);
+  color: var(--button-secondary-text-dark);
+}
+body.theme-dark .btn-secondary:hover {
+  background-color: var(--button-secondary-hover-bg-dark);
+  border-color: var(--button-secondary-hover-bg-dark);
+}
+body.theme-dark .btn-info {
+  background-color: var(--button-info-bg-dark);
+  border-color: var(--button-info-bg-dark);
+  color: var(--button-info-text-dark);
+}
+body.theme-dark .btn-info:hover {
+  background-color: var(--button-info-hover-bg-dark);
+  border-color: var(--button-info-hover-bg-dark);
+}
+body.theme-dark .btn-danger {
+  background-color: var(--button-danger-bg-dark);
+  border-color: var(--button-danger-bg-dark);
+  color: var(--button-danger-text-dark);
+}
+body.theme-dark .btn-danger:hover {
+  background-color: var(--button-danger-hover-bg-dark);
+  border-color: var(--button-danger-hover-bg-dark);
+}
+
+
+/* Table Theming */
+body.theme-light .table {
+  border-color: var(--table-border-light);
+}
+body.theme-light .table thead th {
+  background-color: var(--table-header-bg-light);
+  border-color: var(--table-border-light);
+  color: var(--text-color-light);
+}
+body.theme-light .table tbody td,
+body.theme-light .table tbody th {
+  border-color: var(--table-border-light);
+  color: var(--text-color-light);
+}
+body.theme-light .table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0,0,0,.05); /* Bootstrap default light */
+}
+
+
+body.theme-dark .table {
+  color: var(--text-color-dark);
+  border-color: var(--table-border-dark);
+  background-color: var(--card-bg-dark); /* Use card background for table */
+}
+body.theme-dark .table thead th {
+  background-color: var(--table-header-bg-dark);
+  border-color: var(--table-border-dark);
+  color: var(--text-color-dark);
+}
+body.theme-dark .table tbody td,
+body.theme-dark .table tbody th {
+  border-color: var(--table-border-dark);
+  color: var(--text-color-dark) !important; /* Ensure text is light */
+  background-color: transparent; /* Inherit from .table background */
+}
+body.theme-dark .table-striped tbody tr:nth-of-type(odd) td,
+body.theme-dark .table-striped tbody tr:nth-of-type(odd) th {
+    background-color: rgba(0,0,0,.15); /* Darker stripe for dark mode */
+}
+body.theme-dark .table-hover tbody tr:hover td,
+body.theme-dark .table-hover tbody tr:hover th {
+    color: var(--text-color-dark);
+    background-color: rgba(0,0,0,.25); /* Darker hover for dark mode */
+}
+
+
+/* Card Theming */
+body.theme-light .card {
+  background-color: var(--card-bg-light);
+  border: 1px solid var(--card-border-light);
+}
+body.theme-light .card-header {
+  background-color: var(--table-header-bg-light); /* Similar to table header */
+  border-bottom: 1px solid var(--card-border-light);
+}
+
+body.theme-dark .card {
+  background-color: var(--card-bg-dark);
+  border: 1px solid var(--card-border-dark);
+  color: var(--text-color-dark);
+}
+body.theme-dark .card-header {
+  background-color: var(--table-header-bg-dark); /* Similar to table header */
+  border-bottom: 1px solid var(--card-border-dark);
+  color: var(--text-color-dark);
+}
+body.theme-dark .card-body {
+    color: var(--text-color-dark);
+}
+
+
+/* Form Input Theming */
+body.theme-light .form-control,
+body.theme-light .form-select {
+  background-color: var(--input-bg-light);
+  border: 1px solid var(--input-border-light);
+  color: var(--input-text-light);
+}
+body.theme-light .form-control:focus,
+body.theme-light .form-select:focus {
+  border-color: #86b7fe; /* Bootstrap default focus */
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); /* Bootstrap default focus */
+}
+
+
+body.theme-dark .form-control,
+body.theme-dark .form-select {
+  background-color: var(--input-bg-dark);
+  border: 1px solid var(--input-border-dark);
+  color: var(--input-text-dark);
+}
+body.theme-dark .form-control::placeholder {
+    color: #6c757d; /* Lighter placeholder for dark inputs */
+}
+body.theme-dark .form-control:focus,
+body.theme-dark .form-select:focus {
+  border-color: #86b7fe; /* Bootstrap default focus, can be themed too */
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); /* Bootstrap default focus */
+  background-color: var(--input-bg-dark); /* Ensure focus doesn't change bg color if not intended */
+  color: var(--input-text-dark);
+}
+
+
+/* Flash Message Theming */
+body.theme-light .alert-success {
+  background-color: var(--flash-success-bg-light);
+  color: var(--flash-success-text-light);
+  border-color: var(--flash-success-bg-light);
+}
+body.theme-light .alert-danger {
+  background-color: var(--flash-error-bg-light);
+  color: var(--flash-error-text-light);
+  border-color: var(--flash-error-bg-light);
+}
+body.theme-light .alert-info {
+  background-color: var(--flash-info-bg-light);
+  color: var(--flash-info-text-light);
+  border-color: var(--flash-info-bg-light);
+}
+
+body.theme-dark .alert-success {
+  background-color: var(--flash-success-bg-dark);
+  color: var(--flash-success-text-dark);
+  border-color: var(--flash-success-bg-dark);
+}
+body.theme-dark .alert-danger {
+  background-color: var(--flash-error-bg-dark);
+  color: var(--flash-error-text-dark);
+  border-color: var(--flash-error-bg-dark);
+}
+body.theme-dark .alert-info {
+  background-color: var(--flash-info-bg-dark);
+  color: var(--flash-info-text-dark);
+  border-color: var(--flash-info-bg-dark);
+}
+
+/* Badge Theming */
+body.theme-dark .badge.bg-success {
+    background-color: var(--badge-success-bg-dark) !important; /* important to override BS default */
+    color: var(--badge-success-text-dark) !important;
+}
+body.theme-dark .badge.bg-info {
+    background-color: var(--badge-info-bg-dark) !important;
+    color: var(--badge-info-text-dark) !important;
+}
+body.theme-dark .badge.bg-secondary {
+    background-color: var(--badge-secondary-bg-dark) !important;
+    color: var(--badge-secondary-text-dark) !important;
+}
+/* Add other badge types (bg-danger, bg-warning) if needed for dark mode */
+body.theme-dark .badge.bg-danger {
+    background-color: var(--button-danger-bg-dark) !important; /* Using button color for consistency */
+    color: var(--button-danger-text-dark) !important;
+}
+
+
+/* List Group Theming */
+body.theme-light .list-group-item {
+    background-color: var(--bg-color-light);
+    color: var(--text-color-light);
+    border-color: var(--table-border-light); /* Use table border for consistency */
+}
+
+body.theme-dark .list-group {
+    /* Optional: if the list-group itself needs a specific bg */
+}
+
+body.theme-dark .list-group-item {
+    background-color: var(--card-bg-dark); /* Use card background for items */
+    color: var(--text-color-dark);
+    border-color: var(--table-border-dark); /* Use table border for consistency */
+}
+body.theme-dark .list-group-item strong { /* Ensure strong tags are also themed */
+    color: var(--text-color-dark);
+}
+
+
+/* Theme toggle switch styling */
+.theme-switch-wrapper {
+  display: flex;
+  align-items: center;
+  margin-left: 1rem; /* Adjust as needed */
+}
+
+.theme-switch {
+  display: inline-block;
+  height: 24px; /* Adjusted height */
+  position: relative;
+  width: 48px;  /* Adjusted width */
+}
+
+.theme-switch input {
+  display:none;
+}
+
+.slider {
+  background-color: #ccc;
+  bottom: 0;
+  cursor: pointer;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transition: .4s;
+}
+
+.slider:before {
+  background-color: #fff;
+  bottom: 3px; /* Adjusted position */
+  /* content: ""; */ /* Will be replaced by icon */
+  height: 18px; /* Adjusted size */
+  left: 3px;  /* Adjusted position */
+  position: absolute;
+  transition: .4s;
+  width: 18px; /* Adjusted size */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px; /* Adjust icon size */
+  color: #777; /* Default icon color for light mode */
+  content: '☀️'; /* Sun icon for light mode */
+}
+
+input:checked + .slider {
+  background-color: var(--link-color-dark); /* Use a theme color */
+}
+body.theme-light input:checked + .slider {
+  background-color: var(--link-color-light);
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px); /* Adjusted translation */
+  content: '🌙'; /* Moon icon for dark mode */
+  color: #fff; /* Icon color for dark mode */
+}
+
+.slider.round {
+  border-radius: 24px; /* Adjusted for new height */
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+.theme-switch-wrapper .form-check-label {
+    margin-left: 0.5rem;
+    font-size: 0.9rem; /* Smaller label */
+}
+
+/* Ensure navbar items are vertically centered with the switch */
+.navbar-nav {
+    align-items: center;
+}

@@ -1,0 +1,36 @@
+---
+- name: List QLDS Chat Logs
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    game_port: "{{ port }}"
+    log_dir: "/home/ql/qlds-{{ game_port }}/chatlogs/"
+
+  tasks:
+    - name: Initialize file list
+      ansible.builtin.set_fact:
+        chat_log_files: []
+
+    - name: Check if chat log directory exists
+      ansible.builtin.stat:
+        path: "{{ log_dir }}"
+      register: dir_stat
+
+    - name: Find chat log files
+      ansible.builtin.find:
+        paths: "{{ log_dir }}"
+        patterns: "chat.log*"
+        file_type: file
+      register: found_files
+      when: dir_stat.stat.exists and dir_stat.stat.isdir
+
+    - name: Set file list from results
+      ansible.builtin.set_fact:
+        chat_log_files: "{{ found_files.files | map(attribute='path') | map('basename') | list | sort(reverse=True) }}"
+      when: dir_stat.stat.exists and dir_stat.stat.isdir
+
+    - name: Output file list to stdout for capture
+      ansible.builtin.debug:
+        msg: "{{ chat_log_files | to_json }}"

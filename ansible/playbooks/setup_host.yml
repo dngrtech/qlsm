@@ -1,0 +1,429 @@
+---
+- name: Setup Host for QLDS Instances (One-Time)
+  hosts: all # Target host will be specified by the calling task
+  become: yes
+  gather_facts: true
+
+  vars:
+    # Shared locations for base installs and assets
+    steam_dir: "/home/ql/Steam"
+    qlds_base_dir: "/home/ql/qlds-base"
+    minqlx_build_dir: "/tmp/minqlx-build" # Temporary build location
+    minqlx_shared_dir: "/home/ql/minqlx-shared"
+    common_assets_dir: "/home/ql/assets/common"
+
+    # Firewall vars (can be kept if needed, or simplified if static)
+    game_udp_ports: [27960, 27961, 27962, 27963]
+    rcon_tcp_ports: [28888, 28889, 28890, 28891, 29999, 30000, 30001, 30002]
+    remote_rules_path: /tmp/iptables.new.v4
+
+    # SSH and standalone host configuration
+    # These can be overridden via --extra-vars from the calling task
+    ssh_port: 22
+    is_standalone: false
+
+  tasks:
+  #######################################################################
+  # 0. Network Configuration for Debian (Disable cloud-init & set static IP)
+  #######################################################################
+    - name: Gather network facts
+      set_fact:
+        primary_interface: "{{ ansible_default_ipv4.interface }}"
+        current_ip: "{{ ansible_default_ipv4.address }}"
+        current_netmask: "{{ ansible_default_ipv4.netmask }}"
+        current_gateway: "{{ ansible_default_ipv4.gateway }}"
+
+    - name: Disable cloud-init network configuration
+      copy:
+        dest: /etc/cloud/cloud.cfg.d/99_disable_network.cfg
+        content: "network: {config: disabled}\n"
+        owner: root
+        group: root
+        mode: '0644'
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Configure static network interface (ifupdown)
+      copy:
+        dest: /etc/network/interfaces
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          auto lo
+          iface lo inet loopback
+
+          auto {{ primary_interface }}
+          iface {{ primary_interface }} inet static
+            address {{ current_ip }}
+            netmask {{ current_netmask }}
+            gateway {{ current_gateway }}
+            dns-nameservers 1.1.1.1 8.8.8.8
+      notify: restart networking
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+  #######################################################################
+  # 1. Base packages & ssh hardening
+  #######################################################################
+    # Skip SSH hardening for standalone hosts - user manages their own security
+    - name: Force key-only ssh logins
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?{{ item.key }}"
+        line: "{{ item.key }} {{ item.val }}"
+        state: present
+        backup: yes
+        validate: /usr/sbin/sshd -t -f %s
+      loop:
+        - { key: PasswordAuthentication,         val: "no"  } # Use quotes
+        - { key: ChallengeResponseAuthentication, val: "no"  } # Use quotes
+        - { key: PubkeyAuthentication,            val: "yes" } # Use quotes
+      notify: restart ssh
+      when: not is_standalone
+
+    - name: Pre-seed iptables-persistent answers
+      debconf:
+        name: iptables-persistent
+        question: "{{ item }}"
+        value: "true"
+        vtype: boolean
+      loop:
+        - iptables-persistent/autosave_v4
+        - iptables-persistent/autosave_v6
+
+    - name: Check for Akamai repository
+      stat:
+        path: /etc/apt/sources.list.d/akamai-linux-team.list
+      register: akamai_repo
+
+    - name: Refresh Akamai GPG key to prevent apt cache update failures
+      shell: "curl -fsSL https://download.opensuse.org/repositories/home:/akamai-linux-team/Debian_12/Release.key | gpg --dearmor --yes -o /usr/share/keyrings/akamai-linux-team.gpg"
+      args:
+        executable: /bin/bash
+      when: akamai_repo.stat.exists
+
+    - name: Install prereqs
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        pkg:
+          - rsync
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - git
+          - net-tools
+          - wget
+          - build-essential
+          - lib32gcc-s1
+          - lib32stdc++6
+          - libc6-i386
+          - python3
+          - python3-dev
+          - python3-pip
+          - python3.11
+          - python3.11-dev
+          - redis-server # Keep redis-server here as it's host-level
+          - iptables-persistent
+          - sudo
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Set system timezone
+      community.general.timezone:
+        name: "{{ host_timezone | default('UTC') }}"
+      when: host_timezone is defined
+
+  ########################################################################
+  # 2. Firewall: build atomically, verify, roll back on failure
+  ########################################################################
+  # ------------------------------------------------------------------
+  # 2-A. Build a complete candidate rules file on the control node
+  # ------------------------------------------------------------------
+    - name: Create local temporary file for firewall rules
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .iptables
+      register: local_rules_temp
+      become: no
+
+    - name: Render candidate IPv4 ruleset locally
+      delegate_to: localhost
+      run_once: true # Still run once on control node
+      template:
+        src: "{{ playbook_dir }}/../templates/iptables.rules.j2"
+        dest: "{{ local_rules_temp.path }}"
+      become: no
+  # ------------------------------------------------------------------
+  # 2-B. Copy, validate syntax, back up current rules
+  # ------------------------------------------------------------------
+    - name: Upload candidate rules
+      copy:
+        src: "{{ local_rules_temp.path }}"
+        dest: "{{ remote_rules_path }}"
+        mode: '0600'
+
+    - name: Save active rules for rollback
+      command: iptables-save
+      register: ipt_backup
+      changed_when: false
+
+    - name: Dry-run iptables-restore (syntax check only)
+      shell: iptables-restore --test < {{ remote_rules_path }}
+      args:
+        executable: /bin/bash
+
+  # ------------------------------------------------------------------
+  # 2-C. Apply rules atomically; verify we're still reachable
+  # ------------------------------------------------------------------
+    - name: Apply rules atomically; verify reachability
+      block:
+        - name: Apply candidate firewall rules
+          shell: "cat {{ remote_rules_path }} | iptables-restore"
+          args:
+            executable: /bin/bash
+
+        - name: Verify SSH still reachable (25 s)
+          wait_for:
+            port: "{{ ssh_port }}" # Use variable for consistency and QUOTE it
+            timeout: 25
+            state: started
+
+        - name: Persist rules on success
+          copy:
+            content: "{{ lookup('file', local_rules_temp.path) }}"
+            dest: /etc/iptables/rules.v4
+            mode: '0600'
+      rescue:
+        - name: Roll back to previous firewall rules
+          ansible.builtin.copy:
+            content: "{{ ipt_backup.stdout }}"
+            dest: /tmp/iptables.rollback
+            mode: '0600'
+        - name: Restore previous rules from backup
+          shell: "cat /tmp/iptables.rollback | iptables-restore"
+          args:
+            executable: /bin/bash
+        - fail:
+            msg: "Firewall change rolled back – SSH check failed."
+
+  #######################################################################
+  # 3. ql user
+  #######################################################################
+    - name: Ensure ql user exists
+      user: { name: ql, system: yes, createhome: yes, shell: /bin/bash }
+
+    - name: Ensure ql user owns its home directory
+      file:
+        path: /home/ql
+        owner: ql
+        group: ql
+        mode: '0750'
+        state: directory
+
+    - name: Create shared directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - "{{ steam_dir }}"
+        - "{{ qlds_base_dir }}"
+        - "{{ minqlx_shared_dir }}"
+        - "{{ common_assets_dir }}"
+        - "{{ common_assets_dir }}/minqlx-plugins" # For plugins sync
+        - "{{ common_assets_dir }}/scripts"       # For scripts sync
+
+  #######################################################################
+  # 4. SteamCMD + Base QLDS Install & Workshop Updater
+  #######################################################################
+    - name: Copy workshop update script to host
+      copy:
+        src: "{{ playbook_dir }}/../files/update_ql_workshops.sh"
+        dest: "/usr/local/bin/update_ql_workshops.sh"
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install Base QLDS with SteamCMD
+      shell: |
+        set -e
+        # Ensure directories exist and have correct owner (redundant with task above, but safe)
+        mkdir -p {{ steam_dir }} {{ qlds_base_dir }}
+        chown -R ql:ql {{ steam_dir }} {{ qlds_base_dir }}
+
+        # Run commands as ql user via su
+        su - ql -c "cd {{ steam_dir }} && \
+        ([ -f steamcmd.sh ] || { wget -qO steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz && tar xf steamcmd_linux.tar.gz && rm steamcmd_linux.tar.gz; }) && \
+        {{ steam_dir }}/steamcmd.sh +force_install_dir {{ qlds_base_dir }} +login anonymous +app_update 349090 validate +quit"
+      args:
+        executable: /bin/bash
+        creates: "{{ qlds_base_dir }}/run_server_x64.sh" # Avoid re-running if base exists
+      register: steamcmd_result
+      retries: 2
+      delay: 5
+      until: steamcmd_result.rc == 0
+
+  #######################################################################
+  # 5. Shared minqlx build
+  #######################################################################
+    - name: Clean up old minqlx build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+
+    - name: Create fresh minqlx build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Clone minqlx repo as ql user
+      become: yes
+      become_user: ql
+      git:
+        repo: https://github.com/MinoMino/minqlx.git
+        dest: "{{ minqlx_build_dir }}"
+        depth: 1
+      # Consider adding 'version: master' or a specific tag/commit for reproducibility
+
+    - name: Compile minqlx (make) as ql user
+      become: yes
+      become_user: ql
+      make:
+        chdir: "{{ minqlx_build_dir }}"
+      # Add check for existing shared files?
+      # args:
+      #   creates: "{{ minqlx_shared_dir }}/minqlx.x64.so"
+
+    - name: Copy minqlx compiled files to shared location
+      copy:
+        src: "{{ minqlx_build_dir }}/{{ item.src }}"
+        dest: "{{ minqlx_shared_dir }}/{{ item.dest }}"
+        remote_src: yes
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - { src: "bin/minqlx.x64.so", dest: "minqlx.x64.so" }
+        - { src: "bin/run_server_x64_minqlx.sh", dest: "run_server_x64_minqlx.sh" }
+        - { src: "python/minqlx/", dest: "minqlx/" } # Copy package CONTENTS
+
+    - name: Copy optional helper scripts to shared location if present
+      become: yes
+      shell: |
+        for h in minqlx-cmd quake_live.sh; do
+          if [ -f "{{ minqlx_build_dir }}/$h" ]; then
+            cp "{{ minqlx_build_dir }}/$h" "{{ minqlx_shared_dir }}/$h"
+            chown ql:ql "{{ minqlx_shared_dir }}/$h"
+            chmod 0755 "{{ minqlx_shared_dir }}/$h"
+          fi
+        done
+      args:
+        executable: /bin/bash
+
+    - name: Clean up minqlx build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+
+  #######################################################################
+  # 6. Sync Common Assets & Install Core Dependencies
+  #######################################################################
+    - name: Install core Python dependencies for minqlx
+      pip:
+        name:
+          - redis
+          - pyzmq
+          - discord.py
+        executable: pip3
+        extra_args: --break-system-packages
+
+    # Optional: Check for a common requirements file for plugins
+    # - name: Check if common requirements.txt exists
+    #   stat:
+    #     path: "{{ playbook_dir }}/../../ql-assets/data/common-requirements.txt" # Example path
+    #   register: common_req_stat
+    #   delegate_to: localhost
+    #   run_once: true
+
+    # - name: Install common plugin Python deps if present
+    #   pip:
+    #     requirements: "{{ playbook_dir }}/../../ql-assets/data/common-requirements.txt"
+    #     executable: pip3
+    #     extra_args: --break-system-packages
+    #   when: common_req_stat.stat.exists
+
+    - name: Check if local steamapps directory exists
+      stat:
+        path: "../../ql-assets/data/steamapps"
+      delegate_to: localhost
+      register: local_steamapps_stat
+      become: no
+
+    - name: Check if local minqlx-plugins directory exists
+      stat:
+        path: "../../ql-assets/data/minqlx-plugins"
+      delegate_to: localhost
+      register: local_minqlx_plugins_stat
+      become: no
+
+    - name: Check if local scripts directory exists
+      stat:
+        path: "../../ql-assets/data/scripts"
+      delegate_to: localhost
+      register: local_scripts_stat
+      become: no
+
+    - name: Sync common minqlx plugins
+      synchronize:
+        src: "../../ql-assets/data/minqlx-plugins/"
+        dest: "{{ common_assets_dir }}/minqlx-plugins/"
+        archive: yes
+        recursive: yes
+        delete: yes
+      when: local_minqlx_plugins_stat.stat.exists and local_minqlx_plugins_stat.stat.isdir
+
+    - name: Sync steamapps (workshop items) if present locally
+      synchronize:
+        src: "../../ql-assets/data/steamapps"
+        dest: "{{ qlds_base_dir }}/"
+        archive: yes
+        recursive: yes
+        delete: yes
+      when: local_steamapps_stat.stat.exists and local_steamapps_stat.stat.isdir
+
+    - name: Sync common scripts (excluding factories) to shared location
+      synchronize:
+        src: "../../ql-assets/data/scripts/"
+        dest: "{{ common_assets_dir }}/scripts/"
+        archive: yes
+        recursive: yes
+        delete: yes
+        rsync_opts:
+          - "--exclude=*.factories"  # Exclude factories - users select these via UI
+      when: local_scripts_stat.stat.exists and local_scripts_stat.stat.isdir
+
+    - name: Ensure correct ownership for shared assets
+      file:
+        path: "{{ item }}"
+        owner: ql
+        group: ql
+        recurse: yes
+        state: directory # Ensure directories exist
+      loop:
+        - "{{ common_assets_dir }}"
+        - "{{ qlds_base_dir }}/steamapps" # Specifically ensure steamapps ownership
+
+  handlers:
+    - name: restart networking
+      service: { name: networking, state: restarted }
+      when: not is_standalone
+    - name: restart ssh
+      service: { name: ssh, state: restarted }
+      when: not is_standalone

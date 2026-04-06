@@ -1,0 +1,51 @@
+# ── Exclude everything by default ──────────────────────────────────────────────
+*
+
+# ── Core application (Stage 2 — app container) ─────────────────────────────────
+!ui/
+!ansible/
+!ansible.cfg
+!terraform/
+!migrations/
+!requirements.txt
+!entrypoint.sh
+!gunicorn.conf.py
+!rcon_service/
+
+# ── Frontend source (Stage 1 — build only) ─────────────────────────────────────
+!frontend-react/
+
+# ── Bundled bootstrap data (seed first-run runtime volume) ────────────────────
+# Keep only the default preset in the build context.
+!configs/
+configs/*
+!configs/presets/
+configs/presets/*
+!configs/presets/default/
+!configs/presets/default/**
+
+# ── Game assets (plugins, scripts, qlfilter, rcon) ────────────────────────────
+# Everything ships in the image except steamapps (large binary workshop files).
+!ql-assets/
+ql-assets/data/steamapps
+
+# ── Sensitive / generated subdirs within included paths ────────────────────────
+
+# Terraform: exclude SSH keys, provider cache, and workspace state
+terraform/ssh-keys/
+terraform/vultr-root/terraform.tfstate.d/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+
+# Ansible: exclude generated inventory
+ansible/inventory/
+
+# Frontend: exclude installed packages and previous build output
+frontend-react/node_modules/
+frontend-react/dist/
+
+# Python: exclude bytecode
+**/__pycache__/
+**/*.pyc
+**/*.pyo

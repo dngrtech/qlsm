@@ -1,0 +1,117 @@
+---
+- name: Sync Instance Configs and Restart QLDS Service
+  hosts: all # Target host will be specified by the calling task's limit
+  become: yes
+  gather_facts: false
+
+  vars:
+    # Instance specific vars (passed via -e by the RQ task)
+    qlds_id: "{{ id }}" # Expecting 'id' - used for config sourcing
+    host_name: "{{ host_name }}" # Expecting 'host_name' for config path
+    game_port: "{{ port }}" # Expecting 'port' from task call, aliasing for clarity
+
+    restart_service: true # Default to true for backward compatibility
+
+    # Instance directory on target host
+    qlds_dir: "/home/ql/qlds-{{ game_port }}"
+
+  tasks:
+    - name: Sync instance-specific configs from UI server
+      ansible.builtin.synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: yes # Efficiently syncs
+        recursive: yes # Though individual files, good for consistency
+        rsync_path: "sudo -u ql rsync"
+        # Ensure delete is false (default) so other files in dest are not removed
+      loop:
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/server.cfg",  dest: "{{ qlds_dir }}/baseq3/server.cfg" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/mappool.txt", dest: "{{ qlds_dir }}/baseq3/mappool.txt" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/access.txt",  dest: "{{ qlds_dir }}/baseq3/access.txt" }
+        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/workshop.txt", dest: "{{ qlds_dir }}/baseq3/workshop.txt" }
+
+
+      delegate_to: localhost # synchronize runs from the control node (qlds-ui server)
+      become: false
+
+    - name: Sync instance-specific scripts (minqlx plugins) from UI server
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/scripts/"
+        dest: "{{ qlds_dir }}/minqlx-plugins/"
+        archive: yes
+        recursive: yes
+        rsync_path: "sudo -u ql rsync"
+        delete: yes
+      delegate_to: localhost
+
+      become: false
+
+    - name: Copy common minqlx-plugins to instance directory
+      ansible.builtin.copy:
+        src: "/home/ql/assets/common/minqlx-plugins/"
+        dest: "{{ qlds_dir }}/minqlx-plugins/"
+        owner: ql
+        group: ql
+        mode: preserve
+        remote_src: yes
+
+    - name: Remove existing factory files before syncing (ensures only selected factories remain)
+      ansible.builtin.shell: |
+        find {{ qlds_dir }}/baseq3/scripts/ -maxdepth 1 -name '*.factories' -type f -delete
+      ignore_errors: yes  # Directory may not exist on first run
+      
+    - name: Sync instance-specific factory files from UI server
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/factories/"
+        dest: "{{ qlds_dir }}/baseq3/scripts/" # Factories go into baseq3/scripts
+        archive: yes
+        recursive: yes
+        rsync_path: "sudo -u ql rsync"
+        delete: no # Don't delete non-factory files (like map scripts)
+      delegate_to: localhost
+      become: false
+
+    - name: Ensure correct ownership of minqlx-plugins directory
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/minqlx-plugins"
+        owner: ql
+        group: ql
+        recurse: yes
+        state: directory
+
+    - name: Ensure correct ownership of synced configs
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/baseq3/{{ item }}"
+        owner: ql
+        group: ql
+        mode: '0644' # Or appropriate permissions
+      loop:
+        - server.cfg
+        - mappool.txt
+        - access.txt
+        - workshop.txt
+
+
+    
+    - name: Render QLDS systemd service file (Update Hostname/Args)
+      ansible.builtin.template:
+        src: ../templates/qlds@.service.j2
+        dest: /etc/systemd/system/qlds@{{ game_port }}.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload systemd daemon
+
+    - name: Flush handlers to ensure daemon_reload runs before restart
+      ansible.builtin.meta: flush_handlers
+
+    - name: Restart QLDS service
+      ansible.builtin.systemd:
+        name: "qlds@{{ game_port }}"
+        state: restarted
+      when: restart_service | bool
+
+  handlers:
+    - name: reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes

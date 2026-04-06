@@ -1,0 +1,32 @@
+---
+- name: Sync All Files
+  hosts: all
+  become: yes
+  gather_facts: true
+
+  tasks:
+ 
+    - name: Synchronize files and folders
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: yes
+        recursive: yes
+      with_items:
+        - { src: "../../ql-assets/data/minqlx-plugins", dest: "/home/ql/qlds/data" }
+        - { src: "../../ql-assets/data/scripts", dest: "/home/ql/qlds/data" }
+        - { src: "../../ql-assets/data/steamapps", dest: "/home/ql/qlds/data" }
+        - { src: "../../ql-assets/common/workshop.txt", dest: "/home/ql/qlds/workshop.txt" }
+        - { src: "../../configs/{{ target_host }}/mappool.txt", dest: "/home/ql/qlds/mappool.txt" }
+        - { src: "../../ql-assets/common/redis.conf", dest: "/home/ql/qlds/redis.conf" }
+        - { src: "../../configs/{{ inventory_hostname }}/server1.cfg", dest: "/home/ql/qlds/server1.cfg" }
+        - { src: "../../configs/{{ inventory_hostname }}/server2.cfg", dest: "/home/ql/qlds/server2.cfg" }
+        - { src: "../../configs/{{ inventory_hostname }}/server3.cfg", dest: "/home/ql/qlds/server3.cfg" }
+        - { src: "../../configs/{{ inventory_hostname }}/docker-compose.yml", dest: "/home/ql/qlds/docker-compose.yml" }
+    
+    - name: Set ownership for /home/ql and all subdirectories
+      file:
+        path: /home/ql
+        owner: ql
+        group: ql
+        recurse: yes

@@ -1,0 +1,82 @@
+[
+  {
+    "cvars": {
+      "timelimit": "20",
+      "capturelimit": "8",
+      "teamsize": "4",
+	"mercylimit": "5",
+      "g_itemTimers": "0",
+      "g_dropCmds": "7",
+      "g_overtime": "0",
+      "g_suddenDeathRespawn": "1",
+      "g_battleSuitDampen": "0.33",
+      "g_allowKill": "0",
+      "g_itemHeight": "15",
+      "g_spawnDelay_powerup": "30",
+      "g_spawnDelayRandom_powerup": "30",
+      "g_laghaxMs": "180",
+	  "g_lagHaxHistory": "10",
+	  "pmove_BunnyHop": "0",
+      "pmove_CrouchStepJump": "0",
+      "pmove_JumpTimeDeltaMin": "50",
+      "pmove_WaterSwimScale": "0.5f",
+      "pmove_WaterWadeScale": "0.75f",
+      "g_timeoutCount": "3",
+      "g_timeoutLen": "90",
+      "g_teamForceBalance": "0",
+      "sv_warmupReadyPercentage": "1.0",
+      "g_autoAction": "3",
+      "sv_altEntDir": "noHMG"
+    },
+    "tags": [
+      "classic"
+    ],
+    "author": "House of Quake Live",
+    "title": "HoQ CTF",
+    "description": "House of Quake CTF League Settings",
+    "basegt": "ctf",
+    "id": "hoql_ctf"
+  },
+  {
+    "cvars": {
+      "timelimit": "20",
+      "fraglimit": "0",
+      "teamsize": "4",
+      "mercylimit": "50",
+      "g_itemTimers": "0",
+      "g_dropCmds": "4",
+      "g_dropPowerups": "0",
+      "g_friendlyFire": "1",
+      "g_weaponRespawn": "30",
+      "g_damage_mg": "4",
+	"g_damage_lg": "7",
+	"g_knockback_lg": "1.5",	
+	"g_laghaxMs": "180",
+	"g_lagHaxHistory": "10",
+      "g_complaintLimit": "0",
+      "g_allowKill": "0",
+      "g_itemHeight": "15",
+      "g_spawnDelay_powerup": "30",
+      "g_spawnDelayRandom_powerup": "30",
+      "pmove_BunnyHop": "0",
+      "pmove_CrouchStepJump": "0",
+      "pmove_JumpTimeDeltaMin": "50",
+      "pmove_WaterSwimScale": "0.5f",
+      "pmove_WaterWadeScale": "0.75f",
+      "g_timeoutCount": "3",
+      "g_timeoutLen": "90",
+      "g_teamForceBalance": "0",
+      "sv_warmupReadyPercentage": "1.0",
+      "g_autoAction": "3",
+      "sv_altEntDir": "noHMG"
+    },
+    "tags": [
+      "classic"
+    ],
+    "author": "House of Quake",
+    "title": "HoQ TDM",
+    "description": "House of Quake TDM League Settings",
+    "basegt": "tdm",
+    "id": "hoq_tdm2"
+  }
+]

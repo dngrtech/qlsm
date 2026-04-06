@@ -1,0 +1,94 @@
+---
+- name: Restart QLDS Host
+  hosts: all
+  become: yes
+  gather_facts: true
+
+  vars:
+    ssh_port: 22  # Reuse the same SSH port from setup_host.yml
+    critical_services:
+      - redis-server  # Required for minqlx
+      - ssh          # Required for host management
+      - iptables     # Required for firewall
+
+  tasks:
+    - name: Check if running in check mode
+      fail:
+        msg: "This playbook cannot be run in check mode as it requires a system reboot"
+      when: ansible_check_mode
+
+    - name: Get uptime before reboot
+      shell: cat /proc/uptime | awk '{print $1}'
+      register: uptime_before
+      changed_when: false
+      failed_when: uptime_before.rc != 0
+
+    - name: Debug - Show uptime before reboot
+      debug:
+        msg: >
+          {% if uptime_before is defined and 'stdout' in uptime_before %}
+          Uptime before reboot: {{ uptime_before.stdout }} seconds
+          {% else %}
+          Uptime before reboot not available.
+          {% endif %}
+
+    - name: Verify SSH is reachable before restart
+      wait_for:
+        port: "{{ ssh_port }}"
+        timeout: 25
+        state: started
+
+    - name: Restart host
+      reboot:
+        msg: "Restarting host"
+        pre_reboot_delay: 10
+        post_reboot_delay: 30
+        reboot_timeout: 300
+      register: reboot_result
+      check_mode: no
+
+    - name: Debug - Show reboot result
+      debug:
+        var: reboot_result
+
+    - name: Wait for SSH to be available after restart
+      wait_for:
+        port: "{{ ssh_port }}"
+        timeout: 300
+        state: started
+        delay: 10
+
+    - name: Get uptime after reboot
+      shell: cat /proc/uptime | awk '{print $1}'
+      register: uptime_after
+      changed_when: false
+      failed_when: "'rc' not in uptime_after or uptime_after.rc != 0"
+      retries: 5
+      delay: 5
+      until: uptime_after is defined and 'rc' in uptime_after and uptime_after.rc == 0 and 'stdout' in uptime_after and uptime_after.stdout | trim != ""
+
+    - name: Debug - Show uptime after reboot
+      debug:
+        msg: >
+          {% if uptime_after is defined and 'stdout' in uptime_after %}
+          Uptime after reboot: {{ uptime_after.stdout }} seconds
+          {% else %}
+          Uptime after reboot not available.
+          {% endif %}
+
+    - name: Verify reboot occurred
+      assert:
+        that:
+          - uptime_after is defined
+          - uptime_before is defined
+          - uptime_after.stdout is defined
+          - uptime_before.stdout is defined
+          - uptime_after.stdout | float < uptime_before.stdout | float
+        fail_msg: "System did not reboot - uptime did not reset"
+        success_msg: "System successfully rebooted - uptime reset confirmed"
+
+    - name: Verify critical services
+      service:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ critical_services }}"

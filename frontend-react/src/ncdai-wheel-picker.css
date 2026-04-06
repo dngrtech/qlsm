@@ -1,0 +1,40 @@
+/* Base library styles */
+@import "@ncdai/react-wheel-picker/style.css";
+
+/* ── Theme-aware wheel picker overrides ── */
+
+/* Wrapper: bordered container matching app surfaces */
+[data-rwp-wrapper] {
+    border-radius: 0.5rem;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-raised);
+    padding: 0 0.25rem;
+}
+
+/* Round highlight corners on first/last columns */
+[data-rwp-wrapper] > [data-rwp]:first-child [data-rwp-highlight-wrapper] {
+    border-top-left-radius: 0.375rem;
+    border-bottom-left-radius: 0.375rem;
+}
+
+[data-rwp-wrapper] > [data-rwp]:last-child [data-rwp-highlight-wrapper] {
+    border-top-right-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
+}
+
+/* Non-selected option items */
+.rwp-option {
+    color: var(--text-muted);
+    transition: color 0.15s;
+}
+
+/* Highlight band (selected row background) */
+.rwp-highlight {
+    background: var(--surface-elevated);
+}
+
+/* Selected item text */
+.rwp-highlight-item {
+    font-weight: 600;
+    color: var(--accent-primary);
+}

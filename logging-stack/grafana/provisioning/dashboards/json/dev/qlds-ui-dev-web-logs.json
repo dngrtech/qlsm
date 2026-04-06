@@ -1,0 +1,74 @@
+{
+  "uid": "qlds-ui-dev-web-logs",
+  "title": "QLDS-UI Dev - web",
+  "tags": ["qlds-ui", "logs", "dev"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "level",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "" },
+        "query": { "type": 1, "label": "level", "stream": "{job=\"qlds-ui\", env=\"dev\", service=~\"web\"}" },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "label": "Level"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log Volume",
+      "type": "barchart",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "" },
+      "targets": [
+        {
+          "expr": "sum by (service) (count_over_time({job=\"qlds-ui\", env=\"dev\", service=~\"web\", level=~\"$level\"} [1m]))",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "stacking": "normal"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Logs",
+      "type": "logs",
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 6 },
+      "datasource": { "type": "loki", "uid": "" },
+      "targets": [
+        {
+          "expr": "{job=\"qlds-ui\", env=\"dev\", service=~\"web\", level=~\"$level\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

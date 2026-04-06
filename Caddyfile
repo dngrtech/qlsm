@@ -1,0 +1,15 @@
+# QLDS UI — Caddyfile
+#
+# SITE_ADDRESS controls TLS behaviour (set in .env):
+#   Automatic HTTPS:  SITE_ADDRESS=qlds.example.com
+#   HTTP only:        SITE_ADDRESS=:80
+#
+# Caddy obtains and renews Let's Encrypt certificates automatically when a
+# domain name is set. No Certbot or manual cert management required.
+# Certificates are stored in the caddy-data Docker volume.
+
+{$SITE_ADDRESS} {
+    # Proxy everything to Flask (API + SPA + WebSockets)
+    # WebSocket upgrade is handled automatically by Caddy
+    reverse_proxy web:5001
+}

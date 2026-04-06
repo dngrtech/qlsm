@@ -1,0 +1,34 @@
+services:
+  loki:
+    image: grafana/loki:3.4.2
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+      - ${LOGGING_DATA_DIR:-./logging-data}/loki:/loki
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "0.0.0.0:3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ${LOGGING_DATA_DIR:-./logging-data}/grafana:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+    depends_on:
+      - loki
+    restart: unless-stopped

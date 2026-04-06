@@ -1,0 +1,32 @@
+---
+- name: Check QLFilter Service Status
+  hosts: "{{ target_host }}"
+  become: yes
+  vars:
+    qlfilter_service_name: "qlfilter.service"
+  tasks:
+    - name: Check if qlfilter service is active and enabled
+      ansible.builtin.systemd:
+        name: "{{ qlfilter_service_name }}"
+      register: qlfilter_service_status
+      ignore_errors: yes # Service might not exist
+
+    - name: Set qlfilter_installed fact
+      ansible.builtin.set_fact:
+        qlfilter_installed: "{{ qlfilter_service_status.status.ActiveState == 'active' and qlfilter_service_status.status.LoadState == 'loaded' and qlfilter_service_status.status.UnitFileState == 'enabled' }}"
+        qlfilter_active: "{{ qlfilter_service_status.status.ActiveState == 'active' }}"
+        qlfilter_enabled: "{{ qlfilter_service_status.status.UnitFileState == 'enabled' }}"
+        qlfilter_exists: "{{ not qlfilter_service_status.failed and qlfilter_service_status.status.LoadState == 'loaded' }}" # Check if service file exists and is loaded
+      when: qlfilter_service_status is defined and qlfilter_service_status.status is defined
+
+    - name: Set qlfilter_installed to false if service check failed or service not defined
+      ansible.builtin.set_fact:
+        qlfilter_installed: false
+        qlfilter_active: false
+        qlfilter_enabled: false
+        qlfilter_exists: false
+      when: qlfilter_service_status is not defined or qlfilter_service_status.status is not defined or qlfilter_service_status.failed
+
+    - name: Debug QLFilter status
+      ansible.builtin.debug:
+        msg: "QLFilter Installed: {{ qlfilter_installed }}, Active: {{ qlfilter_active }}, Enabled: {{ qlfilter_enabled }}, Exists: {{ qlfilter_exists }}"

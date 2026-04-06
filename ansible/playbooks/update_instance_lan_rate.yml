@@ -1,0 +1,125 @@
+---
+- name: Update QLDS Instance LAN Rate Settings
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    # Instance specific vars (passed via -e)
+    game_port: "{{ port }}"
+    # lan_rate_enabled: passed from task logic
+    # qlds_args: passed from task logic
+
+  tasks:
+  #######################################################################
+  # 1. Ensure route_localnet is enabled (only if enabling LAN rate)
+  #######################################################################
+    - name: Ensure route_localnet is enabled
+      sysctl:
+        name: "{{ item }}"
+        value: 1
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - net.ipv4.conf.all.route_localnet
+        - net.ipv4.conf.default.route_localnet
+        - net.ipv4.conf.lo.route_localnet
+      when: lan_rate_enabled | default(false)
+
+  #######################################################################
+  # 2. Re-render systemd service file with updated qlds_args
+  #######################################################################
+    - name: Render QLDS systemd service file
+      ansible.builtin.template:
+        src: ../templates/qlds@.service.j2
+        dest: /etc/systemd/system/qlds@{{ game_port }}.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload systemd daemon
+
+    - name: Flush handlers to ensure daemon_reload runs before service restart
+      ansible.builtin.meta: flush_handlers
+
+  #######################################################################
+  # 3. Add or remove NAT iptables rules based on lan_rate_enabled
+  #######################################################################
+    # Add NAT rules (when enabling LAN rate)
+    - name: Check if INPUT SNAT rule exists (required for NAT)
+      command: iptables -t nat -C INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      register: input_snat_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_enabled | default(false)
+
+    - name: Add INPUT SNAT rule (required for NAT)
+      command: iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - input_snat_check.rc != 0
+
+    - name: Check if PREROUTING DNAT rule exists
+      command: iptables -t nat -C PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      register: prerouting_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_enabled | default(false)
+
+    - name: Add PREROUTING DNAT rule
+      command: iptables -t nat -A PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - prerouting_check.rc != 0
+
+    - name: Check if POSTROUTING SNAT rule exists
+      command: iptables -t nat -C POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      register: postrouting_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_enabled | default(false)
+
+    - name: Add POSTROUTING SNAT rule
+      command: iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_enabled | default(false)
+        - postrouting_check.rc != 0
+
+    # Remove NAT rules (when disabling LAN rate)
+    - name: Remove PREROUTING DNAT rule
+      command: iptables -t nat -D PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      when: not (lan_rate_enabled | default(false))
+      ignore_errors: yes
+
+    - name: Remove POSTROUTING SNAT rule
+      command: iptables -t nat -D POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      when: not (lan_rate_enabled | default(false))
+      ignore_errors: yes
+
+  #######################################################################
+  # 4. Persist iptables rules
+  #######################################################################
+    - name: Ensure iptables directory exists
+      file:
+        path: /etc/iptables
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Save iptables rules
+      shell: iptables-save > /etc/iptables/rules.v4
+
+  #######################################################################
+  # 5. Restart the instance service
+  #######################################################################
+    - name: Restart QLDS service
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: restarted
+        enabled: yes
+
+  handlers:
+    - name: reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes

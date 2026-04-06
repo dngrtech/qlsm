@@ -1,0 +1,54 @@
+---
+- name: Remove QLFilter
+  hosts: "{{ target_host }}"
+  become: yes
+  vars:
+    qlfilter_base_dir: "/opt/qlfilter"
+    qlfilter_service_name: "qlfilter.service"
+  tasks:
+    - name: Gather facts to get default network interface
+      ansible.builtin.setup:
+      when: ansible_default_ipv4.interface is not defined
+
+    - name: Set network interface fact
+      ansible.builtin.set_fact:
+        network_interface: "{{ ansible_default_ipv4.interface }}"
+      when: ansible_default_ipv4.interface is defined
+
+    - name: Ensure network_interface is set
+      ansible.builtin.fail:
+        msg: "Could not determine the default network interface."
+      when: network_interface is not defined or network_interface == ""
+
+    - name: Stop and disable QLFilter service
+      ansible.builtin.systemd:
+        name: "{{ qlfilter_service_name }}"
+        state: stopped
+        enabled: no
+      ignore_errors: yes # Ignore if service doesn't exist
+
+    - name: Remove QLFilter service file
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ qlfilter_service_name }}"
+        state: absent
+      register: service_file_removal
+      notify: Reload systemd if service file was removed
+
+    - name: Detach XDP program from interface
+      ansible.builtin.command:
+        cmd: "ip link set dev {{ network_interface }} xdp off"
+      register: xdp_detach_result
+      changed_when: xdp_detach_result.rc == 0
+      failed_when: xdp_detach_result.rc != 0 and "No XDP program loaded" not in xdp_detach_result.stderr
+      ignore_errors: yes # It might not be loaded, or interface might not exist in some edge cases
+
+    - name: Remove QLFilter base directory
+      ansible.builtin.file:
+        path: "{{ qlfilter_base_dir }}"
+        state: absent
+
+  handlers:
+    - name: Reload systemd if service file was removed
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      when: service_file_removal.changed

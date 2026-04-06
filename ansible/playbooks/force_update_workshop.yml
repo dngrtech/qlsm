@@ -1,0 +1,64 @@
+---
+- name: Force Update Workshop Item
+  hosts: "{{ target_host | default('all') }}"
+  become: yes
+  vars:
+    # QL User and paths
+    ql_user: ql
+    ql_group: ql
+    steam_cmd_path: "/home/ql/Steam/steamcmd.sh"
+    qlds_base_workshop_path: "/home/ql/qlds-base/steamapps/workshop/content/282440"
+
+    # Needs to be passed in at runtime: item_id
+    workshop_item_id: "{{ item_id }}"
+
+  tasks:
+    - name: Ensure item_id is provided
+      fail:
+        msg: "an 'item_id' variable must be provided."
+      when: workshop_item_id is not defined or workshop_item_id == ""
+
+    - name: Run steamcmd to download the workshop item to qlds-base
+      command: >
+        {{ steam_cmd_path }}
+        +force_install_dir /home/ql/qlds-base
+        +login anonymous
+        +workshop_download_item 282440 {{ workshop_item_id }} validate
+        +quit
+      become_user: "{{ ql_user }}"
+      register: steamcmd_result
+      failed_when: >
+        steamcmd_result.rc != 0 or
+        'Success.' not in steamcmd_result.stdout
+
+    - name: Display steamcmd output
+      debug:
+        var: steamcmd_result.stdout_lines
+
+    - name: Find all existing instance directories
+      find:
+        paths: "/home/ql"
+        file_type: directory
+        patterns: "qlds-*"
+        excludes: "qlds-base"
+      register: instance_directories
+
+    - name: Copy downloaded workshop item from qlds-base to all instances
+      copy:
+        src: "{{ qlds_base_workshop_path }}/{{ workshop_item_id }}/"
+        dest: "{{ item.path }}/steamapps/workshop/content/282440/{{ workshop_item_id }}/"
+        remote_src: yes
+        owner: "{{ ql_user }}"
+        group: "{{ ql_group }}"
+        mode: preserve
+        directory_mode: yes
+      loop: "{{ instance_directories.files }}"
+      when: instance_directories.matched > 0
+
+    - name: Ensure correct ownership of the workshop item in qlds-base
+      file:
+        path: "{{ qlds_base_workshop_path }}/{{ workshop_item_id }}"
+        owner: "{{ ql_user }}"
+        group: "{{ ql_group }}"
+        recurse: yes
+        state: directory

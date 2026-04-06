@@ -1,0 +1,21 @@
+[Unit]
+Description=Quake Live Dedicated Server Port %i
+After=network.target
+
+[Service]
+User=ql
+Group=ql
+WorkingDirectory=/home/ql/qlds-%i
+# The ExecStart line will include the script and the dynamic arguments passed from Ansible
+# Wrap the entire command in quotes to handle spaces/quotes in qlds_args
+ExecStart=/home/ql/qlds-%i/run_server_x64_minqlx.sh {{ qlds_args | default('') }} 
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10 
+
+# Standard output and error logging (optional, defaults to journald)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+---
+- name: Sync Only Config Files
+  hosts: all
+  become: yes
+  gather_facts: true
+
+  tasks:
+ 
+    - name: Synchronize files and folders
+      synchronize:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        archive: yes
+        recursive: yes
+      with_items:
+
+        - { src: "../../configs/{{ target_host }}/workshop.txt", dest: "/home/ql/qlds/workshop.txt" }
+        - { src: "../../configs/{{ target_host }}/mappool.txt", dest: "/home/ql/qlds/mappool.txt" }
+        - { src: "../../configs/{{ target_host }}/access.txt", dest: "/home/ql/qlds/access.txt" }
+        - { src: "../../configs/{{ inventory_hostname }}/server.cfg", dest: "/home/ql/qlds/server.cfg" }
+
+    - name: Set ownership for /home/ql and all subdirectories
+      file:
+        path: /home/ql
+        owner: ql
+        group: ql
+        recurse: yes

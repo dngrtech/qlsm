@@ -1,0 +1,18 @@
+{
+    "cvars": {
+        "g_startingWeapons": "65",
+        "capturelimit": "5",
+        "g_suddenDeathRespawn": "0",
+        "g_instagib": "1",
+        "g_dropCmds": "1",
+        "timelimit": "15",
+        "dmflags": "28",
+        "g_allowKill": "1",
+        "g_overtime": "0"
+    },
+    "author": "id Software",
+    "description": "iCTF Tournament Rules: suddenDeathRespawn 0 | allowKill 1",
+    "basegt": "ctf",
+    "id": "tictf",
+    "title": "Tournament Instagib CTF"
+}

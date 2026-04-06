@@ -1,0 +1,39 @@
+---
+- name: Fetch QLDS Instance Logs
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    game_port: "{{ port }}"
+    # Log filter mode: 'time' or 'lines'
+    log_mode: "{{ filter_mode | default('lines') }}"
+    # Time period for time-based filtering (e.g., '1 hour ago', '15 minutes ago')
+    log_since: "{{ since | default('1 hour ago') }}"
+    # Number of lines for line-based filtering
+    log_lines: "{{ lines | default(500) }}"
+
+  tasks:
+    - name: Query journalctl by time (when log_mode is 'time')
+      ansible.builtin.command:
+        cmd: journalctl -u qlds@{{ game_port }}.service --since "{{ log_since }}" --no-pager
+      register: journal_output_time
+      changed_when: false
+      failed_when: false
+      when: log_mode == 'time'
+
+    - name: Query journalctl by line count (when log_mode is 'lines')
+      ansible.builtin.command:
+        cmd: journalctl -u qlds@{{ game_port }}.service -n {{ log_lines }} --no-pager
+      register: journal_output_lines
+      changed_when: false
+      failed_when: false
+      when: log_mode == 'lines'
+
+    - name: Set combined output
+      ansible.builtin.set_fact:
+        combined_output: "{{ (journal_output_time.stdout | default('')) if log_mode == 'time' else (journal_output_lines.stdout | default('')) }}"
+
+    - name: Output logs to stdout for capture
+      ansible.builtin.debug:
+        msg: "{{ combined_output if combined_output | length > 0 else '-- No entries --' }}"

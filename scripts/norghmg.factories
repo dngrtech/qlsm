@@ -1,0 +1,23 @@
+[
+{
+"id": "norghmg",
+"title":"NO RG or HMG",
+"author":"BOGDOG",
+"description":"NO RG or HMG",
+"basegt":"ca",
+"cvars":{
+"dmflags": "28",
+"g_startingWeapons": "191",
+"g_startingAmmo_sg": "50",
+"g_startingAmmo_mg": "100",
+"g_startingAmmo_lg": "160",
+"g_startingAmmo_gl": "12",
+"g_startingAmmo_rl": "50",
+"g_startingAmmo_pg": "100",
+"g_startingHealth": "200",
+"g_startingArmor": "100",
+"g_startingHealthBonus": "0",
+"g_overtime": "0"
+}
+}
+]

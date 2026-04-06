@@ -1,0 +1,22 @@
+---
+- name: Get QLDS systemd service logs
+  hosts: "{{ target_host }}"
+  become: yes # journalctl might require root privileges depending on configuration
+  gather_facts: no
+
+  vars:
+    # Required variables to be passed via --extra-vars:
+    # id: The QLDS instance ID (e.g., 1)
+    lines: 100 # Default number of lines to retrieve, can be overridden
+
+  tasks:
+    - name: Retrieve logs for qlds@{{ id }}.service
+      ansible.builtin.command:
+        cmd: "journalctl -u qlds@{{ id }}.service --no-pager --lines={{ lines }}"
+      register: journalctl_output
+      changed_when: false # This command doesn't change state
+      failed_when: journalctl_output.rc != 0 and "No entries" not in journalctl_output.stderr # Don't fail if service just hasn't logged anything
+
+    - name: Display logs for qlds@{{ id }}.service
+      ansible.builtin.debug:
+        var: journalctl_output.stdout_lines

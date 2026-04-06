@@ -1,0 +1,78 @@
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # --- Docker: read container logs via Docker socket ---
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=qlds-ui"]
+    relabel_configs:
+      # Use the compose service name as the 'service' label
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+      # Set job label
+      - source_labels: []
+        target_label: job
+        replacement: qlds-ui
+      # Set env label — matches prod dashboards which filter on env="prod"
+      - source_labels: []
+        target_label: env
+        replacement: prod
+
+    pipeline_stages:
+      # JSON log lines (structured logs from Flask, rcon, poller)
+      - match:
+          selector: '{job="qlds-ui", env="prod"} |~ "^\\{"'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  module: module
+            - labels:
+                level:
+                module:
+      # Re-label rcon-related modules (in web process) → service=rcon
+      - match:
+          selector: '{job="qlds-ui", env="prod", module=~"redis_listener|socketio_events"}'
+          stages:
+            - static_labels:
+                service: rcon
+      # Plain-text Ansible output from worker — derive level from content
+      - match:
+          selector: '{job="qlds-ui", env="prod", service="worker"} !~ "^\\{"'
+          stages:
+            - regex:
+                expression: '(?i)(?P<err_match>fatal:|FAILED!|UNREACHABLE!)'
+            - regex:
+                expression: '(?P<warn_match>\[WARNING\]|DEPRECATION WARNING|\.\.\.ignoring)'
+            - regex:
+                expression: '(?P<changed_match>\bchanged:)'
+            - regex:
+                expression: '(?P<ok_match>\bok:)'
+            - regex:
+                expression: '(?P<skipped_match>\bskipping:|\bskipped=\d+)'
+            - regex:
+                expression: '(?P<task_match>TASK \[|PLAY \[|PLAY RECAP)'
+            - regex:
+                expression: '(?P<ansible_status>.*)'
+            - template:
+                source: ansible_status
+                template: >-
+                  {{ if .err_match }}failed{{ else if .warn_match }}warning{{ else if .changed_match }}changed{{ else if .ok_match }}ok{{ else if .skipped_match }}skipped{{ else if .task_match }}task{{ else }}info{{ end }}
+            - template:
+                source: level
+                template: >-
+                  {{ if .err_match }}error{{ else if .warn_match }}warning{{ else if .changed_match }}info{{ else if .ok_match }}debug{{ else if .skipped_match }}debug{{ else }}info{{ end }}
+            - labels:
+                ansible_status:
+                level:
