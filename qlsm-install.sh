@@ -3,10 +3,10 @@
 # QLSM — one-liner installer
 #
 # Usage (HTTP, no domain):
-#   curl -fsSL https://raw.githubusercontent.com/dngrtech/qlds-ui/main-docker/qlsm-install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
 #
 # Usage (HTTPS with domain):
-#   SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlds-ui/main-docker/qlsm-install.sh)
+#   SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 #
 # Environment variables (all optional):
 #   SITE_ADDRESS      Domain or :port  (default: :80)
@@ -17,7 +17,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/dngrtech/qlds-ui/main-docker"
+REPO_RAW="https://raw.githubusercontent.com/dngrtech/qlsm/main"
 
 # ── Colours (disabled when stdout is not a terminal or NO_COLOR is set) ──────
 if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
@@ -39,7 +39,7 @@ ADMIN_USER="${ADMIN_USER:-admin}"
 
 echo ""
 echo -e "${BOLD}  QLSM — Quake Live Server Manager${RESET}"
-echo "  https://github.com/dngrtech/qlds-ui"
+echo "  https://github.com/dngrtech/qlsm"
 echo ""
 
 # ── 1. Check dependencies ─────────────────────────────────────────────────────
