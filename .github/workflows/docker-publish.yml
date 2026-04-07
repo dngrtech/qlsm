@@ -3,7 +3,7 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main-docker    # Auto-deploy on merge to default branch
+      - main    # Auto-deploy on merge to default branch
     tags:
       - "v*"           # Trigger on version tags: v1.0.0, v1.2.3, etc.
     paths:
