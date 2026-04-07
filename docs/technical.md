@@ -48,24 +48,25 @@ graph TD
         Nginx -->|🔁 Reverse Proxy| Gunicorn[Gunicorn]
         Gunicorn -->|WSGI| FlaskApp[🧩 Flask App UI]
 
-        FlaskApp -->|🔄 Reads/Writes Host & Instance Data| SQLite[(🗄️ SQLite DB <br> - Host (name, ip, region, size, status, qlfilter_status, ssh_key_path) <br> - QLInstance (name, port, config, status, host_id))]
-        FlaskApp -->|📤 Enqueues Tasks (Ansible/Terraform)| Redis[(🧠 Redis)]
+        FlaskApp -->|🔄 Reads/Writes Host & Instance Data| SQLite[(🗄️ SQLite DB)]
+        FlaskApp -->|📤 Enqueues Tasks| Redis[(🧠 Redis)]
         FlaskApp -->|⚙️ Reads/Writes| DotEnv[⚙️ Dotenv Config]
 
         RQWorker[RQ Worker] -->|📥 Dequeues Tasks| Redis
-        RQWorker -->|🚀 Executes Ansible/Terraform| AutomationRunner["🛠️ Automation Runner <br> (Ansible Runner / Terraform)"]
+        RQWorker -->|🚀 Executes Ansible/Terraform| AutomationRunner["🛠️ Automation Runner"]
         AutomationRunner -->|📝 Updates Host/Instance Status| SQLite
         AutomationRunner -->|📂 Reads| DotEnv
     end
 
-    %% Target Hosts (Provisioned by Terraform, Managed by Ansible)
+    %% Target Hosts
     subgraph "Target Host Servers (Managed)"
-        AutomationRunner -- "Terraform Apply<br>(Provision Host)" --> NewHost["💻 New Host VM <br> (Region, Size)"]
-        NewHost -- "Get IP, SSH Key" --> AutomationRunner
+        AutomationRunner -->|"Terraform Apply - Provision Host"| NewHost["💻 New Host VM"]
+        NewHost -->|"Get IP and SSH Key"| AutomationRunner
 
-        AutomationRunner -- "Ansible Playbook<br>(Deploy/Manage QL Instance)" -->|🔐 SSH| ManagedHost1["💻 Managed Host 1<br>(/home/ql/qlds-*)"]
-        AutomationRunner -- "Ansible Playbook<br>(Deploy/Manage QL Instance)" -->|🔐 SSH| ManagedHostN["💻 Managed Host N<br>(/home/ql/qlds-*)"]
+        AutomationRunner -->|"🔐 SSH - Ansible: Deploy/Manage Instance"| ManagedHost1["💻 Managed Host 1 - /home/ql/qlds-*"]
+        AutomationRunner -->|"🔐 SSH - Ansible: Deploy/Manage Instance"| ManagedHostN["💻 Managed Host N - /home/ql/qlds-*"]
     end
+
 ```
 
 ## Flask Application Structure
