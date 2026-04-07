@@ -55,7 +55,16 @@ echo ""
 info "Checking dependencies..."
 
 if ! command -v docker &>/dev/null; then
-    die "Docker is not installed. Install it from https://docs.docker.com/get-docker/ and re-run."
+    echo -e "${RED}✗${RESET}  Docker is not installed." >&2
+    echo "" >&2
+    echo -e "  To install Docker on Ubuntu, run:" >&2
+    echo "" >&2
+    echo -e "    ${BOLD}curl -fsSL https://get.docker.com | sh${RESET}" >&2
+    echo -e "    ${BOLD}sudo usermod -aG docker \$USER${RESET}   # then log out and back in" >&2
+    echo "" >&2
+    echo -e "  Docs: https://docs.docker.com/engine/install/ubuntu/" >&2
+    echo "" >&2
+    exit 1
 fi
 
 # Accept both 'docker compose' (plugin) and 'docker-compose' (standalone)
@@ -64,15 +73,35 @@ if docker compose version &>/dev/null 2>&1; then
 elif command -v docker-compose &>/dev/null; then
     COMPOSE="docker-compose"
 else
-    die "Docker Compose is not installed. Install it from https://docs.docker.com/compose/install/ and re-run."
+    echo -e "${RED}✗${RESET}  Docker Compose is not installed." >&2
+    echo "" >&2
+    echo -e "  To install the Compose plugin on Ubuntu, run:" >&2
+    echo "" >&2
+    echo -e "    ${BOLD}sudo apt-get update && sudo apt-get install -y docker-compose-plugin${RESET}" >&2
+    echo "" >&2
+    echo -e "  Docs: https://docs.docker.com/compose/install/" >&2
+    echo "" >&2
+    exit 1
 fi
 
 if ! command -v curl &>/dev/null; then
-    die "curl is not installed. Install it (e.g. apt install curl) and re-run."
+    echo -e "${RED}✗${RESET}  curl is not installed." >&2
+    echo "" >&2
+    echo -e "  To install curl on Ubuntu, run:" >&2
+    echo "" >&2
+    echo -e "    ${BOLD}sudo apt-get update && sudo apt-get install -y curl${RESET}" >&2
+    echo "" >&2
+    exit 1
 fi
 
 if ! command -v openssl &>/dev/null; then
-    die "openssl is not installed. Install it (e.g. apt install openssl) and re-run."
+    echo -e "${RED}✗${RESET}  openssl is not installed." >&2
+    echo "" >&2
+    echo -e "  To install openssl on Ubuntu, run:" >&2
+    echo "" >&2
+    echo -e "    ${BOLD}sudo apt-get update && sudo apt-get install -y openssl${RESET}" >&2
+    echo "" >&2
+    exit 1
 fi
 
 success "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
