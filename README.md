@@ -8,6 +8,24 @@ Bring your own VPS. If you want to provision new hosts on Vultr, there's Terrafo
 
 Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers. The frontend is a Vite/Tailwind SPA served behind Caddy.
 
+## Requirements
+
+You need a Linux VPS (Ubuntu 22.04 or newer recommended) with:
+
+- **Docker** — [install guide](https://docs.docker.com/engine/install/ubuntu/)
+- **Docker Compose** (usually included with Docker)
+- A user with `sudo` access
+
+That's it. Everything else (Redis, Caddy, the app itself) runs inside Docker.
+
+To install Docker on a fresh Ubuntu server:
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
 ## Quick start (production)
 
 ### Option 1 — one-liner (recommended)
