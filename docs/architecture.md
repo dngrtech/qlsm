@@ -4,27 +4,26 @@ This document describes the architecture of the QLSM application.
 
 ## Overview
 
-QLSM is designed as a simple monolithic web application running on a Linux VPS. Its primary goal is to provide a user interface for managing existing Quake Live dedicated server instances (deployed directly on hosts) on remote servers by triggering Ansible playbooks asynchronously. Key components include a Flask backend, an RQ task queue with Redis, and integration with Ansible (via direct CLI calls).
+QLSM is a containerized web application deployed via Docker Compose. It provides a UI for managing Quake Live dedicated server instances on remote hosts by triggering Ansible playbooks asynchronously. The stack runs as multiple containers (web app, Redis, Caddy, Grafana/Loki/Promtail) coordinated by Docker Compose. Key components include a Flask backend, an RQ task queue with Redis, and integration with Ansible and Terraform via direct CLI calls.
 
 ## Architecture Diagram
 
 ```mermaid
 graph TD
     %% External User
-    User[👤 User] -->|🌐 HTTP or HTTPS| Nginx[Nginx]
+    User[👤 User] -->|🌐 HTTP or HTTPS| Caddy[Caddy]
 
     %% Client-Side
     subgraph "Client-Side (Browser)"
         ReactApp[⚛️ React Frontend App]
     end
-    Nginx -- "Serves Static Assets (JS, CSS, HTML)" --> ReactApp
-    ReactApp -- "API Calls (Auth, Data, Actions)" --> Nginx
+    Caddy -- "Serves Static Assets (JS, CSS, HTML)" --> ReactApp
+    ReactApp -- "API Calls (Auth, Data, Actions)" --> Caddy
 
 
-    %% qlds-ui Runtime Server (Backend API & Task Processing)
-    subgraph "QLSM Backend Server"
-        Nginx -->|🔁 Reverse Proxy API Requests| Gunicorn[Gunicorn]
-        Gunicorn -->|WSGI| FlaskApp[🧩 Flask API Backend]
+    %% Docker Compose Stack
+    subgraph "QLSM Docker Compose Stack"
+        Caddy -->|🔁 Reverse Proxy API Requests| FlaskApp[🧩 Flask API + Gunicorn]
 
         FlaskApp -->|🔄 Reads/Writes Host & Instance Data| SQLite["🗄️ SQLite DB <br> - Host (name, ip, provider, region, size, status, qlfilter_status, ssh_key_path, logs) <br> - QLInstance (name, port, hostname, status, host_id, logs) <br> - ConfigPreset (...)"]
         FlaskApp -->|💾 Reads/Writes Instance Config Files| FileSystem["📁 Filesystem <br> (configs/<host>/<instance_id>/*)"]
@@ -54,9 +53,9 @@ graph TD
 ## Component Descriptions
 
 *   **User:** Interacts with the application via a web browser over HTTP/S.
-*   **Nginx:** Acts as a reverse proxy for the backend API (Gunicorn/Flask) and serves the static assets (HTML, CSS, JavaScript) for the React frontend application. It can also handle SSL termination.
-*   **React Frontend App:** A single-page application (SPA) built with React, running in the user's browser. It handles all user interface rendering, client-side routing, state management, and client-side table sorting. It communicates with the Flask backend via API calls to fetch data, trigger actions, and authenticate. It utilizes libraries like Tailwind CSS for styling, Headless UI for accessible UI components (like those used in `HostActionsMenu.jsx` and `InstanceActionsMenu.jsx`), and `@floating-ui/react-dom` for robust positioning of elements like dropdown menus.
-*   **Gunicorn:** A WSGI HTTP server that runs the Flask API backend. It manages multiple worker processes to handle concurrent API requests.
+*   **Caddy:** Reverse proxy that serves the React SPA static assets and proxies API requests to Flask. Handles automatic HTTPS (Let's Encrypt) when a domain is configured via `SITE_ADDRESS`.
+*   **React Frontend App:** A single-page application (SPA) built with React, running in the user's browser. Handles UI rendering, client-side routing, state management. Communicates with Flask via JSON API. Uses Tailwind CSS, Headless UI, and `@floating-ui/react-dom`.
+*   **Flask API + Gunicorn:** Flask runs behind Gunicorn inside the `web` container. Handles API requests, authentication (JWT via HttpOnly cookies), database access, and task enqueueing.
 *   **Flask API Backend (ui):** The core backend application built with Flask. It now primarily serves as an API provider for the React frontend. It handles API requests, interacts with the database, manages authentication (using `Flask-JWT-Extended` with `HttpOnly` cookies), and enqueues background tasks.
     * **App Factory (`ui/__init__.py`):** Creates and configures the Flask application, including CORS setup for the React frontend and initialization of `Flask-JWT-Extended`.
     * **Configuration (`ui/config.py`):** Manages application settings, including those for `Flask-JWT-Extended` (cookie name, security attributes, token location).
@@ -108,13 +107,13 @@ graph TD
 *   **Automation Tool Integration:** Uses direct `subprocess` calls for executing Ansible and Terraform playbooks/commands.
 *   **Split Ansible Playbooks:** Playbooks are split by responsibility: `setup_host.yml` (one-time host setup after Terraform), `add_qlds_instance.yml` (per-instance deploy), and dedicated playbooks for rename, restart, LAN rate, workshop update, auto-restart, log fetching, and QLFilter management.
 *   **Data Model Relationship:** Establishes a clear one-to-many relationship between Hosts and QLInstances in the database.
-*   **Standard Deployment Stack:** Uses common tools like Gunicorn, Systemd, and Nginx.
+*   **Containerized Deployment:** All services run as Docker containers coordinated by Docker Compose. Caddy handles reverse proxying and automatic HTTPS. No manual Systemd or Nginx configuration required.
 *   **Comprehensive Testing:** Requires expansion of the test suite to cover Host CRUD, Terraform task queueing/execution (mocked), Ansible host setup task integration, and updated Instance tests reflecting the Host relationship and new Ansible playbooks.
 
 ## Directory Structure
 
 ```
-qlds-ui/
+qlsm/
 ├── ui/                          # Flask backend
 │   ├── __init__.py              # App factory
 │   ├── models.py                # SQLAlchemy models (Host, QLInstance, ConfigPreset)

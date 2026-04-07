@@ -1,107 +1,119 @@
-# Setup Prerequisites
+# Setup Guide
 
-This document lists the prerequisites required for setting up the development environment and deploying the QLSM application.
+## Requirements
 
-## System Prerequisites
+- A Linux VPS (Ubuntu 22.04+ recommended) with `sudo` access
+- **Docker** and **Docker Compose** — [install guide](https://docs.docker.com/engine/install/ubuntu/)
+- (Optional) A domain name for HTTPS
 
-*   VPS access (Linux/Ubuntu recommended), with `sudo` privileges and SSH key access configured.
-*   Ansible installed on the VPS.
-*   Terraform installed on the VPS.
-*   Existing Ansible playbooks and templates accessible on the VPS (e.g., within the `ansible/` directory of the project).
-*   Ansible Inventory (`ansible/hosts.yml`) populated with target Quake Live server details.
-*   SSH connectivity configured from the VPS to the target Quake Live Host Servers (key-based authentication recommended).
-*   Git installed on the VPS.
-*   (Optional) A domain name for accessing the UI.
-
-## Python Environment Setup
-
-1. **Create and activate a virtual environment:**
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Set up environment variables:**
-   Create a `.env` file in the project root with the following variables (adjust as needed):
-   ```
-   # Flask Configuration
-   FLASK_APP=ui:create_app()
-   FLASK_ENV=development # Change to 'production' for deployment
-   SECRET_KEY='your-secret-key' # Replace with a real secret key
-
-   # Database Configuration
-   DATABASE_URL=sqlite:///qlds_ui.db
-
-   # Redis / RQ Configuration
-   REDIS_URL=redis://localhost:6379/0
-   # If you set a password in redis.conf, uncomment and set the following:
-   # REDIS_PASSWORD='your-redis-password'
-   RQ_DEFAULT_RESULT_TTL=86400 # Keep job results for 1 day
-
-   # Ansible Runner Configuration (Adjust paths if needed)
-   ANSIBLE_RUNNER_PRIVATE_DATA_DIR=./ansible_runner_data # Directory for ansible-runner artifacts
-   ```
-
-## Database Initialization
-
-After setting up the Python environment, initialize the database:
+Install Docker on a fresh Ubuntu server:
 
 ```bash
-flask init-db
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
 ```
 
-This will create the SQLite database file and set up the required tables.
+## Installation
 
-## Running the Development Server
-
-For development purposes, you can run the Flask development server:
+### Option 1 — one-liner (recommended)
 
 ```bash
-flask run
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
 ```
 
-For production deployment, follow the instructions in the README.md for setting up Gunicorn, Systemd, and Nginx.
+With a domain (enables automatic HTTPS via Caddy):
 
-## Status Poller Service
-
-The live server status feature requires a background daemon that polls game hosts every 15s via SSH, reads instance Redis DBs, and caches results in management Redis.
-
-Create `/etc/systemd/system/qlds-status-poller.service`:
-
-```ini
-[Unit]
-Description=QLDS UI Status Poller
-After=network.target redis.service qlds-ui.service
-Requires=redis.service
-
-[Service]
-User=www-data
-WorkingDirectory=/path/to/qlds-ui
-Environment=FLASK_APP=ui
-EnvironmentFile=/path/to/qlds-ui/.env
-ExecStart=/path/to/qlds-ui/.venv/bin/flask run-status-poller
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable qlds-status-poller
-sudo systemctl start qlds-status-poller
-sudo journalctl -u qlds-status-poller -f  # Follow logs
+SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
-**Prerequisites:**
-- The `discord_status.py` minqlx plugin must be enabled on each game server instance for status data to appear. Without it, the poller succeeds but all statuses will be `null` (displayed as `—` in the UI).
-- SSH access from the management server to all game hosts must work with the key at `host.ssh_key_path` (already configured by Terraform/Ansible).
+The script will:
+1. Create `~/qlsm/` with the required directory structure
+2. Download `docker-compose.yml` and `Caddyfile`
+3. Generate a `.env` file with secure random secrets
+4. Pull the Docker image and start all services
+5. Wait for the health check to pass
+
+### Option 2 — git clone
+
+```bash
+git clone https://github.com/dngrtech/qlsm.git && cd qlsm
+cp .env.example .env
+# Edit .env — set SITE_ADDRESS, REDIS_PASSWORD, and VULTR_API_KEY if using Vultr
+docker compose up -d
+```
+
+## First Login
+
+Default credentials: `admin` / `admin`
+
+You will be prompted to change your password on first login.
+
+## Configuration (.env)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SITE_ADDRESS` | Domain or `:port` — controls HTTPS | `:80` |
+| `REDIS_PASSWORD` | Redis auth password | auto-generated |
+| `DEFAULT_ADMIN_USER` | Bootstrap admin username | `admin` |
+| `VULTR_API_KEY` | Vultr API key for VM provisioning | (blank) |
+| `LOG_LEVEL` | Logging verbosity | `INFO` |
+| `JWT_EXPIRATION_HOURS` | Session length in hours | `24` |
+
+After editing `.env`, restart the stack:
+
+```bash
+cd ~/qlsm && docker compose up -d
+```
+
+## Updating
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update
+```
+
+Downloads the latest `docker-compose.yml`, pulls the new image, and restarts. Your `.env` and data are untouched.
+
+## Services
+
+The Docker Compose stack runs the following containers:
+
+| Container | Purpose |
+|-----------|---------|
+| `web` | Flask API + RQ worker + status poller |
+| `redis` | Task queue and live status cache |
+| `caddy` | Reverse proxy + automatic HTTPS |
+| `loki` | Log aggregation |
+| `promtail` | Log collection |
+| `grafana` | Log viewer (optional) |
+
+## Useful Commands
+
+```bash
+cd ~/qlsm
+
+docker compose logs -f web      # Follow app logs
+docker compose logs -f          # Follow all logs
+docker compose down             # Stop everything
+docker compose up -d            # Start everything
+docker compose restart web      # Restart app only
+docker compose ps               # Show running containers
+```
+
+## Live Server Status
+
+The `discord_status.py` minqlx plugin must be enabled on each game server instance for live status data (map, players, state) to appear in the UI. Without it, statuses will show as `—`.
+
+## Development
+
+```bash
+cp .env.example .env
+./run-dev.sh
+```
+
+Starts Flask (`:5001`), Vite (`:5173`), RQ worker, RCON service, and status poller together. Requires Redis running locally:
+
+```bash
+sudo apt install redis-server && sudo systemctl enable --now redis
+```
