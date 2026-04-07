@@ -81,7 +81,7 @@ class AdminCog(Cog):
     """
 
     def __init__(self, bot):
-        Plugin.set_cvar_once("qlx_discordAdminPassword", "supersecret")
+        Plugin.set_cvar_once("qlx_discordAdminPassword", "")
         Plugin.set_cvar_once("qlx_discordAuthCommand", "auth")
         Plugin.set_cvar_once("qlx_discordExecPrefix", "qlx")
         Plugin.set_cvar_once("qlx_discordCommandsWhitelist", "")

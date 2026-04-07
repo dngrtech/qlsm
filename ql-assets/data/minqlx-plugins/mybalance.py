@@ -79,16 +79,8 @@ VERSION = "v0.56.5"
 # This code makes sure the required superclass is loaded automatically
 try:
     from .iouonegirl import iouonegirlPlugin
-except:
-    try:
-        abs_file_path = os.path.join(os.path.dirname(__file__), "iouonegirl.py")
-        res = requests.get("https://raw.githubusercontent.com/dsverdlo/minqlx-plugins/master/iouonegirl.py")
-        if res.status_code != requests.codes.ok: raise
-        with open(abs_file_path,"a+") as f: f.write(res.text)
-        from .iouonegirl import iouonegirlPlugin
-    except Exception as e :
-        minqlx.CHAT_CHANNEL.reply("^1iouonegirl abstract plugin download failed^7: {}".format(e))
-        raise
+except ImportError as e:
+    raise ImportError("iouonegirl.py is required but not found. Ensure it is present in the minqlx-plugins directory.") from e
 
 BOUNDARIES = []
 
