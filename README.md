@@ -11,10 +11,13 @@ Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers
 ## Quick start (production)
 
 ```bash
-git clone https://github.com/dngrtech/qlsm.git && cd qlsm
-cp .env.example .env
-# edit .env: set SITE_ADDRESS, REDIS_PASSWORD, and VULTR_API_KEY if using Vultr
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
+```
+
+With a domain (enables HTTPS via Caddy):
+
+```bash
+SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
 Default login is `admin` / `admin`. You'll be forced to change the password on first login.
