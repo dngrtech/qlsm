@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { copyToClipboard } from '../utils/clipboard';
+import { copyToClipboard as copyTextToClipboard } from '../utils/clipboard';
 import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, MapPin, GripVertical } from 'lucide-react';
 import { useServers } from '../hooks/useServers';
 import StatusIndicator from '../components/StatusIndicator';
@@ -84,7 +84,7 @@ export default function ServersPage() {
 
     const copyToClipboard = (ip, hostId, e) => {
         e?.stopPropagation();
-        copyToClipboard(ip).then(() => {
+        copyTextToClipboard(ip).then(() => {
             setCopiedIp(hostId);
             addNotification('IP copied to clipboard', 'success');
             setTimeout(() => setCopiedIp(null), 2000);

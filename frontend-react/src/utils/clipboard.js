@@ -17,7 +17,7 @@ export function copyToClipboard(text) {
     textarea.focus();
     textarea.select();
     try {
-        document.execCommand('copy');
+        if (!document.execCommand('copy')) throw new Error('Copy failed');
         return Promise.resolve();
     } catch {
         return Promise.reject(new Error('Copy failed'));
