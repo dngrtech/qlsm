@@ -87,6 +87,16 @@ terraform/vultr-root/*
 !scripts/
 !scripts/**
 
+# ── QL Assets ────────────────────────────────────────────────────────────────
+!ql-assets/
+ql-assets/*
+!ql-assets/data/
+ql-assets/data/*
+!ql-assets/data/minqlx-plugins/
+!ql-assets/data/minqlx-plugins/**
+!ql-assets/qlfilter/
+!ql-assets/qlfilter/**
+
 # ── Configs (default preset only) ────────────────────────────────────────────
 !configs/
 configs/*
