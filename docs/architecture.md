@@ -20,7 +20,6 @@ graph TD
     Caddy -- "Serves Static Assets (JS, CSS, HTML)" --> ReactApp
     ReactApp -- "API Calls (Auth, Data, Actions)" --> Caddy
 
-
     %% Docker Compose Stack
     subgraph "QLSM Docker Compose Stack"
         Caddy -->|🔁 Reverse Proxy API Requests| FlaskApp[🧩 Flask API + Gunicorn]
@@ -36,17 +35,18 @@ graph TD
         AutomationRunner -->|📂 Reads| DotEnv
     end
 
-    %% Target Hosts (Provisioned by Terraform, Managed by Ansible)
+    %% Target Hosts
     subgraph "Target Host Servers (Managed)"
-        AutomationRunner -- "1. Terraform Apply (Provision Host)" --> NewHost["💻 New Host VM <br> (Region, Size)"]
-        NewHost -- "Get IP and SSH Key" --> AutomationRunner
-        AutomationRunner -- "2. Ansible: setup_host.yml (Initial Setup)" -->|🔐 SSH| NewHost
+        AutomationRunner -->|"🔐 SSH - Terraform Apply (Provision Host)"| NewHost["💻 New Host VM <br> (Region, Size)"]
+        NewHost -->|"Get IP and SSH Key"| AutomationRunner
+        AutomationRunner -->|"🔐 SSH - Ansible: setup_host.yml (Initial Setup)"| NewHost
 
-        AutomationRunner -- "Ansible: add_qlds_instance.yml (Add Instance)" -->|🔐 SSH| ManagedHost1["💻 Managed Host 1<br>(/home/ql/qlds-*)"]
-        AutomationRunner -- "Ansible: add_qlds_instance.yml (Add Instance)" -->|🔐 SSH| ManagedHostN["💻 Managed Host N<br>(/home/ql/qlds-*)"]
-        AutomationRunner -- "Ansible: setup_qlfilter.yml (Install QLFilter)" -->|🔐 SSH| ManagedHost1
-        AutomationRunner -- "Ansible: remove_qlfilter.yml (Uninstall QLFilter)" -->|🔐 SSH| ManagedHost1
+        AutomationRunner -->|"🔐 SSH - Ansible: add_qlds_instance.yml"| ManagedHost1["💻 Managed Host 1<br>(/home/ql/qlds-*)"]
+        AutomationRunner -->|"🔐 SSH - Ansible: add_qlds_instance.yml"| ManagedHostN["💻 Managed Host N<br>(/home/ql/qlds-*)"]
+        AutomationRunner -->|"🔐 SSH - Ansible: setup_qlfilter.yml"| ManagedHost1
+        AutomationRunner -->|"🔐 SSH - Ansible: remove_qlfilter.yml"| ManagedHost1
     end
+
 
 ```
 
