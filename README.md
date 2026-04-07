@@ -4,6 +4,14 @@ I built this because managing Quake Live dedicated servers without tooling means
 
 Bring your own VPS. If you want to provision new hosts on Vultr, there's Terraform for that. Everything else runs over SSH via Ansible.
 
+
+
+<img width="1428" height="993" alt="servers_page" src="https://github.com/user-attachments/assets/11894a0e-19df-492e-8da7-d69b5ff01d8a" />
+
+
+<img width="1258" height="1218" alt="edit_config" src="https://github.com/user-attachments/assets/23cbf0dd-b291-46af-941b-74ad802c746b" />
+
+
 ## Stack
 
 Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers. The frontend is a Vite/Tailwind SPA served behind Caddy.
