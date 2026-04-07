@@ -197,22 +197,22 @@ export default function ServersPage() {
                                 </div>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleOpenHostDrawer(host.id); }}
-                                    className="text-[15px] font-semibold hover:underline text-left truncate"
+                                    className="host-name-cell text-[15px] font-semibold hover:underline text-left truncate"
                                     style={{ color: 'var(--accent-primary)' }}
                                 >
                                     {host.name}
                                 </button>
-                                <span className="text-[13px] capitalize truncate text-theme-secondary">
+                                <span className="host-provider-cell text-[13px] capitalize truncate text-theme-secondary">
                                     {host.provider || 'standalone'}
                                 </span>
-                                <span className="text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
+                                <span className="host-region-cell text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
                                     <MapPin size={14} className="text-theme-muted flex-shrink-0" />
                                     {host.is_standalone
                                         ? (host.timezone || '—')
                                         : (formatVultrRegion(host.region) || '—')
                                     }
                                 </span>
-                                <div className="flex items-center gap-2 truncate" style={{ gridColumn: 'span 3' }} onClick={(e) => e.stopPropagation()}>
+                                <div className="host-ip-cell flex items-center gap-2 truncate" style={{ gridColumn: 'span 3' }} onClick={(e) => e.stopPropagation()}>
                                     <span className="font-mono text-[13px] text-theme-secondary">{host.ip_address || '—'}</span>
                                     {host.ip_address && (
                                         <button onClick={(e) => copyToClipboard(host.ip_address, host.id, e)} className="p-1 text-theme-muted hover:text-theme-secondary rounded transition-colors hover:bg-black/5 dark:hover:bg-white/5">
@@ -220,13 +220,13 @@ export default function ServersPage() {
                                         </button>
                                     )}
                                 </div>
-                                <div>
+                                <div className="host-status-cell">
                                     {(host.qlfilter_status === 'installing' || host.qlfilter_status === 'uninstalling')
                                         ? <StatusIndicator status="configuring" pollableStatuses={['configuring']} />
                                         : <StatusIndicator status={host.status} pollableStatuses={POLLABLE_HOST_STATUSES} />
                                     }
                                 </div>
-                                <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                                <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
                                     <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} POLLABLE_STATUSES={POLLABLE_HOST_STATUSES} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenAutoRestart={openAutoRestartModal} />
                                 </div>
                             </div>

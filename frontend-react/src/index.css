@@ -899,7 +899,7 @@ body {
   border-top-color: var(--surface-border-strong);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 639px) {
   .host-header-row,
   .instances-header-row {
     display: none;
@@ -925,38 +925,38 @@ body {
     padding-top: 2px;
   }
 
-  .host-row > button:nth-child(2) {
+  .host-name-cell {
     grid-column: 2;
     grid-row: 1;
     min-width: 0;
   }
 
-  .host-row > span:nth-child(3) {
+  .host-provider-cell {
     grid-column: 2;
     grid-row: 2;
     min-width: 0;
   }
 
-  .host-row > span:nth-child(4) {
+  .host-region-cell {
     grid-column: 2;
     grid-row: 3;
     min-width: 0;
   }
 
-  .host-row > div:nth-child(5) {
+  .host-ip-cell {
     grid-column: 2 / 4 !important;
     grid-row: 4;
     min-width: 0;
     flex-wrap: wrap;
   }
 
-  .host-row > div:nth-child(6) {
+  .host-status-cell {
     grid-column: 3;
     grid-row: 1;
     justify-self: end;
   }
 
-  .host-row > div:nth-child(7) {
+  .host-actions-cell {
     grid-column: 3;
     grid-row: 2 / span 2;
     align-self: start;
