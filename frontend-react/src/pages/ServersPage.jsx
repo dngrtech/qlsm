@@ -120,12 +120,12 @@ export default function ServersPage() {
     }
 
     return (
-        <div className="max-w-[1280px] mx-auto py-8 px-8">
+        <div className="max-w-[1280px] mx-auto px-4 py-6 sm:px-8 sm:py-8">
             {/* Page Header */}
-            <div className="flex items-end justify-between mb-7">
-                <div>
-                    <h1 className="heading-display text-[32px] text-theme-primary tracking-wider">Servers</h1>
-                    <div className="flex gap-5 mt-3">
+            <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                    <h1 className="heading-display text-[28px] tracking-wider text-theme-primary sm:text-[32px]">Servers</h1>
+                    <div className="mt-3 hidden gap-5 sm:flex">
                         <span className="flex items-center gap-1.5 text-sm font-medium text-theme-secondary">
                             <span className="w-2 h-2 rounded-full bg-blue-500" />
                             {stats.totalHosts} Host{stats.totalHosts !== 1 ? 's' : ''}
@@ -140,12 +140,12 @@ export default function ServersPage() {
                         </span>
                     </div>
                 </div>
-                <div className="flex gap-2.5">
-                    <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary gap-2">
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:justify-end">
+                    <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary w-full justify-center gap-2 sm:w-auto">
                         {allExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {allExpanded ? 'Collapse All' : 'Expand All'}
                     </button>
-                    <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary gap-2">
+                    <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary w-full justify-center gap-2 sm:w-auto">
                         <Plus size={14} /> Add New Host
                     </button>
                 </div>
