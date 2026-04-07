@@ -120,12 +120,12 @@ export default function ServersPage() {
     }
 
     return (
-        <div className="max-w-[1280px] mx-auto py-8 px-8">
+        <div className="max-w-[1280px] mx-auto px-4 py-6 sm:px-8 sm:py-8">
             {/* Page Header */}
-            <div className="flex items-end justify-between mb-7">
-                <div>
-                    <h1 className="heading-display text-[32px] text-theme-primary tracking-wider">Servers</h1>
-                    <div className="flex gap-5 mt-3">
+            <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="min-w-0">
+                    <h1 className="heading-display text-[28px] tracking-wider text-theme-primary sm:text-[32px]">Servers</h1>
+                    <div className="mt-3 hidden gap-5 sm:flex">
                         <span className="flex items-center gap-1.5 text-sm font-medium text-theme-secondary">
                             <span className="w-2 h-2 rounded-full bg-blue-500" />
                             {stats.totalHosts} Host{stats.totalHosts !== 1 ? 's' : ''}
@@ -140,12 +140,12 @@ export default function ServersPage() {
                         </span>
                     </div>
                 </div>
-                <div className="flex gap-2.5">
-                    <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary gap-2">
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:justify-end">
+                    <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary w-full justify-center gap-2 sm:w-auto">
                         {allExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {allExpanded ? 'Collapse All' : 'Expand All'}
                     </button>
-                    <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary gap-2">
+                    <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary w-full justify-center gap-2 sm:w-auto">
                         <Plus size={14} /> Add New Host
                     </button>
                 </div>
@@ -197,22 +197,22 @@ export default function ServersPage() {
                                 </div>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleOpenHostDrawer(host.id); }}
-                                    className="text-[15px] font-semibold hover:underline text-left truncate"
+                                    className="host-name-cell text-[15px] font-semibold hover:underline text-left truncate"
                                     style={{ color: 'var(--accent-primary)' }}
                                 >
                                     {host.name}
                                 </button>
-                                <span className="text-[13px] capitalize truncate text-theme-secondary">
+                                <span className="host-provider-cell text-[13px] capitalize truncate text-theme-secondary">
                                     {host.provider || 'standalone'}
                                 </span>
-                                <span className="text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
+                                <span className="host-region-cell text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
                                     <MapPin size={14} className="text-theme-muted flex-shrink-0" />
                                     {host.is_standalone
                                         ? (host.timezone || '—')
                                         : (formatVultrRegion(host.region) || '—')
                                     }
                                 </span>
-                                <div className="flex items-center gap-2 truncate" style={{ gridColumn: 'span 3' }} onClick={(e) => e.stopPropagation()}>
+                                <div className="host-ip-cell flex items-center gap-2 truncate" style={{ gridColumn: 'span 3' }} onClick={(e) => e.stopPropagation()}>
                                     <span className="font-mono text-[13px] text-theme-secondary">{host.ip_address || '—'}</span>
                                     {host.ip_address && (
                                         <button onClick={(e) => copyToClipboard(host.ip_address, host.id, e)} className="p-1 text-theme-muted hover:text-theme-secondary rounded transition-colors hover:bg-black/5 dark:hover:bg-white/5">
@@ -220,13 +220,13 @@ export default function ServersPage() {
                                         </button>
                                     )}
                                 </div>
-                                <div>
+                                <div className="host-status-cell">
                                     {(host.qlfilter_status === 'installing' || host.qlfilter_status === 'uninstalling')
                                         ? <StatusIndicator status="configuring" pollableStatuses={['configuring']} />
                                         : <StatusIndicator status={host.status} pollableStatuses={POLLABLE_HOST_STATUSES} />
                                     }
                                 </div>
-                                <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                                <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
                                     <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} POLLABLE_STATUSES={POLLABLE_HOST_STATUSES} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenAutoRestart={openAutoRestartModal} />
                                 </div>
                             </div>

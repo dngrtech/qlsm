@@ -23,22 +23,22 @@ export default function InstanceRowContent({
         <>
             <button
                 onClick={() => onOpenDetails(inst.id)}
-                className="text-sm font-medium hover:underline text-left truncate pl-2 text-blue-600 dark:text-blue-400"
+                className="instance-name-cell truncate pl-2 text-left text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
             >
                 {inst.name}
             </button>
             <span
-                className="text-[13px] truncate text-theme-secondary"
+                className="instance-hostname-cell truncate text-[13px] text-theme-secondary"
                 style={{ gridColumn: 'span 2' }}
                 title={inst.hostname}
             >
                 {inst.hostname || '—'}
             </span>
-            <span className="font-mono text-[13px] text-theme-secondary">
+            <span className="instance-port-cell font-mono text-[13px] text-theme-secondary">
                 {inst.port}
             </span>
             <span
-                className={`flex items-center gap-1 text-[12px] font-mono font-semibold ${inst.lan_rate_enabled
+                className={`instance-rate-cell flex items-center gap-1 text-[12px] font-mono font-semibold ${inst.lan_rate_enabled
                     ? 'text-[var(--accent-warning)]'
                     : 'text-theme-muted'
                     }`}
@@ -46,7 +46,7 @@ export default function InstanceRowContent({
                 {inst.lan_rate_enabled && <Zap size={12} />}
                 {inst.lan_rate_enabled ? '99k' : '25k'}
             </span>
-            <span className="flex items-center gap-1.5" title="View live status">
+            <span className="instance-players-cell flex items-center gap-1.5" title="View live status">
                 {serverStatus
                     ? (
                         <button
@@ -63,7 +63,7 @@ export default function InstanceRowContent({
                     : <span className="text-[13px] font-mono text-theme-muted px-2 py-0.5">—</span>
                 }
             </span>
-            <div className="flex items-center gap-4">
+            <div className="instance-status-cell flex items-center gap-4">
                 <StatusIndicator
                     status={inst.status}
                     pollableStatuses={pollableStatuses}
@@ -84,7 +84,7 @@ export default function InstanceRowContent({
                         </a>
                     )}
             </div>
-            <div className="flex justify-end">
+            <div className="instance-actions-cell flex justify-end">
                 <InstanceActionsMenu
                     instance={{
                         ...inst,
