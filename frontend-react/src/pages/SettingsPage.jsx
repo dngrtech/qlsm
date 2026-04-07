@@ -4,6 +4,7 @@ import { getApiKey, regenerateApiKey, revokeApiKey } from '../services/api';
 import { useNotification } from '../components/NotificationProvider';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { formatDateTime } from '../utils/uiUtils';
+import { copyToClipboard } from '../utils/clipboard';
 
 function SettingsPage() {
   const [apiKey, setApiKey] = useState(null);
@@ -55,7 +56,7 @@ function SettingsPage() {
 
   const handleCopy = () => {
     if (apiKey?.key) {
-      navigator.clipboard.writeText(apiKey.key);
+      copyToClipboard(apiKey.key);
       showSuccess('API key copied to clipboard.');
     }
   };

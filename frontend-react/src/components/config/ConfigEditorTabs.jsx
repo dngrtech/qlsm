@@ -4,6 +4,7 @@ import { Maximize, Copy } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import FileUploadButton from '../FileUploadButton';
 import { classNames } from '../../utils/uiUtils';
+import { copyToClipboard } from '../../utils/clipboard';
 
 function ConfigEditorTabs({
   configFilesOrder,
@@ -18,7 +19,7 @@ function ConfigEditorTabs({
 }) {
   const handleCopyContent = (fileName) => {
     const content = configs[fileName] || '';
-    navigator.clipboard.writeText(content);
+    copyToClipboard(content);
   };
 
   return (

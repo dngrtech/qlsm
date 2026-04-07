@@ -8,6 +8,7 @@ import StatusIndicator from '../StatusIndicator';
 import { formatDateTime } from '../../utils/uiUtils';
 import { formatVultrRegion, formatVultrPlan } from '../../utils/formatters';
 import { HostStatus, QLFILTER_STATUS } from '../../utils/statusEnums';
+import { copyToClipboard } from '../../utils/clipboard';
 import { validateHostName, HOST_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
 
 export default function HostDetailDrawer({
@@ -82,7 +83,7 @@ export default function HostDetailDrawer({
 
   const handleCopyIp = () => {
     if (internalHost?.ip_address) {
-      navigator.clipboard.writeText(internalHost.ip_address).then(() => {
+      copyToClipboard(internalHost.ip_address).then(() => {
         setIpCopied(true);
         setTimeout(() => setIpCopied(false), 2000);
         addNotification('IP Address copied to clipboard!', 'success');

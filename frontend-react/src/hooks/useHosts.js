@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getHosts, deleteHost } from '../services/api';
 import { useNotification } from '../components/NotificationProvider';
 import { useLoading } from '../contexts/LoadingContext'; // Import useLoading
+import { copyToClipboard as copyTextToClipboard } from '../utils/clipboard';
 
 export const POLLING_INTERVAL = 3000; // 3 seconds
 export const POLLABLE_HOST_STATUSES = ['pending', 'provisioning', 'provisioned_pending_setup', 'deleting', 'rebooting', 'configuring'];
@@ -100,7 +101,7 @@ export function useHosts() {
   };
 
   const copyToClipboard = (text, hostId) => {
-    navigator.clipboard.writeText(text).then(() => {
+    copyTextToClipboard(text).then(() => {
       setCopiedIp(hostId);
       setTimeout(() => setCopiedIp(null), 2000);
     }).catch(err => {

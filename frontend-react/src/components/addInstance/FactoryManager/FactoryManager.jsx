@@ -5,6 +5,7 @@ import CodeMirrorEditor from '../../CodeMirrorEditor';
 import { Loader2, File as FileIcon, Maximize, Copy } from 'lucide-react';
 import NewFactoryModal from './NewFactoryModal';
 import FullScreenConfigEditorModal from '../../config/FullScreenConfigEditorModal';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 // Using a simple JSON syntax highlighter might be better if factories are JSON-like,
 // but they are usually JSON-ish or proprietary. Python or just generic config is often fine.
@@ -359,7 +360,7 @@ function FactoryManager({
     const handleCopyContent = () => {
         const content = getCurrentContent();
         if (content) {
-            navigator.clipboard.writeText(content);
+            copyToClipboard(content);
         }
     };
 

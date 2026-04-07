@@ -3,6 +3,7 @@ import { LoaderCircle, AlertTriangle, Zap, Copy, Check } from 'lucide-react'; //
 import { formatStatus } from '../../utils/formatters';
 import InstanceActionsMenu from '../InstanceActionsMenu'; // Path relative to InstancesTableRow.jsx
 import { useNotification } from '../NotificationProvider'; // Added for copy notification
+import { copyToClipboard } from '../../utils/clipboard';
 import InfoTooltip from '../common/InfoTooltip';
 
 function InstancesTableRow({
@@ -23,7 +24,7 @@ function InstancesTableRow({
 
   const handleCopyIp = (ipAddress) => {
     if (!ipAddress) return;
-    navigator.clipboard.writeText(ipAddress).then(() => {
+    copyToClipboard(ipAddress).then(() => {
       setIpCopied(true);
       addNotification('IP Address copied to clipboard!', 'success');
       setTimeout(() => setIpCopied(false), 2000);

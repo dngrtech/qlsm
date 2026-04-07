@@ -2,6 +2,7 @@ import React from 'react';
 import { Tab } from '@headlessui/react';
 import { Maximize, Copy } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
+import { copyToClipboard } from '../../utils/clipboard';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import FileUploadButton from '../FileUploadButton';
 import { qlcfgLanguage } from '../../codemirror-lang-qlcfg';
@@ -22,7 +23,7 @@ function InstanceConfigTabs({
 }) {
   const handleCopyContent = (fileName) => {
     const content = configContents[fileName] || '';
-    navigator.clipboard.writeText(content);
+    copyToClipboard(content);
   };
 
   return (

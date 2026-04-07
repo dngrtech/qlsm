@@ -9,6 +9,7 @@ import StatusIndicator from '../StatusIndicator';
 import QlColorString from '../common/QlColorString';
 import LiveServerStatusModal from './LiveServerStatusModal';
 import { validateInstanceName, INSTANCE_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
+import { copyToClipboard } from '../../utils/clipboard';
 
 const POLLING_INTERVAL = 3000;
 const POLLABLE_STATUSES = ['PENDING', 'DEPLOYING', 'CONFIGURING', 'STARTING', 'STOPPING', 'RESTARTING', 'DELETING'];
@@ -148,7 +149,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
 
   const handleCopyIp = (ipAddress) => {
     if (!ipAddress) return;
-    navigator.clipboard.writeText(ipAddress).then(() => {
+    copyToClipboard(ipAddress).then(() => {
       setIpCopied(true); addNotification('IP Address copied to clipboard!', 'success');
       setTimeout(() => setIpCopied(false), 2000);
     }).catch(() => addNotification('Failed to copy IP address.', 'error'));
@@ -156,7 +157,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
 
   const handleCopyText = (text, field) => {
     if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
+    copyToClipboard(text).then(() => {
       setCopiedField(field);
       addNotification('Copied to clipboard!', 'success');
       setTimeout(() => setCopiedField(null), 2000);
