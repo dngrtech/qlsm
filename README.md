@@ -22,6 +22,14 @@ SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.co
 
 Default login is `admin` / `admin`. You'll be forced to change the password on first login.
 
+## Updating
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update
+```
+
+Downloads the latest `docker-compose.yml`, pulls the new image, and restarts. Your `.env` and data are untouched.
+
 Full setup guide: [docs/setup.md](docs/setup.md)
 
 ## Development

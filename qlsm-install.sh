@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# QLSM — one-liner installer
+# QLSM — one-liner installer / updater
 #
-# Usage (HTTP, no domain):
+# Install (HTTP, no domain):
 #   curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
 #
-# Usage (HTTPS with domain):
+# Install (HTTPS with domain):
 #   SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+#
+# Update existing installation:
+#   curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update
 #
 # Environment variables (all optional):
 #   SITE_ADDRESS      Domain or :port  (default: :80)
@@ -16,6 +19,12 @@
 #   NO_COLOR          Set to any value to disable colour output
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
+
+# ── Mode ──────────────────────────────────────────────────────────────────────
+UPDATE_MODE=0
+for arg in "$@"; do
+    [[ "$arg" == "--update" ]] && UPDATE_MODE=1
+done
 
 REPO_RAW="https://raw.githubusercontent.com/dngrtech/qlsm/main"
 
@@ -68,6 +77,24 @@ fi
 
 success "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 success "Compose (${COMPOSE})"
+
+# ── UPDATE MODE ───────────────────────────────────────────────────────────────
+if [[ $UPDATE_MODE -eq 1 ]]; then
+    [[ ! -d "${INSTALL_DIR}" ]] && die "QLSM not found at ${INSTALL_DIR}. Run without --update to install first."
+    cd "${INSTALL_DIR}"
+    info "Updating docker-compose.yml..."
+    curl -fsSL "${REPO_RAW}/docker-compose.yml" -o docker-compose.yml
+    success "docker-compose.yml updated"
+    info "Pulling latest image..."
+    ${COMPOSE} pull
+    info "Restarting QLSM..."
+    ${COMPOSE} up -d
+    success "QLSM updated and restarted"
+    echo ""
+    echo -e "${GREEN}${BOLD}  Update complete!${RESET}"
+    echo ""
+    exit 0
+fi
 
 # ── 2. Create install directory ───────────────────────────────────────────────
 info "Creating install directory: ${INSTALL_DIR}"
