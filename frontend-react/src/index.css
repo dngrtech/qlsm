@@ -73,6 +73,8 @@
    ============================================ */
 html {
   scroll-behavior: smooth;
+  width: 100%;
+  overflow-x: clip;
 }
 
 /* Noise texture overlay */
@@ -89,6 +91,15 @@ body {
   font-family: 'Exo 2', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  overflow-x: clip;
+}
+
+#root,
+.app-shell,
+.main-shell {
+  width: 100%;
+  overflow-x: clip;
 }
 
 /* ============================================
@@ -1341,6 +1352,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 32px;
+  min-width: 0;
   animation: navbar-content-reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1361,6 +1373,7 @@ body {
   display: flex;
   align-items: center;
   gap: 20px;
+  min-width: 0;
   animation: navbar-fade-in 0.4s ease-out 0.1s backwards;
 }
 
@@ -1386,6 +1399,7 @@ body {
   text-decoration: none;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  min-width: 0;
 }
 
 .navbar-brand-link::before {
@@ -1495,6 +1509,7 @@ body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1;
+  min-width: 0;
 }
 
 .navbar-brand-text {
@@ -1879,7 +1894,37 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
   animation: navbar-fade-in 0.4s ease-out 0.3s backwards;
+}
+
+.navbar-mobile-menu-wrapper {
+  display: none;
+  position: relative;
+}
+
+.navbar-mobile-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.navbar-mobile-menu-trigger:hover {
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+}
+
+.navbar-mobile-menu-trigger:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 /* Logout button */
@@ -2016,6 +2061,31 @@ body {
 .navbar-theme-wrapper {
   display: flex;
   align-items: center;
+  min-width: 0;
+}
+
+.navbar-mobile-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(260px, calc(100vw - 24px));
+  background: var(--surface-raised);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    0 0 0 1px var(--surface-border);
+  outline: none;
+  z-index: 70;
+}
+
+.navbar-mobile-logout {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 /* ===== NEUMORPHIC THEME TOGGLE ===== */
@@ -2324,8 +2394,8 @@ body {
     padding: 0 16px;
   }
 
-  .navbar-brand-text-wrapper {
-    font-size: 18px;
+  .navbar-brand-link {
+    padding-right: 0;
   }
 
   .navbar-brand-subtext {
@@ -2336,8 +2406,11 @@ body {
     display: none;
   }
 
-  .navbar-logout-btn span,
-  .navbar-login-btn span {
+  .navbar-brand-text {
+    font-size: 18px;
+  }
+
+  .navbar-logout-btn span {
     display: none;
   }
 
@@ -2345,11 +2418,25 @@ body {
   .navbar-login-btn {
     padding: 8px 12px;
   }
+
+  .navbar-logout-btn,
+  .navbar-divider {
+    display: none;
+  }
+
+  .navbar-mobile-menu-wrapper {
+    display: block;
+  }
 }
 
 @media (max-width: 480px) {
   .navbar-container {
     height: 56px;
+  }
+
+  .navbar-content {
+    gap: 10px;
+    padding: 0 10px;
   }
 
   .navbar-brand-icon-wrapper {
@@ -2363,7 +2450,22 @@ body {
   }
 
   .navbar-section-left {
-    gap: 12px;
+    gap: 8px;
+    flex: 1 1 auto;
+  }
+
+  .navbar-section-right {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .navbar-brand-link {
+    gap: 10px;
+  }
+
+  .navbar-brand-text {
+    font-size: 16px;
+    letter-spacing: 0.08em;
   }
 }
 

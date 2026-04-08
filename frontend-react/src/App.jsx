@@ -19,9 +19,9 @@ function App() {
       <LoadingProvider>
         <NotificationProvider>
           {/* Main container uses CSS variable-based theme class */}
-          <div className="flex flex-col min-h-screen bg-theme-base text-theme-primary">
+          <div className="app-shell flex flex-col min-h-screen bg-theme-base text-theme-primary">
             <Navbar />
-            <main className="flex-grow relative z-0 main-grid-bg">
+            <main className="main-shell flex-grow relative z-0 main-grid-bg">
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route element={<ProtectedRoute />}>
