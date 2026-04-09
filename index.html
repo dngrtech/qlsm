@@ -1,12 +1,89 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="0; url=https://github.com/dngrtech/qlsm">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QLSM — Quake Live Server Management</title>
-<meta name="description" content="Web UI for managing Quake Live dedicated servers via Terraform and Ansible.">
+<meta name="description" content="Web UI for managing Quake Live dedicated servers via Terraform and Ansible. Flask + React + SQLite + Redis. Deploy instances, edit configs, restart servers from a browser.">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #24292e; line-height: 1.6; }
+  h1 { font-size: 2em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+  h2 { font-size: 1.5em; margin-top: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+  pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  code { background: #f6f8fa; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
+  pre code { background: none; padding: 0; }
+  a { color: #0366d6; }
+  ul { padding-left: 1.5em; }
+  .github-link { display: inline-block; margin: 10px 0 20px; padding: 8px 16px; background: #24292e; color: #fff; border-radius: 6px; text-decoration: none; font-weight: bold; }
+  .github-link:hover { background: #444; color: #fff; }
+</style>
 </head>
 <body>
-<a href="https://github.com/dngrtech/qlsm">Redirecting to GitHub...</a>
+
+<h1>QLSM — Quake Live Server Management</h1>
+
+<a class="github-link" href="https://github.com/dngrtech/qlsm">View on GitHub</a>
+
+<p>I built this because managing Quake Live dedicated servers without tooling means a lot of SSH sessions, manual config edits, and copy-pasting commands. QLSM wraps that into a web UI — deploy instances, edit configs, restart servers, monitor status, all from a browser.</p>
+
+<p>Bring your own VPS. If you want to provision new hosts on Vultr, there's Terraform for that. Everything else runs over SSH via Ansible.</p>
+
+<h2>Stack</h2>
+
+<p>Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers. The frontend is a Vite/Tailwind SPA served behind Caddy.</p>
+
+<h2>Requirements</h2>
+
+<p>You need a Linux VPS (Ubuntu 22.04 or newer recommended) with:</p>
+<ul>
+  <li><strong>Docker</strong> — <a href="https://docs.docker.com/engine/install/ubuntu/">install guide</a></li>
+  <li><strong>Docker Compose</strong> (usually included with Docker)</li>
+  <li>A user with <code>sudo</code> access</li>
+</ul>
+
+<p>To install Docker on a fresh Ubuntu server:</p>
+<pre><code>curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker</code></pre>
+
+<h2>Quick start (production)</h2>
+
+<h3>Option 1 — one-liner (recommended)</h3>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash</code></pre>
+
+<p>With a domain (enables HTTPS via Caddy):</p>
+<pre><code>SITE_ADDRESS=qlds.example.com bash &lt;(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)</code></pre>
+
+<h3>Option 2 — git clone</h3>
+<pre><code>git clone https://github.com/dngrtech/qlsm.git &amp;&amp; cd qlsm
+cp .env.example .env
+# edit .env: set SITE_ADDRESS, REDIS_PASSWORD, and VULTR_API_KEY if using Vultr
+docker compose up -d</code></pre>
+
+<p>Default login is <code>admin</code> / <code>admin</code>. You'll be forced to change the password on first login.</p>
+
+<h2>Updating</h2>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update</code></pre>
+
+<p>Downloads the latest <code>docker-compose.yml</code>, pulls the new image, and restarts. Your <code>.env</code> and data are untouched.</p>
+
+<h2>Development</h2>
+<pre><code>cp .env.example .env
+./run-dev.sh</code></pre>
+
+<p>That starts Flask, Vite, an RQ worker, the RCON service, and a status poller together. Flask ends up on <code>:5001</code>, frontend on <code>:5173</code>.</p>
+
+<pre><code>pytest tests/</code></pre>
+
+<h2>Docs</h2>
+<ul>
+  <li><a href="https://github.com/dngrtech/qlsm/blob/main/docs/setup.md">docs/setup.md</a> — install and configure</li>
+  <li><a href="https://github.com/dngrtech/qlsm/blob/main/docs/architecture.md">docs/architecture.md</a> — how it fits together</li>
+  <li><a href="https://github.com/dngrtech/qlsm/blob/main/docs/technical.md">docs/technical.md</a> — implementation details</li>
+</ul>
+
+<h2>License</h2>
+<p>GPL-3.0</p>
+
 </body>
 </html>
