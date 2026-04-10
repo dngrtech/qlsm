@@ -123,8 +123,6 @@ docs/*
 !docs/setup.md
 !docs/technical.md
 !docs/architecture.md
-!docs/superpowers/
-!docs/superpowers/**
 
 # ── Re-ignore runtime artifacts inside included dirs ──────────────────────────
 __pycache__/
