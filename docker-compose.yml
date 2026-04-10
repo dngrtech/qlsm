@@ -65,6 +65,7 @@ services:
       LOG_FORMAT: json
       RUN_MIGRATIONS: "true"
       QLSM_HOST_USER: ${USER:-root}
+      QLSM_HOST_IP: ${QLSM_HOST_IP:-}
     volumes:
       - ./data:/app/data
       - ./terraform/ssh-keys:/app/terraform/ssh-keys
@@ -72,7 +73,11 @@ services:
       - ./ansible/inventory:/app/ansible/inventory
       - ./configs:/app/configs
       - ./logs:/app/logs
-      - ${HOME}/.ssh:/host-ssh
+      # Self-host SSH bridge. DO NOT change to ${HOME}/.ssh — the web container
+      # must not have access to the operator's full SSH identity. The host side
+      # must be a dedicated directory (mode 0700) and sshd must be configured
+      # to read its authorized_keys file. See docs/setup.md#self-host-provider.
+      - ${HOME}/.qlsm-ssh:/host-ssh
     command:
       - gunicorn
       - --config=gunicorn.conf.py

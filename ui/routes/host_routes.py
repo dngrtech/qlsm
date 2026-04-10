@@ -79,9 +79,7 @@ from ui.routes.self_host_helpers import (
     SelfHostKeyError,
     cleanup_self_host_key_material,
     detect_default_self_ssh_user,
-    detect_docker_host_ip,
     generate_self_host_keys,
-    remove_authorized_key,
 )
 from flask_jwt_extended import jwt_required # Import the decorator from Flask-JWT-Extended
 
@@ -283,11 +281,8 @@ def _handle_standalone_host_creation(name, data):
 @jwt_required()
 def get_self_host_defaults_api():
     ssh_user = detect_default_self_ssh_user()
-    try:
-        gateway_ip = detect_docker_host_ip()
-    except ValueError:
-        gateway_ip = None
-    return jsonify({"data": {"ssh_user": ssh_user, "gateway_ip": gateway_ip}})
+    host_ip = os.environ.get('QLSM_HOST_IP', '').strip() or None
+    return jsonify({"data": {"ssh_user": ssh_user, "host_ip": host_ip}})
 
 
 def _validate_self_ssh_user(value):
@@ -325,17 +320,20 @@ def _handle_self_host_creation(name, data):
     if error:
         return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
+    ip_address, error = validate_ip_address(data.get('ip_address', ''))
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
+
     host = None
     key_path = None
     public_key = None
     lock_token = None
     try:
-        gateway_ip = detect_docker_host_ip()
         key_path, public_key = generate_self_host_keys(name)
         host = create_host(
             name=name,
             provider='self',
-            ip_address=gateway_ip,
+            ip_address=ip_address,
             ssh_user=ssh_user,
             ssh_key_path=key_path,
             ssh_port=22,
@@ -419,17 +417,6 @@ def delete_host_api(host_id): # Renamed function
         return jsonify({"error": {"message": f'Another operation is running on host "{host_name}". Please wait for it to complete.'}}), 409
 
     try:
-        if host.provider == 'self' and host.ssh_key_path:
-            try:
-                with open(f"{host.ssh_key_path}.pub") as public_key_file:
-                    public_key = public_key_file.read().strip()
-                remove_authorized_key(public_key)
-            except Exception as cleanup_err:
-                current_app.logger.warning(
-                    "Could not remove self-host authorized key for host %s: %s",
-                    host.id,
-                    cleanup_err,
-                )
         update_host(host.id, status=HostStatus.DELETING)
         if is_standalone:
             enqueue_task(remove_standalone_host, host.id, lock_token=lock_token, on_failure=host_job_failure_handler)

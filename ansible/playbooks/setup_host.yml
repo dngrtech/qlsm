@@ -410,6 +410,11 @@
   #######################################################################
   # 6. Sync Common Assets & Install Core Dependencies
   #######################################################################
+    - name: Get pip3 version
+      command: pip3 --version
+      register: pip3_version_output
+      changed_when: false
+
     - name: Install core Python dependencies for minqlx
       pip:
         name:
@@ -417,7 +422,7 @@
           - pyzmq
           - discord.py
         executable: pip3
-        extra_args: --break-system-packages
+        extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
 
     # Optional: Check for a common requirements file for plugins
     # - name: Check if common requirements.txt exists

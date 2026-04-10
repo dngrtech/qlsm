@@ -6,6 +6,7 @@ from rq import get_current_job
 
 from ui import db
 from ui.models import Host, HostStatus
+from ui.routes.self_host_helpers import remove_authorized_key
 from .common import append_log
 from .standalone_inventory import inventory_filename_for_host
 
@@ -55,6 +56,21 @@ def remove_standalone_host_logic(host_id):
         if host.provider == 'self' and ssh_key_path:
             pub_key_path = f"{ssh_key_path}.pub"
             if os.path.exists(pub_key_path):
+                try:
+                    public_key = Path(pub_key_path).read_text().strip()
+                except OSError as e:
+                    public_key = None
+                    log.error(f"Error reading SSH public key file {pub_key_path}: {e}")
+                    append_log(host, f"Warning: Failed to read SSH public key file {pub_key_path}: {e}")
+
+                if public_key:
+                    try:
+                        remove_authorized_key(public_key)
+                        append_log(host, "Removed self-host public key from authorized_keys")
+                    except Exception as e:
+                        log.error(f"Error removing self-host authorized key: {e}")
+                        append_log(host, f"Warning: Failed to remove self-host authorized key: {e}")
+
                 try:
                     os.remove(pub_key_path)
                     append_log(host, f"Deleted SSH public key file: {pub_key_path}")

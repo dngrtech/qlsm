@@ -101,6 +101,59 @@ docker compose restart web      # Restart app only
 docker compose ps               # Show running containers
 ```
 
+## Self-Host Provider
+
+QLSM can deploy game servers on the same machine that runs the QLSM Docker
+stack via the **self-host provider**. This is useful when you already have a
+spare Linux box and don't want to bring up a second VM just to run one or two
+Quake Live instances.
+
+The web container manages self-host SSH keys through a dedicated directory at
+`~/.qlsm-ssh/`. It is deliberately **not** mounted against `~/.ssh` — the
+container has no business seeing the operator's personal private keys. Two
+one-time host-side steps are required to enable self-host deployment:
+
+### 1. Create the directory
+
+The install script creates this automatically; if you're setting up by hand:
+
+```bash
+mkdir -p ~/.qlsm-ssh
+chmod 700 ~/.qlsm-ssh
+touch ~/.qlsm-ssh/authorized_keys
+chmod 600 ~/.qlsm-ssh/authorized_keys
+```
+
+### 2. Tell `sshd` to read it
+
+Add the dedicated `authorized_keys` file to `sshd`'s authorized-keys search
+path. Edit `/etc/ssh/sshd_config` (as root) and add:
+
+```sshd_config
+AuthorizedKeysFile .ssh/authorized_keys .qlsm-ssh/authorized_keys
+```
+
+Then reload sshd:
+
+```bash
+sudo sshd -t && sudo systemctl reload ssh
+```
+
+Verify the new path is active:
+
+```bash
+sudo sshd -T | grep authorizedkeysfile
+# authorizedkeysfile .ssh/authorized_keys .qlsm-ssh/authorized_keys
+```
+
+That's it — the next time you add a **QLSM Host (self)** from the UI, the web
+container will drop a generated public key into `~/.qlsm-ssh/authorized_keys`
+and connect to `172.17.0.1` (the Docker bridge gateway) as your shell user.
+
+> **Note:** The self-host SSH user defaults to whoever owns the
+> `~/.qlsm-ssh/` directory. If you run the stack as root but want self-host
+> SSH to land as a different user, set `QLSM_HOST_USER` in `.env`.
+
 ## Live Server Status
 
 The `discord_status.py` minqlx plugin must be enabled on each game server instance for live status data (map, players, state) to appear in the UI. Without it, statuses will show as `—`.

@@ -50,9 +50,9 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
 
     getSelfHostDefaults()
       .then((defaults) => {
-        if (!cancelled && defaults?.ssh_user) {
-          setSshUser(defaults.ssh_user);
-        }
+        if (cancelled) return;
+        if (defaults?.ssh_user) setSshUser(defaults.ssh_user);
+        if (defaults?.host_ip) setIpAddress(defaults.host_ip);
       })
       .catch((err) => {
         const message = err.error?.message || err.message || 'Failed to load self-host defaults.';
@@ -155,6 +155,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       }
     }
     if (provider === 'self') {
+      if (!ipAddress || !ipAddress.trim()) {
+        setError('Host public IP is required for self hosts.');
+        return;
+      }
       if (!timezone) {
         setError('Timezone is required for self hosts.');
         return;
@@ -183,6 +187,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
         hostData = {
           name: name.trim().toLowerCase(),
           provider: 'self',
+          ip_address: ipAddress.trim(),
           timezone,
           ssh_user: sshUser.trim(),
         };

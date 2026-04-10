@@ -5,6 +5,7 @@ from rq import get_current_job
 
 from ui import db
 from ui.models import Host, HostStatus
+from ui.routes.self_host_helpers import detect_docker_host_ip
 from .common import append_log
 from .standalone_inventory import generate_standalone_inventory
 
@@ -96,7 +97,8 @@ def setup_standalone_host_logic(host_id):
 def _generate_standalone_inventory(host):
     """Generate Ansible inventory file for a standalone host."""
     try:
-        inventory_path = generate_standalone_inventory(host)
+        ansible_host = detect_docker_host_ip() if host.provider == 'self' else None
+        inventory_path = generate_standalone_inventory(host, ansible_host=ansible_host)
         log.info(f"Generated standalone inventory file: {inventory_path}")
         return inventory_path
     except Exception as e:

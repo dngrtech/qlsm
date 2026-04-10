@@ -181,6 +181,8 @@ function AddHostFormFields({
             Deploys game servers on this machine. SSH keys are generated and configured automatically.
           </div>
           <SelfHostFields
+            ipAddress={ipAddress}
+            onIpAddressChange={onIpAddressChange}
             sshUser={sshUser}
             onSshUserChange={onSshUserChange}
             timezone={timezone}

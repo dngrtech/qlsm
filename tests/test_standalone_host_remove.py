@@ -1,0 +1,98 @@
+from pathlib import Path
+from unittest.mock import patch
+
+from ui import db
+from ui.models import Host, HostStatus
+from ui.task_logic.standalone_host_remove import remove_standalone_host_logic
+
+
+def _create_host(**overrides):
+    defaults = dict(
+        name='self-host',
+        provider='self',
+        is_standalone=True,
+        status=HostStatus.ACTIVE,
+    )
+    defaults.update(overrides)
+    host = Host(**defaults)
+    db.session.add(host)
+    db.session.commit()
+    return host
+
+
+@patch('ui.task_logic.standalone_host_remove.get_current_job')
+@patch('ui.task_logic.standalone_host_remove.remove_authorized_key')
+def test_remove_standalone_host_removes_self_authorized_key(
+    mock_remove_key, mock_job, app, tmp_path
+):
+    """Self-host destroy task reads the pub key and removes it from
+    authorized_keys before unlinking the file."""
+    mock_job.return_value.id = 'job-1'
+
+    key_path = tmp_path / 'self_id_rsa'
+    key_path.write_text('private')
+    pub_path = Path(str(key_path) + '.pub')
+    pub_path.write_text('ssh-rsa self-host-key\n')
+
+    with app.app_context():
+        host = _create_host(ssh_key_path=str(key_path))
+        host_id = host.id
+
+        result = remove_standalone_host_logic(host_id)
+
+    assert 'removed from inventory' in result
+    mock_remove_key.assert_called_once_with('ssh-rsa self-host-key')
+    assert not pub_path.exists()
+    assert not key_path.exists()
+
+
+@patch('ui.task_logic.standalone_host_remove.get_current_job')
+@patch('ui.task_logic.standalone_host_remove.remove_authorized_key')
+def test_remove_standalone_host_skips_key_removal_for_non_self_provider(
+    mock_remove_key, mock_job, app, tmp_path
+):
+    """Standalone (non-self) hosts must not touch authorized_keys."""
+    mock_job.return_value.id = 'job-2'
+
+    key_path = tmp_path / 'standalone_id_rsa'
+    key_path.write_text('private')
+    Path(str(key_path) + '.pub').write_text('ssh-rsa standalone-key\n')
+
+    with app.app_context():
+        host = _create_host(
+            name='standalone-host',
+            provider='user-provided',
+            ssh_key_path=str(key_path),
+        )
+        host_id = host.id
+
+        remove_standalone_host_logic(host_id)
+
+    mock_remove_key.assert_not_called()
+
+
+@patch('ui.task_logic.standalone_host_remove.get_current_job')
+@patch('ui.task_logic.standalone_host_remove.remove_authorized_key')
+def test_remove_standalone_host_continues_when_key_removal_fails(
+    mock_remove_key, mock_job, app, tmp_path
+):
+    """A failure to scrub authorized_keys must not abort host destruction —
+    the host record is still deleted so the operator is not left with a
+    zombie row."""
+    mock_job.return_value.id = 'job-3'
+    mock_remove_key.side_effect = OSError('permission denied')
+
+    key_path = tmp_path / 'self_id_rsa'
+    key_path.write_text('private')
+    Path(str(key_path) + '.pub').write_text('ssh-rsa failing-key\n')
+
+    with app.app_context():
+        host = _create_host(ssh_key_path=str(key_path))
+        host_id = host.id
+
+        result = remove_standalone_host_logic(host_id)
+
+        assert db.session.get(Host, host_id) is None
+
+    assert 'removed from inventory' in result
+    mock_remove_key.assert_called_once()

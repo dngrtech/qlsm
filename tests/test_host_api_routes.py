@@ -245,41 +245,39 @@ def test_create_standalone_host_invalid_os_type(client, app):
     assert response.status_code == 400
 
 
-@patch('ui.routes.host_routes.detect_docker_host_ip', return_value='172.17.0.1')
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
-def test_get_self_host_defaults(mock_user, mock_gateway, client, app):
+def test_get_self_host_defaults_no_env(mock_user, client, app):
+    """Without QLSM_HOST_IP env var, host_ip is None."""
     headers = auth_headers(app, DEFAULT_USER)
-
     response = client.get('/api/hosts/self/defaults', headers=headers)
-
     assert response.status_code == 200
-    assert response.get_json()['data'] == {
-        'ssh_user': 'rage',
-        'gateway_ip': '172.17.0.1',
-    }
+    data = response.get_json()['data']
+    assert data['ssh_user'] == 'rage'
+    assert data['host_ip'] is None
 
 
-@patch('ui.routes.host_routes.detect_docker_host_ip', side_effect=ValueError('no gateway'))
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
-def test_get_self_host_defaults_allows_missing_gateway(mock_user, mock_gateway, client, app):
+def test_get_self_host_defaults_with_env(mock_user, client, app, monkeypatch):
+    """QLSM_HOST_IP env var is returned as host_ip."""
+    monkeypatch.setenv('QLSM_HOST_IP', '203.0.113.10')
     headers = auth_headers(app, DEFAULT_USER)
-
     response = client.get('/api/hosts/self/defaults', headers=headers)
-
     assert response.status_code == 200
-    assert response.get_json()['data'] == {'ssh_user': 'rage', 'gateway_ip': None}
+    data = response.get_json()['data']
+    assert data['host_ip'] == '203.0.113.10'
 
 
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.generate_self_host_keys', return_value=('/tmp/self-key', 'ssh-rsa pub'))
-@patch('ui.routes.host_routes.detect_docker_host_ip', return_value='172.17.0.1')
-def test_create_self_host_success(mock_gateway, mock_keys, mock_lock, mock_enqueue, client, app):
+def test_create_self_host_success(mock_keys, mock_lock, mock_enqueue, client, app):
+    """Valid self-host with user-provided IP stores that IP."""
     headers = auth_headers(app, DEFAULT_USER)
 
     response = client.post('/api/hosts/', headers=headers, json={
         'name': 'self-host',
         'provider': 'self',
+        'ip_address': '203.0.113.10',
         'timezone': 'UTC',
         'ssh_user': 'rage',
     })
@@ -287,11 +285,38 @@ def test_create_self_host_success(mock_gateway, mock_keys, mock_lock, mock_enque
     assert response.status_code == 201
     data = response.get_json()['data']
     assert data['provider'] == 'self'
-    assert data['ip_address'] == '172.17.0.1'
+    assert data['ip_address'] == '203.0.113.10'
     assert data['ssh_key_path'] == '/tmp/self-key'
     assert data['is_standalone'] is True
     assert data['status'] == HostStatus.PROVISIONED_PENDING_SETUP.value
     mock_enqueue.assert_called_once()
+
+
+def test_create_self_host_missing_ip_returns_400(client, app):
+    """Missing ip_address for self host returns 400."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+    assert response.status_code == 400
+    assert 'IP address' in response.get_json()['error']['message']
+
+
+def test_create_self_host_invalid_ip_returns_400(client, app):
+    """Invalid ip_address for self host returns 400."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'ip_address': 'not-an-ip',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+    assert response.status_code == 400
+    assert 'Invalid IP address' in response.get_json()['error']['message']
 
 
 def test_create_second_self_host_rejected(client, app):
@@ -302,6 +327,7 @@ def test_create_second_self_host_rejected(client, app):
     response = client.post('/api/hosts/', headers=headers, json={
         'name': 'another-self',
         'provider': 'self',
+        'ip_address': '203.0.113.10',
         'timezone': 'UTC',
         'ssh_user': 'rage',
     })
@@ -310,13 +336,13 @@ def test_create_second_self_host_rejected(client, app):
     assert 'self host already exists' in response.get_json()['error']['message']
 
 
-@patch('ui.routes.host_routes.detect_docker_host_ip', return_value='172.17.0.1')
-def test_create_self_host_rejects_unsafe_ssh_user(mock_gateway, client, app):
+def test_create_self_host_rejects_unsafe_ssh_user(client, app):
     headers = auth_headers(app, DEFAULT_USER)
 
     response = client.post('/api/hosts/', headers=headers, json={
         'name': 'self-host',
         'provider': 'self',
+        'ip_address': '203.0.113.10',
         'timezone': 'UTC',
         'ssh_user': 'rage;rm -rf /',
     })
@@ -329,15 +355,15 @@ def test_create_self_host_rejects_unsafe_ssh_user(mock_gateway, client, app):
 @patch('ui.routes.host_routes.enqueue_task', side_effect=RuntimeError('queue down'))
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.generate_self_host_keys', return_value=('/tmp/self-key', 'ssh-rsa pub'))
-@patch('ui.routes.host_routes.detect_docker_host_ip', return_value='172.17.0.1')
 def test_create_self_host_cleans_up_when_enqueue_fails(
-    mock_gateway, mock_keys, mock_lock, mock_enqueue, mock_cleanup, client, app
+    mock_keys, mock_lock, mock_enqueue, mock_cleanup, client, app
 ):
     headers = auth_headers(app, DEFAULT_USER)
 
     response = client.post('/api/hosts/', headers=headers, json={
         'name': 'self-host',
         'provider': 'self',
+        'ip_address': '203.0.113.10',
         'timezone': 'UTC',
         'ssh_user': 'rage',
     })
@@ -395,12 +421,14 @@ def test_delete_host_success(mock_lock, mock_enqueue, client, app):
     mock_enqueue.assert_called_once()
 
 
-@patch('ui.routes.host_routes.remove_authorized_key')
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
-def test_delete_self_host_removes_authorized_key_before_queue(
-    mock_lock, mock_enqueue, mock_remove_key, client, app, tmp_path
+def test_delete_self_host_defers_key_removal_to_task(
+    mock_lock, mock_enqueue, client, app, tmp_path
 ):
+    """The DELETE route must not touch authorized_keys directly — the destroy
+    task owns that cleanup, so an enqueue failure never leaves the host record
+    in place with its key already removed."""
     key_path = tmp_path / 'self_id_rsa'
     Path(str(key_path) + '.pub').write_text('ssh-rsa pub\n')
     with app.app_context():
@@ -417,7 +445,6 @@ def test_delete_self_host_removes_authorized_key_before_queue(
     response = client.delete(f'/api/hosts/{host_id}', headers=headers)
 
     assert response.status_code == 202
-    mock_remove_key.assert_called_once_with('ssh-rsa pub')
     mock_enqueue.assert_called_once()
 
 

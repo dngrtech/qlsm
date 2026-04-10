@@ -37,6 +37,18 @@ def test_generate_self_inventory_writes_ssh_inventory(tmp_path):
     assert 'ansible_port: 22' in content
 
 
+def test_generate_self_inventory_uses_ansible_host_override(tmp_path):
+    path = generate_standalone_inventory(
+        _host('self'),
+        inventory_dir=tmp_path,
+        ansible_host='172.18.0.1',
+    )
+
+    assert path == str(tmp_path / 'test-host_self_host.yml')
+    content = (tmp_path / 'test-host_self_host.yml').read_text()
+    assert 'ansible_host: 172.18.0.1' in content
+
+
 def test_inventory_filename_used_for_self_cleanup():
     host = _host('self')
 

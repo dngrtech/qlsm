@@ -30,12 +30,12 @@ describe('getSelfHostDefaults', () => {
 
   it('fetches self-host defaults', async () => {
     mocks.get.mockResolvedValue({
-      data: { data: { ssh_user: 'rage', gateway_ip: '172.17.0.1' } },
+      data: { data: { ssh_user: 'rage', host_ip: '203.0.113.10' } },
     });
 
     await expect(getSelfHostDefaults()).resolves.toEqual({
       ssh_user: 'rage',
-      gateway_ip: '172.17.0.1',
+      host_ip: '203.0.113.10',
     });
     expect(mocks.get).toHaveBeenCalledWith('/hosts/self/defaults');
   });
