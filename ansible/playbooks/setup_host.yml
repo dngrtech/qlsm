@@ -16,6 +16,13 @@
     game_udp_ports: [27960, 27961, 27962, 27963]
     rcon_tcp_ports: [28888, 28889, 28890, 28891, 29999, 30000, 30001, 30002]
     remote_rules_path: /tmp/iptables.new.v4
+    firewall_mode: full
+    qlsm_network_rules:
+      filter:
+        udp_accept: [27960, 27961, 27962, 27963]
+        tcp_accept: [28888, 28889, 28890, 28891, 29999, 30000, 30001, 30002]
+      lan_rate:
+        udp_ports: []
 
     # SSH and standalone host configuration
     # These can be overridden via --extra-vars from the calling task
@@ -89,6 +96,7 @@
       loop:
         - iptables-persistent/autosave_v4
         - iptables-persistent/autosave_v6
+      when: firewall_mode == 'full'
 
     - name: Check for Akamai repository
       stat:
@@ -105,7 +113,9 @@
       apt:
         update_cache: yes
         cache_valid_time: 3600
-        pkg:
+        pkg: "{{ base_packages + ((firewall_mode == 'full') | ternary(['iptables-persistent'], [])) }}"
+      vars:
+        base_packages:
           - rsync
           - apt-transport-https
           - ca-certificates
@@ -123,7 +133,7 @@
           - python3.11
           - python3.11-dev
           - redis-server # Keep redis-server here as it's host-level
-          - iptables-persistent
+          - iptables
           - sudo
       environment:
         DEBIAN_FRONTEND: noninteractive
@@ -147,6 +157,7 @@
         suffix: .iptables
       register: local_rules_temp
       become: no
+      when: firewall_mode == 'full'
 
     - name: Render candidate IPv4 ruleset locally
       delegate_to: localhost
@@ -155,6 +166,7 @@
         src: "{{ playbook_dir }}/../templates/iptables.rules.j2"
         dest: "{{ local_rules_temp.path }}"
       become: no
+      when: firewall_mode == 'full'
   # ------------------------------------------------------------------
   # 2-B. Copy, validate syntax, back up current rules
   # ------------------------------------------------------------------
@@ -163,16 +175,19 @@
         src: "{{ local_rules_temp.path }}"
         dest: "{{ remote_rules_path }}"
         mode: '0600'
+      when: firewall_mode == 'full'
 
     - name: Save active rules for rollback
       command: iptables-save
       register: ipt_backup
       changed_when: false
+      when: firewall_mode == 'full'
 
     - name: Dry-run iptables-restore (syntax check only)
       shell: iptables-restore --test < {{ remote_rules_path }}
       args:
         executable: /bin/bash
+      when: firewall_mode == 'full'
 
   # ------------------------------------------------------------------
   # 2-C. Apply rules atomically; verify we're still reachable
@@ -207,6 +222,66 @@
             executable: /bin/bash
         - fail:
             msg: "Firewall change rolled back – SSH check failed."
+      when: firewall_mode == 'full'
+
+    - name: Ensure QLSM config directory exists
+      file:
+        path: /etc/qlsm
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: firewall_mode == 'helper'
+
+    - name: Install QLSM network rules helper
+      copy:
+        src: "{{ playbook_dir }}/../files/qlsm-network-rules-apply"
+        dest: /usr/local/sbin/qlsm-network-rules-apply
+        owner: root
+        group: root
+        mode: '0755'
+      when: firewall_mode == 'helper'
+
+    - name: Write QLSM network rules config
+      template:
+        src: "{{ playbook_dir }}/../templates/qlsm-network-rules.json.j2"
+        dest: /etc/qlsm/network-rules.json
+        owner: root
+        group: root
+        mode: '0644'
+      when: firewall_mode == 'helper'
+
+    - name: Install QLSM network rules service
+      template:
+        src: "{{ playbook_dir }}/../templates/qlsm-network-rules.service.j2"
+        dest: /etc/systemd/system/qlsm-network-rules.service
+        owner: root
+        group: root
+        mode: '0644'
+      when: firewall_mode == 'helper'
+
+    - name: Install QLSM network rules timer
+      template:
+        src: "{{ playbook_dir }}/../templates/qlsm-network-rules.timer.j2"
+        dest: /etc/systemd/system/qlsm-network-rules.timer
+        owner: root
+        group: root
+        mode: '0644'
+      when: firewall_mode == 'helper'
+
+    - name: Enable QLSM network rules timer
+      systemd:
+        name: qlsm-network-rules.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      when: firewall_mode == 'helper'
+
+    - name: Apply QLSM network rules once
+      systemd:
+        name: qlsm-network-rules.service
+        state: started
+      when: firewall_mode == 'helper'
 
   #######################################################################
   # 3. ql user
