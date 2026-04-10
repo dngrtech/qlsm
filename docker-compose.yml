@@ -21,9 +21,9 @@ x-app: &app
     # Keep password out of URL; app injects REDIS_PASSWORD internally.
     REDIS_URL: redis://redis:6379/0
     LOG_FORMAT: json
-  volumes:
-    # Admin-facing data — bind mounts for direct filesystem access.
-    # Shared across all app containers. See docs/docker-volume-concurrency.md
+  volumes: &app-volumes
+    # Admin-facing data - bind mounts for direct filesystem access.
+    # Shared across app containers except web's self-host SSH mount. See docs/docker-volume-concurrency.md
     - ./data:/app/data
     - ./terraform/ssh-keys:/app/terraform/ssh-keys
     - ./terraform/vultr-root/terraform.tfstate.d:/app/terraform/vultr-root/terraform.tfstate.d
@@ -64,6 +64,15 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_FORMAT: json
       RUN_MIGRATIONS: "true"
+      QLSM_HOST_USER: ${USER:-root}
+    volumes:
+      - ./data:/app/data
+      - ./terraform/ssh-keys:/app/terraform/ssh-keys
+      - ./terraform/vultr-root/terraform.tfstate.d:/app/terraform/vultr-root/terraform.tfstate.d
+      - ./ansible/inventory:/app/ansible/inventory
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+      - ${HOME}/.ssh:/host-ssh
     command:
       - gunicorn
       - --config=gunicorn.conf.py
