@@ -7,6 +7,7 @@ from rq import get_current_job
 from ui import db
 from ui.models import Host, HostStatus
 from .common import append_log
+from .standalone_inventory import inventory_filename_for_host
 
 log = logging.getLogger(__name__)
 
@@ -51,8 +52,18 @@ def remove_standalone_host_logic(host_id):
                 log.error(f"Error deleting SSH key file {ssh_key_path}: {e}")
                 append_log(host, f"Warning: Failed to delete SSH key file {ssh_key_path}: {e}")
 
+        if host.provider == 'self' and ssh_key_path:
+            pub_key_path = f"{ssh_key_path}.pub"
+            if os.path.exists(pub_key_path):
+                try:
+                    os.remove(pub_key_path)
+                    append_log(host, f"Deleted SSH public key file: {pub_key_path}")
+                except OSError as e:
+                    log.error(f"Error deleting SSH public key file {pub_key_path}: {e}")
+                    append_log(host, f"Warning: Failed to delete SSH public key file {pub_key_path}: {e}")
+
         # 2. Delete Ansible inventory file
-        inventory_path = os.path.abspath(f"ansible/inventory/{host_name}_standalone_host.yml")
+        inventory_path = os.path.abspath(f"ansible/inventory/{inventory_filename_for_host(host)}")
         if os.path.exists(inventory_path):
             try:
                 os.remove(inventory_path)
