@@ -6,6 +6,7 @@ from rq import get_current_job
 from ui import db
 from ui.models import Host, HostStatus
 from .common import append_log
+from .standalone_inventory import generate_standalone_inventory
 
 log = logging.getLogger(__name__)
 
@@ -95,28 +96,9 @@ def setup_standalone_host_logic(host_id):
 def _generate_standalone_inventory(host):
     """Generate Ansible inventory file for a standalone host."""
     try:
-        inventory_dir = os.path.abspath('ansible/inventory')
-        os.makedirs(inventory_dir, exist_ok=True)
-
-        inventory_filename = f"{host.name}_standalone_host.yml"
-        inventory_path = os.path.join(inventory_dir, inventory_filename)
-
-        inventory_content = f"""all:
-  hosts:
-    {host.name}:
-      ansible_host: {host.ip_address}
-      ansible_user: {host.ssh_user}
-      ansible_ssh_private_key_file: {os.path.abspath(host.ssh_key_path)}
-      ansible_port: {host.ssh_port}
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-"""
-
-        with open(inventory_path, 'w') as f:
-            f.write(inventory_content)
-
+        inventory_path = generate_standalone_inventory(host)
         log.info(f"Generated standalone inventory file: {inventory_path}")
         return inventory_path
-
     except Exception as e:
         log.error(f"Failed to generate inventory file for host {host.id}: {e}")
         return None
@@ -167,12 +149,13 @@ def _run_setup_playbook(host, inventory_path):
     """Run the Ansible setup playbook with standalone-specific variables."""
     ansible_playbook_path = os.path.abspath('ansible/playbooks/setup_host.yml')
 
-    # Pass is_standalone=true and ssh_port to the playbook
+    firewall_mode = 'helper' if host.provider == 'self' else 'full'
     ansible_command_args = [
         'ansible-playbook',
         '-i', inventory_path,
         '-e', f'is_standalone=true',
         '-e', f'ssh_port={host.ssh_port}',
+        '-e', f'firewall_mode={firewall_mode}',
     ]
     if host.timezone:
         ansible_command_args += ['-e', f'host_timezone={host.timezone}']
