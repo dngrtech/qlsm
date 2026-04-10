@@ -4,6 +4,7 @@ import FloatingListbox from '../common/FloatingListbox';
 import { providerOptions } from '../../utils/providerData';
 import { HOST_NAME_MAX_LENGTH, HOST_NAME_PATTERN } from '../../utils/resourceValidation';
 import { STANDALONE_TIMEZONES } from '../../utils/formatters';
+import SelfHostFields from './SelfHostFields';
 
 const inputClass = 'mt-1 block w-full px-3 py-2 rounded-lg text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none focus:ring-1 transition-colors';
 const inputFocusRing = 'focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]';
@@ -22,7 +23,6 @@ function AddHostFormFields({
   vultrContinentOptions,
   region,
   onRegionChange,
-  vultrAllRegions,
   vultrFilteredRegions,
   machineSize,
   onMachineSizeChange,
@@ -44,9 +44,13 @@ function AddHostFormFields({
   onTestConnection,
 }) {
   const fileInputRef = useRef(null);
+  const providerLabels = {
+    standalone: 'Standalone',
+    self: 'QLSM Host (self)',
+  };
   const providerListOptions = Object.keys(providerOptions).map(pKey => ({
     id: pKey,
-    name: pKey === 'standalone' ? 'Standalone' : pKey.toUpperCase()
+    name: providerLabels[pKey] || pKey.toUpperCase()
   }));
 
   const handleFileUpload = (e) => {
@@ -65,6 +69,7 @@ function AddHostFormFields({
   };
 
   const isStandalone = provider === 'standalone';
+  const isSelf = provider === 'self';
 
   return (
     <>
@@ -106,7 +111,7 @@ function AddHostFormFields({
       />
 
       {/* Cloud provider fields */}
-      {!isStandalone && (
+      {!isStandalone && !isSelf && (
         <>
           {provider === 'vultr' && (
             <FloatingListbox
@@ -160,6 +165,26 @@ function AddHostFormFields({
               return selectedOpt ? selectedOpt.name : 'Select Size';
             }}
             noOptionsMessage="No sizes available for this provider."
+          />
+        </>
+      )}
+
+      {isSelf && (
+        <>
+          <div
+            className="rounded-lg px-3.5 py-3 text-sm text-theme-secondary"
+            style={{
+              background: 'rgba(0, 255, 157, 0.08)',
+              border: '1px solid rgba(0, 255, 157, 0.2)',
+            }}
+          >
+            Deploys game servers on this machine. SSH keys are generated and configured automatically.
+          </div>
+          <SelfHostFields
+            sshUser={sshUser}
+            onSshUserChange={onSshUserChange}
+            timezone={timezone}
+            onTimezoneChange={onTimezoneChange}
           />
         </>
       )}

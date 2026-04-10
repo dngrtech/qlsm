@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { X, Server, AlertTriangle } from 'lucide-react';
-import { createHost, testHostConnection } from '../../services/api';
+import { createHost, getSelfHostDefaults, testHostConnection } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import { providerOptions } from '../../utils/providerData';
 import AddHostFormFields from './AddHostFormFields';
@@ -43,6 +43,26 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setRegion('');
     setMachineSize('');
   }, [provider]);
+
+  useEffect(() => {
+    if (!isOpen || provider !== 'self') return;
+    let cancelled = false;
+
+    getSelfHostDefaults()
+      .then((defaults) => {
+        if (!cancelled && defaults?.ssh_user) {
+          setSshUser(defaults.ssh_user);
+        }
+      })
+      .catch((err) => {
+        const message = err.error?.message || err.message || 'Failed to load self-host defaults.';
+        showError(message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, provider, showError]);
 
   const resetForm = () => {
     setName('');
@@ -134,6 +154,16 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
         return;
       }
     }
+    if (provider === 'self') {
+      if (!timezone) {
+        setError('Timezone is required for self hosts.');
+        return;
+      }
+      if (!sshUser || !sshUser.trim()) {
+        setError('SSH user is required for self hosts.');
+        return;
+      }
+    }
 
     setLoading(true);
     try {
@@ -149,6 +179,13 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           os_type: osType,
           timezone,
         };
+      } else if (provider === 'self') {
+        hostData = {
+          name: name.trim().toLowerCase(),
+          provider: 'self',
+          timezone,
+          ssh_user: sshUser.trim(),
+        };
       } else {
         hostData = {
           name: name.trim().toLowerCase(),
@@ -160,9 +197,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       }
 
       const response = await createHost(hostData);
-      const successMessage = provider === 'standalone'
-        ? response.message || 'Standalone host added and setup task queued.'
-        : response.message || 'Host added and provisioning task queued.';
+      const successMessage = provider === 'self'
+        ? response.message || 'Self host added and setup task queued.'
+        : provider === 'standalone'
+          ? response.message || 'Standalone host added and setup task queued.'
+          : response.message || 'Host added and provisioning task queued.';
       showSuccess(successMessage);
       if (onHostAdded) onHostAdded();
       handleClose();
@@ -251,7 +290,6 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                       vultrContinentOptions={vultrContinentOptions}
                       region={region}
                       onRegionChange={setRegion}
-                      vultrAllRegions={vultrAllRegions}
                       vultrFilteredRegions={vultrFilteredRegions}
                       machineSize={machineSize}
                       onMachineSizeChange={setMachineSize}
