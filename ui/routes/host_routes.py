@@ -13,6 +13,7 @@ from ui.task_lock import acquire_lock, release_lock
 # Host name validation constants
 HOST_NAME_MAX_LENGTH = 20
 HOST_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$')
+SSH_USER_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_.-]{0,63}$')
 
 # Systemd OnCalendar validation (matches formats produced by the frontend)
 SYSTEMD_CALENDAR_RE = re.compile(
@@ -74,6 +75,14 @@ from ui.tasks import provision_host, destroy_host, \
     force_update_workshop_task, configure_host_auto_restart_task, \
     enqueue_task
 from ui.task_logic.job_failure_handlers import host_job_failure_handler
+from ui.routes.self_host_helpers import (
+    SelfHostKeyError,
+    cleanup_self_host_key_material,
+    detect_default_self_ssh_user,
+    detect_docker_host_ip,
+    generate_self_host_keys,
+    remove_authorized_key,
+)
 from flask_jwt_extended import jwt_required # Import the decorator from Flask-JWT-Extended
 
 # Create a Blueprint for host API routes
@@ -107,11 +116,11 @@ def add_host_api():
         return jsonify({"error": {"message": error["message"]}}), error["status_code"]
     name = validated_name
 
-    # Handle standalone provider differently
+    if provider == 'self':
+        return _handle_self_host_creation(name, data)
     if provider == 'standalone':
         return _handle_standalone_host_creation(name, data)
-    else:
-        return _handle_cloud_host_creation(name, provider, data)
+    return _handle_cloud_host_creation(name, provider, data)
 
 
 def _handle_cloud_host_creation(name, provider, data):
@@ -270,6 +279,115 @@ def _handle_standalone_host_creation(name, data):
 
 # Note: The GET part of the original add_host is removed as forms are handled by React.
 
+@host_api_bp.route('/self/defaults', methods=['GET'], endpoint='get_self_host_defaults_api')
+@jwt_required()
+def get_self_host_defaults_api():
+    ssh_user = detect_default_self_ssh_user()
+    try:
+        gateway_ip = detect_docker_host_ip()
+    except ValueError:
+        gateway_ip = None
+    return jsonify({"data": {"ssh_user": ssh_user, "gateway_ip": gateway_ip}})
+
+
+def _validate_self_ssh_user(value):
+    if value is None:
+        value = detect_default_self_ssh_user()
+    if not isinstance(value, str):
+        return None, {"message": "SSH username must be a string.", "status_code": 400}
+    value = value.strip()
+    if not value:
+        return None, {"message": "SSH username cannot be empty.", "status_code": 400}
+    if not SSH_USER_PATTERN.match(value):
+        return None, {"message": "SSH username contains invalid characters.", "status_code": 400}
+    return value, None
+
+
+def _validate_required_timezone(timezone):
+    if not isinstance(timezone, str) or not timezone.strip():
+        return None, {"message": "Timezone is required for self hosts.", "status_code": 400}
+    timezone = timezone.strip()
+    if timezone not in VALID_TIMEZONES:
+        return None, {"message": "Invalid timezone. Must be a valid IANA timezone.", "status_code": 400}
+    return timezone, None
+
+
+def _handle_self_host_creation(name, data):
+    existing_self = Host.query.filter_by(provider='self').first()
+    if existing_self:
+        return jsonify({"error": {"message": "A self host already exists. Only one QLSM Host (self) is allowed."}}), 409
+
+    timezone, error = _validate_required_timezone(data.get('timezone'))
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
+
+    ssh_user, error = _validate_self_ssh_user(data.get('ssh_user'))
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
+
+    host = None
+    key_path = None
+    public_key = None
+    lock_token = None
+    try:
+        gateway_ip = detect_docker_host_ip()
+        key_path, public_key = generate_self_host_keys(name)
+        host = create_host(
+            name=name,
+            provider='self',
+            ip_address=gateway_ip,
+            ssh_user=ssh_user,
+            ssh_key_path=key_path,
+            ssh_port=22,
+            os_type='debian12',
+            is_standalone=True,
+            timezone=timezone,
+            status=HostStatus.PENDING,
+        )
+
+        lock_token = str(uuid.uuid4())
+        if not acquire_lock('host', host.id, lock_token, ttl=1260):
+            db.session.delete(host)
+            db.session.commit()
+            cleanup_self_host_key_material(key_path, public_key=public_key)
+            return jsonify({"error": {"message": f'Another operation is running on host "{name}". Please wait for it to complete.'}}), 409
+
+        update_host(host.id, status=HostStatus.PROVISIONED_PENDING_SETUP)
+        enqueue_task(
+            setup_standalone_host_ansible,
+            host.id,
+            timeout=1200,
+            lock_token=lock_token,
+            on_failure=host_job_failure_handler,
+        )
+        current_app.logger.info(f'Self host "{name}" (ID: {host.id}) added and setup task queued.')
+        return jsonify({"data": host.to_dict(), "message": f'Self host "{name}" added and setup task queued.'}), 201
+    except ValueError as exc:
+        return jsonify({"error": {"message": str(exc)}}), 500
+    except SelfHostKeyError:
+        return jsonify({"error": {"message": "SSH key generation failed."}}), 500
+    except Exception as exc:
+        if lock_token and host:
+            try:
+                release_lock('host', host.id, lock_token)
+            except Exception as lock_exc:
+                current_app.logger.warning(
+                    "Could not release self-host creation lock for host %s: %s",
+                    host.id,
+                    lock_exc,
+                )
+        if host:
+            try:
+                db.session.delete(host)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        if key_path:
+            cleanup_self_host_key_material(key_path, public_key=public_key)
+        current_app.logger.error(f'Error adding self host: {exc}', exc_info=True)
+        return jsonify({"error": {"message": f'Error adding self host: {str(exc)}'}}), 500
+
+
 @host_api_bp.route('/<int:host_id>', methods=['GET'], endpoint='view_host_api') # Changed route from /view to just /<id> for RESTful GET
 @jwt_required()
 def view_host_api(host_id): # Renamed function
@@ -301,6 +419,17 @@ def delete_host_api(host_id): # Renamed function
         return jsonify({"error": {"message": f'Another operation is running on host "{host_name}". Please wait for it to complete.'}}), 409
 
     try:
+        if host.provider == 'self' and host.ssh_key_path:
+            try:
+                with open(f"{host.ssh_key_path}.pub") as public_key_file:
+                    public_key = public_key_file.read().strip()
+                remove_authorized_key(public_key)
+            except Exception as cleanup_err:
+                current_app.logger.warning(
+                    "Could not remove self-host authorized key for host %s: %s",
+                    host.id,
+                    cleanup_err,
+                )
         update_host(host.id, status=HostStatus.DELETING)
         if is_standalone:
             enqueue_task(remove_standalone_host, host.id, lock_token=lock_token, on_failure=host_job_failure_handler)
