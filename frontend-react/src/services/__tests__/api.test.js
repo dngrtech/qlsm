@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
   put: vi.fn(),
   requestUse: vi.fn(),
   responseUse: vi.fn(),
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('axios', () => ({
   default: {
     create: mocks.create.mockReturnValue({
+      get: mocks.get,
       put: mocks.put,
       interceptors: {
         request: { use: mocks.requestUse },
@@ -19,7 +21,25 @@ vi.mock('axios', () => ({
   },
 }));
 
-import { updateInstanceConfig } from '../api';
+import { getSelfHostDefaults, updateInstanceConfig } from '../api';
+
+describe('getSelfHostDefaults', () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+  });
+
+  it('fetches self-host defaults', async () => {
+    mocks.get.mockResolvedValue({
+      data: { data: { ssh_user: 'rage', gateway_ip: '172.17.0.1' } },
+    });
+
+    await expect(getSelfHostDefaults()).resolves.toEqual({
+      ssh_user: 'rage',
+      gateway_ip: '172.17.0.1',
+    });
+    expect(mocks.get).toHaveBeenCalledWith('/hosts/self/defaults');
+  });
+});
 
 describe('updateInstanceConfig', () => {
   beforeEach(() => {
