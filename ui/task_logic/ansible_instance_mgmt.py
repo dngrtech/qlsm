@@ -12,6 +12,7 @@ from ui import db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from .common import append_log # Import from the common module
 from .ansible_runner import _run_ansible_playbook
+from .self_host_network import with_self_host_network_extravars
 
 from .zmq_utils import ensure_zmq_rcon_setup
 
@@ -130,6 +131,7 @@ def deploy_instance_logic(instance_id):
             'qlds_args': qlds_args_string, # Pass the constructed args for the service
             'lan_rate_enabled': instance.lan_rate_enabled # Pass for conditional iptables/sysctl
         }
+        deploy_extravars = with_self_host_network_extravars(instance, deploy_extravars)
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -360,6 +362,7 @@ def start_instance_logic(instance_id):
             'id': instance.id,
             'lan_rate_enabled': instance.lan_rate_enabled
         }
+        start_extravars = with_self_host_network_extravars(instance, start_extravars)
 
         runner_result, error_msg = _run_ansible_playbook(
             instance,
@@ -443,6 +446,7 @@ def apply_instance_config_logic(instance_id, restart=True):
             'qlds_args': qlds_args_string, # Pass constructed args for service re-templating
             'restart_service': restart     # Pass restart flag
         }
+        apply_config_extravars = with_self_host_network_extravars(instance, apply_config_extravars)
 
         # Run the new playbook: sync_instance_configs_and_restart.yml
         runner_result, error_msg = _run_ansible_playbook(
@@ -548,6 +552,11 @@ def delete_instance_logic(instance_id):
             'port': instance.port, # Add port to target correct service name and directory
             'id': instance.id      # Keep id
         }
+        delete_extravars = with_self_host_network_extravars(
+            instance,
+            delete_extravars,
+            exclude_instance_id=instance.id,
+        )
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -668,6 +677,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             'qlds_args': qlds_args_string,
             'lan_rate_enabled': instance.lan_rate_enabled
         }
+        reconfigure_extravars = with_self_host_network_extravars(instance, reconfigure_extravars)
 
         # Run the LAN rate update playbook
         runner_result, error_msg = _run_ansible_playbook(
