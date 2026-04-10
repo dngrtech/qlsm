@@ -9,6 +9,7 @@
     qlds_id: "{{ id }}" # Expecting 'id' - used for config sourcing
     host_name: "{{ host_name }}" # Expecting 'host_name' for config path
     game_port: "{{ port }}" # Expecting 'port' from task call, aliasing for clarity
+    firewall_mode_effective: "{{ firewall_mode | default('full') }}"
 
     restart_service: true # Default to true for backward compatibility
 
@@ -104,6 +105,21 @@
 
     - name: Flush handlers to ensure daemon_reload runs before restart
       ansible.builtin.meta: flush_handlers
+
+    - name: Write QLSM network rules config
+      template:
+        src: ../templates/qlsm-network-rules.json.j2
+        dest: /etc/qlsm/network-rules.json
+        owner: root
+        group: root
+        mode: '0644'
+      when: firewall_mode_effective == 'helper'
+
+    - name: Apply QLSM network rules
+      systemd:
+        name: qlsm-network-rules.service
+        state: started
+      when: firewall_mode_effective == 'helper'
 
     - name: Restart QLDS service
       ansible.builtin.systemd:

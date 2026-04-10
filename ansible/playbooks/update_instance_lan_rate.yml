@@ -7,6 +7,7 @@
   vars:
     # Instance specific vars (passed via -e)
     game_port: "{{ port }}"
+    firewall_mode_effective: "{{ firewall_mode | default('full') }}"
     # lan_rate_enabled: passed from task logic
     # qlds_args: passed from task logic
 
@@ -25,7 +26,9 @@
         - net.ipv4.conf.all.route_localnet
         - net.ipv4.conf.default.route_localnet
         - net.ipv4.conf.lo.route_localnet
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
   #######################################################################
   # 2. Re-render systemd service file with updated qlds_args
@@ -42,6 +45,21 @@
     - name: Flush handlers to ensure daemon_reload runs before service restart
       ansible.builtin.meta: flush_handlers
 
+    - name: Write QLSM network rules config
+      template:
+        src: ../templates/qlsm-network-rules.json.j2
+        dest: /etc/qlsm/network-rules.json
+        owner: root
+        group: root
+        mode: '0644'
+      when: firewall_mode_effective == 'helper'
+
+    - name: Apply QLSM network rules
+      systemd:
+        name: qlsm-network-rules.service
+        state: started
+      when: firewall_mode_effective == 'helper'
+
   #######################################################################
   # 3. Add or remove NAT iptables rules based on lan_rate_enabled
   #######################################################################
@@ -51,11 +69,14 @@
       register: input_snat_check
       failed_when: false
       changed_when: false
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
     - name: Add INPUT SNAT rule (required for NAT)
       command: iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - input_snat_check.rc != 0
 
@@ -64,11 +85,14 @@
       register: prerouting_check
       failed_when: false
       changed_when: false
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
     - name: Add PREROUTING DNAT rule
       command: iptables -t nat -A PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - prerouting_check.rc != 0
 
@@ -77,23 +101,30 @@
       register: postrouting_check
       failed_when: false
       changed_when: false
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
     - name: Add POSTROUTING SNAT rule
       command: iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - postrouting_check.rc != 0
 
     # Remove NAT rules (when disabling LAN rate)
     - name: Remove PREROUTING DNAT rule
       command: iptables -t nat -D PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
-      when: not (lan_rate_enabled | default(false))
+      when:
+        - firewall_mode_effective == 'full'
+        - not (lan_rate_enabled | default(false))
       ignore_errors: yes
 
     - name: Remove POSTROUTING SNAT rule
       command: iptables -t nat -D POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
-      when: not (lan_rate_enabled | default(false))
+      when:
+        - firewall_mode_effective == 'full'
+        - not (lan_rate_enabled | default(false))
       ignore_errors: yes
 
   #######################################################################
@@ -106,9 +137,11 @@
         owner: root
         group: root
         mode: '0755'
+      when: firewall_mode_effective == 'full'
 
     - name: Save iptables rules
       shell: iptables-save > /etc/iptables/rules.v4
+      when: firewall_mode_effective == 'full'
 
   #######################################################################
   # 5. Restart the instance service
