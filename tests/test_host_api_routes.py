@@ -115,6 +115,19 @@ def test_create_host_name_too_long(client, app):
     assert response.status_code == 400
 
 
+def test_create_host_name_numeric_only_rejected(client, app):
+    """Host name made only of digits returns 400."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': '234234',
+        'provider': 'vultr',
+        'region': 'ewr',
+        'machine_size': 'vc2-1c-1gb'
+    })
+    assert response.status_code == 400
+    assert 'cannot contain only digits' in response.get_json()['error']['message']
+
+
 def test_create_host_duplicate_name(client, app):
     """Duplicate host name returns 409."""
     with app.app_context():

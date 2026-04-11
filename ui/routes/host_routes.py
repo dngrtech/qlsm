@@ -33,6 +33,8 @@ def validate_host_name(name, exclude_host_id=None):
         return None, {"message": "Name cannot be empty", "status_code": 400}
     if len(name) > HOST_NAME_MAX_LENGTH:
         return None, {"message": f"Name cannot exceed {HOST_NAME_MAX_LENGTH} characters", "status_code": 400}
+    if name.isdigit():
+        return None, {"message": "Host name cannot contain only digits.", "status_code": 400}
     if not HOST_NAME_PATTERN.match(name):
         return None, {"message": "Name must start and end with a letter or number, and can only contain letters, numbers, and hyphens", "status_code": 400}
     existing_host = get_host_by_name(name)

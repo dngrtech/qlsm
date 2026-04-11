@@ -10,6 +10,20 @@ from .common import append_log
 from .standalone_inventory import generate_standalone_inventory
 
 log = logging.getLogger(__name__)
+INVENTORY_MISMATCH_MARKERS = (
+    "no inventory was parsed",
+    "could not match supplied host pattern",
+    "no hosts matched",
+)
+
+
+def _extract_inventory_mismatch_detail(stdout_content="", stderr_content=""):
+    for source in (stderr_content or "", stdout_content or ""):
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped and any(marker in stripped.lower() for marker in INVENTORY_MISMATCH_MARKERS):
+                return stripped
+    return None
 
 
 def setup_standalone_host_logic(host_id):
@@ -134,6 +148,13 @@ def _wait_for_ssh(host, inventory_path):
             wait_command_args,
             check=True, capture_output=True, text=True, env=os.environ
         )
+        inventory_error = _extract_inventory_mismatch_detail(wait_result.stdout, wait_result.stderr)
+        if inventory_error:
+            log.error(f"Inventory mismatch while waiting for SSH on host {host.id}: {inventory_error}")
+            append_log(host, f"Host setup failed: {inventory_error}")
+            host.status = HostStatus.ERROR
+            db.session.commit()
+            return False
         log.debug(f"Ansible wait stdout:\n{wait_result.stdout}")
         if wait_result.stderr:
             log.warning(f"Ansible wait stderr:\n{wait_result.stderr}")
@@ -199,6 +220,13 @@ def _run_setup_playbook(host, inventory_path):
 
         rc = process.returncode
         log.info(f"Ansible setup playbook finished with return code: {rc}")
+        inventory_error = _extract_inventory_mismatch_detail(stdout_content, stderr_content)
+        if inventory_error:
+            log.error(f"Inventory mismatch during host setup playbook for host {host.id}: {inventory_error}")
+            append_log(host, f"Host setup failed: {inventory_error}")
+            host.status = HostStatus.ERROR
+            db.session.commit()
+            return False
 
         if rc != 0:
             raise subprocess.CalledProcessError(rc, ansible_command_args, output=stdout_content, stderr=stderr_content)
