@@ -13,7 +13,7 @@ from ui import db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from .common import append_log # Import from the common module
 from .ansible_runner import _run_ansible_playbook
-from .self_host_network import with_self_host_network_extravars
+from .self_host_network import is_self_host, with_self_host_network_extravars
 
 from .zmq_utils import ensure_zmq_rcon_setup
 
@@ -54,6 +54,20 @@ def _prepare_instance_zmq(instance):
         db.session.commit()
 
 
+def _self_host_redis_args(instance):
+    if not is_self_host(getattr(instance, "host", None)):
+        return []
+
+    redis_password = (os.environ.get("REDIS_PASSWORD") or "").strip()
+    if not redis_password:
+        raise ValueError("Self-host instance Redis password is not configured.")
+
+    return [
+        '+set qlx_redisAddress "127.0.0.1:6379"',
+        f'+set qlx_redisPassword "{redis_password}"',
+    ]
+
+
 def _build_qlds_args_string(instance):
     _validate_instance_fields(instance)
 
@@ -72,6 +86,9 @@ def _build_qlds_args_string(instance):
         f'+set net_port {instance.port}',
         f'+set sv_hostname "{instance.hostname}"',
         f'+set qlx_serverBrandName "{instance.hostname}"',
+    ]
+    parts += _self_host_redis_args(instance)
+    parts += [
         f'+set qlx_redisDatabase {redis_db_index}',
         f'+set fs_homepath {homepath}',
         f'+set qlx_pluginsPath {homepath}/minqlx-plugins',

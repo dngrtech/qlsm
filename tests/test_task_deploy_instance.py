@@ -191,6 +191,7 @@ def _make_instance_for_args(**kwargs):
     inst.zmq_stats_password = kwargs.get('zmq_stats_password', 'statspass')
     inst.lan_rate_enabled = kwargs.get('lan_rate_enabled', False)
     inst.qlx_plugins = kwargs.get('qlx_plugins', None)
+    inst.host = kwargs.get('host', SimpleNamespace(provider='standalone'))
     return inst
 
 
@@ -217,3 +218,43 @@ def test_build_qlds_args_serverchecker_not_duplicated(test_app):
         result = _build_qlds_args_string(inst)
         assert result.count('serverchecker') == 1
         assert '+set qlx_plugins "serverchecker, balance"' in result
+
+
+def test_build_qlds_args_self_host_includes_shared_redis_runtime(test_app, monkeypatch):
+    with test_app.app_context():
+        monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")
+        inst = _make_instance_for_args()
+        inst.host = SimpleNamespace(provider="self")
+
+        result = _build_qlds_args_string(inst)
+
+        assert '+set qlx_redisAddress "127.0.0.1:6379"' in result
+        assert '+set qlx_redisPassword "shared-secret"' in result
+        assert '+set qlx_redisDatabase 1' in result
+
+
+def test_build_qlds_args_non_self_host_does_not_include_shared_redis_runtime(
+    test_app, monkeypatch
+):
+    with test_app.app_context():
+        monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")
+        inst = _make_instance_for_args()
+        inst.host = SimpleNamespace(provider="standalone")
+
+        result = _build_qlds_args_string(inst)
+
+        assert "qlx_redisAddress" not in result
+        assert "qlx_redisPassword" not in result
+
+
+def test_build_qlds_args_self_host_requires_redis_password(test_app, monkeypatch):
+    with test_app.app_context():
+        monkeypatch.delenv("REDIS_PASSWORD", raising=False)
+        inst = _make_instance_for_args()
+        inst.host = SimpleNamespace(provider="self")
+
+        with pytest.raises(
+            ValueError,
+            match="Self-host instance Redis password is not configured.",
+        ):
+            _build_qlds_args_string(inst)
