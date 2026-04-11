@@ -5,7 +5,7 @@ from rq import get_current_job
 
 from ui import db
 from ui.models import Host, HostStatus
-from ui.routes.self_host_helpers import resolve_self_host_management_target
+from ui.task_logic.self_host_network import resolve_self_host_management_target
 from .common import append_log
 from .standalone_inventory import generate_standalone_inventory
 

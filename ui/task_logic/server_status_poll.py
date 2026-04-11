@@ -6,7 +6,7 @@ import subprocess
 from flask import current_app
 
 from ui.models import Host, HostStatus, InstanceStatus
-from ui.routes.self_host_helpers import resolve_self_host_management_target
+from ui.task_logic.self_host_network import resolve_self_host_management_target
 
 logger = logging.getLogger(__name__)
 

@@ -129,6 +129,13 @@ container will generate an SSH keypair, drop the public key into
 > `~/.qlsm-ssh/` directory. If you run the stack as root but want self-host
 > SSH to land as a different user, set `QLSM_HOST_USER` in `.env`.
 
+> **Security notice:** The `host-init` service runs with `privileged: true`
+> and `pid: host` so it can write to `/etc/ssh/sshd_config.d/` and reload
+> `sshd` on the host. Any process that can invoke `docker compose up` on this
+> machine gains host-level root access through that container. Do not expose
+> the Docker socket to untrusted users or run this stack in shared
+> environments without understanding this implication.
+
 ## Live Server Status
 
 The `discord_status.py` minqlx plugin must be enabled on each game server instance for live status data (map, players, state) to appear in the UI. Without it, statuses will show as `—`.

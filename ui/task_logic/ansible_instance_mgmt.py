@@ -264,10 +264,11 @@ def restart_instance_logic(instance_id):
         # We use this playbook because it re-templates the service file with new args AND restarts
         restart_extravars = {
             'host_name': instance.host.name,
-            'port': instance.port, 
+            'port': instance.port,
             'id': instance.id,
             'qlds_args': qlds_args_string
         }
+        restart_extravars = with_self_host_network_extravars(instance, restart_extravars)
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -333,6 +334,7 @@ def stop_instance_logic(instance_id):
             'port': instance.port,
             'id': instance.id
         }
+        stop_extravars = with_self_host_network_extravars(instance, stop_extravars)
 
         runner_result, error_msg = _run_ansible_playbook(
             instance,
