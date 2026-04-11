@@ -61,12 +61,21 @@ def _assert_helper_extravars(mock_run, expected_lan_ports):
     assert extravars['qlsm_network_rules']['lan_rate']['udp_ports'] == expected_lan_ports
 
 
+def _assert_self_host_redis_qlds_args(mock_run):
+    qlds_args = mock_run.call_args.kwargs['extravars']['qlds_args']
+    assert '+set qlx_redisAddress "127.0.0.1:6379"' in qlds_args
+    assert '+set qlx_redisPassword "shared-secret"' in qlds_args
+
+
 @patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
 @patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
 @patch(f'{TASK_LOGIC_MODULE}.append_log')
 @patch(f'{TASK_LOGIC_MODULE}.db.session')
 @patch(f'{TASK_LOGIC_MODULE}.get_current_job')
-def test_deploy_self_host_passes_helper_network_state(mock_job, mock_session, mock_log, mock_zmq, mock_run, test_app):
+def test_deploy_self_host_passes_helper_network_state(
+    mock_job, mock_session, mock_log, mock_zmq, mock_run, test_app, monkeypatch
+):
+    monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")
     inst = _instance()
     _wire_host([inst])
     mock_job.return_value.id = 'job'
@@ -76,6 +85,7 @@ def test_deploy_self_host_passes_helper_network_state(mock_job, mock_session, mo
     deploy_instance(inst.id)
 
     _assert_helper_extravars(mock_run, [27960])
+    _assert_self_host_redis_qlds_args(mock_run)
 
 
 @patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
@@ -99,7 +109,10 @@ def test_start_self_host_passes_helper_network_state(mock_job, mock_session, moc
 @patch(f'{TASK_LOGIC_MODULE}.append_log')
 @patch(f'{TASK_LOGIC_MODULE}.db.session')
 @patch(f'{TASK_LOGIC_MODULE}.get_current_job')
-def test_apply_config_self_host_passes_helper_network_state(mock_job, mock_session, mock_log, mock_zmq, mock_run, test_app):
+def test_apply_config_self_host_passes_helper_network_state(
+    mock_job, mock_session, mock_log, mock_zmq, mock_run, test_app, monkeypatch
+):
+    monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")
     inst = _instance()
     _wire_host([inst])
     mock_job.return_value.id = 'job'
@@ -109,6 +122,7 @@ def test_apply_config_self_host_passes_helper_network_state(mock_job, mock_sessi
     apply_instance_config(inst.id)
 
     _assert_helper_extravars(mock_run, [27960])
+    _assert_self_host_redis_qlds_args(mock_run)
 
 
 @patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
@@ -116,7 +130,10 @@ def test_apply_config_self_host_passes_helper_network_state(mock_job, mock_sessi
 @patch(f'{TASK_LOGIC_MODULE}.append_log')
 @patch(f'{TASK_LOGIC_MODULE}.db.session')
 @patch(f'{TASK_LOGIC_MODULE}.get_current_job')
-def test_reconfigure_self_host_passes_helper_network_state(mock_job, mock_session, mock_log, mock_zmq, mock_run, test_app):
+def test_reconfigure_self_host_passes_helper_network_state(
+    mock_job, mock_session, mock_log, mock_zmq, mock_run, test_app, monkeypatch
+):
+    monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")
     inst = _instance()
     _wire_host([inst])
     mock_job.return_value.id = 'job'
@@ -126,6 +143,7 @@ def test_reconfigure_self_host_passes_helper_network_state(mock_job, mock_sessio
     reconfigure_instance_lan_rate(inst.id)
 
     _assert_helper_extravars(mock_run, [27960])
+    _assert_self_host_redis_qlds_args(mock_run)
 
 
 @patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')

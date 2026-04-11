@@ -22,6 +22,7 @@ def _make_mock_instance(instance_id=10, status=InstanceStatus.IDLE):
     mock_host.ip_address = '1.2.3.4'
     mock_host.ssh_user = 'testuser'
     mock_host.ssh_key_path = '/fake/key.pem'
+    mock_host.provider = 'standalone'
 
     mock_instance = MagicMock(spec=QLInstance)
     mock_instance.id = instance_id
@@ -29,6 +30,12 @@ def _make_mock_instance(instance_id=10, status=InstanceStatus.IDLE):
     mock_instance.hostname = 'Test Server'
     mock_instance.status = status
     mock_instance.host = mock_host
+    mock_instance.zmq_rcon_port = 28960
+    mock_instance.zmq_rcon_password = 'rconpass'
+    mock_instance.zmq_stats_port = 29960
+    mock_instance.zmq_stats_password = 'statspass'
+    mock_instance.lan_rate_enabled = False
+    mock_instance.qlx_plugins = None
     return mock_instance
 
 
@@ -174,6 +181,29 @@ def test_deploy_instance_exception(
     assert mock_instance.status == InstanceStatus.ERROR
     assert mock_session.commit.call_count == 2
     assert 'Playbook init error' in result
+
+
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_deploy_instance_self_host_missing_redis_password_sets_error(
+    mock_get_job, mock_session, mock_append_log, test_app, monkeypatch
+):
+    mock_job = MagicMock()
+    mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+    monkeypatch.delenv("REDIS_PASSWORD", raising=False)
+
+    mock_instance = _make_mock_instance()
+    mock_instance.host.provider = 'self'
+    mock_session.get.return_value = mock_instance
+
+    with patch('ui.task_context.create_app', return_value=test_app):
+        with patch(f'{TASK_LOGIC_MODULE}.os.environ.get', return_value=''):
+            result = deploy_instance(mock_instance.id)
+
+    assert mock_instance.status == InstanceStatus.ERROR
+    assert "Self-host instance Redis password is not configured." in result
 
 
 # ── _build_qlds_args_string / SYSTEM_PLUGINS tests ──────────────────────────
