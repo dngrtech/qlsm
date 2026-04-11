@@ -3,6 +3,7 @@ set -euo pipefail
 
 CONFIG_PATH="${QLSM_NETWORK_RULES_CONFIG:-/etc/qlsm/network-rules.json}"
 IPTABLES="${QLSM_IPTABLES:-iptables}"
+IPTABLES_RESTORE="${QLSM_IPTABLES_RESTORE:-iptables-restore}"
 SYSCTL="${QLSM_SYSCTL:-sysctl}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -64,19 +65,9 @@ ensure_hook() {
     "$IPTABLES" -w -t "$table" -I "$source" 1 -j "$chain"
 }
 
+# Ensure chains and hooks exist before we restore into them
 ensure_chain filter QLSM-INPUT
 ensure_hook filter INPUT QLSM-INPUT
-"$IPTABLES" -w -t filter -F QLSM-INPUT
-
-while read -r port; do
-  [ -n "$port" ] || continue
-  "$IPTABLES" -w -t filter -A QLSM-INPUT -p udp --dport "$port" -j ACCEPT
-done < "$TMP_DIR/filter_udp_accept"
-
-while read -r port; do
-  [ -n "$port" ] || continue
-  "$IPTABLES" -w -t filter -A QLSM-INPUT -p tcp --dport "$port" -j ACCEPT
-done < "$TMP_DIR/filter_tcp_accept"
 
 ensure_chain nat QLSM-LANRATE-PREROUTING
 ensure_chain nat QLSM-LANRATE-POSTROUTING
@@ -85,19 +76,45 @@ ensure_hook nat PREROUTING QLSM-LANRATE-PREROUTING
 ensure_hook nat POSTROUTING QLSM-LANRATE-POSTROUTING
 ensure_hook nat INPUT QLSM-LANRATE-INPUT
 
-"$IPTABLES" -w -t nat -F QLSM-LANRATE-PREROUTING
-"$IPTABLES" -w -t nat -F QLSM-LANRATE-POSTROUTING
-"$IPTABLES" -w -t nat -F QLSM-LANRATE-INPUT
+# Build filter table ruleset and apply atomically — no gap where chain is empty
+{
+  echo "*filter"
+  echo ":QLSM-INPUT - [0:0]"
+  echo "-F QLSM-INPUT"
+  while read -r port; do
+    [ -n "$port" ] || continue
+    echo "-A QLSM-INPUT -p udp --dport $port -j ACCEPT"
+  done < "$TMP_DIR/filter_udp_accept"
+  while read -r port; do
+    [ -n "$port" ] || continue
+    echo "-A QLSM-INPUT -p tcp --dport $port -j ACCEPT"
+  done < "$TMP_DIR/filter_tcp_accept"
+  echo "COMMIT"
+} | "$IPTABLES_RESTORE" --noflush
 
+# Apply sysctl before nat restore
 if [ -s "$TMP_DIR/lan_rate_udp_ports" ]; then
   "$SYSCTL" -w net.ipv4.conf.all.route_localnet=1
   "$SYSCTL" -w net.ipv4.conf.default.route_localnet=1
   "$SYSCTL" -w net.ipv4.conf.lo.route_localnet=1
-  "$IPTABLES" -w -t nat -A QLSM-LANRATE-INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
 fi
 
-while read -r port; do
-  [ -n "$port" ] || continue
-  "$IPTABLES" -w -t nat -A QLSM-LANRATE-PREROUTING -p udp --dport "$port" -j DNAT --to-destination 127.0.0.1
-  "$IPTABLES" -w -t nat -A QLSM-LANRATE-POSTROUTING -p udp -d 127.0.0.1 --dport "$port" -j SNAT --to-source 127.0.0.1
-done < "$TMP_DIR/lan_rate_udp_ports"
+# Build nat table ruleset and apply atomically — no gap where chains are empty
+{
+  echo "*nat"
+  echo ":QLSM-LANRATE-PREROUTING - [0:0]"
+  echo ":QLSM-LANRATE-POSTROUTING - [0:0]"
+  echo ":QLSM-LANRATE-INPUT - [0:0]"
+  echo "-F QLSM-LANRATE-PREROUTING"
+  echo "-F QLSM-LANRATE-POSTROUTING"
+  echo "-F QLSM-LANRATE-INPUT"
+  if [ -s "$TMP_DIR/lan_rate_udp_ports" ]; then
+    echo "-A QLSM-LANRATE-INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1"
+  fi
+  while read -r port; do
+    [ -n "$port" ] || continue
+    echo "-A QLSM-LANRATE-PREROUTING -p udp --dport $port -j DNAT --to-destination 127.0.0.1"
+    echo "-A QLSM-LANRATE-POSTROUTING -p udp -d 127.0.0.1 --dport $port -j SNAT --to-source 127.0.0.1"
+  done < "$TMP_DIR/lan_rate_udp_ports"
+  echo "COMMIT"
+} | "$IPTABLES_RESTORE" --noflush
