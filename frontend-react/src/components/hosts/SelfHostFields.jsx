@@ -1,5 +1,6 @@
 import React from 'react';
 import FloatingListbox from '../common/FloatingListbox';
+import InfoTooltip from '../common/InfoTooltip';
 import { STANDALONE_TIMEZONES } from '../../utils/formatters';
 
 const inputClass = 'mt-1 block w-full px-3 py-2 rounded-lg text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none focus:ring-1 transition-colors';
@@ -12,10 +13,18 @@ function SelfHostFields({ ipAddress, onIpAddressChange, sshUser, onSshUserChange
     <>
       <div>
         <label htmlFor="modal-self-ip" className={labelClass}>
-          Host Public IP <span style={{ color: 'var(--accent-danger)' }}>*</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span>Server address</span>
+            <InfoTooltip
+              text="Address clients use to connect to this server. It can be a public IP, a LAN address, or an external address forwarded through a router. QLSM does not use this address as the self-host SSH target."
+              placement="top"
+            />
+          </span>
+          <span style={{ color: 'var(--accent-danger)' }}>*</span>
         </label>
         <input
           id="modal-self-ip"
+          aria-label="Server address"
           type="text"
           value={ipAddress || ''}
           onChange={onIpAddressChange}
@@ -24,9 +33,6 @@ function SelfHostFields({ ipAddress, onIpAddressChange, sshUser, onSshUserChange
           className={`${inputClass} ${inputFocusRing}`}
           style={inputStyle}
         />
-        <p className="mt-1 text-xs text-theme-muted">
-          Public IP of this server. Set <code>QLSM_HOST_IP</code> in <code>.env</code> to pre-fill automatically.
-        </p>
       </div>
 
       <FloatingListbox

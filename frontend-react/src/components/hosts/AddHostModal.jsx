@@ -156,7 +156,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     }
     if (provider === 'self') {
       if (!ipAddress || !ipAddress.trim()) {
-        setError('Host public IP is required for self hosts.');
+        setError('Server address is required for self hosts.');
         return;
       }
       if (!timezone) {
