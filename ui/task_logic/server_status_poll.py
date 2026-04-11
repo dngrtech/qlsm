@@ -27,7 +27,12 @@ def _build_ssh_command(host, instances, redis_password=None):
         if db < 1:
             raise ValueError(f"Invalid port {port}: Redis DB index must be >= 1 (port must be >= 27960)")
     target = _ssh_target_for_host(host)
-    redis_kwargs = f"db=db,password={redis_password!r}" if redis_password else "db=db"
+    if redis_password:
+        import base64 as _b64
+        pw_b64 = _b64.b64encode(redis_password.encode()).decode()
+        redis_kwargs = f"db=db,password=__import__('base64').b64decode('{pw_b64}').decode()"
+    else:
+        redis_kwargs = "db=db"
     python_snippet = (
         "import redis,json;"
         f"ports_dbs={ports_dbs!r};"

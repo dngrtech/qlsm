@@ -69,6 +69,7 @@ def test_build_ssh_command_self_host_uses_management_target(monkeypatch):
 
 
 def test_build_ssh_command_self_host_includes_redis_password(monkeypatch):
+    import base64
     from ui.task_logic.server_status_poll import _build_ssh_command
 
     monkeypatch.setattr(
@@ -77,8 +78,27 @@ def test_build_ssh_command_self_host_includes_redis_password(monkeypatch):
     )
     cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)], redis_password='s3cr3t')
     full_cmd = ' '.join(cmd)
-    assert 's3cr3t' in full_cmd
+    expected_b64 = base64.b64encode(b's3cr3t').decode()
+    assert expected_b64 in full_cmd
     assert 'password' in full_cmd
+    # plaintext must not appear so shell-special chars in passwords are safe
+    assert 's3cr3t' not in full_cmd
+
+
+def test_build_ssh_command_password_shell_special_chars(monkeypatch):
+    import base64
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    monkeypatch.setattr(
+        'ui.task_logic.server_status_poll.resolve_self_host_management_target',
+        lambda: 'host.docker.internal',
+    )
+    tricky = 'p@$$"w0rd`$HOME'
+    cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)], redis_password=tricky)
+    full_cmd = ' '.join(cmd)
+    expected_b64 = base64.b64encode(tricky.encode()).decode()
+    assert expected_b64 in full_cmd
+    assert tricky not in full_cmd
 
 
 def test_build_ssh_command_no_password_by_default():
