@@ -96,7 +96,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_FORMAT: json
       RUN_MIGRATIONS: "true"
-      QLSM_HOST_USER: ${USER:-root}
+      QLSM_HOST_USER: ${QLSM_HOST_USER:-root}
       QLSM_HOST_IP: ${QLSM_HOST_IP:-}
     volumes:
       - ./data:/app/data
