@@ -14,6 +14,8 @@ x-app: &app
   # Pull pre-built image; fall back to building from source if image isn't available
   image: ghcr.io/dngrtech/qlsm:latest
   build: .
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   env_file: .env
   environment:
     FLASK_ENV: docker-production

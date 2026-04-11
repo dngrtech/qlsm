@@ -42,6 +42,40 @@ def test_detect_docker_host_ip_raises_when_unavailable(monkeypatch, tmp_path):
         helpers.detect_docker_host_ip(route_path=route_file)
 
 
+def test_resolve_self_host_management_target_prefers_env_override(monkeypatch):
+    monkeypatch.setenv("QLSM_SELF_HOST_SSH_TARGET", "10.10.10.10")
+
+    assert helpers.resolve_self_host_management_target() == "10.10.10.10"
+
+
+def test_resolve_self_host_management_target_prefers_host_docker_internal(monkeypatch):
+    monkeypatch.delenv("QLSM_SELF_HOST_SSH_TARGET", raising=False)
+    monkeypatch.setattr(
+        helpers,
+        "_can_resolve_hostname",
+        lambda name: name == "host.docker.internal",
+    )
+    monkeypatch.setattr(
+        helpers,
+        "detect_docker_host_ip",
+        lambda **_: "172.18.0.1",
+    )
+
+    assert helpers.resolve_self_host_management_target() == "host.docker.internal"
+
+
+def test_resolve_self_host_management_target_falls_back_to_gateway(monkeypatch):
+    monkeypatch.delenv("QLSM_SELF_HOST_SSH_TARGET", raising=False)
+    monkeypatch.setattr(helpers, "_can_resolve_hostname", lambda name: False)
+    monkeypatch.setattr(
+        helpers,
+        "detect_docker_host_ip",
+        lambda **_: "172.18.0.1",
+    )
+
+    assert helpers.resolve_self_host_management_target() == "172.18.0.1"
+
+
 def test_detect_default_self_ssh_user_prefers_env(monkeypatch, tmp_path):
     monkeypatch.setenv("QLSM_HOST_USER", "rage")
 

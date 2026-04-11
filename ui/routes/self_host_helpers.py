@@ -1,5 +1,6 @@
 import os
 import pwd
+import socket
 import subprocess
 from pathlib import Path
 
@@ -30,6 +31,23 @@ def detect_docker_host_ip(route_path="/proc/net/route"):
             return tokens[idx + 1]
 
     raise ValueError("Could not detect host machine IP. Ensure Docker bridge networking is active.")
+
+
+def _can_resolve_hostname(name):
+    try:
+        socket.getaddrinfo(name, None)
+        return True
+    except socket.gaierror:
+        return False
+
+
+def resolve_self_host_management_target():
+    override = os.environ.get("QLSM_SELF_HOST_SSH_TARGET", "").strip()
+    if override:
+        return override
+    if _can_resolve_hostname("host.docker.internal"):
+        return "host.docker.internal"
+    return detect_docker_host_ip()
 
 
 def _detect_gateway_from_proc_route(route_path):
