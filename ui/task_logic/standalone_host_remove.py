@@ -65,8 +65,15 @@ def remove_standalone_host_logic(host_id):
 
                 if public_key:
                     try:
-                        remove_authorized_key(public_key)
-                        append_log(host, "Removed self-host public key from authorized_keys")
+                        removed = remove_authorized_key(public_key)
+                        if removed:
+                            append_log(host, "Removed self-host public key from authorized_keys")
+                        else:
+                            log.warning(
+                                "Self-host public key was not present in authorized_keys for host %s",
+                                host.id,
+                            )
+                            append_log(host, "Warning: Self-host public key was not present in authorized_keys")
                     except Exception as e:
                         log.error(f"Error removing self-host authorized key: {e}")
                         append_log(host, f"Warning: Failed to remove self-host authorized key: {e}")

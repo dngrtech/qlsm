@@ -103,6 +103,16 @@ services:
   worker:
     <<: *app
     command: flask rq worker
+    volumes:
+      - ./data:/app/data
+      - ./terraform/ssh-keys:/app/terraform/ssh-keys
+      - ./terraform/vultr-root/terraform.tfstate.d:/app/terraform/vultr-root/terraform.tfstate.d
+      - ./ansible/inventory:/app/ansible/inventory
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+      # Worker removes self-host keys during destroy tasks and needs the same
+      # dedicated host SSH bridge as the web service.
+      - ${HOME}/.qlsm-ssh:/host-ssh
     deploy:
       replicas: 2
 

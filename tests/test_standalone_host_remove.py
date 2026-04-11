@@ -96,3 +96,32 @@ def test_remove_standalone_host_continues_when_key_removal_fails(
 
     assert 'removed from inventory' in result
     mock_remove_key.assert_called_once()
+
+
+@patch('ui.task_logic.standalone_host_remove.append_log')
+@patch('ui.task_logic.standalone_host_remove.get_current_job')
+@patch('ui.task_logic.standalone_host_remove.remove_authorized_key', return_value=False)
+def test_remove_standalone_host_warns_when_authorized_key_missing(
+    mock_remove_key, mock_job, mock_append_log, app, tmp_path
+):
+    """If the key is already missing from authorized_keys, the task should
+    warn instead of claiming successful removal."""
+    mock_job.return_value.id = 'job-4'
+
+    key_path = tmp_path / 'self_id_rsa'
+    key_path.write_text('private')
+    Path(str(key_path) + '.pub').write_text('ssh-rsa missing-key\n')
+
+    with app.app_context():
+        host = _create_host(ssh_key_path=str(key_path))
+        host_id = host.id
+
+        result = remove_standalone_host_logic(host_id)
+
+        assert db.session.get(Host, host_id) is None
+
+    messages = [call.args[1] for call in mock_append_log.call_args_list if len(call.args) > 1]
+    assert 'removed from inventory' in result
+    mock_remove_key.assert_called_once_with('ssh-rsa missing-key')
+    assert "Removed self-host public key from authorized_keys" not in messages
+    assert "Warning: Self-host public key was not present in authorized_keys" in messages
