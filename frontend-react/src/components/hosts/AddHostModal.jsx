@@ -1,17 +1,25 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { X, Server, AlertTriangle } from 'lucide-react';
-import { createHost, getSelfHostDefaults, testHostConnection } from '../../services/api';
+import { createHost, getHosts, getSelfHostDefaults, testHostConnection } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import { providerOptions } from '../../utils/providerData';
 import AddHostFormFields from './AddHostFormFields';
 import { validateHostName } from '../../utils/resourceValidation';
 import { getTimezoneForRegion } from '../../utils/formatters';
 
+const PROVIDER_LIST_OPTIONS = [
+  { id: 'self', name: 'QLSM Host (self-deployment)' },
+  { id: 'standalone', name: 'Standalone' },
+  { id: 'vultr', name: 'VULTR' },
+];
+
 function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
-  const [provider, setProvider] = useState('vultr');
+  const [provider, setProvider] = useState('self');
+  const [selfHostExists, setSelfHostExists] = useState(false);
+  const [providerOptionsReady, setProviderOptionsReady] = useState(false);
   const [selectedContinent, setSelectedContinent] = useState('');
   const [vultrContinentOptions, setVultrContinentOptions] = useState([]);
   const [region, setRegion] = useState('');
@@ -32,6 +40,37 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [connectionTestStatus, setConnectionTestStatus] = useState('idle');
   const [connectionTestMessage, setConnectionTestMessage] = useState('');
 
+  const availableProviderOptions = PROVIDER_LIST_OPTIONS.filter(
+    (option) => option.id !== 'self' || !selfHostExists
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setProviderOptionsReady(false);
+
+    getHosts()
+      .then((hosts) => {
+        if (cancelled) return;
+        const hasSelfHost = hosts.some((host) => host.provider === 'self');
+        setSelfHostExists(hasSelfHost);
+        setProvider(hasSelfHost ? 'standalone' : 'self');
+        setProviderOptionsReady(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const message = err.error?.message || err.message || 'Failed to load host options.';
+        showError(message);
+        setSelfHostExists(false);
+        setProvider('self');
+        setProviderOptionsReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, showError]);
+
   useEffect(() => {
     if (provider === 'vultr') {
       const uniqueContinents = [...new Set(providerOptions.vultr.regions.map(r => r.continent))].sort();
@@ -45,7 +84,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   }, [provider]);
 
   useEffect(() => {
-    if (!isOpen || provider !== 'self') return;
+    if (!isOpen || !providerOptionsReady || provider !== 'self') return;
     let cancelled = false;
 
     getSelfHostDefaults()
@@ -62,12 +101,12 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, provider, showError]);
+  }, [isOpen, provider, providerOptionsReady, showError]);
 
   const resetForm = () => {
     setName('');
     setNameError(null);
-    setProvider('vultr');
+    setProvider(selfHostExists ? 'standalone' : 'self');
     setSelectedContinent('');
     setRegion('');
     setMachineSize('');
@@ -81,6 +120,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setTimezone('');
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
+    setProviderOptionsReady(false);
   };
 
   const resetConnectionTest = () => {
@@ -280,41 +320,46 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                 {/* Body */}
                 <form onSubmit={handleSubmit}>
                   <div className="px-6 py-5 space-y-5">
-                    <AddHostFormFields
-                      name={name}
-                      onNameChange={(e) => {
-                        setName(e.target.value);
-                        if (nameError) setNameError(null);
-                      }}
-                      nameError={nameError}
-                      onNameBlur={handleNameBlur}
-                      provider={provider}
-                      onProviderChange={setProvider}
-                      selectedContinent={selectedContinent}
-                      onContinentChange={setSelectedContinent}
-                      vultrContinentOptions={vultrContinentOptions}
-                      region={region}
-                      onRegionChange={setRegion}
-                      vultrFilteredRegions={vultrFilteredRegions}
-                      machineSize={machineSize}
-                      onMachineSizeChange={setMachineSize}
-                      currentSizes={currentSizes}
-                      ipAddress={ipAddress}
-                      onIpAddressChange={(e) => { setIpAddress(e.target.value); resetConnectionTest(); }}
-                      sshPort={sshPort}
-                      onSshPortChange={(e) => { setSshPort(e.target.value); resetConnectionTest(); }}
-                      sshUser={sshUser}
-                      onSshUserChange={(e) => { setSshUser(e.target.value); resetConnectionTest(); }}
-                      sshKey={sshKey}
-                      onSshKeyChange={(e) => { setSshKey(e.target.value); resetConnectionTest(); }}
-                      osType={osType}
-                      onOsTypeChange={setOsType}
-                      timezone={timezone}
-                      onTimezoneChange={setTimezone}
-                      connectionTestStatus={connectionTestStatus}
-                      connectionTestMessage={connectionTestMessage}
-                      onTestConnection={handleTestConnection}
-                    />
+                    {providerOptionsReady ? (
+                      <AddHostFormFields
+                        name={name}
+                        onNameChange={(e) => {
+                          setName(e.target.value);
+                          if (nameError) setNameError(null);
+                        }}
+                        nameError={nameError}
+                        onNameBlur={handleNameBlur}
+                        provider={provider}
+                        providerListOptions={availableProviderOptions}
+                        onProviderChange={setProvider}
+                        selectedContinent={selectedContinent}
+                        onContinentChange={setSelectedContinent}
+                        vultrContinentOptions={vultrContinentOptions}
+                        region={region}
+                        onRegionChange={setRegion}
+                        vultrFilteredRegions={vultrFilteredRegions}
+                        machineSize={machineSize}
+                        onMachineSizeChange={setMachineSize}
+                        currentSizes={currentSizes}
+                        ipAddress={ipAddress}
+                        onIpAddressChange={(e) => { setIpAddress(e.target.value); resetConnectionTest(); }}
+                        sshPort={sshPort}
+                        onSshPortChange={(e) => { setSshPort(e.target.value); resetConnectionTest(); }}
+                        sshUser={sshUser}
+                        onSshUserChange={(e) => { setSshUser(e.target.value); resetConnectionTest(); }}
+                        sshKey={sshKey}
+                        onSshKeyChange={(e) => { setSshKey(e.target.value); resetConnectionTest(); }}
+                        osType={osType}
+                        onOsTypeChange={setOsType}
+                        timezone={timezone}
+                        onTimezoneChange={setTimezone}
+                        connectionTestStatus={connectionTestStatus}
+                        connectionTestMessage={connectionTestMessage}
+                        onTestConnection={handleTestConnection}
+                      />
+                    ) : (
+                      <div className="text-sm text-theme-muted">Loading host options...</div>
+                    )}
 
                     {error && (
                       <div
@@ -346,7 +391,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                     </button>
                     <button
                       type="submit"
-                      disabled={loading || (provider === 'standalone' && connectionTestStatus !== 'success')}
+                      disabled={loading || !providerOptionsReady || (provider === 'standalone' && connectionTestStatus !== 'success')}
                       className="px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white dark:text-[#0A0E14]"
                       style={{
                         background: 'var(--accent-primary)',

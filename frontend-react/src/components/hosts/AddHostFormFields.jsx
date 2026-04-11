@@ -17,6 +17,7 @@ function AddHostFormFields({
   nameError,
   onNameBlur,
   provider,
+  providerListOptions,
   onProviderChange,
   selectedContinent,
   onContinentChange,
@@ -44,14 +45,6 @@ function AddHostFormFields({
   onTestConnection,
 }) {
   const fileInputRef = useRef(null);
-  const providerLabels = {
-    standalone: 'Standalone',
-    self: 'QLSM Host (self-deployment)',
-  };
-  const providerListOptions = Object.keys(providerOptions).map(pKey => ({
-    id: pKey,
-    name: providerLabels[pKey] || pKey.toUpperCase()
-  }));
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
