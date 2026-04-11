@@ -46,7 +46,7 @@ function AddHostFormFields({
   const fileInputRef = useRef(null);
   const providerLabels = {
     standalone: 'Standalone',
-    self: 'QLSM Host (self)',
+    self: 'QLSM Host (self-deployment)',
   };
   const providerListOptions = Object.keys(providerOptions).map(pKey => ({
     id: pKey,
