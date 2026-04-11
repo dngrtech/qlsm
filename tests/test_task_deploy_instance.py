@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from ui import create_app, db
@@ -84,7 +85,34 @@ def test_deploy_instance_ansible_failure(
 
     assert mock_instance.status == InstanceStatus.ERROR
     assert mock_session.commit.call_count == 2
-    assert 'Ansible runner failed with RC: 1' in result
+    assert 'stderr' in result
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_deploy_instance_surfaces_ansible_fail_message(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    mock_job = MagicMock(); mock_job.id = 'job'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance()
+    mock_session.get.return_value = mock_instance
+    stdout = (
+        'fatal: [test-host]: FAILED! => {"changed": false, "msg": '
+        '"QLDS instance directory /home/ql/qlds-27960 already exists."}'
+    )
+    mock_run_playbook.return_value = (SimpleAnsibleResult(2, stdout, ''), None)
+
+    result = deploy_instance(10)
+
+    assert mock_instance.status == InstanceStatus.ERROR
+    assert "QLDS instance directory /home/ql/qlds-27960 already exists." in result
 
 
 @patch(f'{TASK_LOGIC_MODULE}.append_log')

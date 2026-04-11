@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import re
 import shutil
 import time
 import subprocess
@@ -93,6 +94,19 @@ def _build_qlds_args_string(instance):
 log = logging.getLogger(__name__)
 
 
+def _extract_ansible_failure_detail(stdout_content, stderr_content, rc):
+    match = re.search(r'"msg":\s*"([^"]+)"', stdout_content or "")
+    if match:
+        return match.group(1)
+    for source in (stderr_content, stdout_content):
+        if source:
+            for line in reversed(source.splitlines()):
+                line = line.strip()
+                if line:
+                    return line[:400]
+    return f"Ansible runner failed with RC: {rc}"
+
+
 def deploy_instance_logic(instance_id):
     """
     Logic for deploying a QL instance via Ansible.
@@ -175,7 +189,11 @@ def deploy_instance_logic(instance_id):
             log.error(f"Ansible runner indicated success (RC=0) but no hosts matched for instance {instance_id} deployment: {error_detail}")
             append_log(instance, f"Task failed: {error_detail}.")
         else: # This handles the rc != 0 case
-            error_detail = f"Ansible runner failed with RC: {runner_result.rc}"
+            error_detail = _extract_ansible_failure_detail(
+                stdout_content,
+                stderr_content,
+                runner_result.rc,
+            )
             log.error(f"Ansible runner failed for instance {instance_id} deployment. RC: {runner_result.rc}")
             append_log(instance, f"Task failed: {error_detail}.")
 
