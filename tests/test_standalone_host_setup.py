@@ -56,3 +56,19 @@ def test_wait_for_ssh_fails_when_inventory_host_pattern_does_not_match(
         'Host setup failed: [WARNING]: Could not match supplied host pattern, ignoring: 234234',
     )
     mock_session.commit.assert_called_once_with()
+
+
+def test_setup_playbook_vars_disable_host_redis_for_self_host():
+    from ui.task_logic.standalone_host_setup import _setup_playbook_extra_vars
+
+    host = SimpleNamespace(provider='self', ssh_port=22, timezone='UTC')
+
+    assert _setup_playbook_extra_vars(host)['use_host_redis'] == 'false'
+
+
+def test_setup_playbook_vars_keep_host_redis_for_standalone_host():
+    from ui.task_logic.standalone_host_setup import _setup_playbook_extra_vars
+
+    host = SimpleNamespace(provider='standalone', ssh_port=22, timezone='UTC')
+
+    assert _setup_playbook_extra_vars(host).get('use_host_redis', 'true') == 'true'

@@ -36,7 +36,9 @@ def restart_host_ansible_logic(host_id):
         # host.name is used by _run_host_ansible_playbook for -l limit
         # If restart_host.yml needs target_host explicitly, it can be added.
         # For now, assuming -l host.name is sufficient.
-        extra_vars = {} 
+        extra_vars = {}
+        if host.provider == 'self':
+            extra_vars['critical_services'] = ['ssh']
         # If your playbook /ansible/playbooks/restart_host.yml uses a variable like `target_host_name`
         # then you would define it here:
         # extra_vars = {"target_host_name": host.name} 

@@ -180,20 +180,29 @@ def _wait_for_ssh(host, inventory_path):
         return False
 
 
+def _setup_playbook_extra_vars(host):
+    extra_vars = {
+        'is_standalone': 'true',
+        'ssh_port': str(host.ssh_port),
+        'firewall_mode': 'helper' if host.provider == 'self' else 'full',
+    }
+    if host.provider == 'self':
+        extra_vars['use_host_redis'] = 'false'
+    if host.timezone:
+        extra_vars['host_timezone'] = host.timezone
+    return extra_vars
+
+
 def _run_setup_playbook(host, inventory_path):
     """Run the Ansible setup playbook with standalone-specific variables."""
     ansible_playbook_path = os.path.abspath('ansible/playbooks/setup_host.yml')
 
-    firewall_mode = 'helper' if host.provider == 'self' else 'full'
     ansible_command_args = [
         'ansible-playbook',
         '-i', inventory_path,
-        '-e', f'is_standalone=true',
-        '-e', f'ssh_port={host.ssh_port}',
-        '-e', f'firewall_mode={firewall_mode}',
     ]
-    if host.timezone:
-        ansible_command_args += ['-e', f'host_timezone={host.timezone}']
+    for key, value in _setup_playbook_extra_vars(host).items():
+        ansible_command_args += ['-e', f'{key}={value}']
     ansible_command_args.append(ansible_playbook_path)
 
     log.info(f"Executing Ansible command: {' '.join(ansible_command_args)}")

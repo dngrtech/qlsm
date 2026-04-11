@@ -28,6 +28,7 @@
     # These can be overridden via --extra-vars from the calling task
     ssh_port: 22
     is_standalone: false
+    use_host_redis: true
 
   tasks:
   #######################################################################
@@ -113,7 +114,9 @@
       apt:
         update_cache: yes
         cache_valid_time: 3600
-        pkg: "{{ base_packages + ((firewall_mode == 'full') | ternary(['iptables-persistent'], [])) }}"
+        pkg: "{{ base_packages
+                 + ((use_host_redis | bool) | ternary(['redis-server'], []))
+                 + ((firewall_mode == 'full') | ternary(['iptables-persistent'], [])) }}"
       vars:
         base_packages:
           - rsync
@@ -132,7 +135,6 @@
           - python3-pip
           - python3.11
           - python3.11-dev
-          - redis-server # Keep redis-server here as it's host-level
           - iptables
           - sudo
       environment:
