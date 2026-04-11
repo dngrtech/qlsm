@@ -5,7 +5,7 @@ from rq import get_current_job
 
 from ui import db
 from ui.models import Host, HostStatus
-from ui.routes.self_host_helpers import detect_docker_host_ip
+from ui.routes.self_host_helpers import resolve_self_host_management_target
 from .common import append_log
 from .standalone_inventory import generate_standalone_inventory
 
@@ -45,19 +45,28 @@ def setup_standalone_host_logic(host_id):
             return "Error: Host details missing"
 
         # Generate inventory file for standalone host
-        inventory_path = _generate_standalone_inventory(host)
-        if not inventory_path:
+        inventory_result = _generate_standalone_inventory(host)
+        if not inventory_result:
             append_log(host, "Task failed: Could not generate Ansible inventory file.")
             host.status = HostStatus.ERROR
             db.session.commit()
             return "Error: Failed to generate inventory file"
+        inventory_path, management_target = inventory_result
 
         append_log(host, f"Generated inventory file: {inventory_path}")
+        append_log(host, f"Configured server address: {host.ip_address}")
+        if host.provider == 'self':
+            append_log(host, f"Resolved self-host management target: {management_target}")
+            append_log(
+                host,
+                f"Waiting for SSH connection to self-host management target {management_target}:{host.ssh_port}...",
+            )
+        else:
+            append_log(host, f"Waiting for SSH connection to {management_target}:{host.ssh_port}...")
         db.session.commit()
 
         # Wait for SSH connection
-        log.info(f"Waiting for SSH connection to {host.ip_address}:{host.ssh_port}...")
-        append_log(host, f"Waiting for SSH connection to {host.ip_address}:{host.ssh_port}...")
+        log.info(f"Waiting for SSH connection to {management_target}:{host.ssh_port}...")
         db.session.commit()
 
         if not _wait_for_ssh(host, inventory_path):
@@ -97,10 +106,13 @@ def setup_standalone_host_logic(host_id):
 def _generate_standalone_inventory(host):
     """Generate Ansible inventory file for a standalone host."""
     try:
-        ansible_host = detect_docker_host_ip() if host.provider == 'self' else None
+        if host.provider == 'self':
+            ansible_host = resolve_self_host_management_target()
+        else:
+            ansible_host = host.ip_address
         inventory_path = generate_standalone_inventory(host, ansible_host=ansible_host)
         log.info(f"Generated standalone inventory file: {inventory_path}")
-        return inventory_path
+        return inventory_path, ansible_host
     except Exception as e:
         log.error(f"Failed to generate inventory file for host {host.id}: {e}")
         return None
