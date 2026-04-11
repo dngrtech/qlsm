@@ -204,8 +204,6 @@
     - name: Remove existing factory files before syncing (ensures only selected factories remain)
       ansible.builtin.shell: |
         find {{ qlds_dir }}/baseq3/scripts/ -maxdepth 1 -name '*.factories' -type f -delete
-      args:
-        warn: false
       ignore_errors: yes  # Directory may not exist on first run
 
     - name: Sync instance-specific factory files from UI server
