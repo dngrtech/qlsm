@@ -52,6 +52,32 @@ def test_build_ssh_command_multiple_instances():
     assert str(27961 - 27959) in full_cmd  # db=2
 
 
+def test_build_ssh_command_self_host_uses_management_target(monkeypatch):
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    host = _make_host(ip='203.0.113.10')
+    host.provider = 'self'
+    monkeypatch.setattr(
+        'ui.task_logic.server_status_poll.resolve_self_host_management_target',
+        lambda: 'host.docker.internal',
+    )
+
+    cmd = _build_ssh_command(host, [_make_instance(port=27960)])
+
+    assert 'host.docker.internal' in cmd
+    assert '203.0.113.10' not in cmd
+
+
+def test_build_ssh_command_standalone_uses_connect_address():
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    host = _make_host(ip='10.0.0.1')
+    host.provider = 'standalone'
+    cmd = _build_ssh_command(host, [_make_instance(port=27960)])
+
+    assert '10.0.0.1' in cmd
+
+
 def test_parse_ssh_output_valid():
     from ui.task_logic.server_status_poll import _parse_ssh_output
     payload = {'map': 'campgrounds', 'players': [], 'maxplayers': 16, 'state': 'warmup'}

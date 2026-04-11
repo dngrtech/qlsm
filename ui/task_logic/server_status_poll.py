@@ -6,11 +6,18 @@ import subprocess
 from flask import current_app
 
 from ui.models import Host, HostStatus, InstanceStatus
+from ui.routes.self_host_helpers import resolve_self_host_management_target
 
 logger = logging.getLogger(__name__)
 
 STATUS_KEY_PREFIX = 'server:status'
 STATUS_TTL = 30  # seconds
+
+
+def _ssh_target_for_host(host):
+    if getattr(host, "provider", None) == "self":
+        return resolve_self_host_management_target()
+    return host.ip_address
 
 
 def _build_ssh_command(host, instances):
@@ -19,6 +26,7 @@ def _build_ssh_command(host, instances):
     for port, db in ports_dbs:
         if db < 1:
             raise ValueError(f"Invalid port {port}: Redis DB index must be >= 1 (port must be >= 27960)")
+    target = _ssh_target_for_host(host)
     python_snippet = (
         "import redis,json;"
         f"ports_dbs={ports_dbs!r};"
@@ -36,7 +44,7 @@ def _build_ssh_command(host, instances):
         '-o', 'BatchMode=yes',
         '-o', 'ConnectTimeout=5',
         '-l', host.ssh_user,
-        host.ip_address,
+        target,
         f'python3 -c "{python_snippet}"',
     ]
 
@@ -64,7 +72,14 @@ def _write_status_to_redis(redis_client, host_id, instance_id, data):
 def _fetch_and_cache_host(host, instances, redis_client):
     """SSH to one host, read all instance statuses, write to management Redis."""
     cmd = _build_ssh_command(host, instances)
-    logger.debug("Polling host %s (%s) — %d instance(s)", host.name, host.ip_address, len(instances))
+    target = _ssh_target_for_host(host)
+    logger.debug(
+        "Polling host %s (connect=%s, target=%s) — %d instance(s)",
+        host.name,
+        host.ip_address,
+        target,
+        len(instances),
+    )
     try:
         result = subprocess.run(
             cmd,
