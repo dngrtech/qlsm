@@ -110,45 +110,20 @@ Quake Live instances.
 
 The web container manages self-host SSH keys through a dedicated directory at
 `~/.qlsm-ssh/`. It is deliberately **not** mounted against `~/.ssh` — the
-container has no business seeing the operator's personal private keys. Two
-one-time host-side steps are required to enable self-host deployment:
+container has no business seeing the operator's personal private keys.
 
-### 1. Create the directory
+No manual setup is required. The `host-init` service in `docker-compose.yml`
+runs automatically on every `docker compose up` and handles all host-side
+configuration:
 
-The install script creates this automatically; if you're setting up by hand:
+- Creates `~/.qlsm-ssh/` with correct permissions
+- Writes `/etc/ssh/sshd_config.d/qlsm.conf` so `sshd` reads keys from
+  `~/.qlsm-ssh/authorized_keys`
+- Reloads `sshd`
 
-```bash
-mkdir -p ~/.qlsm-ssh
-chmod 700 ~/.qlsm-ssh
-touch ~/.qlsm-ssh/authorized_keys
-chmod 600 ~/.qlsm-ssh/authorized_keys
-```
-
-### 2. Tell `sshd` to read it
-
-Add the dedicated `authorized_keys` file to `sshd`'s authorized-keys search
-path. Edit `/etc/ssh/sshd_config` (as root) and add:
-
-```sshd_config
-AuthorizedKeysFile .ssh/authorized_keys .qlsm-ssh/authorized_keys
-```
-
-Then reload sshd:
-
-```bash
-sudo sshd -t && sudo systemctl reload ssh
-```
-
-Verify the new path is active:
-
-```bash
-sudo sshd -T | grep authorizedkeysfile
-# authorizedkeysfile .ssh/authorized_keys .qlsm-ssh/authorized_keys
-```
-
-That's it — the next time you add a **QLSM Host (self)** from the UI, the web
-container will drop a generated public key into `~/.qlsm-ssh/authorized_keys`
-and connect to `172.17.0.1` (the Docker bridge gateway) as your shell user.
+Once the stack is up, add a **QLSM Host (self)** from the UI and the web
+container will generate an SSH keypair, drop the public key into
+`~/.qlsm-ssh/authorized_keys`, and connect automatically.
 
 > **Note:** The self-host SSH user defaults to whoever owns the
 > `~/.qlsm-ssh/` directory. If you run the stack as root but want self-host

@@ -36,6 +36,33 @@ x-app: &app
       condition: service_healthy
 
 services:
+  # ── Host Init (one-shot: idempotent host-side sshd bootstrap) ─────────────
+  # Runs at every `docker compose up`. Creates ~/.qlsm-ssh/ and configures
+  # sshd to accept keys from it (required for the self-host provider).
+  # Harmless on non-self-host deployments: ~/.qlsm-ssh/authorized_keys stays
+  # empty so no extra access is granted.
+  host-init:
+    image: debian:12-slim
+    pid: host
+    privileged: true
+    volumes:
+      - ${HOME}/.qlsm-ssh:/qlsm-ssh
+    entrypoint: /bin/sh
+    command:
+      - -ec
+      - |
+        mkdir -p /qlsm-ssh
+        chmod 700 /qlsm-ssh
+        touch /qlsm-ssh/authorized_keys
+        chmod 600 /qlsm-ssh/authorized_keys
+        nsenter -t 1 -m -u -i -n -p -- /bin/sh -c '
+          mkdir -p /etc/ssh/sshd_config.d
+          printf "AuthorizedKeysFile .ssh/authorized_keys .qlsm-ssh/authorized_keys\n" \
+            > /etc/ssh/sshd_config.d/qlsm.conf
+          systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+        '
+    restart: "no"
+
   # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -57,6 +84,11 @@ services:
   # ── Web (Flask / Gunicorn + SocketIO) ──────────────────────────────────────
   web:
     <<: *app
+    depends_on:
+      redis:
+        condition: service_healthy
+      host-init:
+        condition: service_completed_successfully
     environment:
       FLASK_ENV: docker-production
       DATABASE_URL: sqlite:////app/data/qlds_ui.db
@@ -74,9 +106,8 @@ services:
       - ./configs:/app/configs
       - ./logs:/app/logs
       # Self-host SSH bridge. DO NOT change to ${HOME}/.ssh — the web container
-      # must not have access to the operator's full SSH identity. The host side
-      # must be a dedicated directory (mode 0700) and sshd must be configured
-      # to read its authorized_keys file. See docs/setup.md#self-host-provider.
+      # must not have access to the operator's full SSH identity.
+      # The host-init service (above) sets up the directory and sshd config.
       - ${HOME}/.qlsm-ssh:/host-ssh
     command:
       - gunicorn
@@ -102,6 +133,11 @@ services:
   # ── RQ Worker (Terraform / Ansible background tasks) ───────────────────────
   worker:
     <<: *app
+    depends_on:
+      redis:
+        condition: service_healthy
+      host-init:
+        condition: service_completed_successfully
     command: flask rq worker
     volumes:
       - ./data:/app/data
