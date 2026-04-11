@@ -68,6 +68,27 @@ def test_build_ssh_command_self_host_uses_management_target(monkeypatch):
     assert '203.0.113.10' not in cmd
 
 
+def test_build_ssh_command_self_host_includes_redis_password(monkeypatch):
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    monkeypatch.setattr(
+        'ui.task_logic.server_status_poll.resolve_self_host_management_target',
+        lambda: 'host.docker.internal',
+    )
+    cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)], redis_password='s3cr3t')
+    full_cmd = ' '.join(cmd)
+    assert 's3cr3t' in full_cmd
+    assert 'password' in full_cmd
+
+
+def test_build_ssh_command_no_password_by_default():
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)])
+    full_cmd = ' '.join(cmd)
+    assert 'password' not in full_cmd
+
+
 def test_build_ssh_command_standalone_uses_connect_address():
     from ui.task_logic.server_status_poll import _build_ssh_command
 
