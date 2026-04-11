@@ -107,7 +107,7 @@ graph TD
 *   **Asynchronous Task Execution (Backend):** Long-running operations are handled asynchronously by the backend using RQ and Redis.
 *   **Automation Tool Integration:** Uses direct `subprocess` calls for executing Ansible and Terraform playbooks/commands.
 *   **Split Ansible Playbooks:** Playbooks are split by responsibility: `setup_host.yml` (one-time host setup after Terraform), `add_qlds_instance.yml` (per-instance deploy), and dedicated playbooks for rename, restart, LAN rate, workshop update, auto-restart, log fetching, and QLFilter management.
-*   **Self-Host Provider:** A `self` provider creates a host record with `provider='self'` and `is_standalone=True`. The web container owns a dedicated `/host-ssh` mount (backed by `~/.qlsm-ssh/` on the host, intentionally separate from `~/.ssh/` so the container never sees the operator's personal private keys). It generates the SSH keypair and appends the generated public key to `~/.qlsm-ssh/authorized_keys`; `sshd` is configured to include that file in `AuthorizedKeysFile`. The worker then uses the generated private key over the Docker bridge gateway, just like any other Ansible-managed standalone host.
+*   **Self-Host Provider:** A `self` provider creates a host record with `provider='self'` and `is_standalone=True`. The web container owns a dedicated `/host-ssh` mount (backed by `~/.qlsm-ssh/` on the host, intentionally separate from `~/.ssh/` so the container never sees the operator's personal private keys). It generates the SSH keypair and appends the generated public key to `~/.qlsm-ssh/authorized_keys`; `sshd` is configured to include that file in `AuthorizedKeysFile`. For self hosts, the stored `Host.ip_address` remains the client-facing server address shown in the UI and used in connect links. Automation resolves a hidden Docker-reachable management target for SSH, Ansible, and status polling.
 *   **Firewall Modes:** Cloud and standalone hosts use `firewall_mode=full`, where QLSM owns the complete persisted host firewall ruleset. Self hosts use `firewall_mode=helper`, where a host-side `qlsm-network-rules-apply` helper reconciles only QLSM-owned `QLSM-*` iptables chains. The helper does not touch Docker chains or the `FORWARD` chain.
 *   **Data Model Relationship:** Establishes a clear one-to-many relationship between Hosts and QLInstances in the database.
 *   **Containerized Deployment:** All services run as Docker containers coordinated by Docker Compose. Caddy handles reverse proxying and automatic HTTPS. No manual Systemd or Nginx configuration required.
@@ -193,7 +193,7 @@ qlsm/
 ### Self-Host Setup
 1. User selects `QLSM Host (self)` → frontend calls `GET /api/hosts/self/defaults`
 2. User submits form → `POST /api/hosts` with `provider: "self"`
-3. Web container detects the Docker bridge gateway and appends a generated public key to `/host-ssh/authorized_keys` (which is `~/.qlsm-ssh/authorized_keys` on the host, read by `sshd` via `AuthorizedKeysFile`)
+3. Web container appends a generated public key to `/host-ssh/authorized_keys` (which is `~/.qlsm-ssh/authorized_keys` on the host, read by `sshd` via `AuthorizedKeysFile`) and resolves a hidden Docker-reachable management target for self-host automation
 4. Host record is created with `provider='self'`, `is_standalone=True`, and status `PROVISIONED_PENDING_SETUP`
 5. RQ worker runs `setup_host.yml` over SSH using the generated private key
 6. `setup_host.yml` installs the QLSM network helper in `firewall_mode=helper`

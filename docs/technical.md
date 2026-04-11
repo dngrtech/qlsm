@@ -152,6 +152,10 @@ class Host(db.Model):
 
 ```
 
+### Self-Host Address Contract
+
+For `provider=self`, `Host.ip_address` remains the client-facing server address shown in the UI and used in connect links. Automation does not SSH to that stored address. QLSM resolves a hidden management target inside the Docker deployment and uses that target for self-host Ansible runs and status polling.
+
 **QLInstance Model:** Represents a Quake Live server instance running on a specific `Host`.
 
 ```python
