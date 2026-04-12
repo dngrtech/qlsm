@@ -159,7 +159,8 @@ def handle_rcon_join(data):
         'action': 'connect',
         'ip': ip,
         'rcon_port': rcon_port,
-        'rcon_password': rcon_password
+        'rcon_password': rcon_password,
+        'self_host': getattr(instance.host, 'provider', None) == 'self',
     })
     publish_to_redis(channel, message)
 

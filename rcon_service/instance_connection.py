@@ -88,7 +88,13 @@ class InstanceConnection:
             except Exception as e:
                 log.error(f"Error in message callback: {e}")
     
-    async def connect(self, ip: str, rcon_port: int, rcon_password: str) -> bool:
+    async def connect(
+        self,
+        ip: str,
+        rcon_port: int,
+        rcon_password: str,
+        self_host: bool = False,
+    ) -> bool:
         """Connect to QLDS instance via ZMQ DEALER socket.
         
         Based on C++ QLRcon.cpp connectToServer():
@@ -103,6 +109,7 @@ class InstanceConnection:
             ip: Server IP address
             rcon_port: RCON port (typically 28960+)
             rcon_password: RCON password for PLAIN auth
+            self_host: Whether this instance runs on the same machine as QLSM
             
         Returns:
             True if connection successful, False otherwise
@@ -133,7 +140,7 @@ class InstanceConnection:
             # Connection settings - no receive timeout, we'll use poll instead
             self._socket.setsockopt(zmq.LINGER, 0)
             self._socket.setsockopt(zmq.SNDTIMEO, 5000)
-            self._socket.setsockopt(zmq.IMMEDIATE, 1)
+            self._socket.setsockopt(zmq.IMMEDIATE, 0 if self_host else 1)
             
             # Connect to server
             endpoint = f"tcp://{ip}:{rcon_port}"

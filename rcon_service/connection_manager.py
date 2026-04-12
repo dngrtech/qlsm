@@ -85,7 +85,8 @@ class ConnectionManager:
         instance_id: int,
         ip: str,
         rcon_port: int,
-        rcon_password: str
+        rcon_password: str,
+        self_host: bool = False,
     ) -> bool:
         """Connect to a QLDS instance.
         
@@ -97,6 +98,7 @@ class ConnectionManager:
             ip: Server IP address
             rcon_port: RCON port
             rcon_password: RCON password
+            self_host: Whether this is a self-host deployment target
             
         Returns:
             True if connection successful or already connected
@@ -133,7 +135,7 @@ class ConnectionManager:
             )
             
             # Attempt connection
-            success = await conn.connect(ip, rcon_port, rcon_password)
+            success = await conn.connect(ip, rcon_port, rcon_password, self_host=self_host)
             
             if success:
                 self._connections[key] = conn
