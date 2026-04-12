@@ -140,19 +140,21 @@ class InstanceConnection:
             log.debug(f"[{self.host_id}:{self.instance_id}] Connecting to {endpoint}")
             self._socket.connect(endpoint)
 
-            # Give the event loop time to complete the TCP+ZMTP+PLAIN handshake
-            # before sending "register". IMMEDIATE=1 returns EAGAIN if no peer
-            # is confirmed yet — on loopback the TCP connect is instant but the
-            # ZMQ state machine still needs several event loop cycles.
-            await asyncio.sleep(0.1)
+            # Give the event loop one cycle to process the TCP+ZMTP+PLAIN
+            # handshake before sending "register".
+            await asyncio.sleep(0)
 
-            # Send "register" command (required by QLDS RCON protocol)
-            # With `zmq.IMMEDIATE = 1`, this will instantly fail with EAGAIN if the target is offline
+            # Send "register" using a synchronous NOBLOCK call.
+            # `await send_string()` with IMMEDIATE=1 deadlocks on asyncio zmq:
+            # the asyncio layer waits for POLLOUT on the ZMQ fd, but the ZMQ fd
+            # never signals POLLOUT in a way asyncio recognises, so it blocks
+            # forever. The synchronous NOBLOCK call works correctly — EAGAIN
+            # means the target is offline, success means the peer is connected.
             try:
-                await self._socket.send_string("register")
+                self._socket.send_string("register", zmq.NOBLOCK)
                 log.debug(f"[{self.host_id}:{self.instance_id}] Sent register command")
-            except zmq.error.ZMQError as e:
-                log.error(f"[{self.host_id}:{self.instance_id}] Server offline or unreachable: {e}")
+            except zmq.error.Again:
+                log.error(f"[{self.host_id}:{self.instance_id}] Server offline or unreachable")
                 raise Exception("Server is offline or unreachable")
             
             # QLDS doesn't always respond to register - just proceed
