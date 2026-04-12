@@ -140,11 +140,11 @@ class InstanceConnection:
             log.debug(f"[{self.host_id}:{self.instance_id}] Connecting to {endpoint}")
             self._socket.connect(endpoint)
 
-            # Yield to the event loop once so the TCP+ZMTP+PLAIN handshake can
-            # complete before we send "register". Without this, IMMEDIATE=1
-            # returns EAGAIN on loopback/fast connections where the TCP connect
-            # resolves before the ZMQ state machine has had a cycle.
-            await asyncio.sleep(0)
+            # Give the event loop time to complete the TCP+ZMTP+PLAIN handshake
+            # before sending "register". IMMEDIATE=1 returns EAGAIN if no peer
+            # is confirmed yet — on loopback the TCP connect is instant but the
+            # ZMQ state machine still needs several event loop cycles.
+            await asyncio.sleep(0.1)
 
             # Send "register" command (required by QLDS RCON protocol)
             # With `zmq.IMMEDIATE = 1`, this will instantly fail with EAGAIN if the target is offline
