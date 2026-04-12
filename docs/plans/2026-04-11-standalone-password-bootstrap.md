@@ -190,7 +190,7 @@ def test_create_standalone_host_password_bootstrap_success(...):
         "ssh_user": "root",
         "ssh_auth_method": "password",
         "ssh_password": "secret",
-        "os_type": "debian12",
+        "os_type": "ubuntu",
         "timezone": "UTC",
     })
 

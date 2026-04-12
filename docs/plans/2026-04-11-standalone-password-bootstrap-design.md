@@ -172,7 +172,7 @@ Standalone create and test-connection requests gain an explicit auth method:
   "ssh_user": "root",
   "ssh_auth_method": "password",
   "ssh_password": "secret",
-  "os_type": "debian12",
+  "os_type": "debian",
   "timezone": "UTC"
 }
 ```
@@ -186,7 +186,7 @@ Key mode remains:
   "ssh_user": "root",
   "ssh_auth_method": "key",
   "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
-  "os_type": "debian12",
+  "os_type": "ubuntu",
   "timezone": "UTC"
 }
 ```
