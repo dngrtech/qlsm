@@ -59,7 +59,7 @@ def validate_ip_address(ip_str):
         return None, {"message": "Invalid IP address format", "status_code": 400}
 
 # Valid OS types for standalone hosts
-VALID_OS_TYPES = ['debian', 'ubuntu20', 'ubuntu22', 'ubuntu24']
+VALID_OS_TYPES = ['debian', 'ubuntu']
 VALID_STANDALONE_AUTH_METHODS = {'key', 'password'}
 VALID_TIMEZONES = {
     'Africa/Johannesburg', 'America/Anchorage', 'America/Chicago', 'America/Denver',
@@ -278,6 +278,8 @@ def _validate_selected_standalone_os_type(os_type):
     os_type = os_type.strip().lower()
     if os_type == 'debian12':
         os_type = 'debian'
+    if os_type in {'ubuntu20', 'ubuntu22', 'ubuntu24'}:
+        os_type = 'ubuntu'
     if os_type not in VALID_OS_TYPES:
         return None, {"message": f"OS type must be one of: {', '.join(VALID_OS_TYPES)}", "status_code": 400}
     return os_type, None
@@ -291,7 +293,7 @@ def _validate_remote_os_selection(selected_os_type, detected_os):
         return (
             False,
             f"Connection failed: detected OS {detected_name} is not supported. "
-            "QLSM standalone hosts must run Debian or Ubuntu 20.04, 22.04, or 24.04.",
+            "QLSM standalone hosts must run Debian or Ubuntu 20.x, 22.x, or 24.x.",
         )
 
     if detected_os_type != selected_os_type:

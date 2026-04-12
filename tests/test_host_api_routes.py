@@ -599,7 +599,7 @@ def test_test_connection_password_success(mock_test, mock_detect_os, client, app
     'id': 'ubuntu',
     'version_id': '24.04',
     'pretty_name': 'Ubuntu 24.04.2 LTS',
-    'os_type': 'ubuntu24',
+    'os_type': 'ubuntu',
 })
 @patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
 def test_test_connection_password_accepts_supported_ubuntu24(mock_test, mock_detect_os, client, app):
@@ -611,7 +611,7 @@ def test_test_connection_password_accepts_supported_ubuntu24(mock_test, mock_det
         'ssh_user': 'root',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'ubuntu24',
+        'os_type': 'ubuntu',
     })
 
     assert response.status_code == 200
@@ -625,7 +625,7 @@ def test_test_connection_password_accepts_supported_ubuntu24(mock_test, mock_det
     'id': 'ubuntu',
     'version_id': '22.04',
     'pretty_name': 'Ubuntu 22.04.5 LTS',
-    'os_type': 'ubuntu22',
+    'os_type': 'ubuntu',
 })
 @patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
 def test_test_connection_password_rejects_os_mismatch(mock_test, mock_detect_os, client, app):
@@ -663,7 +663,7 @@ def test_test_connection_password_rejects_unsupported_os(mock_test, mock_detect_
         'ssh_user': 'root',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'ubuntu20',
+        'os_type': 'ubuntu',
     })
 
     assert response.status_code == 200

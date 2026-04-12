@@ -175,7 +175,7 @@ def test_detect_remote_os_maps_supported_release(mock_client_cls):
         "id": "ubuntu",
         "version_id": "24.04",
         "pretty_name": "Ubuntu 24.04.2 LTS",
-        "os_type": "ubuntu24",
+        "os_type": "ubuntu",
     }
 
 

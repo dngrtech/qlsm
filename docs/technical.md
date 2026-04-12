@@ -137,7 +137,7 @@ class Host(db.Model):
     ssh_user = db.Column(db.String(50), default='ansible')
     ssh_key_path = db.Column(db.String(255), nullable=True)
     ssh_port = db.Column(db.Integer, default=22)
-    os_type = db.Column(db.String(50), nullable=True)  # e.g., 'debian', 'ubuntu20', 'ubuntu22', 'ubuntu24'
+    os_type = db.Column(db.String(50), nullable=True)  # e.g., 'debian', 'ubuntu'
     is_standalone = db.Column(db.Boolean, default=False)  # user-provided host (not Terraform)
     timezone = db.Column(db.String(100), nullable=True)  # IANA timezone name
     auto_restart_schedule = db.Column(db.String(100), nullable=True)  # cron expression

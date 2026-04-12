@@ -9,9 +9,10 @@ import paramiko
 SUPPORTED_STANDALONE_OS_LABELS = {
     "debian": "Debian",
     "debian12": "Debian",
-    "ubuntu20": "Ubuntu 20.04",
-    "ubuntu22": "Ubuntu 22.04",
-    "ubuntu24": "Ubuntu 24.04",
+    "ubuntu": "Ubuntu",
+    "ubuntu20": "Ubuntu",
+    "ubuntu22": "Ubuntu",
+    "ubuntu24": "Ubuntu",
 }
 
 
@@ -90,11 +91,11 @@ def _detect_supported_os_type(os_release_values):
     if distro_id == "debian":
         return "debian"
     if distro_id == "ubuntu" and version_id.startswith("20."):
-        return "ubuntu20"
+        return "ubuntu"
     if distro_id == "ubuntu" and version_id.startswith("22."):
-        return "ubuntu22"
+        return "ubuntu"
     if distro_id == "ubuntu" and version_id.startswith("24."):
-        return "ubuntu24"
+        return "ubuntu"
     return None
 
 

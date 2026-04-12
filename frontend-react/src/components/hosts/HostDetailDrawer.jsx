@@ -14,9 +14,10 @@ import { validateHostName, HOST_NAME_MAX_LENGTH } from '../../utils/resourceVali
 const OS_TYPE_LABELS = {
   debian: 'Debian',
   debian12: 'Debian',
-  ubuntu20: 'Ubuntu 20.04',
-  ubuntu22: 'Ubuntu 22.04',
-  ubuntu24: 'Ubuntu 24.04',
+  ubuntu: 'Ubuntu',
+  ubuntu20: 'Ubuntu',
+  ubuntu22: 'Ubuntu',
+  ubuntu24: 'Ubuntu',
 };
 
 export default function HostDetailDrawer({

@@ -85,9 +85,7 @@ export const providerOptions = {
       sizes: [],
       osTypes: [
         { id: 'debian', name: 'Debian' },
-        { id: 'ubuntu20', name: 'Ubuntu 20.04' },
-        { id: 'ubuntu22', name: 'Ubuntu 22.04' },
-        { id: 'ubuntu24', name: 'Ubuntu 24.04' }
+        { id: 'ubuntu', name: 'Ubuntu' }
       ]
     },
     self: {
