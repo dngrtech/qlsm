@@ -6,6 +6,7 @@ import pytest
 
 from ui.standalone_ssh import StandaloneSSHError
 from ui.standalone_ssh import bootstrap_managed_key
+from ui.standalone_ssh import detect_remote_os
 from ui.standalone_ssh import install_managed_key
 from ui.standalone_ssh import load_managed_public_key
 from ui.standalone_ssh import remove_managed_key
@@ -13,13 +14,13 @@ from ui.standalone_ssh import verify_password_login
 from ui.standalone_ssh import verify_passwordless_sudo
 
 
-def _ssh_client():
+def _ssh_client(stdout_data=b"", stderr_data=b"", exit_status=0):
     client = MagicMock()
     stdout = MagicMock()
     stderr = MagicMock()
-    stdout.channel.recv_exit_status.return_value = 0
-    stdout.read.return_value = b""
-    stderr.read.return_value = b""
+    stdout.channel.recv_exit_status.return_value = exit_status
+    stdout.read.return_value = stdout_data
+    stderr.read.return_value = stderr_data
     client.exec_command.return_value = (MagicMock(), stdout, stderr)
     return client
 
@@ -151,10 +152,59 @@ def test_remove_managed_key_uses_key_auth(mock_client_cls, tmp_path):
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")
+def test_detect_remote_os_maps_supported_release(mock_client_cls):
+    client = _ssh_client(
+        stdout_data=(
+            b'NAME="Ubuntu"\n'
+            b'VERSION="22.04.5 LTS (Jammy Jellyfish)"\n'
+            b'ID=ubuntu\n'
+            b'VERSION_ID="22.04"\n'
+            b'PRETTY_NAME="Ubuntu 22.04.5 LTS"\n'
+        ),
+    )
+    mock_client_cls.return_value = client
+
+    detected = detect_remote_os(
+        host="203.0.113.10",
+        port=22,
+        username="root",
+        password="secret",
+    )
+
+    assert detected == {
+        "id": "ubuntu",
+        "version_id": "22.04",
+        "pretty_name": "Ubuntu 22.04.5 LTS",
+        "os_type": "ubuntu22",
+    }
+
+
+@patch("ui.standalone_ssh.paramiko.SSHClient")
+def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
+    client = _ssh_client(
+        stdout_data=(
+            b'ID=ubuntu\n'
+            b'VERSION_ID="24.04"\n'
+            b'PRETTY_NAME="Ubuntu 24.04.2 LTS"\n'
+        ),
+    )
+    mock_client_cls.return_value = client
+
+    detected = detect_remote_os(
+        host="203.0.113.11",
+        port=22,
+        username="root",
+        key_filename="/tmp/test_key",
+    )
+
+    assert detected["pretty_name"] == "Ubuntu 24.04.2 LTS"
+    assert detected["os_type"] is None
+
+
+@patch("ui.standalone_ssh.paramiko.SSHClient")
 def test_bootstrap_managed_key_fails_when_password_login_rejected(mock_client_cls):
     mock_client_cls.return_value = _ssh_client()
 
     with patch("ui.standalone_ssh.verify_password_login", return_value=False):
         with pytest.raises(StandaloneSSHError, match="Password authentication failed"):
             bootstrap_managed_key("203.0.113.10", 22, "ansible", "secret", "/tmp/host_id_rsa")
-

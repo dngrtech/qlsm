@@ -200,6 +200,10 @@ function StandaloneAuthSection({
           <p className="mt-2 text-xs" style={{ color: 'var(--accent-danger)' }}>{connectionTestMessage}</p>
         )}
 
+        {connectionTestMessage && connectionTestStatus === 'success' && (
+          <p className="mt-2 text-xs" style={{ color: '#22d97f' }}>{connectionTestMessage}</p>
+        )}
+
         {connectionTestStatus === 'idle' && (
           <p className="mt-2 text-xs text-theme-muted">
             A successful connection test is required before adding the host.

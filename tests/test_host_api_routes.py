@@ -179,8 +179,9 @@ def test_create_host_no_body(client, app):
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.os.makedirs')
 @patch('ui.routes.host_routes.os.chmod')
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).'))
 @patch('builtins.open', create=True)
-def test_create_standalone_host_success(mock_open, mock_chmod, mock_makedirs, mock_lock, mock_enqueue, client, app):
+def test_create_standalone_host_success(mock_open, mock_detect_os, mock_chmod, mock_makedirs, mock_lock, mock_enqueue, client, app):
     """Valid standalone host data creates host and queues setup task."""
     mock_open.return_value.__enter__ = MagicMock(return_value=MagicMock())
     mock_open.return_value.__exit__ = MagicMock(return_value=False)
@@ -202,14 +203,16 @@ def test_create_standalone_host_success(mock_open, mock_chmod, mock_makedirs, mo
     data = response.get_json()
     assert data['data']['name'] == 'standalone-h'
     assert mock_lock.call_args.kwargs['ttl'] == 1260
+    mock_detect_os.assert_called_once()
 
 
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).'))
 @patch('ui.routes.host_routes.bootstrap_managed_key')
 @patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_id_rsa', '/tmp/managed_id_rsa.pub'))
 def test_create_standalone_host_password_bootstrap_success(
-    mock_generate, mock_bootstrap, mock_lock, mock_enqueue, client, app
+    mock_generate, mock_bootstrap, mock_detect_os, mock_lock, mock_enqueue, client, app
 ):
     """Password mode generates a managed key and queues setup without persisting the password."""
     headers = auth_headers(app, DEFAULT_USER)
@@ -236,15 +239,17 @@ def test_create_standalone_host_password_bootstrap_success(
         'secret',
         '/tmp/managed_id_rsa',
     )
+    mock_detect_os.assert_called_once()
     mock_enqueue.assert_called_once()
 
 
 @patch('ui.routes.host_routes.acquire_lock', return_value=False)
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).'))
 @patch('ui.routes.host_routes.remove_managed_key')
 @patch('ui.routes.host_routes.bootstrap_managed_key')
 @patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_lockfail', '/tmp/managed_lockfail.pub'))
 def test_create_standalone_host_password_bootstrap_rolls_back_remote_key_on_lock_failure(
-    mock_generate, mock_bootstrap, mock_remove_managed, mock_lock, client, app
+    mock_generate, mock_bootstrap, mock_remove_managed, mock_detect_os, mock_lock, client, app
 ):
     """If host creation rolls back after password bootstrap, the installed managed key is scrubbed."""
     headers = auth_headers(app, DEFAULT_USER)
@@ -263,6 +268,7 @@ def test_create_standalone_host_password_bootstrap_rolls_back_remote_key_on_lock
     assert response.status_code == 409
     mock_generate.assert_called_once_with('standalone-lockfail')
     mock_bootstrap.assert_called_once()
+    mock_detect_os.assert_called_once()
     mock_remove_managed.assert_called_once_with(
         '203.0.113.11',
         22,
@@ -284,6 +290,39 @@ def test_create_standalone_host_missing_ip(client, app):
     })
     assert response.status_code == 400
     assert 'IP address is required' in response.get_json()['error']['message']
+
+
+@patch('ui.routes.host_routes._cleanup_local_key_material')
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(False, 'Connection failed: detected OS Ubuntu 22.04.5 LTS does not match selected OS Debian 12.'))
+@patch('ui.routes.host_routes.os.makedirs')
+@patch('ui.routes.host_routes.os.chmod')
+@patch('builtins.open', create=True)
+def test_create_standalone_host_rejects_remote_os_mismatch(
+    mock_open, mock_chmod, mock_makedirs, mock_detect_os, mock_cleanup, client, app
+):
+    mock_open.return_value.__enter__ = MagicMock(return_value=MagicMock())
+    mock_open.return_value.__exit__ = MagicMock(return_value=False)
+
+    with patch('ui.routes.host_routes.os.path.abspath', return_value='/tmp/ssh-keys'):
+        headers = auth_headers(app, DEFAULT_USER)
+        response = client.post('/api/hosts/', headers=headers, json={
+            'name': 'standalone-mismatch',
+            'provider': 'standalone',
+            'ip_address': '192.168.1.101',
+            'ssh_key': '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----',
+            'ssh_user': 'root',
+            'ssh_port': 22,
+            'os_type': 'debian12',
+            'timezone': 'America/New_York'
+        })
+
+    assert response.status_code == 400
+    assert 'does not match selected OS Debian 12' in response.get_json()['error']['message']
+    mock_detect_os.assert_called_once()
+    assert mock_cleanup.call_count == 2
+    assert mock_cleanup.call_args_list[-1].args == ('/tmp/ssh-keys/standalone-mismatch_standalone_id_rsa', None)
+    with app.app_context():
+        assert Host.query.filter_by(name='standalone-mismatch').first() is None
 
 
 def test_create_standalone_host_invalid_ip(client, app):
@@ -493,8 +532,14 @@ def test_create_self_host_cleans_up_when_enqueue_fails(
         assert Host.query.filter_by(provider='self').first() is None
 
 
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian12',
+})
 @patch('ui.routes.host_routes.subprocess.run')
-def test_test_connection_key_success(mock_run, client, app):
+def test_test_connection_key_success(mock_run, mock_detect_os, client, app):
     """Key-mode connection test keeps the existing Ansible ping path."""
     mock_run.return_value = MagicMock(returncode=0, stdout='pong', stderr='')
     headers = auth_headers(app, DEFAULT_USER)
@@ -505,16 +550,25 @@ def test_test_connection_key_success(mock_run, client, app):
         'ssh_user': 'root',
         'ssh_auth_method': 'key',
         'ssh_key': '-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----',
+        'os_type': 'debian12',
     })
 
     assert response.status_code == 200
     assert response.get_json()['data']['success'] is True
+    assert 'Detected OS: Debian GNU/Linux 12' in response.get_json()['data']['message']
     args = mock_run.call_args.args[0]
     assert '--private-key' in args
+    mock_detect_os.assert_called_once()
 
 
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian12',
+})
 @patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
-def test_test_connection_password_success(mock_test, client, app):
+def test_test_connection_password_success(mock_test, mock_detect_os, client, app):
     """Password-mode connection test delegates to the password helper."""
     headers = auth_headers(app, DEFAULT_USER)
 
@@ -524,14 +578,73 @@ def test_test_connection_password_success(mock_test, client, app):
         'ssh_user': 'deploy',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
+        'os_type': 'debian12',
     })
 
     assert response.status_code == 200
-    assert response.get_json()['data'] == {
-        'success': True,
-        'message': 'Connection successful',
-    }
+    assert response.get_json()['data']['success'] is True
+    assert 'Detected OS: Debian GNU/Linux 12' in response.get_json()['data']['message']
     mock_test.assert_called_once_with('203.0.113.21', 2222, 'deploy', 'secret')
+    mock_detect_os.assert_called_once_with(
+        host='203.0.113.21',
+        port=2222,
+        username='deploy',
+        timeout=15,
+        password='secret',
+        key_filename=None,
+    )
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'ubuntu',
+    'version_id': '22.04',
+    'pretty_name': 'Ubuntu 22.04.5 LTS',
+    'os_type': 'ubuntu22',
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_rejects_os_mismatch(mock_test, mock_detect_os, client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.23',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'os_type': 'debian12',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is False
+    assert 'does not match selected OS Debian 12' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.23', 22, 'root', 'secret')
+    mock_detect_os.assert_called_once()
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'ubuntu',
+    'version_id': '24.04',
+    'pretty_name': 'Ubuntu 24.04.2 LTS',
+    'os_type': None,
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_rejects_unsupported_os(mock_test, mock_detect_os, client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.24',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'os_type': 'ubuntu22',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is False
+    assert 'Ubuntu 24.04.2 LTS is not supported' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.24', 22, 'root', 'secret')
+    mock_detect_os.assert_called_once()
 
 
 @patch(

@@ -137,6 +137,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     ssh_port: parseInt(sshPort, 10) || 22,
     ssh_user: sshUser.trim(),
     ssh_auth_method: standaloneAuthMethod,
+    os_type: osType,
     ...(standaloneAuthMethod === 'password'
       ? { ssh_password: sshPassword }
       : { ssh_key: sshKey }),
@@ -381,7 +382,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         sshPassword={sshPassword}
                         onSshPasswordChange={(e) => { setSshPassword(e.target.value); resetConnectionTest(); }}
                         osType={osType}
-                        onOsTypeChange={setOsType}
+                        onOsTypeChange={(value) => { setOsType(value); resetConnectionTest(); }}
                         timezone={timezone}
                         onTimezoneChange={setTimezone}
                         connectionTestStatus={connectionTestStatus}

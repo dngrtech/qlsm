@@ -87,6 +87,7 @@ from ui.routes.self_host_helpers import (
     generate_self_host_keys,
 )
 from ui.standalone_ssh import StandaloneSSHError, bootstrap_managed_key
+from ui.standalone_ssh import SUPPORTED_STANDALONE_OS_LABELS, detect_remote_os
 from ui.standalone_ssh import remove_managed_key
 from ui.standalone_ssh import verify_password_login, verify_passwordless_sudo
 from flask_jwt_extended import jwt_required # Import the decorator from Flask-JWT-Extended
@@ -268,7 +269,53 @@ def test_password_connection(host, port, username, password, timeout=15):
     return True, "Connection successful"
 
 
-def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_key):
+def _validate_selected_standalone_os_type(os_type):
+    if os_type is None:
+        return 'debian12', None
+    if not isinstance(os_type, str):
+        return None, {"message": "OS type must be a string.", "status_code": 400}
+
+    os_type = os_type.strip().lower()
+    if os_type not in VALID_OS_TYPES:
+        return None, {"message": f"OS type must be one of: {', '.join(VALID_OS_TYPES)}", "status_code": 400}
+    return os_type, None
+
+
+def _validate_remote_os_selection(selected_os_type, detected_os):
+    detected_name = detected_os['pretty_name']
+    detected_os_type = detected_os['os_type']
+
+    if detected_os_type is None:
+        return (
+            False,
+            f"Connection failed: detected OS {detected_name} is not supported. "
+            "QLSM standalone hosts must run Debian 12 or Ubuntu 22.04.",
+        )
+
+    if detected_os_type != selected_os_type:
+        selected_label = SUPPORTED_STANDALONE_OS_LABELS[selected_os_type]
+        return False, f"Connection failed: detected OS {detected_name} does not match selected OS {selected_label}."
+
+    return True, f"Connection successful. Detected OS: {detected_name}."
+
+
+def _detect_and_validate_remote_os(selected_os_type, *, host, port, username, timeout=15, password=None, key_filename=None):
+    try:
+        detected_os = detect_remote_os(
+            host=host,
+            port=port,
+            username=username,
+            timeout=timeout,
+            password=password,
+            key_filename=key_filename,
+        )
+    except StandaloneSSHError as exc:
+        return False, f"Connection failed: {exc}"
+
+    return _validate_remote_os_selection(selected_os_type, detected_os)
+
+
+def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_key, selected_os_type):
     temp_key_path = None
     try:
         temp_key_path = os.path.join(tempfile.gettempdir(), f"test_conn_{uuid.uuid4().hex}")
@@ -297,7 +344,15 @@ def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_k
 
         if result.returncode == 0:
             current_app.logger.info(f"Connection test successful for {validated_ip}")
-            return jsonify({"data": {"success": True, "message": "Connection successful"}}), 200
+            success, message = _detect_and_validate_remote_os(
+                selected_os_type,
+                host=validated_ip,
+                port=ssh_port,
+                username=ssh_user,
+                timeout=15,
+                key_filename=temp_key_path,
+            )
+            return jsonify({"data": {"success": success, "message": message}}), 200
 
         error_output = result.stderr or result.stdout or "Unknown error"
         current_app.logger.warning(f"Connection test failed for {validated_ip}: {error_output}")
@@ -360,9 +415,9 @@ def _handle_standalone_host_creation(name, data):
     except (TypeError, ValueError):
         return jsonify({"error": {"message": "SSH port must be a valid integer."}}), 400
 
-    # Validate OS type
-    if os_type not in VALID_OS_TYPES:
-        return jsonify({"error": {"message": f"OS type must be one of: {', '.join(VALID_OS_TYPES)}"}}), 400
+    os_type, error = _validate_selected_standalone_os_type(os_type)
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
     # Validate timezone
     if not isinstance(timezone, str) or not timezone.strip():
@@ -396,6 +451,28 @@ def _handle_standalone_host_creation(name, data):
             managed_key_installed = True
         else:
             ssh_key_path = _write_standalone_private_key(name, credential)
+
+        remote_os_ok, remote_os_message = _detect_and_validate_remote_os(
+            os_type,
+            host=validated_ip,
+            port=ssh_port,
+            username=ssh_user,
+            timeout=30,
+            key_filename=ssh_key_path,
+        )
+        if not remote_os_ok:
+            if ssh_auth_method == 'password':
+                _cleanup_password_bootstrap_artifacts(
+                    validated_ip,
+                    ssh_port,
+                    ssh_user,
+                    ssh_key_path,
+                    public_key_path,
+                    managed_key_installed,
+                )
+            else:
+                _cleanup_local_key_material(ssh_key_path, public_key_path)
+            return jsonify({"error": {"message": remote_os_message}}), 400
 
         # Create host record
         host = create_host(
@@ -982,6 +1059,7 @@ def test_connection_api():
     ssh_key = data.get('ssh_key')
     ssh_password = data.get('ssh_password')
     ssh_auth_method = data.get('ssh_auth_method')
+    os_type = data.get('os_type', 'debian12')
 
     # Validate required fields
     if not ip_address:
@@ -996,6 +1074,10 @@ def test_connection_api():
         ssh_key=ssh_key,
         ssh_password=ssh_password,
     )
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
+
+    os_type, error = _validate_selected_standalone_os_type(os_type)
     if error:
         return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
@@ -1025,6 +1107,15 @@ def test_connection_api():
             ssh_user,
             credential,
         )
+        if success:
+            success, message = _detect_and_validate_remote_os(
+                os_type,
+                host=validated_ip,
+                port=ssh_port,
+                username=ssh_user,
+                timeout=15,
+                password=credential,
+            )
         return jsonify({"data": {"success": success, "message": message}}), 200
 
     return _test_standalone_connection_with_key(
@@ -1032,4 +1123,5 @@ def test_connection_api():
         ssh_port,
         ssh_user,
         credential,
+        os_type,
     )
