@@ -174,20 +174,6 @@ function AddHostFormFields({
       {/* Standalone provider fields */}
       {isStandalone && (
         <>
-          <div>
-            <label htmlFor="modal-ip-address" className={labelClass}>IP Address</label>
-            <input
-              id="modal-ip-address"
-              type="text"
-              value={ipAddress || ''}
-              onChange={onIpAddressChange}
-              required
-              placeholder="e.g., 192.168.1.100"
-              className={`${inputClass} ${inputFocusRing}`}
-              style={inputStyle}
-            />
-          </div>
-
           <FloatingListbox
             label="Operating System"
             value={osType || 'debian12'}
@@ -212,6 +198,20 @@ function AddHostFormFields({
             getSelectedDisplay={(val) => val || 'Select Timezone...'}
             noOptionsMessage="No timezones available."
           />
+
+          <div>
+            <label htmlFor="modal-ip-address" className={labelClass}>IP Address</label>
+            <input
+              id="modal-ip-address"
+              type="text"
+              value={ipAddress || ''}
+              onChange={onIpAddressChange}
+              required
+              placeholder="e.g., 192.168.1.100"
+              className={`${inputClass} ${inputFocusRing}`}
+              style={inputStyle}
+            />
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
