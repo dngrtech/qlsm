@@ -188,6 +188,31 @@ function AddHostFormFields({
             />
           </div>
 
+          <FloatingListbox
+            label="Operating System"
+            value={osType || 'debian12'}
+            onChange={onOsTypeChange}
+            options={providerOptions.standalone.osTypes}
+            getOptionKey={(opt) => opt.id}
+            getOptionDisplay={(opt) => opt.name}
+            getSelectedDisplay={(val, opts) => {
+              if (!val) return 'Select OS';
+              const selectedOpt = opts.find(o => o.id === val);
+              return selectedOpt ? selectedOpt.name : 'Select OS';
+            }}
+          />
+
+          <FloatingListbox
+            label="Timezone"
+            value={timezone || ''}
+            onChange={onTimezoneChange}
+            options={STANDALONE_TIMEZONES.map(tz => ({ id: tz, name: tz }))}
+            getOptionKey={(opt) => opt.id}
+            getOptionDisplay={(opt) => opt.name}
+            getSelectedDisplay={(val) => val || 'Select Timezone...'}
+            noOptionsMessage="No timezones available."
+          />
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="modal-ssh-port" className={labelClass}>SSH Port</label>
@@ -216,31 +241,6 @@ function AddHostFormFields({
               />
             </div>
           </div>
-
-          <FloatingListbox
-            label="Operating System"
-            value={osType || 'debian12'}
-            onChange={onOsTypeChange}
-            options={providerOptions.standalone.osTypes}
-            getOptionKey={(opt) => opt.id}
-            getOptionDisplay={(opt) => opt.name}
-            getSelectedDisplay={(val, opts) => {
-              if (!val) return 'Select OS';
-              const selectedOpt = opts.find(o => o.id === val);
-              return selectedOpt ? selectedOpt.name : 'Select OS';
-            }}
-          />
-
-          <FloatingListbox
-            label="Timezone"
-            value={timezone || ''}
-            onChange={onTimezoneChange}
-            options={STANDALONE_TIMEZONES.map(tz => ({ id: tz, name: tz }))}
-            getOptionKey={(opt) => opt.id}
-            getOptionDisplay={(opt) => opt.name}
-            getSelectedDisplay={(val) => val || 'Select Timezone...'}
-            noOptionsMessage="No timezones available."
-          />
 
           <StandaloneAuthSection
             authMethod={standaloneAuthMethod}
