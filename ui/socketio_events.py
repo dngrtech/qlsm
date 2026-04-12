@@ -16,6 +16,8 @@ from flask import request
 from flask_jwt_extended import decode_token, get_jwt_identity
 from flask_socketio import SocketIO, emit, join_room, leave_room, disconnect, rooms
 
+from ui.task_logic.self_host_network import resolve_self_host_management_target
+
 REDIS_PREFIX = os.environ.get('REDIS_PREFIX', 'rcon')
 
 log = logging.getLogger(__name__)
@@ -47,6 +49,22 @@ def get_redis_client():
                 
             _redis_client = redis.from_url(redis_url, **kwargs)
     return _redis_client
+
+def _rcon_target_for_host(host) -> str:
+    """Resolve the ZMQ connect address for an RCON/stats socket.
+
+    For self-host instances the player-facing ``host.ip_address`` is often
+    not reachable from inside the rcon container (NAT hairpin, loopback,
+    LAN-only addresses, etc.). The docker-compose stack exposes the host
+    machine to containers as ``host.docker.internal`` via ``extra_hosts``,
+    which is what ``resolve_self_host_management_target`` returns.
+
+    Standalone and cloud-provisioned hosts keep using their public IP.
+    """
+    if getattr(host, "provider", None) == "self":
+        return resolve_self_host_management_target()
+    return host.ip_address
+
 
 def publish_to_redis(channel: str, message: str) -> None:
     """Safely publish to Redis and reset stale connections on failure."""
@@ -123,7 +141,7 @@ def handle_rcon_join(data):
         emit('rcon:error', {'error': f'Instance {instance_id} not found on host {host_id}'})
         return
 
-    ip = instance.host.ip_address
+    ip = _rcon_target_for_host(instance.host)
     rcon_port = instance.zmq_rcon_port
     rcon_password = instance.zmq_rcon_password
 
@@ -245,7 +263,7 @@ def handle_subscribe_stats(data):
         emit('rcon:error', {'error': f'Instance {instance_id} not found on host {host_id}'})
         return
 
-    ip = instance.host.ip_address
+    ip = _rcon_target_for_host(instance.host)
     stats_password = instance.zmq_stats_password
     stats_port = instance.zmq_stats_port
 
