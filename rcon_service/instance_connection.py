@@ -139,15 +139,26 @@ class InstanceConnection:
             endpoint = f"tcp://{ip}:{rcon_port}"
             log.debug(f"[{self.host_id}:{self.instance_id}] Connecting to {endpoint}")
             self._socket.connect(endpoint)
-            
-            # Send "register" command (required by QLDS RCON protocol)
-            # With `zmq.IMMEDIATE = 1`, this will instantly fail with EAGAIN if the target is offline
-            try:
-                await self._socket.send_string("register")
-                log.debug(f"[{self.host_id}:{self.instance_id}] Sent register command")
-            except zmq.error.ZMQError as e:
-                log.error(f"[{self.host_id}:{self.instance_id}] Server offline or unreachable: {e}")
+
+            # Yield to the event loop so the TCP+ZMTP+PLAIN handshake can complete
+            # before we send "register". Without this yield, IMMEDIATE=1 returns
+            # EAGAIN immediately because the peer isn't confirmed yet — even on
+            # loopback. We retry a few times to handle slow servers while still
+            # failing fast if the target is genuinely offline.
+            register_sent = False
+            for attempt in range(10):
+                await asyncio.sleep(0.1)
+                try:
+                    await self._socket.send_string("register", zmq.NOBLOCK)
+                    register_sent = True
+                    break
+                except zmq.error.Again:
+                    log.debug(f"[{self.host_id}:{self.instance_id}] Waiting for ZMQ handshake (attempt {attempt + 1}/10)")
+
+            if not register_sent:
                 raise Exception("Server is offline or unreachable")
+
+            log.debug(f"[{self.host_id}:{self.instance_id}] Sent register command")
             
             # QLDS doesn't always respond to register - just proceed
             # The C++ version doesn't wait for a response either
