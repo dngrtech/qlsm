@@ -18,6 +18,7 @@
     # Optional override for service_state:
     # service_state: started | stopped | restarted | status (default: started)
     game_port: "{{ port }}" # Define game_port from passed 'port'
+    firewall_mode_effective: "{{ firewall_mode | default('full') }}"
 
   tasks:
     # Removed: Render QLDS systemd service file (now handled by deploy playbook)
@@ -37,6 +38,7 @@
         - net.ipv4.conf.default.route_localnet
         - net.ipv4.conf.lo.route_localnet
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
 
@@ -46,12 +48,14 @@
       failed_when: false
       changed_when: false
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
 
     - name: Add INPUT SNAT rule (required for NAT on start)
       command: iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
         - input_snat_check.rc != 0
@@ -62,12 +66,14 @@
       failed_when: false
       changed_when: false
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
 
     - name: Add PREROUTING DNAT rule (on start)
       command: iptables -t nat -A PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
         - prerouting_check.rc != 0
@@ -78,12 +84,14 @@
       failed_when: false
       changed_when: false
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
 
     - name: Add POSTROUTING SNAT rule (on start)
       command: iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - service_state == 'started'
         - postrouting_check.rc != 0
@@ -91,7 +99,29 @@
     - name: Persist iptables rules after NAT changes (on start)
       shell: iptables-save > /etc/iptables/rules.v4
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - service_state == 'started'
+
+    - name: Write QLSM network rules config
+      template:
+        src: ../templates/qlsm-network-rules.json.j2
+        dest: /etc/qlsm/network-rules.json
+        owner: root
+        group: root
+        mode: '0644'
+      when:
+        - firewall_mode_effective == 'helper'
+        - service_action == 'manage'
+        - service_state == 'started'
+
+    - name: Apply QLSM network rules
+      systemd:
+        name: qlsm-network-rules.service
+        state: started
+      when:
+        - firewall_mode_effective == 'helper'
+        - service_action == 'manage'
         - service_state == 'started'
 
     - name: Ensure QLDS service state is managed (start/stop/restart)
@@ -136,6 +166,25 @@
         path: /home/ql/qlds-{{ game_port }} # Use game_port for directory path
         state: absent
       when: service_action == 'delete' # Use renamed variable
+
+    - name: Write QLSM network rules config after delete
+      template:
+        src: ../templates/qlsm-network-rules.json.j2
+        dest: /etc/qlsm/network-rules.json
+        owner: root
+        group: root
+        mode: '0644'
+      when:
+        - firewall_mode_effective == 'helper'
+        - service_action == 'delete'
+
+    - name: Apply QLSM network rules after delete
+      systemd:
+        name: qlsm-network-rules.service
+        state: started
+      when:
+        - firewall_mode_effective == 'helper'
+        - service_action == 'delete'
     # --- End Delete Action Tasks ---
 
     - name: Gather service facts

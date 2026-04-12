@@ -53,7 +53,7 @@ class Host(db.Model):
     ssh_user = db.Column(db.String(50), default='ansible') # Default user for Ansible
     ssh_key_path = db.Column(db.String(255), nullable=True) # Path to private key generated/used by Terraform
     ssh_port = db.Column(db.Integer, default=22, nullable=False) # SSH port for connections
-    os_type = db.Column(db.String(50), default='debian12', nullable=True) # OS type: 'debian12', 'ubuntu22'
+    os_type = db.Column(db.String(50), default='debian', nullable=True) # OS type: 'debian', 'ubuntu'
     is_standalone = db.Column(db.Boolean, default=False, nullable=False) # True for user-provided servers
     timezone = db.Column(db.String(50), nullable=True) # IANA timezone name (e.g., 'America/New_York')
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)

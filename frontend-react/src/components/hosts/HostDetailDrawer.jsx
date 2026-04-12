@@ -11,6 +11,15 @@ import { HostStatus, QLFILTER_STATUS } from '../../utils/statusEnums';
 import { copyToClipboard } from '../../utils/clipboard';
 import { validateHostName, HOST_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
 
+const OS_TYPE_LABELS = {
+  debian: 'Debian',
+  debian12: 'Debian',
+  ubuntu: 'Ubuntu',
+  ubuntu20: 'Ubuntu',
+  ubuntu22: 'Ubuntu',
+  ubuntu24: 'Ubuntu',
+};
+
 export default function HostDetailDrawer({
   host, open, onClose, onDeleteHost, onHostDeleted, onHostUpdated,
   onSwitchToInstanceDrawer, onRequestRestart, onQlfilterAction
@@ -232,7 +241,7 @@ export default function HostDetailDrawer({
                           <>
                             <Field label="SSH Port">{internalHost.ssh_port || 22}</Field>
                             <Field label="OS Type">
-                              {internalHost.os_type === 'debian12' ? 'Debian 12' : internalHost.os_type === 'ubuntu22' ? 'Ubuntu 22.04' : internalHost.os_type || 'Unknown'}
+                              {OS_TYPE_LABELS[internalHost.os_type] || internalHost.os_type || 'Unknown'}
                             </Field>
                           </>
                         ) : (

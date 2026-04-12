@@ -76,6 +76,16 @@ export const createHost = async (hostData) => {
   }
 };
 
+export const getSelfHostDefaults = async () => {
+  try {
+    const response = await apiClient.get('/hosts/self/defaults');
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to fetch self-host defaults:', error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to fetch self-host defaults');
+  }
+};
+
 export const getHostById = async (hostId) => {
   try {
     const response = await apiClient.get(`/hosts/${hostId}`);

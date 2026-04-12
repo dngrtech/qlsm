@@ -6,6 +6,7 @@ import subprocess
 from flask import current_app
 
 from ui.models import Host, HostStatus, InstanceStatus
+from ui.task_logic.self_host_network import resolve_self_host_management_target
 
 logger = logging.getLogger(__name__)
 
@@ -13,19 +14,32 @@ STATUS_KEY_PREFIX = 'server:status'
 STATUS_TTL = 30  # seconds
 
 
-def _build_ssh_command(host, instances):
+def _ssh_target_for_host(host):
+    if getattr(host, "provider", None) == "self":
+        return resolve_self_host_management_target()
+    return host.ip_address
+
+
+def _build_ssh_command(host, instances, redis_password=None):
     """Build SSH command that reads all instance Redis DBs in one round-trip."""
     ports_dbs = [(int(inst.port), int(inst.port) - 27959) for inst in instances]
     for port, db in ports_dbs:
         if db < 1:
             raise ValueError(f"Invalid port {port}: Redis DB index must be >= 1 (port must be >= 27960)")
+    target = _ssh_target_for_host(host)
+    if redis_password:
+        import base64 as _b64
+        pw_b64 = _b64.b64encode(redis_password.encode()).decode()
+        redis_kwargs = f"db=db,password=__import__('base64').b64decode('{pw_b64}').decode()"
+    else:
+        redis_kwargs = "db=db"
     python_snippet = (
         "import redis,json;"
         f"ports_dbs={ports_dbs!r};"
         "out={};"
         "[out.__setitem__(str(port), json.loads(r.get(f'minqlx:server_status:{port}') or 'null'))"
         " for port,db in ports_dbs"
-        " for r in [redis.Redis(db=db)]];"
+        f" for r in [redis.Redis({redis_kwargs})]];"
         "print(json.dumps(out))"
     )
     return [
@@ -36,7 +50,7 @@ def _build_ssh_command(host, instances):
         '-o', 'BatchMode=yes',
         '-o', 'ConnectTimeout=5',
         '-l', host.ssh_user,
-        host.ip_address,
+        target,
         f'python3 -c "{python_snippet}"',
     ]
 
@@ -63,8 +77,16 @@ def _write_status_to_redis(redis_client, host_id, instance_id, data):
 
 def _fetch_and_cache_host(host, instances, redis_client):
     """SSH to one host, read all instance statuses, write to management Redis."""
-    cmd = _build_ssh_command(host, instances)
-    logger.debug("Polling host %s (%s) — %d instance(s)", host.name, host.ip_address, len(instances))
+    redis_password = os.environ.get("REDIS_PASSWORD") if getattr(host, "provider", None) == "self" else None
+    cmd = _build_ssh_command(host, instances, redis_password=redis_password)
+    target = _ssh_target_for_host(host)
+    logger.debug(
+        "Polling host %s (connect=%s, target=%s) — %d instance(s)",
+        host.name,
+        host.ip_address,
+        target,
+        len(instances),
+    )
     try:
         result = subprocess.run(
             cmd,

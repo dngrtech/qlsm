@@ -5,9 +5,25 @@ from rq import get_current_job
 
 from ui import db
 from ui.models import Host, HostStatus
+from ui.task_logic.self_host_network import resolve_self_host_management_target
 from .common import append_log
+from .standalone_inventory import generate_standalone_inventory
 
 log = logging.getLogger(__name__)
+INVENTORY_MISMATCH_MARKERS = (
+    "no inventory was parsed",
+    "could not match supplied host pattern",
+    "no hosts matched",
+)
+
+
+def _extract_inventory_mismatch_detail(stdout_content="", stderr_content=""):
+    for source in (stderr_content or "", stdout_content or ""):
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped and any(marker in stripped.lower() for marker in INVENTORY_MISMATCH_MARKERS):
+                return stripped
+    return None
 
 
 def setup_standalone_host_logic(host_id):
@@ -43,19 +59,28 @@ def setup_standalone_host_logic(host_id):
             return "Error: Host details missing"
 
         # Generate inventory file for standalone host
-        inventory_path = _generate_standalone_inventory(host)
-        if not inventory_path:
+        inventory_result = _generate_standalone_inventory(host)
+        if not inventory_result:
             append_log(host, "Task failed: Could not generate Ansible inventory file.")
             host.status = HostStatus.ERROR
             db.session.commit()
             return "Error: Failed to generate inventory file"
+        inventory_path, management_target = inventory_result
 
         append_log(host, f"Generated inventory file: {inventory_path}")
+        append_log(host, f"Configured server address: {host.ip_address}")
+        if host.provider == 'self':
+            append_log(host, f"Resolved self-host management target: {management_target}")
+            append_log(
+                host,
+                f"Waiting for SSH connection to self-host management target {management_target}:{host.ssh_port}...",
+            )
+        else:
+            append_log(host, f"Waiting for SSH connection to {management_target}:{host.ssh_port}...")
         db.session.commit()
 
         # Wait for SSH connection
-        log.info(f"Waiting for SSH connection to {host.ip_address}:{host.ssh_port}...")
-        append_log(host, f"Waiting for SSH connection to {host.ip_address}:{host.ssh_port}...")
+        log.info(f"Waiting for SSH connection to {management_target}:{host.ssh_port}...")
         db.session.commit()
 
         if not _wait_for_ssh(host, inventory_path):
@@ -95,28 +120,13 @@ def setup_standalone_host_logic(host_id):
 def _generate_standalone_inventory(host):
     """Generate Ansible inventory file for a standalone host."""
     try:
-        inventory_dir = os.path.abspath('ansible/inventory')
-        os.makedirs(inventory_dir, exist_ok=True)
-
-        inventory_filename = f"{host.name}_standalone_host.yml"
-        inventory_path = os.path.join(inventory_dir, inventory_filename)
-
-        inventory_content = f"""all:
-  hosts:
-    {host.name}:
-      ansible_host: {host.ip_address}
-      ansible_user: {host.ssh_user}
-      ansible_ssh_private_key_file: {os.path.abspath(host.ssh_key_path)}
-      ansible_port: {host.ssh_port}
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-"""
-
-        with open(inventory_path, 'w') as f:
-            f.write(inventory_content)
-
+        if host.provider == 'self':
+            ansible_host = resolve_self_host_management_target()
+        else:
+            ansible_host = host.ip_address
+        inventory_path = generate_standalone_inventory(host, ansible_host=ansible_host)
         log.info(f"Generated standalone inventory file: {inventory_path}")
-        return inventory_path
-
+        return inventory_path, ansible_host
     except Exception as e:
         log.error(f"Failed to generate inventory file for host {host.id}: {e}")
         return None
@@ -138,6 +148,13 @@ def _wait_for_ssh(host, inventory_path):
             wait_command_args,
             check=True, capture_output=True, text=True, env=os.environ
         )
+        inventory_error = _extract_inventory_mismatch_detail(wait_result.stdout, wait_result.stderr)
+        if inventory_error:
+            log.error(f"Inventory mismatch while waiting for SSH on host {host.id}: {inventory_error}")
+            append_log(host, f"Host setup failed: {inventory_error}")
+            host.status = HostStatus.ERROR
+            db.session.commit()
+            return False
         log.debug(f"Ansible wait stdout:\n{wait_result.stdout}")
         if wait_result.stderr:
             log.warning(f"Ansible wait stderr:\n{wait_result.stderr}")
@@ -163,19 +180,29 @@ def _wait_for_ssh(host, inventory_path):
         return False
 
 
+def _setup_playbook_extra_vars(host):
+    extra_vars = {
+        'is_standalone': 'true',
+        'ssh_port': str(host.ssh_port),
+        'firewall_mode': 'helper' if host.provider == 'self' else 'full',
+    }
+    if host.provider == 'self':
+        extra_vars['use_host_redis'] = 'false'
+    if host.timezone:
+        extra_vars['host_timezone'] = host.timezone
+    return extra_vars
+
+
 def _run_setup_playbook(host, inventory_path):
     """Run the Ansible setup playbook with standalone-specific variables."""
     ansible_playbook_path = os.path.abspath('ansible/playbooks/setup_host.yml')
 
-    # Pass is_standalone=true and ssh_port to the playbook
     ansible_command_args = [
         'ansible-playbook',
         '-i', inventory_path,
-        '-e', f'is_standalone=true',
-        '-e', f'ssh_port={host.ssh_port}',
     ]
-    if host.timezone:
-        ansible_command_args += ['-e', f'host_timezone={host.timezone}']
+    for key, value in _setup_playbook_extra_vars(host).items():
+        ansible_command_args += ['-e', f'{key}={value}']
     ansible_command_args.append(ansible_playbook_path)
 
     log.info(f"Executing Ansible command: {' '.join(ansible_command_args)}")
@@ -202,6 +229,13 @@ def _run_setup_playbook(host, inventory_path):
 
         rc = process.returncode
         log.info(f"Ansible setup playbook finished with return code: {rc}")
+        inventory_error = _extract_inventory_mismatch_detail(stdout_content, stderr_content)
+        if inventory_error:
+            log.error(f"Inventory mismatch during host setup playbook for host {host.id}: {inventory_error}")
+            append_log(host, f"Host setup failed: {inventory_error}")
+            host.status = HostStatus.ERROR
+            db.session.commit()
+            return False
 
         if rc != 0:
             raise subprocess.CalledProcessError(rc, ansible_command_args, output=stdout_content, stderr=stderr_content)

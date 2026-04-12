@@ -52,6 +52,73 @@ def test_build_ssh_command_multiple_instances():
     assert str(27961 - 27959) in full_cmd  # db=2
 
 
+def test_build_ssh_command_self_host_uses_management_target(monkeypatch):
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    host = _make_host(ip='203.0.113.10')
+    host.provider = 'self'
+    monkeypatch.setattr(
+        'ui.task_logic.server_status_poll.resolve_self_host_management_target',
+        lambda: 'host.docker.internal',
+    )
+
+    cmd = _build_ssh_command(host, [_make_instance(port=27960)])
+
+    assert 'host.docker.internal' in cmd
+    assert '203.0.113.10' not in cmd
+
+
+def test_build_ssh_command_self_host_includes_redis_password(monkeypatch):
+    import base64
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    monkeypatch.setattr(
+        'ui.task_logic.server_status_poll.resolve_self_host_management_target',
+        lambda: 'host.docker.internal',
+    )
+    cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)], redis_password='s3cr3t')
+    full_cmd = ' '.join(cmd)
+    expected_b64 = base64.b64encode(b's3cr3t').decode()
+    assert expected_b64 in full_cmd
+    assert 'password' in full_cmd
+    # plaintext must not appear so shell-special chars in passwords are safe
+    assert 's3cr3t' not in full_cmd
+
+
+def test_build_ssh_command_password_shell_special_chars(monkeypatch):
+    import base64
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    monkeypatch.setattr(
+        'ui.task_logic.server_status_poll.resolve_self_host_management_target',
+        lambda: 'host.docker.internal',
+    )
+    tricky = 'p@$$"w0rd`$HOME'
+    cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)], redis_password=tricky)
+    full_cmd = ' '.join(cmd)
+    expected_b64 = base64.b64encode(tricky.encode()).decode()
+    assert expected_b64 in full_cmd
+    assert tricky not in full_cmd
+
+
+def test_build_ssh_command_no_password_by_default():
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    cmd = _build_ssh_command(_make_host(), [_make_instance(port=27960)])
+    full_cmd = ' '.join(cmd)
+    assert 'password' not in full_cmd
+
+
+def test_build_ssh_command_standalone_uses_connect_address():
+    from ui.task_logic.server_status_poll import _build_ssh_command
+
+    host = _make_host(ip='10.0.0.1')
+    host.provider = 'standalone'
+    cmd = _build_ssh_command(host, [_make_instance(port=27960)])
+
+    assert '10.0.0.1' in cmd
+
+
 def test_parse_ssh_output_valid():
     from ui.task_logic.server_status_poll import _parse_ssh_output
     payload = {'map': 'campgrounds', 'players': [], 'maxplayers': 16, 'state': 'warmup'}

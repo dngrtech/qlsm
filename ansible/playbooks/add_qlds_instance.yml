@@ -9,6 +9,7 @@
     qlds_id: "{{ id }}" # Expecting 'id' from the task call - used for config sourcing
     host_name: "{{ host_name }}" # Expecting 'host_name' for config path
     game_port: "{{ port }}" # Expecting 'port' from task call, aliasing to game_port for clarity
+    firewall_mode_effective: "{{ firewall_mode | default('full') }}"
 
     # Instance directory
     qlds_dir: "/home/ql/qlds-{{ game_port }}"
@@ -44,7 +45,9 @@
         - net.ipv4.conf.all.route_localnet
         - net.ipv4.conf.default.route_localnet
         - net.ipv4.conf.lo.route_localnet
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
   #######################################################################
   # 0b. Add NAT iptables rules for LAN rate (only if enabled)
@@ -54,11 +57,14 @@
       register: input_snat_check
       failed_when: false
       changed_when: false
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
     - name: Add INPUT SNAT rule (required for NAT)
       command: iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - input_snat_check.rc != 0
 
@@ -67,11 +73,14 @@
       register: prerouting_check
       failed_when: false
       changed_when: false
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
     - name: Add PREROUTING DNAT rule
       command: iptables -t nat -A PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - prerouting_check.rc != 0
 
@@ -80,17 +89,22 @@
       register: postrouting_check
       failed_when: false
       changed_when: false
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
     - name: Add POSTROUTING SNAT rule
       command: iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
       when:
+        - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
         - postrouting_check.rc != 0
 
     - name: Persist iptables rules after NAT changes
       shell: iptables-save > /etc/iptables/rules.v4
-      when: lan_rate_enabled | default(false)
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
 
   #######################################################################
   # 1. Create Instance Directory Structure
@@ -190,8 +204,6 @@
     - name: Remove existing factory files before syncing (ensures only selected factories remain)
       ansible.builtin.shell: |
         find {{ qlds_dir }}/baseq3/scripts/ -maxdepth 1 -name '*.factories' -type f -delete
-      args:
-        warn: false
       ignore_errors: yes  # Directory may not exist on first run
 
     - name: Sync instance-specific factory files from UI server
@@ -208,6 +220,11 @@
   #######################################################################
   # 4. Install Instance-Specific Dependencies (if any)
   #######################################################################
+    - name: Get pip3 version
+      command: pip3 --version
+      register: pip3_version_output
+      changed_when: false
+
     - name: Check if instance-specific requirements.txt exists
       ansible.builtin.stat:
         path: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
@@ -217,7 +234,7 @@
       pip:
         requirements: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
         executable: pip3
-        extra_args: --break-system-packages
+        extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
       when: minqlx_req_stat_result.stat.exists
 
   #######################################################################
@@ -255,6 +272,21 @@
       # Consider adding async/poll if start is slow, but maybe not needed now
       # async: 60
       # poll: 5
+
+    - name: Write QLSM network rules config
+      template:
+        src: ../templates/qlsm-network-rules.json.j2
+        dest: /etc/qlsm/network-rules.json
+        owner: root
+        group: root
+        mode: '0644'
+      when: firewall_mode_effective == 'helper'
+
+    - name: Apply QLSM network rules
+      systemd:
+        name: qlsm-network-rules.service
+        state: started
+      when: firewall_mode_effective == 'helper'
 
   handlers:
     # Combined handler for systemd reload and service start

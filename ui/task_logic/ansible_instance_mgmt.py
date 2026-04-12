@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import re
 import shutil
 import time
 import subprocess
@@ -12,6 +13,7 @@ from ui import db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from .common import append_log # Import from the common module
 from .ansible_runner import _run_ansible_playbook
+from .self_host_network import is_self_host, with_self_host_network_extravars
 
 from .zmq_utils import ensure_zmq_rcon_setup
 
@@ -52,6 +54,20 @@ def _prepare_instance_zmq(instance):
         db.session.commit()
 
 
+def _self_host_redis_args(instance):
+    if not is_self_host(getattr(instance, "host", None)):
+        return []
+
+    redis_password = (os.environ.get("REDIS_PASSWORD") or "").strip()
+    if not redis_password:
+        raise ValueError("Self-host instance Redis password is not configured.")
+
+    return [
+        '+set qlx_redisAddress "127.0.0.1:6379"',
+        f'+set qlx_redisPassword "{redis_password}"',
+    ]
+
+
 def _build_qlds_args_string(instance):
     _validate_instance_fields(instance)
 
@@ -70,6 +86,9 @@ def _build_qlds_args_string(instance):
         f'+set net_port {instance.port}',
         f'+set sv_hostname "{instance.hostname}"',
         f'+set qlx_serverBrandName "{instance.hostname}"',
+    ]
+    parts += _self_host_redis_args(instance)
+    parts += [
         f'+set qlx_redisDatabase {redis_db_index}',
         f'+set fs_homepath {homepath}',
         f'+set qlx_pluginsPath {homepath}/minqlx-plugins',
@@ -90,6 +109,19 @@ def _build_qlds_args_string(instance):
 
 
 log = logging.getLogger(__name__)
+
+
+def _extract_ansible_failure_detail(stdout_content, stderr_content, rc):
+    match = re.search(r'"msg":\s*"([^"]+)"', stdout_content or "")
+    if match:
+        return match.group(1)
+    for source in (stderr_content, stdout_content):
+        if source:
+            for line in reversed(source.splitlines()):
+                line = line.strip()
+                if line:
+                    return line[:400]
+    return f"Ansible runner failed with RC: {rc}"
 
 
 def deploy_instance_logic(instance_id):
@@ -130,6 +162,7 @@ def deploy_instance_logic(instance_id):
             'qlds_args': qlds_args_string, # Pass the constructed args for the service
             'lan_rate_enabled': instance.lan_rate_enabled # Pass for conditional iptables/sysctl
         }
+        deploy_extravars = with_self_host_network_extravars(instance, deploy_extravars)
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -173,7 +206,11 @@ def deploy_instance_logic(instance_id):
             log.error(f"Ansible runner indicated success (RC=0) but no hosts matched for instance {instance_id} deployment: {error_detail}")
             append_log(instance, f"Task failed: {error_detail}.")
         else: # This handles the rc != 0 case
-            error_detail = f"Ansible runner failed with RC: {runner_result.rc}"
+            error_detail = _extract_ansible_failure_detail(
+                stdout_content,
+                stderr_content,
+                runner_result.rc,
+            )
             log.error(f"Ansible runner failed for instance {instance_id} deployment. RC: {runner_result.rc}")
             append_log(instance, f"Task failed: {error_detail}.")
 
@@ -227,10 +264,11 @@ def restart_instance_logic(instance_id):
         # We use this playbook because it re-templates the service file with new args AND restarts
         restart_extravars = {
             'host_name': instance.host.name,
-            'port': instance.port, 
+            'port': instance.port,
             'id': instance.id,
             'qlds_args': qlds_args_string
         }
+        restart_extravars = with_self_host_network_extravars(instance, restart_extravars)
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -296,6 +334,7 @@ def stop_instance_logic(instance_id):
             'port': instance.port,
             'id': instance.id
         }
+        stop_extravars = with_self_host_network_extravars(instance, stop_extravars)
 
         runner_result, error_msg = _run_ansible_playbook(
             instance,
@@ -360,6 +399,7 @@ def start_instance_logic(instance_id):
             'id': instance.id,
             'lan_rate_enabled': instance.lan_rate_enabled
         }
+        start_extravars = with_self_host_network_extravars(instance, start_extravars)
 
         runner_result, error_msg = _run_ansible_playbook(
             instance,
@@ -443,6 +483,7 @@ def apply_instance_config_logic(instance_id, restart=True):
             'qlds_args': qlds_args_string, # Pass constructed args for service re-templating
             'restart_service': restart     # Pass restart flag
         }
+        apply_config_extravars = with_self_host_network_extravars(instance, apply_config_extravars)
 
         # Run the new playbook: sync_instance_configs_and_restart.yml
         runner_result, error_msg = _run_ansible_playbook(
@@ -548,6 +589,11 @@ def delete_instance_logic(instance_id):
             'port': instance.port, # Add port to target correct service name and directory
             'id': instance.id      # Keep id
         }
+        delete_extravars = with_self_host_network_extravars(
+            instance,
+            delete_extravars,
+            exclude_instance_id=instance.id,
+        )
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -668,6 +714,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             'qlds_args': qlds_args_string,
             'lan_rate_enabled': instance.lan_rate_enabled
         }
+        reconfigure_extravars = with_self_host_network_extravars(instance, reconfigure_extravars)
 
         # Run the LAN rate update playbook
         runner_result, error_msg = _run_ansible_playbook(

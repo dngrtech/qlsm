@@ -137,7 +137,7 @@ class Host(db.Model):
     ssh_user = db.Column(db.String(50), default='ansible')
     ssh_key_path = db.Column(db.String(255), nullable=True)
     ssh_port = db.Column(db.Integer, default=22)
-    os_type = db.Column(db.String(50), nullable=True)  # e.g., 'debian12', 'ubuntu22'
+    os_type = db.Column(db.String(50), nullable=True)  # e.g., 'debian', 'ubuntu'
     is_standalone = db.Column(db.Boolean, default=False)  # user-provided host (not Terraform)
     timezone = db.Column(db.String(100), nullable=True)  # IANA timezone name
     auto_restart_schedule = db.Column(db.String(100), nullable=True)  # cron expression
@@ -151,6 +151,16 @@ class Host(db.Model):
     instances = db.relationship('QLInstance', backref='host', lazy=True, cascade="all, delete-orphan")
 
 ```
+
+### Self-Host Address Contract
+
+For `provider=self`, `Host.ip_address` remains the client-facing server address shown in the UI and used in connect links. Automation does not SSH to that stored address. QLSM resolves a hidden management target inside the Docker deployment and uses that target for self-host Ansible runs and status polling.
+
+### Self-Host Redis Contract
+
+For `provider=self`, game instances reuse the QLSM Docker Redis on `127.0.0.1:6379`.
+QLSM reserves Redis `DB 0`; minqlx instances use `DB 1..4` derived from `port - 27959`.
+Self-host minqlx services receive `qlx_redisAddress`, `qlx_redisPassword`, and `qlx_redisDatabase` explicitly at deploy time.
 
 **QLInstance Model:** Represents a Quake Live server instance running on a specific `Host`.
 
@@ -212,7 +222,7 @@ The project uses pytest for testing, with fixtures defined in `tests/conftest.py
     -   **Dynamic (Terraform Generated):** Terraform generates a unique inventory snippet file per provisioned host (e.g., `ansible/inventory/my-host-name_vultr_host.yml`) using the `templates/vultr_hosts.yml.tftpl` template. This file contains the host's IP, the specific SSH user (`ansible`), and the absolute path to the generated private key.
     -   **Combined Inventory:** Ansible automatically reads all `.yml` files within the specified inventory directory.
 -   **Playbook Structure:**
-    -   **`ansible/playbooks/setup_host.yml`:** Performs the initial one-time setup on a newly provisioned host. Installs prerequisites (including `iptables-persistent`), configures the firewall using a template (`ansible/templates/iptables.rules.j2`) that defines both filter and NAT rules which are applied atomically via `iptables-restore` and persisted, creates the `ql` user, installs base SteamCMD/QLDS/minqlx to shared locations (`/home/ql/qlds-base`, `/home/ql/minqlx-shared`), and syncs common assets (`/home/ql/assets/common`).
+    -   **`ansible/playbooks/setup_host.yml`:** Performs the initial one-time setup on a newly provisioned host. Installs prerequisites (including `iptables-persistent`, and `redis-server` only when the host runtime needs its own Redis), configures the firewall using a template (`ansible/templates/iptables.rules.j2`) that defines both filter and NAT rules which are applied atomically via `iptables-restore` and persisted, creates the `ql` user, installs base SteamCMD/QLDS/minqlx to shared locations (`/home/ql/qlds-base`, `/home/ql/minqlx-shared`), and syncs common assets (`/home/ql/assets/common`).
     -   **`ansible/playbooks/add_qlds_instance.yml`:** Adds a new QLDS instance to a pre-configured host. Creates the instance directory (`/home/ql/qlds-{id}`), copies shared resources (QLDS base, minqlx, common assets) into the instance directory, syncs instance-specific configuration files from the UI server (`configs/<host>/<id>/`), installs instance-specific Python dependencies, and manages the systemd service.
     -   **`ansible/playbooks/manage_qlds_service.yml`:** Manages the `qlds@<id>.service` systemd service (start, stop, restart, delete service file).
     -   **`ansible/playbooks/get_qlds_logs.yml`:** Retrieves logs for a specific instance service.

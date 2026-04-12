@@ -101,6 +101,41 @@ docker compose restart web      # Restart app only
 docker compose ps               # Show running containers
 ```
 
+## Self-Host Provider
+
+QLSM can deploy game servers on the same machine that runs the QLSM Docker
+stack via the **self-host provider**. This is useful when you already have a
+spare Linux box and don't want to bring up a second VM just to run one or two
+Quake Live instances.
+
+The web container manages self-host SSH keys through a dedicated directory at
+`~/.qlsm-ssh/`. It is deliberately **not** mounted against `~/.ssh` — the
+container has no business seeing the operator's personal private keys.
+
+No manual setup is required. The `host-init` service in `docker-compose.yml`
+runs automatically on every `docker compose up` and handles all host-side
+configuration:
+
+- Creates `~/.qlsm-ssh/` with correct permissions
+- Writes `/etc/ssh/sshd_config.d/qlsm.conf` so `sshd` reads keys from
+  `~/.qlsm-ssh/authorized_keys`
+- Reloads `sshd`
+
+Once the stack is up, add a **QLSM Host (self)** from the UI and the web
+container will generate an SSH keypair, drop the public key into
+`~/.qlsm-ssh/authorized_keys`, and connect automatically.
+
+> **Note:** The self-host SSH user defaults to whoever owns the
+> `~/.qlsm-ssh/` directory. If you run the stack as root but want self-host
+> SSH to land as a different user, set `QLSM_HOST_USER` in `.env`.
+
+> **Security notice:** The `host-init` service runs with `privileged: true`
+> and `pid: host` so it can write to `/etc/ssh/sshd_config.d/` and reload
+> `sshd` on the host. Any process that can invoke `docker compose up` on this
+> machine gains host-level root access through that container. Do not expose
+> the Docker socket to untrusted users or run this stack in shared
+> environments without understanding this implication.
+
 ## Live Server Status
 
 The `discord_status.py` minqlx plugin must be enabled on each game server instance for live status data (map, players, state) to appear in the UI. Without it, statuses will show as `—`.
