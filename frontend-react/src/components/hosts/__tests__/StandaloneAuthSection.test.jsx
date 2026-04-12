@@ -30,7 +30,7 @@ it('switches to password bootstrap and shows the managed-key helper copy', () =>
 
   render(<Harness />);
 
-  fireEvent.click(screen.getByRole('tab', { name: /password/i }));
+  fireEvent.click(screen.getByRole('radio', { name: /password/i }));
   expect(screen.getByLabelText('SSH Password')).toBeInTheDocument();
   expect(screen.getByText(/managed SSH key/i)).toBeInTheDocument();
   expect(screen.getByText(/The password is not stored/i)).toBeInTheDocument();
