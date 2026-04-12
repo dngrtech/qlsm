@@ -7,6 +7,8 @@ from ui.database import (
 import re
 import os
 import ipaddress
+import subprocess
+import tempfile
 import uuid
 from ui.task_lock import acquire_lock, release_lock
 
@@ -58,6 +60,7 @@ def validate_ip_address(ip_str):
 
 # Valid OS types for standalone hosts
 VALID_OS_TYPES = ['debian12', 'ubuntu22']
+VALID_STANDALONE_AUTH_METHODS = {'key', 'password'}
 VALID_TIMEZONES = {
     'Africa/Johannesburg', 'America/Anchorage', 'America/Chicago', 'America/Denver',
     'America/Los_Angeles', 'America/Mexico_City', 'America/New_York', 'America/Sao_Paulo',
@@ -83,6 +86,9 @@ from ui.routes.self_host_helpers import (
     detect_default_self_ssh_user,
     generate_self_host_keys,
 )
+from ui.standalone_ssh import StandaloneSSHError, bootstrap_managed_key
+from ui.standalone_ssh import remove_managed_key
+from ui.standalone_ssh import verify_password_login, verify_passwordless_sudo
 from flask_jwt_extended import jwt_required # Import the decorator from Flask-JWT-Extended
 
 # Create a Blueprint for host API routes
@@ -170,24 +176,175 @@ def _handle_cloud_host_creation(name, provider, data):
         return jsonify({"error": {"message": f'Error adding host: {str(e)}'}}), 500
 
 
+def _validate_standalone_auth_method(value):
+    if value is None:
+        return 'key', None
+    if not isinstance(value, str):
+        return None, {"message": "SSH auth method must be a string.", "status_code": 400}
+
+    value = value.strip().lower()
+    if value == 'ssh_key':
+        value = 'key'
+    if value not in VALID_STANDALONE_AUTH_METHODS:
+        return None, {"message": "SSH auth method must be either 'key' or 'password'.", "status_code": 400}
+    return value, None
+
+
+def _validate_standalone_auth_credential(auth_method, ssh_key=None, ssh_password=None):
+    if auth_method == 'key':
+        if not isinstance(ssh_key, str) or not ssh_key.strip():
+            return None, {"message": "SSH private key is required for standalone hosts.", "status_code": 400}
+        return ssh_key.strip(), None
+
+    if not isinstance(ssh_password, str) or ssh_password == '':
+        return None, {"message": "SSH password is required for standalone hosts.", "status_code": 400}
+    return ssh_password, None
+
+
+def _standalone_private_key_path(name, ssh_keys_dir='terraform/ssh-keys'):
+    resolved_dir = os.path.abspath(ssh_keys_dir)
+    os.makedirs(resolved_dir, exist_ok=True)
+    return os.path.join(resolved_dir, f"{name}_standalone_id_rsa")
+
+
+def _cleanup_local_key_material(*paths):
+    for path in paths:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def _cleanup_password_bootstrap_artifacts(ip_address, ssh_port, ssh_user, ssh_key_path, public_key_path, managed_key_installed):
+    if managed_key_installed and ssh_key_path:
+        try:
+            remove_managed_key(ip_address, ssh_port, ssh_user, ssh_key_path)
+        except Exception as exc:
+            current_app.logger.warning(
+                "Failed to remove bootstrapped managed SSH key during rollback for %s:%s as %s: %s",
+                ip_address,
+                ssh_port,
+                ssh_user,
+                exc,
+            )
+    _cleanup_local_key_material(ssh_key_path, public_key_path)
+
+
+def generate_managed_standalone_keypair(name, ssh_keys_dir='terraform/ssh-keys'):
+    ssh_key_path = _standalone_private_key_path(name, ssh_keys_dir=ssh_keys_dir)
+    public_key_path = f"{ssh_key_path}.pub"
+    _cleanup_local_key_material(ssh_key_path, public_key_path)
+
+    try:
+        subprocess.run(
+            ['ssh-keygen', '-q', '-t', 'rsa', '-b', '4096', '-f', ssh_key_path, '-N', ''],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        os.chmod(ssh_key_path, 0o600)
+        return ssh_key_path, public_key_path
+    except Exception:
+        _cleanup_local_key_material(ssh_key_path, public_key_path)
+        raise
+
+
+def _write_standalone_private_key(name, ssh_key, ssh_keys_dir='terraform/ssh-keys'):
+    ssh_key_path = _standalone_private_key_path(name, ssh_keys_dir=ssh_keys_dir)
+    _cleanup_local_key_material(ssh_key_path, f"{ssh_key_path}.pub")
+
+    with open(ssh_key_path, 'w') as handle:
+        handle.write(ssh_key + '\n')
+    os.chmod(ssh_key_path, 0o600)
+    return ssh_key_path
+
+
+def test_password_connection(host, port, username, password, timeout=15):
+    if not verify_password_login(host, port, username, password, timeout=timeout):
+        return False, "Connection failed: password authentication failed or host is unreachable."
+    if username != 'root' and not verify_passwordless_sudo(host, port, username, password, timeout=timeout):
+        return False, "Connection failed: passwordless sudo is required for non-root users."
+    return True, "Connection successful"
+
+
+def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_key):
+    temp_key_path = None
+    try:
+        temp_key_path = os.path.join(tempfile.gettempdir(), f"test_conn_{uuid.uuid4().hex}")
+        with open(temp_key_path, 'w') as handle:
+            handle.write(ssh_key + '\n')
+        os.chmod(temp_key_path, 0o600)
+
+        ansible_cmd = [
+            'ansible', 'all',
+            '-i', f'{validated_ip},',
+            '-m', 'ping',
+            '-u', ssh_user,
+            '--private-key', temp_key_path,
+            '-e', f'ansible_port={ssh_port}',
+            '-e', 'ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"',
+            '--timeout', '15'
+        ]
+
+        current_app.logger.info(f"Testing connection to {validated_ip}:{ssh_port} as {ssh_user}")
+        result = subprocess.run(
+            ansible_cmd,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode == 0:
+            current_app.logger.info(f"Connection test successful for {validated_ip}")
+            return jsonify({"data": {"success": True, "message": "Connection successful"}}), 200
+
+        error_output = result.stderr or result.stdout or "Unknown error"
+        current_app.logger.warning(f"Connection test failed for {validated_ip}: {error_output}")
+        return jsonify({"data": {"success": False, "message": f"Connection failed: {error_output}"}}), 200
+
+    except subprocess.TimeoutExpired:
+        current_app.logger.warning(f"Connection test timed out for {validated_ip}")
+        return jsonify({"data": {"success": False, "message": "Connection timed out"}}), 200
+    except Exception as exc:
+        current_app.logger.error(f"Error testing connection: {exc}", exc_info=True)
+        return jsonify({"error": {"message": f"Error testing connection: {str(exc)}"}}), 500
+    finally:
+        if temp_key_path and os.path.exists(temp_key_path):
+            try:
+                os.remove(temp_key_path)
+            except OSError:
+                pass
+
+
 def _handle_standalone_host_creation(name, data):
     """Handle creation of standalone (user-provided) hosts."""
     ip_address = data.get('ip_address')
     ssh_key = data.get('ssh_key')
+    ssh_password = data.get('ssh_password')
     ssh_user = data.get('ssh_user', 'root')
     ssh_port = data.get('ssh_port', 22)
+    ssh_auth_method = data.get('ssh_auth_method')
     os_type = data.get('os_type', 'debian12')
     timezone = data.get('timezone')
 
     # Validate required fields
     if not ip_address:
         return jsonify({"error": {"message": "IP address is required for standalone hosts."}}), 400
-    if not ssh_key:
-        return jsonify({"error": {"message": "SSH private key is required for standalone hosts."}}), 400
-    if not ssh_user:
-        return jsonify({"error": {"message": "SSH username is required for standalone hosts."}}), 400
     if not timezone:
         return jsonify({"error": {"message": "Timezone is required for standalone hosts."}}), 400
+
+    ssh_auth_method, error = _validate_standalone_auth_method(ssh_auth_method)
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
+
+    credential, error = _validate_standalone_auth_credential(
+        ssh_auth_method,
+        ssh_key=ssh_key,
+        ssh_password=ssh_password,
+    )
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
     # Validate IP address
     validated_ip, error = validate_ip_address(ip_address)
@@ -215,27 +372,36 @@ def _handle_standalone_host_creation(name, data):
         return jsonify({"error": {"message": "Invalid timezone. Must be a valid IANA timezone."}}), 400
 
     # Validate SSH user
+    if not isinstance(ssh_user, str):
+        return jsonify({"error": {"message": "SSH username must be a string."}}), 400
     ssh_user = ssh_user.strip()
     if not ssh_user:
         return jsonify({"error": {"message": "SSH username cannot be empty."}}), 400
 
+    host = None
+    lock_token = None
+    ssh_key_path = None
+    public_key_path = None
+    managed_key_installed = False
     try:
-        # Save SSH key to file
-        ssh_keys_dir = os.path.abspath('terraform/ssh-keys')
-        os.makedirs(ssh_keys_dir, exist_ok=True)
-        ssh_key_filename = f"{name}_standalone_id_rsa"
-        ssh_key_path = os.path.join(ssh_keys_dir, ssh_key_filename)
-
-        # Write SSH key with restricted permissions
-        with open(ssh_key_path, 'w') as f:
-            f.write(ssh_key.strip() + '\n')
-        os.chmod(ssh_key_path, 0o600)
+        if ssh_auth_method == 'password':
+            ssh_key_path, public_key_path = generate_managed_standalone_keypair(name)
+            bootstrap_managed_key(
+                validated_ip,
+                ssh_port,
+                ssh_user,
+                credential,
+                ssh_key_path,
+            )
+            managed_key_installed = True
+        else:
+            ssh_key_path = _write_standalone_private_key(name, credential)
 
         # Create host record
         host = create_host(
             name=name,
             provider='standalone',
-            ip_address=ip_address,
+            ip_address=validated_ip,
             ssh_user=ssh_user,
             ssh_key_path=ssh_key_path,
             ssh_port=ssh_port,
@@ -248,6 +414,19 @@ def _handle_standalone_host_creation(name, data):
         if host:
             lock_token = str(uuid.uuid4())
             if not acquire_lock('host', host.id, lock_token, ttl=1260):
+                db.session.delete(host)
+                db.session.commit()
+                if ssh_auth_method == 'password':
+                    _cleanup_password_bootstrap_artifacts(
+                        validated_ip,
+                        ssh_port,
+                        ssh_user,
+                        ssh_key_path,
+                        public_key_path,
+                        managed_key_installed,
+                    )
+                else:
+                    _cleanup_local_key_material(ssh_key_path, public_key_path)
                 return jsonify({"error": {"message": f'Another operation is running on host "{name}". Please wait for it to complete.'}}), 409
             try:
                 # Skip PROVISIONING, go directly to PROVISIONED_PENDING_SETUP
@@ -260,20 +439,52 @@ def _handle_standalone_host_creation(name, data):
             current_app.logger.info(f'Standalone host "{name}" (ID: {host.id}) added and setup task queued.')
             return jsonify({"data": host.to_dict(), "message": f'Standalone host "{name}" added and setup task queued.'}), 201
         else:
-            # Cleanup SSH key if host creation failed
-            if os.path.exists(ssh_key_path):
-                os.remove(ssh_key_path)
+            if ssh_auth_method == 'password':
+                _cleanup_password_bootstrap_artifacts(
+                    validated_ip,
+                    ssh_port,
+                    ssh_user,
+                    ssh_key_path,
+                    public_key_path,
+                    managed_key_installed,
+                )
+            else:
+                _cleanup_local_key_material(ssh_key_path, public_key_path)
             current_app.logger.error(f'Error adding standalone host "{name}" - create_host returned None.')
             return jsonify({"error": {"message": f'Error adding standalone host "{name}".'}}), 500
 
+    except StandaloneSSHError as exc:
+        if ssh_auth_method == 'password':
+            _cleanup_password_bootstrap_artifacts(
+                validated_ip,
+                ssh_port,
+                ssh_user,
+                ssh_key_path,
+                public_key_path,
+                managed_key_installed,
+            )
+        else:
+            _cleanup_local_key_material(ssh_key_path, public_key_path)
+        current_app.logger.warning(f'Standalone password bootstrap failed for "{name}": {exc}')
+        return jsonify({"error": {"message": str(exc)}}), 400
     except Exception as e:
-        # Cleanup SSH key on error
-        ssh_key_path = os.path.join(os.path.abspath('terraform/ssh-keys'), f"{name}_standalone_id_rsa")
-        if os.path.exists(ssh_key_path):
+        if host:
             try:
-                os.remove(ssh_key_path)
-            except OSError:
-                pass
+                db.session.delete(host)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        if ssh_auth_method == 'password':
+            _cleanup_password_bootstrap_artifacts(
+                validated_ip,
+                ssh_port,
+                ssh_user,
+                ssh_key_path,
+                public_key_path,
+                managed_key_installed,
+            )
+        else:
+            _cleanup_local_key_material(ssh_key_path, public_key_path)
         current_app.logger.error(f'Error adding standalone host: {e}', exc_info=True)
         return jsonify({"error": {"message": f'Error adding standalone host: {str(e)}'}}), 500
 
@@ -761,10 +972,6 @@ def configure_auto_restart_api(host_id):
 @jwt_required()
 def test_connection_api():
     """Tests SSH connectivity to a standalone host using Ansible ping."""
-    import subprocess
-    import tempfile
-    import uuid
-
     data = request.get_json()
     if not data:
         return jsonify({"error": {"message": "Request body must be JSON"}}), 400
@@ -773,12 +980,24 @@ def test_connection_api():
     ssh_port = data.get('ssh_port', 22)
     ssh_user = data.get('ssh_user', 'root')
     ssh_key = data.get('ssh_key')
+    ssh_password = data.get('ssh_password')
+    ssh_auth_method = data.get('ssh_auth_method')
 
     # Validate required fields
     if not ip_address:
         return jsonify({"error": {"message": "IP address is required."}}), 400
-    if not ssh_key:
-        return jsonify({"error": {"message": "SSH private key is required."}}), 400
+
+    ssh_auth_method, error = _validate_standalone_auth_method(ssh_auth_method)
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
+
+    credential, error = _validate_standalone_auth_credential(
+        ssh_auth_method,
+        ssh_key=ssh_key,
+        ssh_password=ssh_password,
+    )
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
     # Validate IP address
     validated_ip, error = validate_ip_address(ip_address)
@@ -793,52 +1012,24 @@ def test_connection_api():
     except (TypeError, ValueError):
         return jsonify({"error": {"message": "SSH port must be a valid integer."}}), 400
 
-    temp_key_path = None
-    try:
-        # Write SSH key to a temporary file
-        temp_key_path = os.path.join(tempfile.gettempdir(), f"test_conn_{uuid.uuid4().hex}")
-        with open(temp_key_path, 'w') as f:
-            f.write(ssh_key.strip() + '\n')
-        os.chmod(temp_key_path, 0o600)
+    if not isinstance(ssh_user, str):
+        return jsonify({"error": {"message": "SSH username must be a string."}}), 400
+    ssh_user = ssh_user.strip()
+    if not ssh_user:
+        return jsonify({"error": {"message": "SSH username cannot be empty."}}), 400
 
-        # Build ansible ping command
-        ansible_cmd = [
-            'ansible', 'all',
-            '-i', f'{validated_ip},',  # Comma makes it a list, not a file path
-            '-m', 'ping',
-            '-u', ssh_user,
-            '--private-key', temp_key_path,
-            '-e', f'ansible_port={ssh_port}',
-            '-e', 'ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"',
-            '--timeout', '15'
-        ]
-
-        current_app.logger.info(f"Testing connection to {validated_ip}:{ssh_port} as {ssh_user}")
-        result = subprocess.run(
-            ansible_cmd,
-            capture_output=True,
-            text=True,
-            timeout=30
+    if ssh_auth_method == 'password':
+        success, message = test_password_connection(
+            validated_ip,
+            ssh_port,
+            ssh_user,
+            credential,
         )
+        return jsonify({"data": {"success": success, "message": message}}), 200
 
-        if result.returncode == 0:
-            current_app.logger.info(f"Connection test successful for {validated_ip}")
-            return jsonify({"data": {"success": True, "message": "Connection successful"}}), 200
-        else:
-            error_output = result.stderr or result.stdout or "Unknown error"
-            current_app.logger.warning(f"Connection test failed for {validated_ip}: {error_output}")
-            return jsonify({"data": {"success": False, "message": f"Connection failed: {error_output}"}}), 200
-
-    except subprocess.TimeoutExpired:
-        current_app.logger.warning(f"Connection test timed out for {validated_ip}")
-        return jsonify({"data": {"success": False, "message": "Connection timed out"}}), 200
-    except Exception as e:
-        current_app.logger.error(f"Error testing connection: {e}", exc_info=True)
-        return jsonify({"error": {"message": f"Error testing connection: {str(e)}"}}), 500
-    finally:
-        # Clean up temporary key file
-        if temp_key_path and os.path.exists(temp_key_path):
-            try:
-                os.remove(temp_key_path)
-            except OSError:
-                pass
+    return _test_standalone_connection_with_key(
+        validated_ip,
+        ssh_port,
+        ssh_user,
+        credential,
+    )

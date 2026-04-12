@@ -33,6 +33,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [sshPort, setSshPort] = useState(22);
   const [sshUser, setSshUser] = useState('root');
   const [sshKey, setSshKey] = useState('');
+  const [sshPassword, setSshPassword] = useState('');
+  const [standaloneAuthMethod, setStandaloneAuthMethod] = useState('key');
   const [osType, setOsType] = useState('debian12');
   const [timezone, setTimezone] = useState('');
 
@@ -116,6 +118,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setSshPort(22);
     setSshUser('root');
     setSshKey('');
+    setSshPassword('');
+    setStandaloneAuthMethod('key');
     setOsType('debian12');
     setTimezone('');
     setConnectionTestStatus('idle');
@@ -124,22 +128,35 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   };
 
   const resetConnectionTest = () => {
-    if (connectionTestStatus !== 'idle') {
-      setConnectionTestStatus('idle');
-      setConnectionTestMessage('');
+    setConnectionTestStatus('idle');
+    setConnectionTestMessage('');
+  };
+
+  const buildStandaloneConnectionData = () => ({
+    ip_address: ipAddress.trim(),
+    ssh_port: parseInt(sshPort, 10) || 22,
+    ssh_user: sshUser.trim(),
+    ssh_auth_method: standaloneAuthMethod,
+    ...(standaloneAuthMethod === 'password'
+      ? { ssh_password: sshPassword }
+      : { ssh_key: sshKey }),
+  });
+
+  const handleStandaloneAuthMethodChange = (value) => {
+    setStandaloneAuthMethod(value);
+    if (value === 'password') {
+      setSshKey('');
+    } else {
+      setSshPassword('');
     }
+    resetConnectionTest();
   };
 
   const handleTestConnection = async () => {
     setConnectionTestStatus('testing');
     setConnectionTestMessage('');
     try {
-      const result = await testHostConnection({
-        ip_address: ipAddress.trim(),
-        ssh_port: parseInt(sshPort, 10) || 22,
-        ssh_user: sshUser.trim(),
-        ssh_key: sshKey,
-      });
+      const result = await testHostConnection(buildStandaloneConnectionData());
       if (result.success) {
         setConnectionTestStatus('success');
         setConnectionTestMessage(result.message || 'Connection successful');
@@ -181,7 +198,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
         setError('IP address is required for standalone hosts.');
         return;
       }
-      if (!sshKey || !sshKey.trim()) {
+      if (standaloneAuthMethod === 'password' && (!sshPassword || !sshPassword.trim())) {
+        setError('SSH password is required for password bootstrap.');
+        return;
+      }
+      if (standaloneAuthMethod !== 'password' && (!sshKey || !sshKey.trim())) {
         setError('SSH private key is required for standalone hosts.');
         return;
       }
@@ -219,7 +240,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           ip_address: ipAddress.trim(),
           ssh_port: parseInt(sshPort, 10) || 22,
           ssh_user: sshUser.trim(),
-          ssh_key: sshKey,
+          ssh_auth_method: standaloneAuthMethod,
+          ...(standaloneAuthMethod === 'password'
+            ? { ssh_password: sshPassword }
+            : { ssh_key: sshKey }),
           os_type: osType,
           timezone,
         };
@@ -331,7 +355,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onNameBlur={handleNameBlur}
                         provider={provider}
                         providerListOptions={availableProviderOptions}
-                        onProviderChange={setProvider}
+                        onProviderChange={(value) => {
+                          setProvider(value);
+                          resetConnectionTest();
+                        }}
                         selectedContinent={selectedContinent}
                         onContinentChange={setSelectedContinent}
                         vultrContinentOptions={vultrContinentOptions}
@@ -347,8 +374,12 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onSshPortChange={(e) => { setSshPort(e.target.value); resetConnectionTest(); }}
                         sshUser={sshUser}
                         onSshUserChange={(e) => { setSshUser(e.target.value); resetConnectionTest(); }}
+                        standaloneAuthMethod={standaloneAuthMethod}
+                        onStandaloneAuthMethodChange={handleStandaloneAuthMethodChange}
                         sshKey={sshKey}
                         onSshKeyChange={(e) => { setSshKey(e.target.value); resetConnectionTest(); }}
+                        sshPassword={sshPassword}
+                        onSshPasswordChange={(e) => { setSshPassword(e.target.value); resetConnectionTest(); }}
                         osType={osType}
                         onOsTypeChange={setOsType}
                         timezone={timezone}
