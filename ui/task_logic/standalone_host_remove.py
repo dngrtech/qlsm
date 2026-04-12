@@ -7,6 +7,7 @@ from rq import get_current_job
 from ui import db
 from ui.models import Host, HostStatus
 from ui.routes.self_host_helpers import remove_authorized_key
+from ui.standalone_ssh import remove_managed_key as remove_managed_key_via_key
 from .common import append_log
 from .standalone_inventory import inventory_filename_for_host
 
@@ -43,6 +44,45 @@ def remove_standalone_host_logic(host_id):
         append_log(host, f"Task started: remove_standalone_host (Job ID: {job.id})")
         db.session.commit()
 
+        pub_key_path = f"{ssh_key_path}.pub" if ssh_key_path else None
+        pub_key_exists = bool(pub_key_path and os.path.exists(pub_key_path))
+
+        if host.provider == 'standalone' and ssh_key_path and pub_key_exists:
+            try:
+                remove_managed_key_via_key(
+                    host=host.ip_address,
+                    port=host.ssh_port,
+                    username=host.ssh_user,
+                    private_key_path=ssh_key_path,
+                )
+                append_log(host, "Removed managed standalone SSH key from authorized_keys")
+            except Exception as e:
+                log.error(f"Error removing managed standalone SSH key: {e}")
+                append_log(host, f"Warning: Failed to remove managed standalone SSH key: {e}. Manual cleanup may be required.")
+
+        if host.provider == 'self' and pub_key_exists:
+            try:
+                public_key = Path(pub_key_path).read_text().strip()
+            except OSError as e:
+                public_key = None
+                log.error(f"Error reading SSH public key file {pub_key_path}: {e}")
+                append_log(host, f"Warning: Failed to read SSH public key file {pub_key_path}: {e}")
+
+            if public_key:
+                try:
+                    removed = remove_authorized_key(public_key)
+                    if removed:
+                        append_log(host, "Removed self-host public key from authorized_keys")
+                    else:
+                        log.warning(
+                            "Self-host public key was not present in authorized_keys for host %s",
+                            host.id,
+                        )
+                        append_log(host, "Warning: Self-host public key was not present in authorized_keys")
+                except Exception as e:
+                    log.error(f"Error removing self-host authorized key: {e}")
+                    append_log(host, f"Warning: Failed to remove self-host authorized key: {e}")
+
         # 1. Delete SSH key file
         if ssh_key_path and os.path.exists(ssh_key_path):
             try:
@@ -53,37 +93,13 @@ def remove_standalone_host_logic(host_id):
                 log.error(f"Error deleting SSH key file {ssh_key_path}: {e}")
                 append_log(host, f"Warning: Failed to delete SSH key file {ssh_key_path}: {e}")
 
-        if host.provider == 'self' and ssh_key_path:
-            pub_key_path = f"{ssh_key_path}.pub"
-            if os.path.exists(pub_key_path):
-                try:
-                    public_key = Path(pub_key_path).read_text().strip()
-                except OSError as e:
-                    public_key = None
-                    log.error(f"Error reading SSH public key file {pub_key_path}: {e}")
-                    append_log(host, f"Warning: Failed to read SSH public key file {pub_key_path}: {e}")
-
-                if public_key:
-                    try:
-                        removed = remove_authorized_key(public_key)
-                        if removed:
-                            append_log(host, "Removed self-host public key from authorized_keys")
-                        else:
-                            log.warning(
-                                "Self-host public key was not present in authorized_keys for host %s",
-                                host.id,
-                            )
-                            append_log(host, "Warning: Self-host public key was not present in authorized_keys")
-                    except Exception as e:
-                        log.error(f"Error removing self-host authorized key: {e}")
-                        append_log(host, f"Warning: Failed to remove self-host authorized key: {e}")
-
-                try:
-                    os.remove(pub_key_path)
-                    append_log(host, f"Deleted SSH public key file: {pub_key_path}")
-                except OSError as e:
-                    log.error(f"Error deleting SSH public key file {pub_key_path}: {e}")
-                    append_log(host, f"Warning: Failed to delete SSH public key file {pub_key_path}: {e}")
+        if pub_key_exists:
+            try:
+                os.remove(pub_key_path)
+                append_log(host, f"Deleted SSH public key file: {pub_key_path}")
+            except OSError as e:
+                log.error(f"Error deleting SSH public key file {pub_key_path}: {e}")
+                append_log(host, f"Warning: Failed to delete SSH public key file {pub_key_path}: {e}")
 
         # 2. Delete Ansible inventory file
         inventory_path = os.path.abspath(f"ansible/inventory/{inventory_filename_for_host(host)}")

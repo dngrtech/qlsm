@@ -204,6 +204,75 @@ def test_create_standalone_host_success(mock_open, mock_chmod, mock_makedirs, mo
     assert mock_lock.call_args.kwargs['ttl'] == 1260
 
 
+@patch('ui.routes.host_routes.enqueue_task')
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+@patch('ui.routes.host_routes.bootstrap_managed_key')
+@patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_id_rsa', '/tmp/managed_id_rsa.pub'))
+def test_create_standalone_host_password_bootstrap_success(
+    mock_generate, mock_bootstrap, mock_lock, mock_enqueue, client, app
+):
+    """Password mode generates a managed key and queues setup without persisting the password."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'standalone-pw',
+        'provider': 'standalone',
+        'ip_address': '203.0.113.10',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'os_type': 'debian12',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['ssh_key_path'] == '/tmp/managed_id_rsa'
+    mock_generate.assert_called_once_with('standalone-pw')
+    mock_bootstrap.assert_called_once_with(
+        '203.0.113.10',
+        22,
+        'root',
+        'secret',
+        '/tmp/managed_id_rsa',
+    )
+    mock_enqueue.assert_called_once()
+
+
+@patch('ui.routes.host_routes.acquire_lock', return_value=False)
+@patch('ui.routes.host_routes.remove_managed_key')
+@patch('ui.routes.host_routes.bootstrap_managed_key')
+@patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_lockfail', '/tmp/managed_lockfail.pub'))
+def test_create_standalone_host_password_bootstrap_rolls_back_remote_key_on_lock_failure(
+    mock_generate, mock_bootstrap, mock_remove_managed, mock_lock, client, app
+):
+    """If host creation rolls back after password bootstrap, the installed managed key is scrubbed."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'standalone-lockfail',
+        'provider': 'standalone',
+        'ip_address': '203.0.113.11',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'os_type': 'debian12',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 409
+    mock_generate.assert_called_once_with('standalone-lockfail')
+    mock_bootstrap.assert_called_once()
+    mock_remove_managed.assert_called_once_with(
+        '203.0.113.11',
+        22,
+        'root',
+        '/tmp/managed_lockfail',
+    )
+    with app.app_context():
+        assert Host.query.filter_by(name='standalone-lockfail').first() is None
+
+
 def test_create_standalone_host_missing_ip(client, app):
     """Standalone host without IP returns 400."""
     headers = auth_headers(app, DEFAULT_USER)
@@ -256,6 +325,43 @@ def test_create_standalone_host_invalid_os_type(client, app):
         'os_type': 'windows10'
     })
     assert response.status_code == 400
+
+
+def test_create_standalone_host_invalid_auth_method(client, app):
+    """Standalone host rejects unsupported SSH auth methods."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'bad-auth',
+        'provider': 'standalone',
+        'ip_address': '10.0.0.3',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'token',
+        'ssh_key': 'fakekey',
+        'os_type': 'debian12',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 400
+    assert "either 'key' or 'password'" in response.get_json()['error']['message']
+
+
+def test_create_standalone_host_password_mode_requires_password(client, app):
+    """Password bootstrap mode requires ssh_password."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'missing-password',
+        'provider': 'standalone',
+        'ip_address': '10.0.0.4',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'password',
+        'os_type': 'debian12',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH password is required' in response.get_json()['error']['message']
 
 
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
@@ -385,6 +491,69 @@ def test_create_self_host_cleans_up_when_enqueue_fails(
     mock_cleanup.assert_called_once_with('/tmp/self-key', public_key='ssh-rsa pub')
     with app.app_context():
         assert Host.query.filter_by(provider='self').first() is None
+
+
+@patch('ui.routes.host_routes.subprocess.run')
+def test_test_connection_key_success(mock_run, client, app):
+    """Key-mode connection test keeps the existing Ansible ping path."""
+    mock_run.return_value = MagicMock(returncode=0, stdout='pong', stderr='')
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.20',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'key',
+        'ssh_key': '-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is True
+    args = mock_run.call_args.args[0]
+    assert '--private-key' in args
+
+
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_success(mock_test, client, app):
+    """Password-mode connection test delegates to the password helper."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.21',
+        'ssh_port': 2222,
+        'ssh_user': 'deploy',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data'] == {
+        'success': True,
+        'message': 'Connection successful',
+    }
+    mock_test.assert_called_once_with('203.0.113.21', 2222, 'deploy', 'secret')
+
+
+@patch(
+    'ui.routes.host_routes.test_password_connection',
+    return_value=(False, 'Connection failed: passwordless sudo is required for non-root users.')
+)
+def test_test_connection_password_surfaces_sudo_failure(mock_test, client, app):
+    """Password-mode failures return the helper's message unchanged."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.22',
+        'ssh_port': 22,
+        'ssh_user': 'deploy',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is False
+    assert 'passwordless sudo' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.22', 22, 'deploy', 'secret')
 
 
 # --- GET /api/hosts/<id> ---

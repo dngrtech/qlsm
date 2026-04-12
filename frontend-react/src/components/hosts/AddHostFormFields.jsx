@@ -1,10 +1,10 @@
-import React, { useRef } from 'react';
-import { Upload, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import React from 'react';
 import FloatingListbox from '../common/FloatingListbox';
 import { providerOptions } from '../../utils/providerData';
 import { HOST_NAME_MAX_LENGTH, HOST_NAME_PATTERN } from '../../utils/resourceValidation';
 import { STANDALONE_TIMEZONES } from '../../utils/formatters';
 import SelfHostFields from './SelfHostFields';
+import StandaloneAuthSection from './StandaloneAuthSection';
 
 const inputClass = 'mt-1 block w-full px-3 py-2 rounded-lg text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none focus:ring-1 transition-colors';
 const inputFocusRing = 'focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]';
@@ -34,8 +34,12 @@ function AddHostFormFields({
   onSshPortChange,
   sshUser,
   onSshUserChange,
+  standaloneAuthMethod,
+  onStandaloneAuthMethodChange,
   sshKey,
   onSshKeyChange,
+  sshPassword,
+  onSshPasswordChange,
   osType,
   onOsTypeChange,
   timezone,
@@ -44,23 +48,6 @@ function AddHostFormFields({
   connectionTestMessage,
   onTestConnection,
 }) {
-  const fileInputRef = useRef(null);
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result;
-        if (content && onSshKeyChange) {
-          onSshKeyChange({ target: { value: content } });
-        }
-      };
-      reader.readAsText(file);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
 
@@ -255,88 +242,19 @@ function AddHostFormFields({
             noOptionsMessage="No timezones available."
           />
 
-          {/* SSH Key */}
-          <div>
-            <label htmlFor="modal-ssh-key" className={labelClass}>SSH Private Key</label>
-            <div className="mt-1">
-              <textarea
-                id="modal-ssh-key"
-                value={sshKey || ''}
-                onChange={onSshKeyChange}
-                required
-                rows={6}
-                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
-                className={`${inputClass} ${inputFocusRing} font-mono text-xs resize-none`}
-                style={inputStyle}
-              />
-              <div className="mt-2 flex items-center">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pem,.key,.txt,*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="ssh-key-file-input"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-theme-secondary hover:text-theme-primary hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors"
-                  style={{ border: '1px solid var(--surface-border)' }}
-                >
-                  <Upload size={14} className="mr-1.5" />
-                  Upload Key File
-                </button>
-                <span className="ml-3 text-xs text-theme-muted">Or paste key content above</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Test Connection */}
-          <div className="pt-1">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onTestConnection}
-                disabled={!ipAddress || !sshKey || connectionTestStatus === 'testing'}
-                className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-                style={{ border: '1px solid var(--surface-border-strong)', color: 'var(--text-secondary)' }}
-              >
-                {connectionTestStatus === 'testing' ? (
-                  <>
-                    <Loader2 size={15} className="mr-2 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  'Test Connection'
-                )}
-              </button>
-
-              {connectionTestStatus === 'success' && (
-                <div className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#22d97f' }}>
-                  <CheckCircle size={16} />
-                  <span>Connected</span>
-                </div>
-              )}
-
-              {connectionTestStatus === 'failed' && (
-                <div className="flex items-center gap-1.5 text-sm font-medium" style={{ color: 'var(--accent-danger)' }}>
-                  <XCircle size={16} />
-                  <span>Failed</span>
-                </div>
-              )}
-            </div>
-
-            {connectionTestMessage && connectionTestStatus === 'failed' && (
-              <p className="mt-2 text-xs" style={{ color: 'var(--accent-danger)' }}>{connectionTestMessage}</p>
-            )}
-
-            {connectionTestStatus === 'idle' && (
-              <p className="mt-2 text-xs text-theme-muted">
-                A successful connection test is required before adding the host.
-              </p>
-            )}
-          </div>
+          <StandaloneAuthSection
+            authMethod={standaloneAuthMethod}
+            onAuthMethodChange={onStandaloneAuthMethodChange}
+            sshKey={sshKey}
+            onSshKeyChange={onSshKeyChange}
+            sshPassword={sshPassword}
+            onSshPasswordChange={onSshPasswordChange}
+            ipAddress={ipAddress}
+            sshUser={sshUser}
+            connectionTestStatus={connectionTestStatus}
+            connectionTestMessage={connectionTestMessage}
+            onTestConnection={onTestConnection}
+          />
         </>
       )}
     </>

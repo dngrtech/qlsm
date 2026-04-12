@@ -22,6 +22,7 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 | `/hosts` | GET | List all hosts |
 | `/hosts` | POST | Create host (triggers Terraform provisioning) |
 | `/hosts/self/defaults` | GET | Get detected defaults for the self-host provider |
+| `/hosts/test-connection` | POST | Test standalone SSH connectivity before host creation |
 | `/hosts/<id>` | GET | Get host details with instances |
 | `/hosts/<id>` | PUT | Update host (e.g., rename - triggers rename task) |
 | `/hosts/<id>` | DELETE | Delete host (triggers Terraform destroy) |
@@ -47,12 +48,47 @@ Cloud provider:
 }
 ```
 
+Standalone provider with SSH key:
+
+```json
+{
+  "name": "standalone-key-host",
+  "provider": "standalone",
+  "ip_address": "203.0.113.10",
+  "ssh_port": 22,
+  "ssh_user": "root",
+  "ssh_auth_method": "key",
+  "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----",
+  "os_type": "debian12",
+  "timezone": "UTC"
+}
+```
+
+Standalone provider with password bootstrap:
+
+```json
+{
+  "name": "standalone-password-host",
+  "provider": "standalone",
+  "ip_address": "203.0.113.10",
+  "ssh_port": 22,
+  "ssh_user": "root",
+  "ssh_auth_method": "password",
+  "ssh_password": "bootstrap-secret",
+  "os_type": "debian12",
+  "timezone": "UTC"
+}
+```
+
+Password bootstrap never stores `ssh_password`. QLSM uses it once to install a managed SSH key and then persists only the generated key path on the host record. If `ssh_user` is not `root`, passwordless sudo is required.
+
 Self provider:
 
 ```json
 {
   "name": "self-host",
   "provider": "self",
+  "ip_address": "203.0.113.10",
   "timezone": "UTC",
   "ssh_user": "rage"
 }
@@ -72,18 +108,50 @@ Response:
 {
   "data": {
     "ssh_user": "rage",
-    "gateway_ip": "172.17.0.1"
+    "host_ip": "203.0.113.10"
   }
 }
 ```
 
-`gateway_ip` may be `null` if Docker bridge gateway detection is unavailable. Host creation will still perform gateway detection and return an error if it cannot determine the host address.
+`host_ip` may be `null` if `QLSM_HOST_IP` is not set.
 
 Self-host error cases:
 
 - `400` when timezone or SSH username validation fails.
 - `409` when a self host already exists.
-- `500` when Docker gateway detection or SSH key setup fails.
+- `500` when SSH key setup fails.
+
+### Standalone Connection Test
+
+```
+POST /api/hosts/test-connection
+```
+
+Key mode:
+
+```json
+{
+  "ip_address": "203.0.113.10",
+  "ssh_port": 22,
+  "ssh_user": "root",
+  "ssh_auth_method": "key",
+  "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+}
+```
+
+Password mode:
+
+```json
+{
+  "ip_address": "203.0.113.10",
+  "ssh_port": 22,
+  "ssh_user": "deploy",
+  "ssh_auth_method": "password",
+  "ssh_password": "bootstrap-secret"
+}
+```
+
+Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive.
 
 ### Host Name Validation (RFC 1123)
 - Max length: 20 characters
