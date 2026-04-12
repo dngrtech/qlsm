@@ -7,8 +7,11 @@ from pathlib import Path
 import paramiko
 
 SUPPORTED_STANDALONE_OS_LABELS = {
-    "debian12": "Debian 12",
+    "debian": "Debian",
+    "debian12": "Debian",
+    "ubuntu20": "Ubuntu 20.04",
     "ubuntu22": "Ubuntu 22.04",
+    "ubuntu24": "Ubuntu 24.04",
 }
 
 
@@ -84,10 +87,14 @@ def _detect_supported_os_type(os_release_values):
     distro_id = os_release_values.get("ID", "").strip().lower()
     version_id = os_release_values.get("VERSION_ID", "").strip()
 
-    if distro_id == "debian" and version_id == "12":
-        return "debian12"
+    if distro_id == "debian":
+        return "debian"
+    if distro_id == "ubuntu" and version_id.startswith("20."):
+        return "ubuntu20"
     if distro_id == "ubuntu" and version_id.startswith("22."):
         return "ubuntu22"
+    if distro_id == "ubuntu" and version_id.startswith("24."):
+        return "ubuntu24"
     return None
 
 

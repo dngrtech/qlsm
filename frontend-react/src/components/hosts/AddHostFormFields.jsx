@@ -176,7 +176,7 @@ function AddHostFormFields({
         <>
           <FloatingListbox
             label="Operating System"
-            value={osType || 'debian12'}
+            value={osType || 'debian'}
             onChange={onOsTypeChange}
             options={providerOptions.standalone.osTypes}
             getOptionKey={(opt) => opt.id}

@@ -156,10 +156,10 @@ def test_detect_remote_os_maps_supported_release(mock_client_cls):
     client = _ssh_client(
         stdout_data=(
             b'NAME="Ubuntu"\n'
-            b'VERSION="22.04.5 LTS (Jammy Jellyfish)"\n'
+            b'VERSION="24.04.2 LTS (Noble Numbat)"\n'
             b'ID=ubuntu\n'
-            b'VERSION_ID="22.04"\n'
-            b'PRETTY_NAME="Ubuntu 22.04.5 LTS"\n'
+            b'VERSION_ID="24.04"\n'
+            b'PRETTY_NAME="Ubuntu 24.04.2 LTS"\n'
         ),
     )
     mock_client_cls.return_value = client
@@ -173,9 +173,9 @@ def test_detect_remote_os_maps_supported_release(mock_client_cls):
 
     assert detected == {
         "id": "ubuntu",
-        "version_id": "22.04",
-        "pretty_name": "Ubuntu 22.04.5 LTS",
-        "os_type": "ubuntu22",
+        "version_id": "24.04",
+        "pretty_name": "Ubuntu 24.04.2 LTS",
+        "os_type": "ubuntu24",
     }
 
 
@@ -184,8 +184,8 @@ def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
     client = _ssh_client(
         stdout_data=(
             b'ID=ubuntu\n'
-            b'VERSION_ID="24.04"\n'
-            b'PRETTY_NAME="Ubuntu 24.04.2 LTS"\n'
+            b'VERSION_ID="18.04"\n'
+            b'PRETTY_NAME="Ubuntu 18.04.6 LTS"\n'
         ),
     )
     mock_client_cls.return_value = client
@@ -197,7 +197,7 @@ def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
         key_filename="/tmp/test_key",
     )
 
-    assert detected["pretty_name"] == "Ubuntu 24.04.2 LTS"
+    assert detected["pretty_name"] == "Ubuntu 18.04.6 LTS"
     assert detected["os_type"] is None
 
 

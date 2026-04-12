@@ -84,8 +84,10 @@ export const providerOptions = {
       regions: [],
       sizes: [],
       osTypes: [
-        { id: 'debian12', name: 'Debian 12' },
-        { id: 'ubuntu22', name: 'Ubuntu 22.04' }
+        { id: 'debian', name: 'Debian' },
+        { id: 'ubuntu20', name: 'Ubuntu 20.04' },
+        { id: 'ubuntu22', name: 'Ubuntu 22.04' },
+        { id: 'ubuntu24', name: 'Ubuntu 24.04' }
       ]
     },
     self: {

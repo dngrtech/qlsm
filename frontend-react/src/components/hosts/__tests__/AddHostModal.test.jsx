@@ -43,8 +43,8 @@ vi.mock('../AddHostFormFields', () => ({
         <button type="button" onClick={() => props.onProviderChange('standalone')}>Choose standalone</button>
       )}
       <button type="button" onClick={() => props.onTimezoneChange('UTC')}>Set timezone</button>
-      <button type="button" onClick={() => props.onOsTypeChange?.('debian12')}>Set Debian 12</button>
-      <button type="button" onClick={() => props.onOsTypeChange?.('ubuntu22')}>Set Ubuntu 22</button>
+      <button type="button" onClick={() => props.onOsTypeChange?.('debian')}>Set Debian</button>
+      <button type="button" onClick={() => props.onOsTypeChange?.('ubuntu24')}>Set Ubuntu 24</button>
       <input aria-label="Server address" value={props.ipAddress || ''} onChange={props.onIpAddressChange} />
       <input aria-label="SSH User" value={props.sshUser || ''} onChange={props.onSshUserChange} />
       <button type="button" onClick={() => props.onStandaloneAuthMethodChange?.('password')}>Use password</button>
@@ -112,7 +112,7 @@ describe('AddHostModal self provider', () => {
     mocks.getHosts.mockResolvedValue([{ id: 7, provider: 'self', name: 'self-host' }]);
     mocks.testHostConnection
       .mockResolvedValueOnce({ success: true, message: 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).' })
-      .mockResolvedValueOnce({ success: true, message: 'Connection successful. Detected OS: Ubuntu 22.04.5 LTS.' });
+      .mockResolvedValueOnce({ success: true, message: 'Connection successful. Detected OS: Ubuntu 24.04.2 LTS.' });
     mocks.createHost.mockResolvedValue({ message: 'Standalone host added.' });
 
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
@@ -133,7 +133,7 @@ describe('AddHostModal self provider', () => {
       ssh_user: 'root',
       ssh_auth_method: 'password',
       ssh_password: 'bootstrap-secret',
-      os_type: 'debian12',
+      os_type: 'debian',
     })));
     await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('success'));
 
@@ -144,12 +144,12 @@ describe('AddHostModal self provider', () => {
     await waitFor(() => expect(screen.getByTestId('auth-method-value')).toHaveTextContent('password'));
     await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('idle'));
     fireEvent.change(screen.getByLabelText('SSH Password'), { target: { value: 'bootstrap-secret' } });
-    fireEvent.click(screen.getByRole('button', { name: /set ubuntu 22/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set ubuntu 24/i }));
     await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('idle'));
     fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
     await waitFor(() => expect(mocks.testHostConnection).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.testHostConnection).toHaveBeenLastCalledWith(expect.objectContaining({
-      os_type: 'ubuntu22',
+      os_type: 'ubuntu24',
     })));
     await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('success'));
 
@@ -163,7 +163,7 @@ describe('AddHostModal self provider', () => {
       ssh_user: 'root',
       ssh_auth_method: 'password',
       ssh_password: 'bootstrap-secret',
-      os_type: 'ubuntu22',
+      os_type: 'ubuntu24',
       timezone: 'UTC',
     }));
   });

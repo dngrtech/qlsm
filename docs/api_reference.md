@@ -59,7 +59,7 @@ Standalone provider with SSH key:
   "ssh_user": "root",
   "ssh_auth_method": "key",
   "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----",
-  "os_type": "debian12",
+  "os_type": "debian",
   "timezone": "UTC"
 }
 ```
@@ -75,12 +75,12 @@ Standalone provider with password bootstrap:
   "ssh_user": "root",
   "ssh_auth_method": "password",
   "ssh_password": "bootstrap-secret",
-  "os_type": "debian12",
+  "os_type": "ubuntu24",
   "timezone": "UTC"
 }
 ```
 
-Password bootstrap never stores `ssh_password`. QLSM uses it once to install a managed SSH key and then persists only the generated key path on the host record. If `ssh_user` is not `root`, passwordless sudo is required.
+Password bootstrap never stores `ssh_password`. QLSM uses it once to install a managed SSH key and then persists only the generated key path on the host record. If `ssh_user` is not `root`, passwordless sudo is required. Supported standalone OS selections are `debian`, `ubuntu20`, `ubuntu22`, and `ubuntu24`.
 
 Self provider:
 

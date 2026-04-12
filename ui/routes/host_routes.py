@@ -59,7 +59,7 @@ def validate_ip_address(ip_str):
         return None, {"message": "Invalid IP address format", "status_code": 400}
 
 # Valid OS types for standalone hosts
-VALID_OS_TYPES = ['debian12', 'ubuntu22']
+VALID_OS_TYPES = ['debian', 'ubuntu20', 'ubuntu22', 'ubuntu24']
 VALID_STANDALONE_AUTH_METHODS = {'key', 'password'}
 VALID_TIMEZONES = {
     'Africa/Johannesburg', 'America/Anchorage', 'America/Chicago', 'America/Denver',
@@ -271,11 +271,13 @@ def test_password_connection(host, port, username, password, timeout=15):
 
 def _validate_selected_standalone_os_type(os_type):
     if os_type is None:
-        return 'debian12', None
+        return 'debian', None
     if not isinstance(os_type, str):
         return None, {"message": "OS type must be a string.", "status_code": 400}
 
     os_type = os_type.strip().lower()
+    if os_type == 'debian12':
+        os_type = 'debian'
     if os_type not in VALID_OS_TYPES:
         return None, {"message": f"OS type must be one of: {', '.join(VALID_OS_TYPES)}", "status_code": 400}
     return os_type, None
@@ -289,7 +291,7 @@ def _validate_remote_os_selection(selected_os_type, detected_os):
         return (
             False,
             f"Connection failed: detected OS {detected_name} is not supported. "
-            "QLSM standalone hosts must run Debian 12 or Ubuntu 22.04.",
+            "QLSM standalone hosts must run Debian or Ubuntu 20.04, 22.04, or 24.04.",
         )
 
     if detected_os_type != selected_os_type:
@@ -380,7 +382,7 @@ def _handle_standalone_host_creation(name, data):
     ssh_user = data.get('ssh_user', 'root')
     ssh_port = data.get('ssh_port', 22)
     ssh_auth_method = data.get('ssh_auth_method')
-    os_type = data.get('os_type', 'debian12')
+    os_type = data.get('os_type', 'debian')
     timezone = data.get('timezone')
 
     # Validate required fields
@@ -627,7 +629,7 @@ def _handle_self_host_creation(name, data):
             ssh_user=ssh_user,
             ssh_key_path=key_path,
             ssh_port=22,
-            os_type='debian12',
+            os_type='debian',
             is_standalone=True,
             timezone=timezone,
             status=HostStatus.PENDING,
@@ -1059,7 +1061,7 @@ def test_connection_api():
     ssh_key = data.get('ssh_key')
     ssh_password = data.get('ssh_password')
     ssh_auth_method = data.get('ssh_auth_method')
-    os_type = data.get('os_type', 'debian12')
+    os_type = data.get('os_type', 'debian')
 
     # Validate required fields
     if not ip_address:

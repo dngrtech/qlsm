@@ -35,7 +35,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [sshKey, setSshKey] = useState('');
   const [sshPassword, setSshPassword] = useState('');
   const [standaloneAuthMethod, setStandaloneAuthMethod] = useState('key');
-  const [osType, setOsType] = useState('debian12');
+  const [osType, setOsType] = useState('debian');
   const [timezone, setTimezone] = useState('');
 
   // Connection test state
@@ -120,7 +120,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setSshKey('');
     setSshPassword('');
     setStandaloneAuthMethod('key');
-    setOsType('debian12');
+    setOsType('debian');
     setTimezone('');
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
