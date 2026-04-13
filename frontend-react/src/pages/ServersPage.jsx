@@ -35,6 +35,7 @@ import { useHostAutoRestart } from '../hooks/useHostAutoRestart';
 import ForceUpdateWorkshopModal from '../components/hosts/ForceUpdateWorkshopModal';
 import HostAutoRestartScheduleModal from '../components/hosts/HostAutoRestartScheduleModal';
 import { useServerStatus } from '../hooks/useServerStatus';
+import { clearAutoOpenAddHost, shouldAutoOpenAddHost } from '../utils/addHostAutoOpen';
 
 export default function ServersPage() {
     const { addNotification, showSuccess, showError } = useNotification();
@@ -84,11 +85,12 @@ export default function ServersPage() {
 
     const location = useLocation();
     const navigate = useNavigate();
-    const autoOpenRef = useRef(location.state?.openAddHost === true);
+    const autoOpenRef = useRef(shouldAutoOpenAddHost(location.state));
 
     // Clear route state on mount so a page refresh doesn't re-trigger
     useEffect(() => {
         if (autoOpenRef.current) {
+            clearAutoOpenAddHost();
             navigate(
                 { pathname: location.pathname, search: location.search, hash: location.hash },
                 { replace: true, state: null }
