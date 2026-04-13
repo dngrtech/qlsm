@@ -200,7 +200,6 @@ class RconService:
             ip = data.get("ip")
             rcon_port = data.get("rcon_port")
             rcon_password = data.get("rcon_password")
-            self_host = bool(data.get("self_host"))
             
             if not all([ip, rcon_port, rcon_password]):
                 log.error(f"Missing connection details for {host_id}:{instance_id}")
@@ -208,7 +207,7 @@ class RconService:
                 return
             
             await self._manager.connect(
-                host_id, instance_id, ip, int(rcon_port), rcon_password, self_host
+                host_id, instance_id, ip, int(rcon_port), rcon_password
             )
         
         elif action == "disconnect":
