@@ -2,8 +2,11 @@ from pathlib import Path
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import paramiko
 import pytest
 
+from ui.standalone_ssh import _AuditedAutoAddPolicy
+from ui.standalone_ssh import _format_host_key_fingerprint
 from ui.standalone_ssh import StandaloneSSHError
 from ui.standalone_ssh import bootstrap_managed_key
 from ui.standalone_ssh import detect_remote_os
@@ -41,6 +44,8 @@ def test_verify_password_login_uses_password_auth(mock_client_cls):
     assert verify_password_login("203.0.113.10", 2222, "ansible", "secret") is True
 
     client.connect.assert_called_once()
+    policy = client.set_missing_host_key_policy.call_args.args[0]
+    assert isinstance(policy, _AuditedAutoAddPolicy)
     kwargs = client.connect.call_args.kwargs
     assert kwargs["password"] == "secret"
     assert kwargs["allow_agent"] is False
@@ -143,12 +148,28 @@ def test_remove_managed_key_uses_key_auth(mock_client_cls, tmp_path):
 
     assert remove_managed_key("203.0.113.10", 22, "ansible", key_path) == "ssh-rsa AAAA example"
 
+    policy = client.set_missing_host_key_policy.call_args.args[0]
+    assert isinstance(policy, paramiko.AutoAddPolicy)
     kwargs = client.connect.call_args.kwargs
     assert kwargs["key_filename"] == str(key_path)
     assert "password" not in kwargs
     command = client.exec_command.call_args.args[0]
     assert "authorized_keys" in command
     assert "ssh-rsa AAAA example" in command
+
+
+def test_audited_auto_add_policy_logs_sha256_fingerprint(caplog):
+    client = MagicMock()
+    client._host_keys = MagicMock()
+    client._host_keys_filename = None
+    key = paramiko.RSAKey.generate(1024)
+
+    with caplog.at_level("WARNING"):
+        _AuditedAutoAddPolicy().missing_host_key(client, "203.0.113.10", key)
+
+    fingerprint = _format_host_key_fingerprint(key)
+    assert fingerprint in caplog.text
+    client._host_keys.add.assert_called_once_with("203.0.113.10", key.get_name(), key)
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")

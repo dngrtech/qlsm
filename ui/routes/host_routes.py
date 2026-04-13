@@ -430,12 +430,9 @@ def _handle_standalone_host_creation(name, data):
     if timezone not in VALID_TIMEZONES:
         return jsonify({"error": {"message": "Invalid timezone. Must be a valid IANA timezone."}}), 400
 
-    # Validate SSH user
-    if not isinstance(ssh_user, str):
-        return jsonify({"error": {"message": "SSH username must be a string."}}), 400
-    ssh_user = ssh_user.strip()
-    if not ssh_user:
-        return jsonify({"error": {"message": "SSH username cannot be empty."}}), 400
+    ssh_user, error = _validate_standalone_ssh_user(ssh_user)
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
     host = None
     lock_token = None
@@ -582,6 +579,19 @@ def get_self_host_defaults_api():
 def _validate_self_ssh_user(value):
     if value is None:
         value = detect_default_self_ssh_user()
+    if not isinstance(value, str):
+        return None, {"message": "SSH username must be a string.", "status_code": 400}
+    value = value.strip()
+    if not value:
+        return None, {"message": "SSH username cannot be empty.", "status_code": 400}
+    if not SSH_USER_PATTERN.match(value):
+        return None, {"message": "SSH username contains invalid characters.", "status_code": 400}
+    return value, None
+
+
+def _validate_standalone_ssh_user(value):
+    if value is None:
+        value = 'root'
     if not isinstance(value, str):
         return None, {"message": "SSH username must be a string.", "status_code": 400}
     value = value.strip()
@@ -1098,11 +1108,9 @@ def test_connection_api():
     except (TypeError, ValueError):
         return jsonify({"error": {"message": "SSH port must be a valid integer."}}), 400
 
-    if not isinstance(ssh_user, str):
-        return jsonify({"error": {"message": "SSH username must be a string."}}), 400
-    ssh_user = ssh_user.strip()
-    if not ssh_user:
-        return jsonify({"error": {"message": "SSH username cannot be empty."}}), 400
+    ssh_user, error = _validate_standalone_ssh_user(ssh_user)
+    if error:
+        return jsonify({"error": {"message": error["message"]}}), error["status_code"]
 
     if ssh_auth_method == 'password':
         success, message = test_password_connection(

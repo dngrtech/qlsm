@@ -403,6 +403,23 @@ def test_create_standalone_host_password_mode_requires_password(client, app):
     assert 'SSH password is required' in response.get_json()['error']['message']
 
 
+def test_create_standalone_host_rejects_unsafe_ssh_user(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'bad-ssh-user',
+        'provider': 'standalone',
+        'ip_address': '10.0.0.5',
+        'ssh_key': 'fakekey',
+        'ssh_user': 'root\nbad: value',
+        'ssh_port': 22,
+        'os_type': 'debian',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH username contains invalid characters' in response.get_json()['error']['message']
+
+
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
 def test_get_self_host_defaults_no_env(mock_user, client, app):
     """Without QLSM_HOST_IP env var, host_ip is None."""
@@ -693,6 +710,22 @@ def test_test_connection_password_surfaces_sudo_failure(mock_test, client, app):
     assert response.get_json()['data']['success'] is False
     assert 'passwordless sudo' in response.get_json()['data']['message']
     mock_test.assert_called_once_with('203.0.113.22', 22, 'deploy', 'secret')
+
+
+def test_test_connection_rejects_unsafe_ssh_user(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.26',
+        'ssh_port': 22,
+        'ssh_user': 'root\nbad: value',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'os_type': 'debian',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH username contains invalid characters' in response.get_json()['error']['message']
 
 
 # --- GET /api/hosts/<id> ---

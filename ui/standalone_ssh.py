@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import logging
 import shlex
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,6 +23,10 @@ class StandaloneSSHError(RuntimeError):
     """Raised when standalone SSH bootstrap or cleanup fails."""
 
 
+log = logging.getLogger(__name__)
+_AUDITED_HOST_KEYS = set()
+
+
 def _public_key_path(private_key_path):
     return Path(f"{private_key_path}.pub")
 
@@ -33,15 +40,41 @@ def load_managed_public_key(private_key_path):
     return public_key
 
 
-def _create_client():
+def _format_host_key_fingerprint(host_key):
+    digest = hashlib.sha256(host_key.asbytes()).digest()
+    encoded = base64.b64encode(digest).decode("ascii").rstrip("=")
+    return f"SHA256:{encoded}"
+
+
+class _AuditedAutoAddPolicy(paramiko.MissingHostKeyPolicy):
+    def missing_host_key(self, client, hostname, key):
+        fingerprint = _format_host_key_fingerprint(key)
+        seen_key = (hostname, key.get_name(), fingerprint)
+        if seen_key not in _AUDITED_HOST_KEYS:
+            log.warning(
+                "Accepting unknown SSH host key for %s (%s %s). Verify this fingerprint out-of-band before trusting password bootstrap sessions.",
+                hostname,
+                key.get_name(),
+                fingerprint,
+            )
+            _AUDITED_HOST_KEYS.add(seen_key)
+
+        client._host_keys.add(hostname, key.get_name(), key)
+        if client._host_keys_filename is not None:
+            client.save_host_keys(client._host_keys_filename)
+
+
+def _create_client(*, audit_new_host_keys=False):
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.load_system_host_keys()
+    policy = _AuditedAutoAddPolicy() if audit_new_host_keys else paramiko.AutoAddPolicy()
+    client.set_missing_host_key_policy(policy)
     return client
 
 
 @contextmanager
-def _ssh_session(*, host, port, username, timeout, password=None, key_filename=None):
-    client = _create_client()
+def _ssh_session(*, host, port, username, timeout, password=None, key_filename=None, audit_new_host_keys=False):
+    client = _create_client(audit_new_host_keys=audit_new_host_keys)
     try:
         connect_kwargs = {
             "hostname": host,
@@ -135,6 +168,7 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
             password=password,
             key_filename=key_filename,
             timeout=timeout,
+            audit_new_host_keys=password is not None,
         ) as client:
             stdout_text, _ = _run_checked_command(client, "cat /etc/os-release")
     except (paramiko.AuthenticationException, paramiko.SSHException, OSError, StandaloneSSHError) as exc:
@@ -162,6 +196,7 @@ def verify_password_login(host, port, username, password, timeout=30):
             username=username,
             password=password,
             timeout=timeout,
+            audit_new_host_keys=True,
         ) as client:
             _run_checked_command(client, "true")
         return True
@@ -181,6 +216,7 @@ def verify_passwordless_sudo(host, port, username, password, timeout=30):
             username=username,
             password=password,
             timeout=timeout,
+            audit_new_host_keys=True,
         ) as client:
             _run_checked_command(client, "sudo -n true")
         return True
@@ -209,6 +245,7 @@ def install_managed_key(host, port, username, password, private_key_path, timeou
         username=username,
         password=password,
         timeout=timeout,
+        audit_new_host_keys=True,
     ) as client:
         _run_checked_command(client, command)
     return managed_public_key

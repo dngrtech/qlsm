@@ -64,8 +64,12 @@ def _self_host_redis_args(instance):
 
     return [
         '+set qlx_redisAddress "127.0.0.1:6379"',
-        f'+set qlx_redisPassword "{redis_password}"',
+        f'+set qlx_redisPassword "{_escape_qlds_quoted_value(redis_password)}"',
     ]
+
+
+def _escape_qlds_quoted_value(value):
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _build_qlds_args_string(instance):

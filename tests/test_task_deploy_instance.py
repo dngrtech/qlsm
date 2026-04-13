@@ -288,3 +288,14 @@ def test_build_qlds_args_self_host_requires_redis_password(test_app, monkeypatch
             match="Self-host instance Redis password is not configured.",
         ):
             _build_qlds_args_string(inst)
+
+
+def test_build_qlds_args_self_host_escapes_redis_password(test_app, monkeypatch):
+    with test_app.app_context():
+        monkeypatch.setenv("REDIS_PASSWORD", 'shared\\secret"quoted')
+        inst = _make_instance_for_args()
+        inst.host = SimpleNamespace(provider="self")
+
+        result = _build_qlds_args_string(inst)
+
+        assert '+set qlx_redisPassword "shared\\\\secret\\"quoted"' in result
