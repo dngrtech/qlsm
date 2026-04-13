@@ -24,7 +24,7 @@ function ChangePasswordPage() {
       await changePassword(password, confirmPassword);
       clearPasswordChangeRequired();
       showSuccess('Password updated successfully.');
-      navigate('/servers', { replace: true });
+      navigate('/servers', { replace: true, state: { openAddHost: true } });
     } catch (err) {
       setError(err.error?.message || err.message || 'Failed to change password.');
     } finally {

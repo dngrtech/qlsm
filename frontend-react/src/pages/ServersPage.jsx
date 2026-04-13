@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { copyToClipboard as copyTextToClipboard } from '../utils/clipboard';
 import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, MapPin, GripVertical } from 'lucide-react';
 import { useServers } from '../hooks/useServers';
@@ -37,6 +38,7 @@ import { useServerStatus } from '../hooks/useServerStatus';
 
 export default function ServersPage() {
     const { addNotification, showSuccess, showError } = useNotification();
+
     const {
         serversData, stats, loading, error,
         toggleExpand, expandAll, collapseAll, refreshData,
@@ -79,6 +81,29 @@ export default function ServersPage() {
         const inst = host.instances.find(i => i.id === rconKey.instanceId);
         return inst ? { ...inst, host_id: host.id, host_ip: host.ip_address } : null;
     }, [serversData, rconKey]);
+
+    const location = useLocation();
+    const navigate = useNavigate();
+    const autoOpenRef = useRef(location.state?.openAddHost === true);
+
+    // Clear route state on mount so a page refresh doesn't re-trigger
+    useEffect(() => {
+        if (autoOpenRef.current) {
+            navigate(
+                { pathname: location.pathname, search: location.search, hash: location.hash },
+                { replace: true, state: null }
+            );
+        }
+    }, [location.hash, location.pathname, location.search, navigate]);
+
+    // Auto-open Add Host modal when redirected from change-password with no hosts
+    useEffect(() => {
+        if (!autoOpenRef.current || loading) return;
+        autoOpenRef.current = false; // always disarm after loading resolves
+        if (serversData.length === 0) {
+            setIsAddHostModalOpen(true);
+        }
+    }, [loading, serversData]);
 
     const allExpanded = useMemo(() => serversData.length > 0 && serversData.every(h => h.expanded), [serversData]);
 
