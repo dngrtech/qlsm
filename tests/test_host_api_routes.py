@@ -179,7 +179,7 @@ def test_create_host_no_body(client, app):
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.os.makedirs')
 @patch('ui.routes.host_routes.os.chmod')
-@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).'))
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
 @patch('builtins.open', create=True)
 def test_create_standalone_host_success(mock_open, mock_detect_os, mock_chmod, mock_makedirs, mock_lock, mock_enqueue, client, app):
     """Valid standalone host data creates host and queues setup task."""
@@ -195,20 +195,20 @@ def test_create_standalone_host_success(mock_open, mock_detect_os, mock_chmod, m
             'ssh_key': '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----',
             'ssh_user': 'root',
             'ssh_port': 22,
-            'os_type': 'debian',
             'timezone': 'America/New_York'
         })
 
     assert response.status_code == 201
     data = response.get_json()
     assert data['data']['name'] == 'standalone-h'
+    assert data['data']['os_type'] == 'debian'
     assert mock_lock.call_args.kwargs['ttl'] == 1260
     mock_detect_os.assert_called_once()
 
 
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
-@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).'))
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
 @patch('ui.routes.host_routes.bootstrap_managed_key')
 @patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_id_rsa', '/tmp/managed_id_rsa.pub'))
 def test_create_standalone_host_password_bootstrap_success(
@@ -224,7 +224,6 @@ def test_create_standalone_host_password_bootstrap_success(
         'ssh_port': 22,
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'debian',
         'timezone': 'UTC',
     })
 
@@ -244,7 +243,7 @@ def test_create_standalone_host_password_bootstrap_success(
 
 
 @patch('ui.routes.host_routes.acquire_lock', return_value=False)
-@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).'))
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
 @patch('ui.routes.host_routes.remove_managed_key')
 @patch('ui.routes.host_routes.bootstrap_managed_key')
 @patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_lockfail', '/tmp/managed_lockfail.pub'))
@@ -261,7 +260,6 @@ def test_create_standalone_host_password_bootstrap_rolls_back_remote_key_on_lock
         'ssh_port': 22,
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'debian',
         'timezone': 'UTC',
     })
 
@@ -293,7 +291,7 @@ def test_create_standalone_host_missing_ip(client, app):
 
 
 @patch('ui.routes.host_routes._cleanup_local_key_material')
-@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(False, 'Connection failed: detected OS Ubuntu 22.04.5 LTS does not match selected OS Debian.'))
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(False, 'Connection failed: detected OS Ubuntu 22.04.5 LTS is not supported.', None))
 @patch('ui.routes.host_routes.os.makedirs')
 @patch('ui.routes.host_routes.os.chmod')
 @patch('builtins.open', create=True)
@@ -312,12 +310,11 @@ def test_create_standalone_host_rejects_remote_os_mismatch(
             'ssh_key': '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----',
             'ssh_user': 'root',
             'ssh_port': 22,
-            'os_type': 'debian',
             'timezone': 'America/New_York'
         })
 
     assert response.status_code == 400
-    assert 'does not match selected OS Debian' in response.get_json()['error']['message']
+    assert 'is not supported' in response.get_json()['error']['message']
     mock_detect_os.assert_called_once()
     assert mock_cleanup.call_count == 2
     assert mock_cleanup.call_args_list[-1].args == ('/tmp/ssh-keys/standalone-mismatch_standalone_id_rsa', None)
@@ -353,7 +350,7 @@ def test_create_standalone_host_invalid_port(client, app):
 
 
 def test_create_standalone_host_invalid_os_type(client, app):
-    """Standalone host with unsupported OS type returns 400."""
+    """Standalone host no longer requires a manually selected OS type."""
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post('/api/hosts/', headers=headers, json={
         'name': 'bad-os',
@@ -361,9 +358,9 @@ def test_create_standalone_host_invalid_os_type(client, app):
         'ip_address': '10.0.0.2',
         'ssh_key': 'fakekey',
         'ssh_user': 'root',
-        'os_type': 'windows10'
     })
     assert response.status_code == 400
+    assert 'Timezone is required' in response.get_json()['error']['message']
 
 
 def test_create_standalone_host_invalid_auth_method(client, app):
@@ -377,7 +374,6 @@ def test_create_standalone_host_invalid_auth_method(client, app):
         'ssh_port': 22,
         'ssh_auth_method': 'token',
         'ssh_key': 'fakekey',
-        'os_type': 'debian',
         'timezone': 'UTC',
     })
 
@@ -395,7 +391,6 @@ def test_create_standalone_host_password_mode_requires_password(client, app):
         'ssh_user': 'root',
         'ssh_port': 22,
         'ssh_auth_method': 'password',
-        'os_type': 'debian',
         'timezone': 'UTC',
     })
 
@@ -412,7 +407,6 @@ def test_create_standalone_host_rejects_unsafe_ssh_user(client, app):
         'ssh_key': 'fakekey',
         'ssh_user': 'root\nbad: value',
         'ssh_port': 22,
-        'os_type': 'debian',
         'timezone': 'UTC',
     })
 
@@ -567,7 +561,6 @@ def test_test_connection_key_success(mock_run, mock_detect_os, client, app):
         'ssh_user': 'root',
         'ssh_auth_method': 'key',
         'ssh_key': '-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----',
-        'os_type': 'debian',
     })
 
     assert response.status_code == 200
@@ -595,7 +588,6 @@ def test_test_connection_password_success(mock_test, mock_detect_os, client, app
         'ssh_user': 'deploy',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'debian',
     })
 
     assert response.status_code == 200
@@ -628,39 +620,13 @@ def test_test_connection_password_accepts_supported_ubuntu24(mock_test, mock_det
         'ssh_user': 'root',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'ubuntu',
     })
 
     assert response.status_code == 200
     assert response.get_json()['data']['success'] is True
     assert 'Detected OS: Ubuntu 24.04.2 LTS' in response.get_json()['data']['message']
+    assert '99k LAN rate is not compatible with Ubuntu' in response.get_json()['data']['message']
     mock_test.assert_called_once_with('203.0.113.25', 22, 'root', 'secret')
-    mock_detect_os.assert_called_once()
-
-
-@patch('ui.routes.host_routes.detect_remote_os', return_value={
-    'id': 'ubuntu',
-    'version_id': '22.04',
-    'pretty_name': 'Ubuntu 22.04.5 LTS',
-    'os_type': 'ubuntu',
-})
-@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
-def test_test_connection_password_rejects_os_mismatch(mock_test, mock_detect_os, client, app):
-    headers = auth_headers(app, DEFAULT_USER)
-
-    response = client.post('/api/hosts/test-connection', headers=headers, json={
-        'ip_address': '203.0.113.23',
-        'ssh_port': 22,
-        'ssh_user': 'root',
-        'ssh_auth_method': 'password',
-        'ssh_password': 'secret',
-        'os_type': 'debian',
-    })
-
-    assert response.status_code == 200
-    assert response.get_json()['data']['success'] is False
-    assert 'does not match selected OS Debian' in response.get_json()['data']['message']
-    mock_test.assert_called_once_with('203.0.113.23', 22, 'root', 'secret')
     mock_detect_os.assert_called_once()
 
 
@@ -680,7 +646,6 @@ def test_test_connection_password_rejects_unsupported_os(mock_test, mock_detect_
         'ssh_user': 'root',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'ubuntu',
     })
 
     assert response.status_code == 200
@@ -721,7 +686,6 @@ def test_test_connection_rejects_unsafe_ssh_user(client, app):
         'ssh_user': 'root\nbad: value',
         'ssh_auth_method': 'password',
         'ssh_password': 'secret',
-        'os_type': 'debian',
     })
 
     assert response.status_code == 400

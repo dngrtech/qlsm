@@ -35,7 +35,6 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [sshKey, setSshKey] = useState('');
   const [sshPassword, setSshPassword] = useState('');
   const [standaloneAuthMethod, setStandaloneAuthMethod] = useState('key');
-  const [osType, setOsType] = useState('debian');
   const [timezone, setTimezone] = useState('');
 
   // Connection test state
@@ -120,7 +119,6 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setSshKey('');
     setSshPassword('');
     setStandaloneAuthMethod('key');
-    setOsType('debian');
     setTimezone('');
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
@@ -137,7 +135,6 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     ssh_port: parseInt(sshPort, 10) || 22,
     ssh_user: sshUser.trim(),
     ssh_auth_method: standaloneAuthMethod,
-    os_type: osType,
     ...(standaloneAuthMethod === 'password'
       ? { ssh_password: sshPassword }
       : { ssh_key: sshKey }),
@@ -245,7 +242,6 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           ...(standaloneAuthMethod === 'password'
             ? { ssh_password: sshPassword }
             : { ssh_key: sshKey }),
-          os_type: osType,
           timezone,
         };
       } else if (provider === 'self') {
@@ -381,8 +377,6 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onSshKeyChange={(e) => { setSshKey(e.target.value); resetConnectionTest(); }}
                         sshPassword={sshPassword}
                         onSshPasswordChange={(e) => { setSshPassword(e.target.value); resetConnectionTest(); }}
-                        osType={osType}
-                        onOsTypeChange={(value) => { setOsType(value); resetConnectionTest(); }}
                         timezone={timezone}
                         onTimezoneChange={setTimezone}
                         connectionTestStatus={connectionTestStatus}

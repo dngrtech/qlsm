@@ -40,8 +40,6 @@ function AddHostFormFields({
   onSshKeyChange,
   sshPassword,
   onSshPasswordChange,
-  osType,
-  onOsTypeChange,
   timezone,
   onTimezoneChange,
   connectionTestStatus,
@@ -174,19 +172,15 @@ function AddHostFormFields({
       {/* Standalone provider fields */}
       {isStandalone && (
         <>
-          <FloatingListbox
-            label="Operating System"
-            value={osType || 'debian'}
-            onChange={onOsTypeChange}
-            options={providerOptions.standalone.osTypes}
-            getOptionKey={(opt) => opt.id}
-            getOptionDisplay={(opt) => opt.name}
-            getSelectedDisplay={(val, opts) => {
-              if (!val) return 'Select OS';
-              const selectedOpt = opts.find(o => o.id === val);
-              return selectedOpt ? selectedOpt.name : 'Select OS';
+          <div
+            className="rounded-lg px-3.5 py-3 text-sm text-theme-secondary"
+            style={{
+              background: 'rgba(0, 255, 157, 0.08)',
+              border: '1px solid rgba(0, 255, 157, 0.2)',
             }}
-          />
+          >
+            Operating system is detected automatically during connection test and setup.
+          </div>
 
           <FloatingListbox
             label="Timezone"
