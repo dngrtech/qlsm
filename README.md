@@ -1,9 +1,30 @@
 # QLSM — Quake Live Server Management
 
-I built this because managing Quake Live dedicated servers without tooling means a lot of SSH sessions, manual config edits, and copy-pasting commands. QLSM wraps that into a web UI — deploy instances, edit configs, restart servers, monitor status, all from a browser.
+Features:
+- Three deployment modes: (Debian 12 and Ubuntu 22 are tested and recommended):
+  * QLSM self-deployment: run QLDS instances on the same machine as QLSM
+  * Standalone remote server
+  * VULTR cloud provisioning via Terraform
+- Optional 99k LAN rate mode. Only Debian 12 supports this feature
+- Optional `QLFilter` deployment for supported hosts (anti-DDOS protection)
+- Per-instance RCON console with command line and live feed of all server events
+- Live server status with current map, gametype, mode/factory, match timer, player list, and scores
+- Syntax-aware editors (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, with Python linter and  plugin validation. Editor supports search/replace function for easy editing.
+- Upload common config files, factories, custom minqlx plugins, or `*.so` binary files
+- Preset manager for load/save/update/delete workflows. Each preset includes `server.cfg`, `access.cfg`, `mappool.cfg`, `workshop.txt`, set of minqlx-plugins and `*.factories` files
+  - Minqlx plugins are enabled in the UI via ticking checkboxes - no need to edit `qlx_plugins` variable as QLSM takes care of it
+  - Factories are enabled in the UI via ticking checkboxes
+- Chat logs (including rotated archived chat log files) and server logs retrieval with convinient search capability. 
+- Daily/weekly/monthly host auto-restart scheduling; scheduled restarts trigger workshop refresh across deployed instances
+- Manual workshop item update by Steam Workshop ID, with optional restart of selected instances
+- ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI
+- Optional switchable QLFilter deployment (anti-DDOS protection)
+- User management: create users, delete users, and reset passwords
+- External API key management for service-to-service access
+- External REST API for authenticated instance inventory lookups
+- Per-user host/instance ordering and expanded-state preferences stored in browser local storage
 
-Bring your own VPS. If you want to provision new hosts on Vultr, there's Terraform for that. Everything else runs over SSH via Ansible.
-
+Everything runs over SSH via Ansible.
 
 
 <img width="1428" height="993" alt="servers_page" src="https://github.com/user-attachments/assets/11894a0e-19df-492e-8da7-d69b5ff01d8a" />
@@ -18,13 +39,13 @@ Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers
 
 ## Requirements
 
-You need a Linux VPS (Ubuntu 22.04 or newer recommended) with:
+Ubuntu 22.04 or newer recommended:
 
 - **Docker** — [install guide](https://docs.docker.com/engine/install/ubuntu/)
 - **Docker Compose** (usually included with Docker)
 - A user with `sudo` access
 
-That's it. Everything else (Redis, Caddy, the app itself) runs inside Docker.
+Redis, Caddy, the app itself run inside Docker.
 
 To install Docker on a fresh Ubuntu server:
 
@@ -34,15 +55,15 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-## Quick start (production)
+## Quick start
 
-### Option 1 — one-liner (recommended)
+### Option 1 — one-liner
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
 ```
 
-With a domain (enables HTTPS via Caddy):
+With a custom domain (enables HTTPS via Caddy):
 
 ```bash
 SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
@@ -57,7 +78,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Default login is `admin` / `admin`. You'll be forced to change the password on first login.
+Default login is `admin` / `admin`. Password change is enforced on first login.
 
 ## Updating
 
