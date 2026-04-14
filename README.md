@@ -1,7 +1,7 @@
 # QLSM — Quake Live Server Management
 
 Features:
-- Three deployment modes: (Debian 12 and Ubuntu 22 are tested and recommended):
+- Three deployment modes (Debian 12 and Ubuntu 22 are tested and recommended):
   * QLSM self-deployment: run QLDS instances on the same machine as QLSM
   * Standalone remote server
   * VULTR cloud provisioning via Terraform
@@ -9,16 +9,15 @@ Features:
 - Optional `QLFilter` deployment for supported hosts (anti-DDOS protection)
 - Per-instance RCON console with command line and live feed of all server events
 - Live server status with current map, gametype, mode/factory, match timer, player list, and scores
-- Syntax-aware editors (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, with Python linter and  plugin validation. Editor supports search/replace function for easy editing.
+- Syntax-aware editors (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, featuring a Python linter for minqlx plugin's code validation. The editor includes search and replace functionality for easy editing
 - Upload common config files, factories, custom minqlx plugins, or `*.so` binary files
-- Preset manager for load/save/update/delete workflows. Each preset includes `server.cfg`, `access.cfg`, `mappool.cfg`, `workshop.txt`, set of minqlx-plugins and `*.factories` files
-  - Minqlx plugins are enabled in the UI via ticking checkboxes - no need to edit `qlx_plugins` variable as QLSM takes care of it
-  - Factories are enabled in the UI via ticking checkboxes
-- Chat logs (including rotated archived chat log files) and server logs retrieval with convinient search capability. 
+- Preset manager to load/save/update/delete qlds presets. Each preset includes custom `server.cfg`, `access.cfg`, `mappool.cfg`, `workshop.txt`, set of minqlx-plugins and `*.factories` files
+  - Minqlx plugins can be enabled in the UI by selecting checkboxes. This eliminates the need to manually edit the `qlx_plugins` cvar, as QLSM handles it automatically.
+  - UI-driven Factory Management: Enable factories directly via checkboxes
+- Chat logs (including rotated archived chat log files) and server logs retrieval with convenient search capability. 
 - Daily/weekly/monthly host auto-restart scheduling; scheduled restarts trigger workshop refresh across deployed instances
 - Manual workshop item update by Steam Workshop ID, with optional restart of selected instances
 - ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI
-- Optional switchable QLFilter deployment (anti-DDOS protection)
 - User management: create users, delete users, and reset passwords
 - External API key management for service-to-service access
 - External REST API for authenticated instance inventory lookups
