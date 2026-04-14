@@ -1,17 +1,25 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { X, Server, AlertTriangle } from 'lucide-react';
-import { createHost, testHostConnection } from '../../services/api';
+import { createHost, getHosts, getSelfHostDefaults, testHostConnection } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import { providerOptions } from '../../utils/providerData';
 import AddHostFormFields from './AddHostFormFields';
 import { validateHostName } from '../../utils/resourceValidation';
 import { getTimezoneForRegion } from '../../utils/formatters';
 
+const PROVIDER_LIST_OPTIONS = [
+  { id: 'self', name: 'QLSM Host (self-deployment)' },
+  { id: 'standalone', name: 'Standalone' },
+  { id: 'vultr', name: 'VULTR' },
+];
+
 function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
-  const [provider, setProvider] = useState('vultr');
+  const [provider, setProvider] = useState('self');
+  const [selfHostExists, setSelfHostExists] = useState(false);
+  const [providerOptionsReady, setProviderOptionsReady] = useState(false);
   const [selectedContinent, setSelectedContinent] = useState('');
   const [vultrContinentOptions, setVultrContinentOptions] = useState([]);
   const [region, setRegion] = useState('');
@@ -25,12 +33,44 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [sshPort, setSshPort] = useState(22);
   const [sshUser, setSshUser] = useState('root');
   const [sshKey, setSshKey] = useState('');
-  const [osType, setOsType] = useState('debian12');
+  const [sshPassword, setSshPassword] = useState('');
+  const [standaloneAuthMethod, setStandaloneAuthMethod] = useState('key');
   const [timezone, setTimezone] = useState('');
 
   // Connection test state
   const [connectionTestStatus, setConnectionTestStatus] = useState('idle');
   const [connectionTestMessage, setConnectionTestMessage] = useState('');
+
+  const availableProviderOptions = PROVIDER_LIST_OPTIONS.filter(
+    (option) => option.id !== 'self' || !selfHostExists
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setProviderOptionsReady(false);
+
+    getHosts()
+      .then((hosts) => {
+        if (cancelled) return;
+        const hasSelfHost = hosts.some((host) => host.provider === 'self');
+        setSelfHostExists(hasSelfHost);
+        setProvider(hasSelfHost ? 'standalone' : 'self');
+        setProviderOptionsReady(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const message = err.error?.message || err.message || 'Failed to load host options.';
+        showError(message);
+        setSelfHostExists(false);
+        setProvider('self');
+        setProviderOptionsReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, showError]);
 
   useEffect(() => {
     if (provider === 'vultr') {
@@ -44,10 +84,30 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setMachineSize('');
   }, [provider]);
 
+  useEffect(() => {
+    if (!isOpen || !providerOptionsReady || provider !== 'self') return;
+    let cancelled = false;
+
+    getSelfHostDefaults()
+      .then((defaults) => {
+        if (cancelled) return;
+        if (defaults?.ssh_user) setSshUser(defaults.ssh_user);
+        if (defaults?.host_ip) setIpAddress(defaults.host_ip);
+      })
+      .catch((err) => {
+        const message = err.error?.message || err.message || 'Failed to load self-host defaults.';
+        showError(message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, provider, providerOptionsReady, showError]);
+
   const resetForm = () => {
     setName('');
     setNameError(null);
-    setProvider('vultr');
+    setProvider(selfHostExists ? 'standalone' : 'self');
     setSelectedContinent('');
     setRegion('');
     setMachineSize('');
@@ -57,29 +117,44 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setSshPort(22);
     setSshUser('root');
     setSshKey('');
-    setOsType('debian12');
+    setSshPassword('');
+    setStandaloneAuthMethod('key');
     setTimezone('');
+    setConnectionTestStatus('idle');
+    setConnectionTestMessage('');
+    setProviderOptionsReady(false);
+  };
+
+  const resetConnectionTest = () => {
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
   };
 
-  const resetConnectionTest = () => {
-    if (connectionTestStatus !== 'idle') {
-      setConnectionTestStatus('idle');
-      setConnectionTestMessage('');
+  const buildStandaloneConnectionData = () => ({
+    ip_address: ipAddress.trim(),
+    ssh_port: parseInt(sshPort, 10) || 22,
+    ssh_user: sshUser.trim(),
+    ssh_auth_method: standaloneAuthMethod,
+    ...(standaloneAuthMethod === 'password'
+      ? { ssh_password: sshPassword }
+      : { ssh_key: sshKey }),
+  });
+
+  const handleStandaloneAuthMethodChange = (value) => {
+    setStandaloneAuthMethod(value);
+    if (value === 'password') {
+      setSshKey('');
+    } else {
+      setSshPassword('');
     }
+    resetConnectionTest();
   };
 
   const handleTestConnection = async () => {
     setConnectionTestStatus('testing');
     setConnectionTestMessage('');
     try {
-      const result = await testHostConnection({
-        ip_address: ipAddress.trim(),
-        ssh_port: parseInt(sshPort, 10) || 22,
-        ssh_user: sshUser.trim(),
-        ssh_key: sshKey,
-      });
+      const result = await testHostConnection(buildStandaloneConnectionData());
       if (result.success) {
         setConnectionTestStatus('success');
         setConnectionTestMessage(result.message || 'Connection successful');
@@ -121,7 +196,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
         setError('IP address is required for standalone hosts.');
         return;
       }
-      if (!sshKey || !sshKey.trim()) {
+      if (standaloneAuthMethod === 'password' && (!sshPassword || !sshPassword.trim())) {
+        setError('SSH password is required for password bootstrap.');
+        return;
+      }
+      if (standaloneAuthMethod !== 'password' && (!sshKey || !sshKey.trim())) {
         setError('SSH private key is required for standalone hosts.');
         return;
       }
@@ -131,6 +210,20 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       }
       if (!timezone) {
         setError('Timezone is required for standalone hosts.');
+        return;
+      }
+    }
+    if (provider === 'self') {
+      if (!ipAddress || !ipAddress.trim()) {
+        setError('Server address is required for self hosts.');
+        return;
+      }
+      if (!timezone) {
+        setError('Timezone is required for self hosts.');
+        return;
+      }
+      if (!sshUser || !sshUser.trim()) {
+        setError('SSH user is required for self hosts.');
         return;
       }
     }
@@ -145,9 +238,19 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           ip_address: ipAddress.trim(),
           ssh_port: parseInt(sshPort, 10) || 22,
           ssh_user: sshUser.trim(),
-          ssh_key: sshKey,
-          os_type: osType,
+          ssh_auth_method: standaloneAuthMethod,
+          ...(standaloneAuthMethod === 'password'
+            ? { ssh_password: sshPassword }
+            : { ssh_key: sshKey }),
           timezone,
+        };
+      } else if (provider === 'self') {
+        hostData = {
+          name: name.trim().toLowerCase(),
+          provider: 'self',
+          ip_address: ipAddress.trim(),
+          timezone,
+          ssh_user: sshUser.trim(),
         };
       } else {
         hostData = {
@@ -160,9 +263,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       }
 
       const response = await createHost(hostData);
-      const successMessage = provider === 'standalone'
-        ? response.message || 'Standalone host added and setup task queued.'
-        : response.message || 'Host added and provisioning task queued.';
+      const successMessage = provider === 'self'
+        ? response.message || 'Self host added and setup task queued.'
+        : provider === 'standalone'
+          ? response.message || 'Standalone host added and setup task queued.'
+          : response.message || 'Host added and provisioning task queued.';
       showSuccess(successMessage);
       if (onHostAdded) onHostAdded();
       handleClose();
@@ -236,42 +341,51 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                 {/* Body */}
                 <form onSubmit={handleSubmit}>
                   <div className="px-6 py-5 space-y-5">
-                    <AddHostFormFields
-                      name={name}
-                      onNameChange={(e) => {
-                        setName(e.target.value);
-                        if (nameError) setNameError(null);
-                      }}
-                      nameError={nameError}
-                      onNameBlur={handleNameBlur}
-                      provider={provider}
-                      onProviderChange={setProvider}
-                      selectedContinent={selectedContinent}
-                      onContinentChange={setSelectedContinent}
-                      vultrContinentOptions={vultrContinentOptions}
-                      region={region}
-                      onRegionChange={setRegion}
-                      vultrAllRegions={vultrAllRegions}
-                      vultrFilteredRegions={vultrFilteredRegions}
-                      machineSize={machineSize}
-                      onMachineSizeChange={setMachineSize}
-                      currentSizes={currentSizes}
-                      ipAddress={ipAddress}
-                      onIpAddressChange={(e) => { setIpAddress(e.target.value); resetConnectionTest(); }}
-                      sshPort={sshPort}
-                      onSshPortChange={(e) => { setSshPort(e.target.value); resetConnectionTest(); }}
-                      sshUser={sshUser}
-                      onSshUserChange={(e) => { setSshUser(e.target.value); resetConnectionTest(); }}
-                      sshKey={sshKey}
-                      onSshKeyChange={(e) => { setSshKey(e.target.value); resetConnectionTest(); }}
-                      osType={osType}
-                      onOsTypeChange={setOsType}
-                      timezone={timezone}
-                      onTimezoneChange={setTimezone}
-                      connectionTestStatus={connectionTestStatus}
-                      connectionTestMessage={connectionTestMessage}
-                      onTestConnection={handleTestConnection}
-                    />
+                    {providerOptionsReady ? (
+                      <AddHostFormFields
+                        name={name}
+                        onNameChange={(e) => {
+                          setName(e.target.value);
+                          if (nameError) setNameError(null);
+                        }}
+                        nameError={nameError}
+                        onNameBlur={handleNameBlur}
+                        provider={provider}
+                        providerListOptions={availableProviderOptions}
+                        onProviderChange={(value) => {
+                          setProvider(value);
+                          resetConnectionTest();
+                        }}
+                        selectedContinent={selectedContinent}
+                        onContinentChange={setSelectedContinent}
+                        vultrContinentOptions={vultrContinentOptions}
+                        region={region}
+                        onRegionChange={setRegion}
+                        vultrFilteredRegions={vultrFilteredRegions}
+                        machineSize={machineSize}
+                        onMachineSizeChange={setMachineSize}
+                        currentSizes={currentSizes}
+                        ipAddress={ipAddress}
+                        onIpAddressChange={(e) => { setIpAddress(e.target.value); resetConnectionTest(); }}
+                        sshPort={sshPort}
+                        onSshPortChange={(e) => { setSshPort(e.target.value); resetConnectionTest(); }}
+                        sshUser={sshUser}
+                        onSshUserChange={(e) => { setSshUser(e.target.value); resetConnectionTest(); }}
+                        standaloneAuthMethod={standaloneAuthMethod}
+                        onStandaloneAuthMethodChange={handleStandaloneAuthMethodChange}
+                        sshKey={sshKey}
+                        onSshKeyChange={(e) => { setSshKey(e.target.value); resetConnectionTest(); }}
+                        sshPassword={sshPassword}
+                        onSshPasswordChange={(e) => { setSshPassword(e.target.value); resetConnectionTest(); }}
+                        timezone={timezone}
+                        onTimezoneChange={setTimezone}
+                        connectionTestStatus={connectionTestStatus}
+                        connectionTestMessage={connectionTestMessage}
+                        onTestConnection={handleTestConnection}
+                      />
+                    ) : (
+                      <div className="text-sm text-theme-muted">Loading host options...</div>
+                    )}
 
                     {error && (
                       <div
@@ -303,7 +417,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                     </button>
                     <button
                       type="submit"
-                      disabled={loading || (provider === 'standalone' && connectionTestStatus !== 'success')}
+                      disabled={loading || !providerOptionsReady || (provider === 'standalone' && connectionTestStatus !== 'success')}
                       className="px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white dark:text-[#0A0E14]"
                       style={{
                         background: 'var(--accent-primary)',

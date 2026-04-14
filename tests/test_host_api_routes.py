@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from tests.helpers import make_user, auth_headers
 from ui.models import Host, HostStatus, QLFilterStatus, QLInstance, InstanceStatus
@@ -114,6 +115,19 @@ def test_create_host_name_too_long(client, app):
     assert response.status_code == 400
 
 
+def test_create_host_name_numeric_only_rejected(client, app):
+    """Host name made only of digits returns 400."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': '234234',
+        'provider': 'vultr',
+        'region': 'ewr',
+        'machine_size': 'vc2-1c-1gb'
+    })
+    assert response.status_code == 400
+    assert 'cannot contain only digits' in response.get_json()['error']['message']
+
+
 def test_create_host_duplicate_name(client, app):
     """Duplicate host name returns 409."""
     with app.app_context():
@@ -165,8 +179,9 @@ def test_create_host_no_body(client, app):
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.os.makedirs')
 @patch('ui.routes.host_routes.os.chmod')
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
 @patch('builtins.open', create=True)
-def test_create_standalone_host_success(mock_open, mock_chmod, mock_makedirs, mock_lock, mock_enqueue, client, app):
+def test_create_standalone_host_success(mock_open, mock_detect_os, mock_chmod, mock_makedirs, mock_lock, mock_enqueue, client, app):
     """Valid standalone host data creates host and queues setup task."""
     mock_open.return_value.__enter__ = MagicMock(return_value=MagicMock())
     mock_open.return_value.__exit__ = MagicMock(return_value=False)
@@ -180,14 +195,86 @@ def test_create_standalone_host_success(mock_open, mock_chmod, mock_makedirs, mo
             'ssh_key': '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----',
             'ssh_user': 'root',
             'ssh_port': 22,
-            'os_type': 'debian12',
             'timezone': 'America/New_York'
         })
 
     assert response.status_code == 201
     data = response.get_json()
     assert data['data']['name'] == 'standalone-h'
+    assert data['data']['os_type'] == 'debian'
     assert mock_lock.call_args.kwargs['ttl'] == 1260
+    mock_detect_os.assert_called_once()
+
+
+@patch('ui.routes.host_routes.enqueue_task')
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
+@patch('ui.routes.host_routes.bootstrap_managed_key')
+@patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_id_rsa', '/tmp/managed_id_rsa.pub'))
+def test_create_standalone_host_password_bootstrap_success(
+    mock_generate, mock_bootstrap, mock_detect_os, mock_lock, mock_enqueue, client, app
+):
+    """Password mode generates a managed key and queues setup without persisting the password."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'standalone-pw',
+        'provider': 'standalone',
+        'ip_address': '203.0.113.10',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['ssh_key_path'] == '/tmp/managed_id_rsa'
+    mock_generate.assert_called_once_with('standalone-pw')
+    mock_bootstrap.assert_called_once_with(
+        '203.0.113.10',
+        22,
+        'root',
+        'secret',
+        '/tmp/managed_id_rsa',
+    )
+    mock_detect_os.assert_called_once()
+    mock_enqueue.assert_called_once()
+
+
+@patch('ui.routes.host_routes.acquire_lock', return_value=False)
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
+@patch('ui.routes.host_routes.remove_managed_key')
+@patch('ui.routes.host_routes.bootstrap_managed_key')
+@patch('ui.routes.host_routes.generate_managed_standalone_keypair', return_value=('/tmp/managed_lockfail', '/tmp/managed_lockfail.pub'))
+def test_create_standalone_host_password_bootstrap_rolls_back_remote_key_on_lock_failure(
+    mock_generate, mock_bootstrap, mock_remove_managed, mock_detect_os, mock_lock, client, app
+):
+    """If host creation rolls back after password bootstrap, the installed managed key is scrubbed."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'standalone-lockfail',
+        'provider': 'standalone',
+        'ip_address': '203.0.113.11',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 409
+    mock_generate.assert_called_once_with('standalone-lockfail')
+    mock_bootstrap.assert_called_once()
+    mock_detect_os.assert_called_once()
+    mock_remove_managed.assert_called_once_with(
+        '203.0.113.11',
+        22,
+        'root',
+        '/tmp/managed_lockfail',
+    )
+    with app.app_context():
+        assert Host.query.filter_by(name='standalone-lockfail').first() is None
 
 
 def test_create_standalone_host_missing_ip(client, app):
@@ -201,6 +288,38 @@ def test_create_standalone_host_missing_ip(client, app):
     })
     assert response.status_code == 400
     assert 'IP address is required' in response.get_json()['error']['message']
+
+
+@patch('ui.routes.host_routes._cleanup_local_key_material')
+@patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(False, 'Connection failed: detected OS Ubuntu 22.04.5 LTS is not supported.', None))
+@patch('ui.routes.host_routes.os.makedirs')
+@patch('ui.routes.host_routes.os.chmod')
+@patch('builtins.open', create=True)
+def test_create_standalone_host_rejects_remote_os_mismatch(
+    mock_open, mock_chmod, mock_makedirs, mock_detect_os, mock_cleanup, client, app
+):
+    mock_open.return_value.__enter__ = MagicMock(return_value=MagicMock())
+    mock_open.return_value.__exit__ = MagicMock(return_value=False)
+
+    with patch('ui.routes.host_routes.os.path.abspath', return_value='/tmp/ssh-keys'):
+        headers = auth_headers(app, DEFAULT_USER)
+        response = client.post('/api/hosts/', headers=headers, json={
+            'name': 'standalone-mismatch',
+            'provider': 'standalone',
+            'ip_address': '192.168.1.101',
+            'ssh_key': '-----BEGIN RSA PRIVATE KEY-----\nfakekey\n-----END RSA PRIVATE KEY-----',
+            'ssh_user': 'root',
+            'ssh_port': 22,
+            'timezone': 'America/New_York'
+        })
+
+    assert response.status_code == 400
+    assert 'is not supported' in response.get_json()['error']['message']
+    mock_detect_os.assert_called_once()
+    assert mock_cleanup.call_count == 2
+    assert mock_cleanup.call_args_list[-1].args == ('/tmp/ssh-keys/standalone-mismatch_standalone_id_rsa', None)
+    with app.app_context():
+        assert Host.query.filter_by(name='standalone-mismatch').first() is None
 
 
 def test_create_standalone_host_invalid_ip(client, app):
@@ -231,7 +350,7 @@ def test_create_standalone_host_invalid_port(client, app):
 
 
 def test_create_standalone_host_invalid_os_type(client, app):
-    """Standalone host with unsupported OS type returns 400."""
+    """Standalone host no longer requires a manually selected OS type."""
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post('/api/hosts/', headers=headers, json={
         'name': 'bad-os',
@@ -239,9 +358,338 @@ def test_create_standalone_host_invalid_os_type(client, app):
         'ip_address': '10.0.0.2',
         'ssh_key': 'fakekey',
         'ssh_user': 'root',
-        'os_type': 'windows10'
     })
     assert response.status_code == 400
+    assert 'Timezone is required' in response.get_json()['error']['message']
+
+
+def test_create_standalone_host_invalid_auth_method(client, app):
+    """Standalone host rejects unsupported SSH auth methods."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'bad-auth',
+        'provider': 'standalone',
+        'ip_address': '10.0.0.3',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'token',
+        'ssh_key': 'fakekey',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 400
+    assert "either 'key' or 'password'" in response.get_json()['error']['message']
+
+
+def test_create_standalone_host_password_mode_requires_password(client, app):
+    """Password bootstrap mode requires ssh_password."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'missing-password',
+        'provider': 'standalone',
+        'ip_address': '10.0.0.4',
+        'ssh_user': 'root',
+        'ssh_port': 22,
+        'ssh_auth_method': 'password',
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH password is required' in response.get_json()['error']['message']
+
+
+def test_create_standalone_host_rejects_unsafe_ssh_user(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'bad-ssh-user',
+        'provider': 'standalone',
+        'ip_address': '10.0.0.5',
+        'ssh_key': 'fakekey',
+        'ssh_user': 'root\nbad: value',
+        'ssh_port': 22,
+        'timezone': 'UTC',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH username contains invalid characters' in response.get_json()['error']['message']
+
+
+@patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
+def test_get_self_host_defaults_no_env(mock_user, client, app):
+    """Without QLSM_HOST_IP env var, host_ip is None."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/hosts/self/defaults', headers=headers)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['ssh_user'] == 'rage'
+    assert data['host_ip'] is None
+
+
+@patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
+def test_get_self_host_defaults_with_env(mock_user, client, app, monkeypatch):
+    """QLSM_HOST_IP env var is returned as host_ip."""
+    monkeypatch.setenv('QLSM_HOST_IP', '203.0.113.10')
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/hosts/self/defaults', headers=headers)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['host_ip'] == '203.0.113.10'
+
+
+@patch('ui.routes.host_routes.enqueue_task')
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+@patch('ui.routes.host_routes.generate_self_host_keys', return_value=('/tmp/self-key', 'ssh-rsa pub'))
+def test_create_self_host_success(mock_keys, mock_lock, mock_enqueue, client, app):
+    """Valid self-host with user-provided IP stores that IP."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'ip_address': '203.0.113.10',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['provider'] == 'self'
+    assert data['ip_address'] == '203.0.113.10'
+    assert data['ssh_key_path'] == '/tmp/self-key'
+    assert data['is_standalone'] is True
+    assert data['status'] == HostStatus.PROVISIONED_PENDING_SETUP.value
+    mock_enqueue.assert_called_once()
+
+
+def test_create_self_host_missing_ip_returns_400(client, app):
+    """Missing ip_address for self host returns 400."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+    assert response.status_code == 400
+    assert 'IP address' in response.get_json()['error']['message']
+
+
+def test_create_self_host_invalid_ip_returns_400(client, app):
+    """Invalid ip_address for self host returns 400."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'ip_address': 'not-an-ip',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+    assert response.status_code == 400
+    assert 'Invalid IP address' in response.get_json()['error']['message']
+
+
+def test_create_second_self_host_rejected(client, app):
+    with app.app_context():
+        create_host(name='existing-self', provider='self', status=HostStatus.ERROR)
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'another-self',
+        'provider': 'self',
+        'ip_address': '203.0.113.10',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+
+    assert response.status_code == 409
+    assert 'self host already exists' in response.get_json()['error']['message']
+
+
+def test_create_self_host_rejects_unsafe_ssh_user(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'ip_address': '203.0.113.10',
+        'timezone': 'UTC',
+        'ssh_user': 'rage;rm -rf /',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH username contains invalid characters' in response.get_json()['error']['message']
+
+
+@patch('ui.routes.host_routes.cleanup_self_host_key_material')
+@patch('ui.routes.host_routes.enqueue_task', side_effect=RuntimeError('queue down'))
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+@patch('ui.routes.host_routes.generate_self_host_keys', return_value=('/tmp/self-key', 'ssh-rsa pub'))
+def test_create_self_host_cleans_up_when_enqueue_fails(
+    mock_keys, mock_lock, mock_enqueue, mock_cleanup, client, app
+):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'ip_address': '203.0.113.10',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+
+    assert response.status_code == 500
+    mock_cleanup.assert_called_once_with('/tmp/self-key', public_key='ssh-rsa pub')
+    with app.app_context():
+        assert Host.query.filter_by(provider='self').first() is None
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+})
+@patch('ui.routes.host_routes.subprocess.run')
+def test_test_connection_key_success(mock_run, mock_detect_os, client, app):
+    """Key-mode connection test keeps the existing Ansible ping path."""
+    mock_run.return_value = MagicMock(returncode=0, stdout='pong', stderr='')
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.20',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'key',
+        'ssh_key': '-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is True
+    assert 'Detected OS: Debian GNU/Linux 12' in response.get_json()['data']['message']
+    args = mock_run.call_args.args[0]
+    assert '--private-key' in args
+    mock_detect_os.assert_called_once()
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_success(mock_test, mock_detect_os, client, app):
+    """Password-mode connection test delegates to the password helper."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.21',
+        'ssh_port': 2222,
+        'ssh_user': 'deploy',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is True
+    assert 'Detected OS: Debian GNU/Linux 12' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.21', 2222, 'deploy', 'secret')
+    mock_detect_os.assert_called_once_with(
+        host='203.0.113.21',
+        port=2222,
+        username='deploy',
+        timeout=15,
+        password='secret',
+        key_filename=None,
+    )
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'ubuntu',
+    'version_id': '24.04',
+    'pretty_name': 'Ubuntu 24.04.2 LTS',
+    'os_type': 'ubuntu',
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_accepts_supported_ubuntu24(mock_test, mock_detect_os, client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.25',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is True
+    assert 'Detected OS: Ubuntu 24.04.2 LTS' in response.get_json()['data']['message']
+    assert '99k LAN rate is not compatible with Ubuntu' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.25', 22, 'root', 'secret')
+    mock_detect_os.assert_called_once()
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'ubuntu',
+    'version_id': '18.04',
+    'pretty_name': 'Ubuntu 18.04.6 LTS',
+    'os_type': None,
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_rejects_unsupported_os(mock_test, mock_detect_os, client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.24',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is False
+    assert 'Ubuntu 18.04.6 LTS is not supported' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.24', 22, 'root', 'secret')
+    mock_detect_os.assert_called_once()
+
+
+@patch(
+    'ui.routes.host_routes.test_password_connection',
+    return_value=(False, 'Connection failed: passwordless sudo is required for non-root users.')
+)
+def test_test_connection_password_surfaces_sudo_failure(mock_test, client, app):
+    """Password-mode failures return the helper's message unchanged."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.22',
+        'ssh_port': 22,
+        'ssh_user': 'deploy',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['success'] is False
+    assert 'passwordless sudo' in response.get_json()['data']['message']
+    mock_test.assert_called_once_with('203.0.113.22', 22, 'deploy', 'secret')
+
+
+def test_test_connection_rejects_unsafe_ssh_user(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.26',
+        'ssh_port': 22,
+        'ssh_user': 'root\nbad: value',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 400
+    assert 'SSH username contains invalid characters' in response.get_json()['error']['message']
 
 
 # --- GET /api/hosts/<id> ---
@@ -288,6 +736,33 @@ def test_delete_host_success(mock_lock, mock_enqueue, client, app):
     response = client.delete(f'/api/hosts/{host_id}', headers=headers)
     assert response.status_code == 202
     assert 'deletion task queued' in response.get_json()['message']
+    mock_enqueue.assert_called_once()
+
+
+@patch('ui.routes.host_routes.enqueue_task')
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+def test_delete_self_host_defers_key_removal_to_task(
+    mock_lock, mock_enqueue, client, app, tmp_path
+):
+    """The DELETE route must not touch authorized_keys directly — the destroy
+    task owns that cleanup, so an enqueue failure never leaves the host record
+    in place with its key already removed."""
+    key_path = tmp_path / 'self_id_rsa'
+    Path(str(key_path) + '.pub').write_text('ssh-rsa pub\n')
+    with app.app_context():
+        host = create_host(
+            name='self-host',
+            provider='self',
+            is_standalone=True,
+            ssh_key_path=str(key_path),
+            status=HostStatus.ACTIVE,
+        )
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.delete(f'/api/hosts/{host_id}', headers=headers)
+
+    assert response.status_code == 202
     mock_enqueue.assert_called_once()
 
 

@@ -136,6 +136,16 @@ mkdir -p \
     "${INSTALL_DIR}/terraform/vultr-root/terraform.tfstate.d" \
     "${INSTALL_DIR}/ansible/inventory"
 
+# Dedicated directory bind-mounted into the web container for self-host SSH
+# key management. Kept separate from ~/.ssh so the container never sees the
+# operator's private keys. To enable the self-host provider, also add
+#   AuthorizedKeysFile .ssh/authorized_keys .qlsm-ssh/authorized_keys
+# to /etc/ssh/sshd_config and reload sshd. See docs/setup.md#self-host-provider.
+mkdir -p "${HOME}/.qlsm-ssh"
+chmod 700 "${HOME}/.qlsm-ssh"
+touch "${HOME}/.qlsm-ssh/authorized_keys"
+chmod 600 "${HOME}/.qlsm-ssh/authorized_keys"
+
 cd "${INSTALL_DIR}"
 success "Directory ready: ${INSTALL_DIR}"
 

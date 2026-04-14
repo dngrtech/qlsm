@@ -10,6 +10,7 @@ export function validateHostName(name) {
   const trimmed = name.trim();
   if (!trimmed) return 'Name cannot be empty';
   if (trimmed.length > HOST_NAME_MAX_LENGTH) return `Name cannot exceed ${HOST_NAME_MAX_LENGTH} characters`;
+  if (/^\d+$/.test(trimmed)) return 'Host name cannot contain only digits.';
   if (!HOST_NAME_PATTERN.test(trimmed)) return 'Name must start and end with a letter or number, and can only contain letters, numbers, and hyphens';
   return null;
 }

@@ -28,6 +28,7 @@ graph TD
         FlaskApp -->|💾 Reads/Writes Instance Config Files| FileSystem["📁 Filesystem <br> (configs/<host>/<instance_id>/*)"]
         FlaskApp -->|📤 Enqueues Ansible or Terraform Tasks| Redis["🧠 Redis"]
         FlaskApp -->|⚙️ Reads/Writes| DotEnv["⚙️ Dotenv Config"]
+        FlaskApp -->|🔑 Self-host key setup| HostSSH["📁 /host-ssh mount"]
 
         RQWorker[RQ Worker] -->|📥 Dequeues Tasks| Redis
         RQWorker -->|🚀 Executes Terraform & Ansible| AutomationRunner["🛠️ Automation Runner <br> (Terraform & Ansible CLI)"]
@@ -64,7 +65,7 @@ graph TD
     * **CLI Modules (`ui/user_cli.py`, `ui/preset_cli.py`):** Register focused Flask CLI commands for user bootstrap and preset management.
     * **API Routes (`ui/routes/` package):** Defines API endpoints, organized into blueprints. These endpoints return JSON responses. Key route modules: `auth_api_routes.py`, `host_routes.py`, `instance_routes.py`, `preset_api_routes.py`, `server_status_routes.py`, `settings_routes.py`, `user_routes.py`, `draft_routes.py`, `script_routes.py`, `factory_routes.py`, and `external_api_routes.py` (versioned external API at `/api/v1/`).
 *   **SQLite DB:** A simple file-based database storing application metadata:
-    * **Host Model:** Stores information about target servers: name, provisioned IP address, provider, region/size, status (Enum), `qlfilter_status` (Enum), SSH key path, `ssh_port`, `os_type`, `is_standalone`, `timezone`, `auto_restart_schedule`, and logs.
+    * **Host Model:** Stores information about target servers: name, provisioned IP address, provider, region/size, status (Enum), `qlfilter_status` (Enum), SSH key path, `ssh_port`, `os_type`, `is_standalone`, `timezone`, `auto_restart_schedule`, and logs. For standalone hosts, `ssh_key_path` remains the single persisted automation credential even when the operator initially onboarded with password auth, and `os_type` is populated from SSH-based OS auto-detection rather than a user-selected dropdown.
     * **QLInstance Model:** Stores information about Quake Live server instances: name, port, hostname, `lan_rate_enabled`, `qlx_plugins`, ZMQ connection fields (`zmq_rcon_port`, `zmq_rcon_password`, `zmq_stats_port`, `zmq_stats_password`), status (Enum), logs, and a foreign key (`host_id`) linking it to its parent `Host`. Config files are stored on the filesystem.
     * **ConfigPreset Model:** Stores reusable configuration preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer.
     * **ApiKey Model:** Stores API keys for external service authentication (Bearer token auth for `/api/v1/` endpoints).
@@ -93,7 +94,7 @@ graph TD
         * `ui/task_logic/task_lock.py`: Distributed lock mechanism preventing concurrent task execution on the same resource.
 *   **RCON Service (`rcon_service/`):** A set of modules providing remote console and live stats access over ZMQ. Used by the frontend's RCON console modal and live status polling.
 *   **WebSocket (Flask-SocketIO):** Provides real-time push capability from server to browser for live status updates.
-*   **Target Host Servers:** The remote Linux servers provisioned by Terraform and subsequently set up and managed by Ansible. QLDS instances run directly on these hosts (e.g., under `/home/ql/qlds-{id}`), utilizing shared base installations in `/home/ql/qlds-base`, `/home/ql/minqlx-shared`, etc. QLFilter can also be managed on these hosts.
+*   **Target Host Servers:** Linux servers set up and managed by Ansible. Cloud hosts are provisioned by Terraform first. Standalone and self hosts skip Terraform and are configured directly over SSH. QLDS instances run directly on these hosts (e.g., under `/home/ql/qlds-{id}`), utilizing shared base installations in `/home/ql/qlds-base`, `/home/ql/minqlx-shared`, etc. QLFilter can also be managed on these hosts.
 *   **.env / DotEnv Config:** Stores configuration settings like database paths, Redis connection details, cloud provider credentials (needs secure handling), and paths for Terraform/Ansible artifacts.
 
 ## Key Architectural Decisions
@@ -106,6 +107,9 @@ graph TD
 *   **Asynchronous Task Execution (Backend):** Long-running operations are handled asynchronously by the backend using RQ and Redis.
 *   **Automation Tool Integration:** Uses direct `subprocess` calls for executing Ansible and Terraform playbooks/commands.
 *   **Split Ansible Playbooks:** Playbooks are split by responsibility: `setup_host.yml` (one-time host setup after Terraform), `add_qlds_instance.yml` (per-instance deploy), and dedicated playbooks for rename, restart, LAN rate, workshop update, auto-restart, log fetching, and QLFilter management.
+*   **Self-Host Provider:** A `self` provider creates a host record with `provider='self'` and `is_standalone=True`. The web container owns a dedicated `/host-ssh` mount (backed by `~/.qlsm-ssh/` on the host, intentionally separate from `~/.ssh/` so the container never sees the operator's personal private keys). It generates the SSH keypair and appends the generated public key to `~/.qlsm-ssh/authorized_keys`; `sshd` is configured to include that file in `AuthorizedKeysFile`. For self hosts, the stored `Host.ip_address` remains the client-facing server address shown in the UI and used in connect links. Automation resolves a hidden Docker-reachable management target for SSH, Ansible, and status polling. Self-host game instances reuse the QLSM Docker Redis on `127.0.0.1:6379`, with QLSM reserving `DB 0` and minqlx instances using per-instance DBs derived from `port - 27959`; host-level `redis-server` is not part of the self-host runtime contract.
+*   **Standalone Auth Modes:** Standalone hosts support either operator-supplied SSH keys or a password bootstrap path. Password mode is temporary: QLSM verifies login, requires passwordless sudo for non-root users, generates a managed SSH keypair, installs the public key on the target host, and then discards the password. All later Ansible, SSH polling, and instance-management flows continue to use the stored managed private key. Standalone onboarding auto-detects the remote OS from `/etc/os-release`; operators no longer choose an OS family manually. Ubuntu detections are accepted, but the connection test warns that `99k LAN rate` is not compatible with Ubuntu.
+*   **Firewall Modes:** Cloud and standalone hosts use `firewall_mode=full`, where QLSM owns the complete persisted host firewall ruleset. Self hosts use `firewall_mode=helper`, where a host-side `qlsm-network-rules-apply` helper reconciles only QLSM-owned `QLSM-*` iptables chains. The helper does not touch Docker chains or the `FORWARD` chain.
 *   **Data Model Relationship:** Establishes a clear one-to-many relationship between Hosts and QLInstances in the database.
 *   **Containerized Deployment:** All services run as Docker containers coordinated by Docker Compose. Caddy handles reverse proxying and automatic HTTPS. No manual Systemd or Nginx configuration required.
 *   **Comprehensive Testing:** Requires expansion of the test suite to cover Host CRUD, Terraform task queueing/execution (mocked), Ansible host setup task integration, and updated Instance tests reflecting the Host relationship and new Ansible playbooks.
@@ -122,6 +126,7 @@ qlsm/
 │   ├── task_context.py          # @with_app_context decorator
 │   ├── routes/                  # API endpoints
 │   │   ├── host_routes.py       # Host CRUD + actions (restart, qlfilter)
+│   │   ├── self_host_helpers.py # Self-host discovery and SSH key setup
 │   │   ├── instance_routes.py   # Instance CRUD + config management
 │   │   ├── auth_api_routes.py   # JWT authentication
 │   │   └── preset_api_routes.py # Config presets
@@ -136,6 +141,8 @@ qlsm/
 │       ├── ansible_workshop_update.py # Force workshop update
 │       ├── standalone_host_setup.py # Setup user-provided hosts
 │       ├── standalone_host_remove.py # Remove user-provided hosts
+│       ├── standalone_inventory.py # Standalone/self Ansible inventory names
+│       ├── self_host_network.py    # Self-host network desired state
 │       ├── terraform_provision.py   # VM provisioning
 │       ├── terraform_destroy.py     # VM destruction
 │       ├── task_lock.py             # Distributed lock for concurrent task prevention
@@ -184,6 +191,15 @@ qlsm/
 5. Ansible `setup_host.yml` → Initial configuration (QLDS base, minqlx, etc.)
 6. Host status → ACTIVE
 
+### Self-Host Setup
+1. User selects `QLSM Host (self)` → frontend calls `GET /api/hosts/self/defaults`
+2. User submits form → `POST /api/hosts` with `provider: "self"`
+3. Web container appends a generated public key to `/host-ssh/authorized_keys` (which is `~/.qlsm-ssh/authorized_keys` on the host, read by `sshd` via `AuthorizedKeysFile`) and resolves a hidden Docker-reachable management target for self-host automation
+4. Host record is created with `provider='self'`, `is_standalone=True`, and status `PROVISIONED_PENDING_SETUP`
+5. RQ worker runs `setup_host.yml` over SSH using the generated private key
+6. `setup_host.yml` installs the QLSM network helper in `firewall_mode=helper` and skips host-level `redis-server`
+7. Host status → ACTIVE
+
 ### Instance Deployment
 1. User submits form → `POST /api/instances`
 2. Instance record created, config files written to `configs/<host>/<id>/`
@@ -208,7 +224,7 @@ qlsm/
 7. Host status → ACTIVE
 
 ### Live Status and Workshop Preview
-1. `serverchecker` plugin on each game instance writes live status to instance Redis key `minqlx:server_status:<port>`.
+1. `serverchecker` plugin on each game instance writes live status to Redis key `minqlx:server_status:<port>`. For self hosts, minqlx uses the shared QLSM Redis with a per-instance DB selected from `port - 27959`.
 2. Poller (`ui/task_logic/server_status_poll.py`) SSHes hosts, reads per-instance status, and writes to management Redis keys `server:status:<host_id>:<instance_id>`.
 3. Frontend polls `GET /api/server-status` for live map/player/state data.
 4. Status payload now includes `workshop_item_id` when the current map can be resolved to a workshop item.

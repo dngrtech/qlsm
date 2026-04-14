@@ -49,5 +49,7 @@ describe('ChangePasswordPage', () => {
         state: { openAddHost: true },
       });
     });
+
+    expect(window.sessionStorage.getItem('qlsm:auto-open-add-host')).toBe('1');
   });
 });

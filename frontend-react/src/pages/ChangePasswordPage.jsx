@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../components/NotificationProvider';
 import { useAuth } from '../contexts/AuthContext';
 import { changePassword } from '../services/auth';
+import { armAutoOpenAddHost } from '../utils/addHostAutoOpen';
 
 function ChangePasswordPage() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ function ChangePasswordPage() {
 
     try {
       await changePassword(password, confirmPassword);
+      armAutoOpenAddHost();
       clearPasswordChangeRequired();
       showSuccess('Password updated successfully.');
       navigate('/servers', { replace: true, state: { openAddHost: true } });

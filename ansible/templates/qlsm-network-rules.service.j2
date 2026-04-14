@@ -1,0 +1,8 @@
+[Unit]
+Description=Apply QLSM network rules
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/qlsm-network-rules-apply
