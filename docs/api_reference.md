@@ -59,7 +59,6 @@ Standalone provider with SSH key:
   "ssh_user": "root",
   "ssh_auth_method": "key",
   "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----",
-  "os_type": "debian",
   "timezone": "UTC"
 }
 ```
@@ -75,12 +74,11 @@ Standalone provider with password bootstrap:
   "ssh_user": "root",
   "ssh_auth_method": "password",
   "ssh_password": "bootstrap-secret",
-  "os_type": "ubuntu",
   "timezone": "UTC"
 }
 ```
 
-Password bootstrap never stores `ssh_password`. QLSM uses it once to install a managed SSH key and then persists only the generated key path on the host record. If `ssh_user` is not `root`, passwordless sudo is required. Supported standalone OS selections are `debian` and `ubuntu`, where `ubuntu` accepts 20.x, 22.x, and 24.x minor releases.
+Password bootstrap never stores `ssh_password`. QLSM uses it once to install a managed SSH key and then persists only the generated key path on the host record. If `ssh_user` is not `root`, passwordless sudo is required. Standalone host OS is detected automatically over SSH during connection testing and host creation; the stored `Host.os_type` is the normalized detected family (`debian` or `ubuntu`).
 
 Self provider:
 
@@ -151,7 +149,18 @@ Password mode:
 }
 ```
 
-Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive.
+Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive. Connection tests auto-detect the remote OS from `/etc/os-release` and reject unsupported releases. Ubuntu detections succeed, but the response includes a warning that `99k LAN rate` is not compatible with Ubuntu.
+
+Example success response:
+
+```json
+{
+  "data": {
+    "success": true,
+    "message": "Connection successful. Detected OS: Ubuntu 24.04.2 LTS. Warning: 99k LAN rate is not compatible with Ubuntu."
+  }
+}
+```
 
 ### Host Name Validation (RFC 1123)
 - Max length: 20 characters
