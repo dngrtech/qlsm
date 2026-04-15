@@ -118,7 +118,11 @@ pytest tests/
 
 ## Acknowledgements
 
-Huge thanks to **Doomsday** - his deep knowledge of Quake Live dedicated servers administration has directly shaped a large portion of QLSM's features. Years of running servers for the NA Thunderdome community (www.thunderdomequake.com) gave him insights that no documentation could replace. He also maintains an excellent collection of minqlx plugins worth checking out: https://github.com/D00MSDAYDEVICE/minqlx
+Huge thanks to **Doomsday** — his deep knowledge of Quake Live dedicated server 
+administration has directly shaped a large portion of QLSM's features. Years of 
+running servers for the NA [Thunderdome](https://www.thunderdomequake.com) community 
+gave him insights that no documentation could replace. He also maintains an excellent 
+collection of [minqlx plugins](https://github.com/D00MSDAYDEVICE/minqlx) worth checking out.
 
 Kudos to **mb** for his help configuring and troubleshooting the 99k LAN rate feature.
 
