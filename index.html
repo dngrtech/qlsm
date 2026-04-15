@@ -48,7 +48,7 @@
       <li>UI-driven Factory Management: Enable factories directly via checkboxes</li>
     </ul>
   </li>
-  <li>Chat logs (including rotated archived chat log files) and server logs retrieval with convenient search capability</li>
+  <li>Chat logs (including rotated archived chat log files) and server logs retrieval with convenient search capability.</li>
   <li>Daily/weekly/monthly host auto-restart scheduling; scheduled restarts trigger workshop refresh across deployed instances</li>
   <li>Manual workshop item update by Steam Workshop ID, with optional restart of selected instances</li>
   <li>ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI</li>
@@ -70,7 +70,7 @@
 
 <h2>Requirements</h2>
 
-<p>Ubuntu 22.04 or newer recommended:</p>
+<p>Ubuntu 22.04 recommended:</p>
 <ul>
   <li><strong>Docker</strong> — <a href="https://docs.docker.com/engine/install/ubuntu/">install guide</a></li>
   <li><strong>Docker Compose</strong> (usually included with Docker)</li>
@@ -125,6 +125,12 @@ sudo apt install redis-server && sudo systemctl enable --now redis</code></pre>
   <li><a href="https://github.com/dngrtech/qlsm/blob/main/docs/architecture.md">docs/architecture.md</a> — how it fits together</li>
   <li><a href="https://github.com/dngrtech/qlsm/blob/main/docs/technical.md">docs/technical.md</a> — implementation details</li>
 </ul>
+
+<h2>Acknowledgements</h2>
+
+<p>Huge thanks to <strong>Doomsday</strong> — his deep knowledge of Quake Live dedicated server administration has directly shaped a large portion of QLSM's features. Years of running servers for the NA <a href="https://www.thunderdomequake.com">Thunderdome</a> community gave him insights that no documentation could replace. He also maintains an excellent collection of <a href="https://github.com/D00MSDAYDEVICE/minqlx">minqlx plugins</a> worth checking out.</p>
+
+<p>Kudos to <strong>mb</strong> for his help configuring and troubleshooting the 99k LAN rate feature.</p>
 
 <h2>License</h2>
 <p>GPL-3.0</p>
