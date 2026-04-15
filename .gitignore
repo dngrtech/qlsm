@@ -18,7 +18,6 @@
 !gunicorn.conf.py
 !run-dev.sh
 !run_dev.py
-!install.sh
 !Caddyfile
 !redis.conf
 !ansible.cfg
