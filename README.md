@@ -38,7 +38,7 @@ Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers
 
 ## Requirements
 
-Ubuntu 22.04 or newer recommended:
+Ubuntu 22.04 recommended:
 
 - **Docker** — [install guide](https://docs.docker.com/engine/install/ubuntu/)
 - **Docker Compose** (usually included with Docker)
