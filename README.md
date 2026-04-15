@@ -115,6 +115,13 @@ pytest tests/
 - [docs/architecture.md](docs/architecture.md) — how it fits together
 - [docs/technical.md](docs/technical.md) — implementation details
 
+
+## Acknowledgements
+
+Huge thanks to **Doomsday** - his deep knowledge of Quake Live dedicated servers administration has directly shaped a large portion of QLSM's features. Years of running servers for the NA Thunderdome community (www.thunderdomequake.com) gave him insights that no documentation could replace. He also maintains an excellent collection of minqlx plugins worth checking out: https://github.com/D00MSDAYDEVICE/minqlx
+
+Kudos to **mb** for his help configuring and troubleshooting the 99k LAN rate feature.
+
 ## License
 
 GPL-3.0
