@@ -11,6 +11,7 @@
 !entrypoint.sh
 !gunicorn.conf.py
 !rcon_service/
+!vultr-startup-ubuntu22.sh
 
 # ── Frontend source (Stage 1 — build only) ─────────────────────────────────────
 !frontend-react/
