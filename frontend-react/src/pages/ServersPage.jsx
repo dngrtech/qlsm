@@ -167,15 +167,17 @@ export default function ServersPage() {
                         </span>
                     </div>
                 </div>
-                <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:justify-end">
-                    <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary w-full justify-center gap-2 sm:w-auto">
-                        {allExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        {allExpanded ? 'Collapse All' : 'Expand All'}
-                    </button>
-                    <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary w-full justify-center gap-2 sm:w-auto">
-                        <Plus size={14} /> Add New Host
-                    </button>
-                </div>
+                {serversData.length > 0 && (
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:justify-end">
+                        <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary w-full justify-center gap-2 sm:w-auto">
+                            {allExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            {allExpanded ? 'Collapse All' : 'Expand All'}
+                        </button>
+                        <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary w-full justify-center gap-2 sm:w-auto">
+                            <Plus size={14} /> Add New Host
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Content */}
