@@ -1,9 +1,8 @@
 import React, { useState, useEffect, Fragment, useCallback } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { X, Save, AlertTriangle } from 'lucide-react';
-import CodeMirrorEditor from '../CodeMirrorEditor'; // Assuming this path is correct
-import ConfirmationModal from '../ConfirmationModal'; // Assuming this path is correct
-import { classNames } from '../../utils/uiUtils'; // Assuming this path is correct
+import CodeMirrorEditor from '../CodeMirrorEditor';
+import ConfirmationModal from '../ConfirmationModal';
 
 const FullScreenConfigEditorModal = ({
   isOpen,
@@ -12,7 +11,7 @@ const FullScreenConfigEditorModal = ({
   fileName,
   initialContent,
   language,
-  linterSource, // Optional: for CodeMirror linting
+  linterSource,
 }) => {
   const [currentContent, setCurrentContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
@@ -53,17 +52,13 @@ const FullScreenConfigEditorModal = ({
 
   const handleSave = useCallback(() => {
     onSave(currentContent);
-    setIsDirty(false); // Assuming save implies modal will close or content is now "clean"
-  // onClose(); // Typically onSave would also close the modal, handled by parent
+    setIsDirty(false);
   }, [currentContent, onSave]);
-
-  // Removed: if (!isOpen) return null; 
-  // The Transition component's `show` prop will handle visibility and animation.
 
   return (
     <>
       <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={handleAttemptClose}> {/* Removed open={isOpen} to match AddInstanceModal */}
+        <Dialog as="div" className="relative z-50" onClose={handleAttemptClose}>
           <Transition.Child
             as={Fragment}
             enter="ease-out duration-300"
@@ -73,7 +68,7 @@ const FullScreenConfigEditorModal = ({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-black/70 dark:bg-neutral-900/80" />
+            <div className="modal-backdrop fixed inset-0" aria-hidden="true" />
           </Transition.Child>
 
           <div className="fixed inset-0 overflow-y-auto">
@@ -87,57 +82,48 @@ const FullScreenConfigEditorModal = ({
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="flex flex-col w-[95vw] h-[95vh] transform overflow-hidden rounded-lg bg-white dark:bg-neutral-800 text-left align-middle shadow-xl transition-all">
-                  <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
+                <Dialog.Panel className="modal-panel flex flex-col w-[95vw] h-[95vh] transform overflow-hidden text-left align-middle transition-all">
+                  <div className="accent-line-top" />
+
+                  <div className="relative z-10 flex items-center justify-between p-4 border-b border-[var(--surface-border)]">
                     <Dialog.Title
                       as="h3"
-                      className="text-lg font-medium leading-6 text-neutral-900 dark:text-neutral-100"
+                      className="font-display text-lg font-semibold tracking-wider uppercase text-theme-primary"
                     >
                       Editing: {fileName}
                     </Dialog.Title>
                     <button
                       type="button"
-                      className="p-1 rounded-md text-neutral-400 hover:text-neutral-500 dark:text-neutral-500 dark:hover:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600"
+                      className="logs-modal-close-btn"
                       onClick={handleAttemptClose}
+                      aria-label="Close editor"
                     >
-                      <X size={24} />
+                      <X size={16} />
                     </button>
                   </div>
 
-                  <div className="flex-grow overflow-hidden min-h-0"> {/* Added min-h-0 */}
-                    {/* Ensure CodeMirrorEditor can handle dynamic height or is styled to fill */}
+                  <div className="relative z-10 flex-grow overflow-hidden min-h-0">
                     <CodeMirrorEditor
                       value={currentContent}
                       onChange={handleContentChange}
                       language={language}
                       linterSource={linterSource}
-                      height="100%" // Set to 100% to fill flex-grow parent
-                      // Ensure dark mode is handled by CodeMirrorEditor itself or via theme prop
+                      height="100%"
                     />
                   </div>
 
-                  <div className="flex justify-end items-center p-4 border-t border-neutral-200 dark:border-neutral-700 space-x-3">
+                  <div className="relative z-10 flex justify-end items-center p-4 border-t border-[var(--surface-border)] gap-3">
                     <button
                       type="button"
-                      className={classNames(
-                        "px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-neutral-800",
-                        "text-white bg-red-600 hover:bg-red-700 dark:text-white dark:bg-red-600 dark:hover:bg-red-700 focus:ring-red-500"
-                      )}
+                      className="btn btn-danger"
                       onClick={handleAttemptClose}
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
-                      className={classNames(
-                        "inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-neutral-800",
-                        "text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-                        // isDirty ? "bg-indigo-600 hover:bg-indigo-700" : "bg-neutral-400 cursor-not-allowed",
-                        // "dark:text-white",
-                        // isDirty ? "dark:bg-indigo-500 dark:hover:bg-indigo-600" : "dark:bg-neutral-600"
-                      )}
+                      className="btn btn-primary inline-flex items-center"
                       onClick={handleSave}
-                      // disabled={!isDirty} // Optionally disable if not dirty
                     >
                       <Save size={16} className="mr-2" />
                       Save Changes
@@ -160,7 +146,7 @@ const FullScreenConfigEditorModal = ({
           confirmButtonText="Discard Changes"
           cancelButtonText="Keep Editing"
           icon={<AlertTriangle size={24} className="text-yellow-500" />}
-          zIndexClass="z-[60]" // Ensure this is higher than the main modal's z-index
+          zIndexClass="z-[60]"
         />
       )}
     </>

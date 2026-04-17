@@ -397,25 +397,25 @@ function FactoryManager({
 
             {/* Main Editor Area */}
             {!activeFile ? (
-                <div className="flex-1 flex items-center justify-center bg-slate-900 rounded-lg border border-slate-700">
-                    <p className="text-slate-500 text-sm">Select a factory file to view or edit.</p>
+                <div className="flex-1 flex items-center justify-center bg-[var(--surface-base)] rounded-lg border border-[var(--surface-border)]">
+                    <p className="text-[var(--text-muted)] text-sm">Select a factory file to view or edit.</p>
                 </div>
             ) : (
                 <div className="flex-1 flex flex-col min-w-0">
                     {/* Header */}
                     <div className="flex items-center justify-between mb-2 flex-shrink-0">
                         <div className="flex items-center gap-2 min-w-0">
-                            <FileIcon size={16} className="text-blue-500 flex-shrink-0" />
-                            <span className="text-sm font-medium text-slate-200 truncate">{activeFile}</span>
+                            <FileIcon size={16} className="text-[var(--accent-primary)] flex-shrink-0" />
+                            <span className="text-sm font-medium text-[var(--text-primary)] truncate">{activeFile}</span>
                             {editedContent[activeFile] !== undefined && (
-                                <span className="text-orange-500 ml-1">●</span>
+                                <span className="text-[var(--accent-warning)] ml-1">●</span>
                             )}
                         </div>
                         <div className="flex items-center gap-1">
                             <button
                                 type="button"
                                 onClick={handleCopyContent}
-                                className="p-1 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-slate-200"
+                                className="p-1 hover:bg-[var(--surface-elevated)] rounded transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                                 title="Copy to clipboard"
                             >
                                 <Copy size={14} />
@@ -423,8 +423,9 @@ function FactoryManager({
                             <button
                                 type="button"
                                 onClick={handleExpandEditor}
-                                className="p-1 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-slate-200"
+                                className="p-1 hover:bg-[var(--surface-elevated)] rounded transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                                 title="Expand editor"
+                                aria-label="Expand editor"
                             >
                                 <Maximize size={14} />
                             </button>
@@ -432,10 +433,10 @@ function FactoryManager({
                     </div>
 
                     {/* Editor Container */}
-                    <div className="flex-1 min-h-0 border border-slate-700 rounded-lg overflow-hidden relative">
+                    <div className="flex-1 min-h-0 border border-[var(--surface-border)] rounded-lg overflow-hidden relative">
                         {isLoadingContent && (
-                            <div className="absolute inset-0 z-10 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center">
-                                <Loader2 className="animate-spin text-indigo-500" />
+                            <div className="absolute inset-0 z-10 bg-[var(--surface-base)]/50 backdrop-blur-[1px] flex items-center justify-center">
+                                <Loader2 className="animate-spin text-[var(--accent-primary)]" />
                             </div>
                         )}
                         <CodeMirrorEditor
