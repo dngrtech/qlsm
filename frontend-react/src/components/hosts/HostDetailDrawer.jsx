@@ -296,21 +296,20 @@ export default function HostDetailDrawer({
                 {/* Footer Actions */}
                 {internalHost && !loading && !error && (
                   <div className="drawer-footer">
+                    <button type="button" onClick={onClose} className="btn btn-ghost">Close</button>
                     <button type="button" onClick={() => internalHost && onRequestRestart?.(internalHost)} disabled={isRestartDisabled}
-                      className="btn btn-secondary gap-1.5" style={!isRestartDisabled ? { borderColor: 'var(--accent-warning)', color: 'var(--accent-warning)' } : {}}>
+                      className="btn btn-secondary gap-1.5">
                       {internalHost?.status?.toLowerCase() === HostStatus.REBOOTING.toLowerCase()
                         ? <><LoaderCircle size={14} className="animate-spin" /> Rebooting...</>
                         : <><PowerIcon size={14} /> Restart</>}
                     </button>
                     <button type="button" onClick={() => qlBtn.action?.()} disabled={qlBtn.disabled}
-                      className={`btn ${qlBtn.variant === 'primary' ? 'btn-primary' : qlBtn.variant === 'warning' ? 'btn-secondary' : 'btn-secondary'} gap-1.5`}
-                      style={qlBtn.variant === 'warning' && !qlBtn.disabled ? { borderColor: '#f59e0b', color: '#f59e0b' } : {}}>
+                      className={`btn ${qlBtn.variant === 'primary' ? 'btn-primary' : 'btn-secondary'} gap-1.5`}>
                       <qlBtn.Icon size={14} className={qlBtn.loading ? 'animate-spin' : ''} /> {qlBtn.text}
                     </button>
                     <button type="button" onClick={handleDeleteClick} disabled={internalHost?.status === 'deleting'} className="btn btn-danger gap-1.5">
                       {internalHost?.is_standalone ? 'Remove' : 'Delete'}
                     </button>
-                    <button type="button" onClick={onClose} className="btn btn-secondary">Close</button>
                   </div>
                 )}
               </div>
