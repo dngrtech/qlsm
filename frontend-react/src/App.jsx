@@ -37,7 +37,7 @@ function App() {
               </Routes>
             </main>
             <footer
-              className="relative z-10 bg-theme-raised border-t border-theme flex items-center justify-center text-sm text-theme-secondary shrink-0"
+              className="sticky bottom-0 z-50 bg-theme-raised border-t border-theme flex items-center justify-center text-sm text-theme-secondary shrink-0"
               style={{ height: 'var(--footer-height)' }}
             >
               <span className="font-mono text-xs tracking-wide">
