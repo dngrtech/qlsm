@@ -77,12 +77,20 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Default login is `admin` / `admin`. Password change is enforced on first login.
+### Option 3 — Vultr (no terminal required)
+
+The easiest option. Register a [Vultr](https://www.vultr.com) account, go to **Orchestration → Startup Scripts**, and add the [vultr-startup-ubuntu22.sh](https://github.com/dngrtech/qlsm/blob/main/vultr-startup-ubuntu22.sh) script. Then deploy a VPS (Ubuntu 22.04, $5/month works fine) selecting that startup script — QLSM will be up and running in about 10 minutes with no terminal interaction needed.
+
+Default login is `admin` / `admin`. A password change is enforced on first login.
 
 ## Updating
 
 ```bash
+# Default install (~/qlsm):
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update
+
+# Vultr startup script install (/opt/qlsm):
+INSTALL_DIR=/opt/qlsm bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh) --update
 ```
 
 Downloads the latest `docker-compose.yml`, pulls the new image, and restarts. Your `.env` and data are untouched.
