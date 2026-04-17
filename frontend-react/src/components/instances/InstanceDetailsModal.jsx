@@ -412,22 +412,17 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                 {/* Footer Actions */}
                 {instance && !loading && !error && (
                   <div className="drawer-footer">
-                    <button type="button" onClick={() => { if (instance) onOpenEditConfig(instance); onClose(); }}
-                      disabled={actionLoading || ['DEPLOYING', 'CONFIGURING'].includes(statusUpper)}
-                      className="btn btn-secondary gap-1.5" style={{ borderColor: '#3b82f6', color: '#3b82f6' }}>
-                      <Edit3 size={14} /> Edit Config
-                    </button>
+                    <button type="button" onClick={onClose} className="btn btn-ghost">Close</button>
                     <button type="button" onClick={handleStopStart}
                       disabled={actionLoading || isBusyStatus || statusUpper === 'IDLE'}
-                      className="btn btn-secondary gap-1.5"
-                      style={statusUpper === 'STOPPED' ? { borderColor: 'var(--accent-primary)', color: 'var(--accent-primary)' } : isActionableStatus ? { borderColor: 'var(--accent-warning)', color: 'var(--accent-warning)' } : {}}>
+                      className="btn btn-secondary gap-1.5">
                       {statusUpper === 'STOPPED'
                         ? <><Play size={14} /> {actionLoading && statusUpper === 'STARTING' ? 'Starting...' : 'Start'}</>
                         : <><Square size={14} /> {actionLoading && statusUpper === 'STOPPING' ? 'Stopping...' : 'Stop'}</>
                       }
                     </button>
                     <button type="button" onClick={handleRestart} disabled={actionLoading || !isActionableStatus}
-                      className="btn btn-secondary gap-1.5" style={isActionableStatus ? { borderColor: 'var(--accent-warning)', color: 'var(--accent-warning)' } : {}}>
+                      className="btn btn-secondary gap-1.5">
                       <RefreshCw size={14} className={actionLoading && statusUpper === 'RESTARTING' ? 'animate-spin' : ''} />
                       {actionLoading && statusUpper === 'RESTARTING' ? 'Restarting...' : 'Restart'}
                     </button>
@@ -436,7 +431,11 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                       className="btn btn-danger gap-1.5">
                       <Trash2 size={14} /> {actionLoading && statusUpper === 'DELETING' ? 'Deleting...' : 'Delete'}
                     </button>
-                    <button type="button" onClick={onClose} className="btn btn-secondary">Close</button>
+                    <button type="button" onClick={() => { if (instance) onOpenEditConfig(instance); onClose(); }}
+                      disabled={actionLoading || ['DEPLOYING', 'CONFIGURING'].includes(statusUpper)}
+                      className="btn btn-primary gap-1.5">
+                      <Edit3 size={14} /> Edit Config
+                    </button>
                   </div>
                 )}
               </div>
