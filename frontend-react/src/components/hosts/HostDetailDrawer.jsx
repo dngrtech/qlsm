@@ -173,8 +173,14 @@ export default function HostDetailDrawer({
   return (
     <>
       <Transition.Root show={open} as={Fragment}>
-        <div className="fixed inset-0 z-40 overflow-hidden pointer-events-none">
-          <div className="fixed inset-y-0 right-0 flex max-w-full pointer-events-none">
+        <div
+          className="fixed inset-x-0 top-0 z-40 overflow-hidden pointer-events-none"
+          style={{ bottom: 'var(--footer-height)' }}
+        >
+          <div
+            className="fixed top-0 right-0 flex max-w-full pointer-events-none"
+            style={{ bottom: 'var(--footer-height)' }}
+          >
             <Transition.Child as={Fragment} enter="transform transition ease-out duration-300" enterFrom="translate-x-full" enterTo="translate-x-0" leave="transform transition ease-in duration-200" leaveFrom="translate-x-0" leaveTo="translate-x-full">
               <div ref={panelRef} className="drawer-panel w-[420px] pointer-events-auto">
                 {/* Header */}
