@@ -46,11 +46,11 @@ export default function TextFileEditor({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-400 min-w-0 flex-1">
           <span className="truncate">{filePath}</span>
-          {isDirty && <span className="text-yellow-500 text-xs">(modified)</span>}
+          {isDirty && <span className="text-yellow-500 text-xs flex-shrink-0">(modified)</span>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {isPython && (
             <>
               {lintStatus === 'valid' && (
