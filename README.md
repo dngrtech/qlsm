@@ -104,7 +104,7 @@ To run the updater automatically (daily at 9 AM local time):
 (crontab -l 2>/dev/null; echo "0 9 * * * curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update >> \$HOME/qlsm-update.log 2>&1") | crontab -
 
 # Vultr / system install (/opt/qlsm) — install under root:
-sudo bash -c '(crontab -l 2>/dev/null; echo "0 9 * * * INSTALL_DIR=/opt/qlsm bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh) --update >> /var/log/qlsm-update.log 2>&1") | crontab -'
+sudo bash -c '(crontab -l 2>/dev/null | grep -v "qlsm-install.sh"; echo "0 9 * * * curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | INSTALL_DIR=/opt/qlsm bash -s -- --update >> /var/log/qlsm-update.log 2>&1") | crontab -'
 ```
 
 Adjust `0 9 * * *` to change the schedule (minute hour day month weekday). Review `crontab -l` to verify.
