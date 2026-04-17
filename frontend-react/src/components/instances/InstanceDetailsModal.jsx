@@ -426,15 +426,15 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                       <RefreshCw size={14} className={actionLoading && statusUpper === 'RESTARTING' ? 'animate-spin' : ''} />
                       {actionLoading && statusUpper === 'RESTARTING' ? 'Restarting...' : 'Restart'}
                     </button>
-                    <button type="button" onClick={() => setIsDeleteModalOpen(true)}
-                      disabled={actionLoading || ['DELETING', 'DEPLOYING', 'CONFIGURING'].includes(statusUpper)}
-                      className="btn btn-danger gap-1.5">
-                      <Trash2 size={14} /> {actionLoading && statusUpper === 'DELETING' ? 'Deleting...' : 'Delete'}
-                    </button>
                     <button type="button" onClick={() => { if (instance) onOpenEditConfig(instance); onClose(); }}
                       disabled={actionLoading || ['DEPLOYING', 'CONFIGURING'].includes(statusUpper)}
                       className="btn btn-primary gap-1.5">
                       <Edit3 size={14} /> Edit Config
+                    </button>
+                    <button type="button" onClick={() => setIsDeleteModalOpen(true)}
+                      disabled={actionLoading || ['DELETING', 'DEPLOYING', 'CONFIGURING'].includes(statusUpper)}
+                      className="btn btn-danger gap-1.5">
+                      <Trash2 size={14} /> {actionLoading && statusUpper === 'DELETING' ? 'Deleting...' : 'Delete'}
                     </button>
                   </div>
                 )}

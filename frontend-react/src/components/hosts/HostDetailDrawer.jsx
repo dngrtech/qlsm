@@ -303,12 +303,12 @@ export default function HostDetailDrawer({
                         ? <><LoaderCircle size={14} className="animate-spin" /> Rebooting...</>
                         : <><PowerIcon size={14} /> Restart</>}
                     </button>
-                    <button type="button" onClick={handleDeleteClick} disabled={internalHost?.status === 'deleting'} className="btn btn-danger gap-1.5">
-                      {internalHost?.is_standalone ? 'Remove' : 'Delete'}
-                    </button>
                     <button type="button" onClick={() => qlBtn.action?.()} disabled={qlBtn.disabled}
                       className={`btn ${qlBtn.variant === 'primary' ? 'btn-primary' : 'btn-secondary'} gap-1.5`}>
                       <qlBtn.Icon size={14} className={qlBtn.loading ? 'animate-spin' : ''} /> {qlBtn.text}
+                    </button>
+                    <button type="button" onClick={handleDeleteClick} disabled={internalHost?.status === 'deleting'} className="btn btn-danger gap-1.5">
+                      {internalHost?.is_standalone ? 'Remove' : 'Delete'}
                     </button>
                   </div>
                 )}
