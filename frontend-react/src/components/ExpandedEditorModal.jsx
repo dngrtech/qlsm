@@ -12,10 +12,6 @@ function ExpandedEditorModal({
   language,
   linterSource,
 }) {
-  const handleContentChangeInternal = (newContent) => {
-    onContentChange(newContent);
-  };
-
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-[70]" onClose={onClose}>
@@ -65,7 +61,7 @@ function ExpandedEditorModal({
                 <div className="relative z-10 flex-grow overflow-hidden min-h-0 p-1">
                   <CodeMirrorEditor
                     value={fileContent}
-                    onChange={handleContentChangeInternal}
+                    onChange={onContentChange}
                     language={language}
                     linterSource={linterSource}
                     isActiveTab={true}

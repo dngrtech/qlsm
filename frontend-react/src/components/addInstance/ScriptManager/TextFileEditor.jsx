@@ -75,6 +75,7 @@ export default function TextFileEditor({
               onClick={onExpand}
               className="p-1 hover:bg-[var(--surface-base)] rounded transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               title="Expand editor"
+              aria-label="Expand editor"
             >
               <Maximize size={14} />
             </button>
