@@ -213,7 +213,7 @@ const ScriptManager = forwardRef(function ScriptManager({
           onCheck={onCheck}
         />
       </div>
-      <div className="flex-1 bg-[var(--surface-base)]">
+      <div className="flex-1 min-w-0 bg-[var(--surface-base)]">
         {!selectedFile ? (
           <div className="flex items-center justify-center h-full text-gray-500 text-sm">
             Select a file to view or edit
