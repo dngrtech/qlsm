@@ -10,6 +10,9 @@
    CSS Custom Properties - Light Theme (default)
    ============================================ */
 :root {
+  /* Layout */
+  --footer-height: 53px;
+
   /* Accent Colors */
   --accent-primary: #0D9668;
   --accent-primary-dim: #087A53;

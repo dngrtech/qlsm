@@ -36,7 +36,10 @@ function App() {
                 </Route>
               </Routes>
             </main>
-            <footer className="relative z-10 bg-theme-raised border-t border-theme p-4 text-center text-sm text-theme-secondary">
+            <footer
+              className="relative z-10 bg-theme-raised border-t border-theme flex items-center justify-center text-sm text-theme-secondary shrink-0"
+              style={{ height: 'var(--footer-height)' }}
+            >
               <span className="font-mono text-xs tracking-wide">
                 QLSM — Quake Live Server Management
               </span>
