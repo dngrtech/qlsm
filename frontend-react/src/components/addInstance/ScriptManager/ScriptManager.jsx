@@ -36,6 +36,7 @@ const ScriptManager = forwardRef(function ScriptManager({
   onCheck,
   loading,
   error,
+  onExpandEditor,
 }, ref) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [currentContent, setCurrentContent] = useState('');
@@ -53,7 +54,14 @@ const ScriptManager = forwardRef(function ScriptManager({
     setEditedContent({});
   }, [editedContent, writeContent]);
 
-  useImperativeHandle(ref, () => ({ flushEdits }), [flushEdits]);
+  const updateContent = useCallback((path, content) => {
+    setEditedContent(prev => ({ ...prev, [path]: content }));
+    if (selectedFile?.path === path) {
+      setCurrentContent(content);
+    }
+  }, [selectedFile]);
+
+  useImperativeHandle(ref, () => ({ flushEdits, updateContent }), [flushEdits, updateContent]);
 
   const handleSelectFile = useCallback(async (item) => {
     if (item.type === 'folder') return;
@@ -227,6 +235,7 @@ const ScriptManager = forwardRef(function ScriptManager({
             onChange={handleContentChange}
             isDirty={isDirty}
             isLoading={contentLoading}
+            onExpand={onExpandEditor ? () => onExpandEditor(selectedFile, currentContent) : undefined}
           />
         )}
       </div>

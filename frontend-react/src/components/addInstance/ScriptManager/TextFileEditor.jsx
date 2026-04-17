@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, RefreshCw, Maximize } from 'lucide-react';
 import CodeMirrorEditor from '../../CodeMirrorEditor';
 import { python } from '@codemirror/lang-python';
 import { validateScript } from '../../../services/api';
@@ -11,7 +11,7 @@ function getFileType(path) {
 }
 
 export default function TextFileEditor({
-  filePath, content, onChange, isDirty, isLoading,
+  filePath, content, onChange, isDirty, isLoading, onExpand,
 }) {
   const [lintStatus, setLintStatus] = useState(null);
   const [lintErrors, setLintErrors] = useState([]);
@@ -68,6 +68,17 @@ export default function TextFileEditor({
                 Validate
               </button>
             </>
+          )}
+          {onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              className="p-1 hover:bg-[var(--surface-base)] rounded transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              title="Expand editor"
+              aria-label="Expand editor"
+            >
+              <Maximize size={14} />
+            </button>
           )}
         </div>
       </div>
