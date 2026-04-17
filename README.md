@@ -79,7 +79,7 @@ docker compose up -d
 
 ### Option 3 — Vultr (no terminal required)
 
-The easiest option. Register a [Vultr](https://www.vultr.com) account, go to **Orchestration → Startup Scripts**, and add the [vultr-startup-ubuntu22.sh](https://github.com/dngrtech/qlsm/blob/main/vultr-startup-ubuntu22.sh) script. Then deploy a shared CPU VPS (Ubuntu 22.04, $5/month works fine) selecting that startup script in the drop-down menu under the Server Settings — QLSM will be up and running in about 10 minutes with no terminal interaction needed.
+The easiest option. Register a [Vultr](https://www.vultr.com) account, go to **Orchestration → Startup Scripts**, and add the [vultr-startup-ubuntu22.sh](https://github.com/dngrtech/qlsm/blob/main/vultr-startup-ubuntu22.sh) script. Then deploy a shared CPU VPS (Ubuntu 22.04, $5/month works fine) selecting that startup script in the drop-down menu under the Server Settings — QLSM will be up and running in about 10 minutes with no terminal interaction needed. After deployment, open http://[vultr-provided-ip] in your browser to access the web interface.
 
 Default login is `admin` / `admin`. A password change is enforced on first login.
 
