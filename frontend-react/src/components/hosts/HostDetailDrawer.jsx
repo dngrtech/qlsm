@@ -296,7 +296,6 @@ export default function HostDetailDrawer({
                 {/* Footer Actions */}
                 {internalHost && !loading && !error && (
                   <div className="drawer-footer">
-                    <button type="button" onClick={onClose} className="btn btn-ghost">Close</button>
                     <button type="button" onClick={() => internalHost && onRequestRestart?.(internalHost)} disabled={isRestartDisabled}
                       className="btn btn-secondary gap-1.5">
                       {internalHost?.status?.toLowerCase() === HostStatus.REBOOTING.toLowerCase()

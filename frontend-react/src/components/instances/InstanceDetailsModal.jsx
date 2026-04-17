@@ -412,7 +412,6 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                 {/* Footer Actions */}
                 {instance && !loading && !error && (
                   <div className="drawer-footer">
-                    <button type="button" onClick={onClose} className="btn btn-ghost">Close</button>
                     <button type="button" onClick={handleStopStart}
                       disabled={actionLoading || isBusyStatus || statusUpper === 'IDLE'}
                       className="btn btn-secondary gap-1.5">
