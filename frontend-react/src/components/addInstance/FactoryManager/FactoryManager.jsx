@@ -436,7 +436,7 @@ function FactoryManager({
                     <div className="flex-1 min-h-0 border border-[var(--surface-border)] rounded-lg overflow-hidden relative">
                         {isLoadingContent && (
                             <div className="absolute inset-0 z-10 bg-[var(--surface-base)]/50 backdrop-blur-[1px] flex items-center justify-center">
-                                <Loader2 className="animate-spin text-indigo-500" />
+                                <Loader2 className="animate-spin text-[var(--accent-primary)]" />
                             </div>
                         )}
                         <CodeMirrorEditor
