@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, Fragment, useCallback } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen } from 'lucide-react';
+import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updateInstance } from '../../services/api';
 import { useDraftWorkspace } from '../../hooks/useDraftWorkspace';
 import ConfigEditorTabs from '../config/ConfigEditorTabs';
@@ -80,6 +81,7 @@ function EditInstanceConfigModal({
   const [expandedFileContent, setExpandedFileContent] = useState('');
   const [expandedFileLanguage, setExpandedFileLanguage] = useState(null);
   const [expandedFileLinterSource, setExpandedFileLinterSource] = useState(null);
+  const [expandedPluginPath, setExpandedPluginPath] = useState(null);
 
   // State for preset modals
   const [isLoadPresetModalOpen, setIsLoadPresetModalOpen] = useState(false);
@@ -425,6 +427,7 @@ function EditInstanceConfigModal({
   };
 
   const handleExpandEditor = (fileNameToExpand) => {
+    setExpandedPluginPath(null);
     setExpandedFileName(fileNameToExpand);
     setExpandedFileContent(configs[fileNameToExpand] || '');
     setExpandedFileLanguage(getLanguageForFile(fileNameToExpand));
@@ -432,10 +435,25 @@ function EditInstanceConfigModal({
     setIsExpandedEditorOpen(true);
   };
 
+  const handleExpandPluginEditor = useCallback((selectedFile, content) => {
+    setExpandedPluginPath(selectedFile.path);
+    setExpandedFileName(selectedFile.name);
+    setExpandedFileContent(content);
+    setExpandedFileLanguage(selectedFile.name.endsWith('.py') ? python() : null);
+    setExpandedFileLinterSource(null);
+    setIsExpandedEditorOpen(true);
+  }, []);
+
   const handleExpandedEditorContentChange = (newContent) => {
-    setExpandedFileContent(newContent); // Update content for the expanded editor
-    setConfigs(prev => ({ ...prev, [expandedFileName]: newContent })); // Update main configs state
-    setIsDirty(true); // Mark main modal as dirty due to changes from expanded editor
+    setExpandedFileContent(newContent);
+    if (expandedPluginPath) {
+      if (scriptManagerRef.current?.updateContent) {
+        scriptManagerRef.current.updateContent(expandedPluginPath, newContent);
+      }
+    } else {
+      setConfigs(prev => ({ ...prev, [expandedFileName]: newContent }));
+    }
+    setIsDirty(true);
   };
 
   const handleCloseExpandedEditor = () => {
@@ -694,6 +712,7 @@ function EditInstanceConfigModal({
                               onCheck={togglePluginSelection}
                               loading={draft.loading}
                               error={draft.error}
+                              onExpandEditor={handleExpandPluginEditor}
                             />
                           ) : (
                             <FactoryManager
