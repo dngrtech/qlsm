@@ -212,14 +212,8 @@ export default function LiveServerStatusModal({ isOpen, onClose, instance, serve
 
     return (
         <Transition.Root show={isOpen} as={Fragment}>
-            <div
-                className="fixed inset-x-0 top-0 z-40 overflow-hidden pointer-events-none"
-                style={{ bottom: 'var(--footer-height)' }}
-            >
-                <div
-                    className="fixed top-0 right-0 flex max-w-full pointer-events-none"
-                    style={{ bottom: 'var(--footer-height)' }}
-                >
+            <div className="fixed inset-0 z-40 overflow-hidden pointer-events-none">
+                <div className="fixed inset-y-0 right-0 flex max-w-full pointer-events-none">
                     <Transition.Child
                         as={Fragment}
                         enter="transform transition ease-out duration-300"

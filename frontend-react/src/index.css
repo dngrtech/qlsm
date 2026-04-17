@@ -1152,6 +1152,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  padding-bottom: var(--footer-height);
   background: var(--surface-overlay);
   border-left: 1px solid var(--surface-border);
   box-shadow: -10px 0 40px rgba(15, 23, 42, 0.1);
