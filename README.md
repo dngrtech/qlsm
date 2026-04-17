@@ -85,23 +85,38 @@ Default login is `admin` / `admin`. A password change is enforced on first login
 
 ## Updating
 
-### Default install (`~/qlsm`)
+### Manual update
 
-Run a one-time update manually:
+#### Default install (`~/qlsm`)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update
 ```
 
+#### Vultr / system install (`/opt/qlsm`)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | INSTALL_DIR=/opt/qlsm bash -s -- --update
+```
+
 ---
 
-### Vultr / system install (`/opt/qlsm`)
+### Automatic daily updates (cron)
 
-Set up automatic daily updates via cron:
+#### Default install (`~/qlsm`)
+
+```bash
+(crontab -l 2>/dev/null | grep -v "qlsm-install.sh"; echo "0 9 * * * curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update >> \$HOME/qlsm-update.log 2>&1") | crontab -
+```
+
+#### Vultr / system install (`/opt/qlsm`)
 
 ```bash
 sudo bash -c '(crontab -l 2>/dev/null | grep -v "qlsm-install.sh"; echo "0 9 * * * curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | INSTALL_DIR=/opt/qlsm bash -s -- --update >> /var/log/qlsm-update.log 2>&1") | crontab -'
 ```
+
+---
+
 Full setup guide: [docs/setup.md](docs/setup.md)
 
 ## Development
