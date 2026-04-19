@@ -138,6 +138,7 @@ class QLInstance(db.Model):
             'host_id': self.host_id,
             'host_name': self.host.name if self.host else None, # Include host name for convenience
             'host_ip_address': self.host.ip_address if self.host else None, # Include host IP address
+            'host_os_type': self.host.os_type if self.host else None,
             'port': self.port,
             'hostname': self.hostname, # Added hostname
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode

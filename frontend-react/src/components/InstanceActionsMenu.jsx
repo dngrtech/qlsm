@@ -3,6 +3,10 @@ import React, { Fragment } from 'react'; // Removed useEffect
 import { Menu, Transition, Portal } from '@headlessui/react';
 import { useFloating, shift, offset, autoUpdate, flip } from '@floating-ui/react-dom';
 import { Trash2, RefreshCw, SlidersHorizontal, Zap, FileText, ExternalLink, Check, Square, Play, Terminal, MessageSquare } from 'lucide-react';
+import {
+  canEnableLanRate,
+  getLanRateUnsupportedReason,
+} from '../utils/lanRateCompatibility';
 
 // Define InstanceStatus constants to match backend enum values
 const InstanceStatus = {
@@ -20,7 +24,7 @@ const InstanceStatus = {
   ACTIVE: 'active'
 };
 
-function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop, handleStart, handleToggleLanRate, POLLABLE_INSTANCE_STATUSES, onOpenEditConfigModal, onViewInstanceDetails, onViewLogs, onViewChatLogs, onOpenRconConsole }) {
+function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop, handleStart, handleToggleLanRate, onOpenEditConfigModal, onViewInstanceDetails, onViewLogs, onViewChatLogs, onOpenRconConsole }) {
   const { x, y, refs, strategy } = useFloating({
     placement: 'bottom-end',
     middleware: [
@@ -32,6 +36,13 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
   });
 
   const isActionable = [InstanceStatus.RUNNING, InstanceStatus.ACTIVE, InstanceStatus.UPDATED, InstanceStatus.ERROR, InstanceStatus.STOPPED, InstanceStatus.IDLE].includes(instance.status?.toLowerCase());
+  const canToggleLanRate = canEnableLanRate({
+    osType: instance.host_os_type,
+    currentEnabled: instance.lan_rate_enabled,
+  });
+  const lanRateUnsupportedReason = !canToggleLanRate && !instance.lan_rate_enabled
+    ? getLanRateUnsupportedReason(instance.host_os_type)
+    : null;
 
   return (
     <Menu as="div" className="relative inline-block text-left ml-2">
@@ -127,7 +138,7 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                   <Menu.Item>
                     {({ active }) => (
                       <button onClick={() => handleToggleLanRate(instance.id, instance.name, instance.lan_rate_enabled)}
-                        disabled={!isActionable}
+                        disabled={!isActionable || !canToggleLanRate}
                         className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}>
                         <Zap size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
                         <span className="flex-1 text-left">99k LAN Rate</span>
@@ -138,6 +149,11 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                       </button>
                     )}
                   </Menu.Item>
+                  {lanRateUnsupportedReason && (
+                    <p className="px-3 pb-2 text-xs" style={{ color: 'var(--accent-danger)' }}>
+                      {lanRateUnsupportedReason}
+                    </p>
+                  )}
                   <Menu.Item>
                     {({ active }) => (
                       <button onClick={() => handleRestart(instance.id, instance.name)}

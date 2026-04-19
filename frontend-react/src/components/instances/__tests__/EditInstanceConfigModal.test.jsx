@@ -189,4 +189,56 @@ describe('EditInstanceConfigModal preset saving', () => {
       })
     );
   });
+
+  it('disables enabling 99k lan rate for ubuntu hosts', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      host_name: 'ubuntu-host',
+      host_os_type: 'ubuntu',
+      lan_rate_enabled: false,
+      name: 'UbuntuInst',
+      qlx_plugins: '',
+    });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={7}
+        instanceName="UbuntuInst"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText('99k LAN rate is not compatible with Ubuntu.')).toBeInTheDocument();
+  });
+
+  it('allows disabling an already-enabled ubuntu instance', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      host_name: 'ubuntu-host',
+      host_os_type: 'ubuntu',
+      lan_rate_enabled: true,
+      name: 'UbuntuInst',
+      qlx_plugins: '',
+    });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={8}
+        instanceName="UbuntuInst"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
+    expect(toggle).not.toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  });
 });

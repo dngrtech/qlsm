@@ -7,6 +7,8 @@ function InstanceBasicInfoForm({
   port, onPortChange, availablePorts, loadingPorts,
   hostname, onHostnameChange,
   lanRateEnabled, onLanRateChange,
+  lanRateDisabled = false,
+  lanRateUnavailableReason = null,
 }) {
   const listboxBtnClass = 'relative w-full cursor-default rounded py-2 pl-3 pr-10 text-left text-sm border bg-[var(--surface-raised)] border-[var(--surface-border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] transition-colors';
   const listboxOptionsClass = 'absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded bg-[var(--surface-overlay)] border border-[var(--surface-border)] py-1 text-sm shadow-xl focus:outline-none scrollbar-thin';
@@ -157,6 +159,7 @@ function InstanceBasicInfoForm({
           onClick={() => onLanRateChange(!lanRateEnabled)}
           className="neu-toggle"
           aria-pressed={lanRateEnabled}
+          disabled={lanRateDisabled}
         >
           <span className="sr-only">Toggle 99k LAN Rate</span>
           <span className={`neu-toggle__track ${lanRateEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
@@ -168,6 +171,11 @@ function InstanceBasicInfoForm({
           99k LAN Rate
         </span>
       </div>
+      {lanRateUnavailableReason && (
+        <p className="mt-2 text-sm" style={{ color: 'var(--accent-danger)' }}>
+          {lanRateUnavailableReason}
+        </p>
+      )}
     </>
   );
 }

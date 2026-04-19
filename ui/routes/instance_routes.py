@@ -6,6 +6,10 @@ from flask import Blueprint, request, current_app, jsonify
 import sqlalchemy
 from ui import db
 from ui.models import QLInstance, Host, HostStatus, InstanceStatus
+from ui.lan_rate_policy import (
+    lan_rate_unsupported_message,
+    would_enable_unsupported_lan_rate,
+)
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
     get_host,
@@ -87,6 +91,13 @@ def add_instance_api():
         selected_host = get_host(host_id_int)
         if not selected_host or selected_host.status != HostStatus.ACTIVE:
             return jsonify({"error": {"message": "Invalid or inactive host selected."}}), 400
+
+        if would_enable_unsupported_lan_rate(
+            selected_host,
+            current_enabled=False,
+            requested_enabled=lan_rate_enabled,
+        ):
+            return jsonify({"error": {"message": lan_rate_unsupported_message(selected_host)}}), 400
 
         if len(selected_host.instances) >= 4:
             return jsonify({"error": {"message": "Host has reached the maximum of 4 instances."}}), 400
@@ -423,6 +434,13 @@ def update_instance_lan_rate_api(instance_id):
 
     lan_rate_enabled = bool(data.get('lan_rate_enabled'))
 
+    if would_enable_unsupported_lan_rate(
+        instance.host,
+        current_enabled=instance.lan_rate_enabled,
+        requested_enabled=lan_rate_enabled,
+    ):
+        return jsonify({"error": {"message": lan_rate_unsupported_message(instance.host)}}), 400
+
     # Check if value is actually changing
     if instance.lan_rate_enabled == lan_rate_enabled:
         return jsonify({"message": f'LAN rate mode is already {"enabled" if lan_rate_enabled else "disabled"} for instance "{instance.name}".'}), 200
@@ -610,6 +628,16 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
         data = request.get_json()
         if not data:
             return jsonify({"error": {"message": "Request body must be JSON"}}), 400
+
+        if (
+            'lan_rate_enabled' in data and
+            would_enable_unsupported_lan_rate(
+                instance.host,
+                current_enabled=instance.lan_rate_enabled,
+                requested_enabled=data.get('lan_rate_enabled'),
+            )
+        ):
+            return jsonify({"error": {"message": lan_rate_unsupported_message(instance.host)}}), 400
 
         lock_token = str(uuid.uuid4())
         if not acquire_lock('instance', instance.id, lock_token, ttl=360):

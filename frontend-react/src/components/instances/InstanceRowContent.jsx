@@ -90,6 +90,7 @@ export default function InstanceRowContent({
                         ...inst,
                         host_id: host.id,
                         host_ip: host.ip_address,
+                        host_os_type: host.os_type,
                     }}
                     handleRestart={(id, name) => onRestart(id, name)}
                     handleDelete={(id, name) => onDelete(id, name)}

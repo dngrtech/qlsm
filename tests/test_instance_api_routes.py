@@ -70,6 +70,32 @@ def test_update_instance_name_and_hostname(client, app):
         assert updated.hostname == 'renamed.hostname.com'
 
 
+def test_view_instance_includes_host_os_type(client, app):
+    """GET /api/instances/<id> should include host_os_type in the payload."""
+    with app.app_context():
+        host = create_host(
+            name='ubuntu-host',
+            provider='standalone',
+            status=HostStatus.ACTIVE,
+            os_type='ubuntu',
+        )
+        instance = create_instance(
+            name='inst-os',
+            host_id=host.id,
+            port=27960,
+            hostname='test.hostname',
+        )
+        db.session.commit()
+        instance_id = instance.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    response = client.get(f'/api/instances/{instance_id}', headers=headers)
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['host_os_type'] == 'ubuntu'
+
+
 @patch('ui.routes.instance_routes.enqueue_task')
 def test_add_instance_rejects_when_host_has_4_instances(mock_enqueue, client, app, tmp_path, monkeypatch):
     """POST /api/instances must return 400 when the host already has 4 instances."""

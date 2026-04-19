@@ -18,6 +18,10 @@ import {
 import { qlmappoolLanguage } from '../../codemirror-lang-qlmappool';
 import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
+import {
+  getLanRateUnsupportedReason,
+  isLanRateSupported,
+} from '../../utils/lanRateCompatibility';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
@@ -474,11 +478,45 @@ function AddInstanceForm({
   const editorOnChangeHandlers = useMemo(() => (CONFIG_FILES.reduce((acc, fileName) => { acc[fileName] = (newContent) => handleConfigChange(fileName, newContent); return acc; }, {})), [handleConfigChange]);
   const handleInternalServerCfgLint = useCallback((hasErrors) => { setServerCfgHasLintErrors(hasErrors); if (onServerCfgLintStatusChange) onServerCfgLintStatusChange(hasErrors); }, [onServerCfgLintStatusChange]);
   const qlCfgLinterSource = useCallback(() => (createQlCfgLinter(availablePorts, handleInternalServerCfgLint)), [availablePorts, handleInternalServerCfgLint]);
-  const getLanguageForFile = (fileName) => { switch (fileName) { case 'server.cfg': return qlcfgLanguage; case 'mappool.txt': return qlmappoolLanguage; case 'access.txt': return qlaccessLanguage; case 'workshop.txt': return qlworkshopLanguage; default: return undefined; } };
-  const getLinterSourceForFile = (fileName) => (fileName === 'server.cfg' ? qlCfgLinterSource : null);
-  const handleExpandEditor = useCallback((fileName) => { setEditingFileDetails({ name: fileName, content: configContents[fileName] || '', language: getLanguageForFile(fileName), linterSource: getLinterSourceForFile(fileName) }); setIsFullScreenEditorOpen(true); }, [configContents, qlCfgLinterSource]);
+  const handleExpandEditor = useCallback((fileName) => {
+    let language;
+    switch (fileName) {
+      case 'server.cfg':
+        language = qlcfgLanguage;
+        break;
+      case 'mappool.txt':
+        language = qlmappoolLanguage;
+        break;
+      case 'access.txt':
+        language = qlaccessLanguage;
+        break;
+      case 'workshop.txt':
+        language = qlworkshopLanguage;
+        break;
+      default:
+        language = undefined;
+    }
+    setEditingFileDetails({
+      name: fileName,
+      content: configContents[fileName] || '',
+      language,
+      linterSource: fileName === 'server.cfg' ? qlCfgLinterSource : null,
+    });
+    setIsFullScreenEditorOpen(true);
+  }, [configContents, qlCfgLinterSource]);
   const handleCloseFullScreenEditor = useCallback(() => { setIsFullScreenEditorOpen(false); }, []);
   const handleSaveFullScreenEditor = useCallback((newContent) => { const fileName = editingFileDetails.name; handleConfigChange(fileName, newContent); setIsFullScreenEditorOpen(false); }, [editingFileDetails.name, handleConfigChange]);
+  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
+  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
+  const selectedHostOsType = selectedHost?.os_type ?? null;
+  const lanRateSupported = isLanRateSupported(selectedHostOsType);
+  const lanRateUnavailableReason = !lanRateSupported ? getLanRateUnsupportedReason(selectedHostOsType) : null;
+
+  useEffect(() => {
+    if (!lanRateSupported && lanRateEnabled) {
+      setLanRateEnabled(false);
+    }
+  }, [lanRateEnabled, lanRateSupported]);
 
   const handleFileUpload = useCallback((content, fileName, error) => {
     if (error) {
@@ -558,7 +596,7 @@ function AddInstanceForm({
   return (
     <form onSubmit={localHandleSubmit} className="flex flex-col flex-grow min-h-0 pt-4">
       <div className="flex-shrink-0 mb-6">
-        <InstanceBasicInfoForm name={name} onNameChange={(e) => setName(e.target.value)} selectedHostId={selectedHostId} onHostChange={handleHostChange} hosts={initialData.hosts || []} port={port} onPortChange={setPort} availablePorts={availablePorts} loadingPorts={loadingPorts} hostname={hostname} onHostnameChange={(e) => setHostname(e.target.value)} lanRateEnabled={lanRateEnabled} onLanRateChange={setLanRateEnabled} />
+        <InstanceBasicInfoForm name={name} onNameChange={(e) => setName(e.target.value)} selectedHostId={selectedHostId} onHostChange={handleHostChange} hosts={initialData.hosts || []} port={port} onPortChange={setPort} availablePorts={availablePorts} loadingPorts={loadingPorts} hostname={hostname} onHostnameChange={(e) => setHostname(e.target.value)} lanRateEnabled={lanRateEnabled} onLanRateChange={setLanRateEnabled} lanRateDisabled={!lanRateSupported} lanRateUnavailableReason={lanRateUnavailableReason} />
       </div>
       <div className="flex flex-col flex-grow min-h-0 mb-6">
         {/* Show loaded preset indicator */}

@@ -17,6 +17,10 @@ import { qlcfgLanguage, createQlCfgLinter, stripManagedCvars } from '../../codem
 import { qlmappoolLanguage } from '../../codemirror-lang-qlmappool';
 import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
+import {
+  canEnableLanRate,
+  getLanRateUnsupportedReason,
+} from '../../utils/lanRateCompatibility';
 
 const CONFIG_FILES_ORDER = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 
@@ -63,6 +67,7 @@ function EditInstanceConfigModal({
   // LAN Rate state
   const [lanRateEnabled, setLanRateEnabled] = useState(false);
   const [originalLanRateEnabled, setOriginalLanRateEnabled] = useState(false);
+  const [hostOsType, setHostOsType] = useState(null);
 
   // Restart on Save state
   const [restartAfterSave, setRestartAfterSave] = useState(true);
@@ -186,6 +191,7 @@ function EditInstanceConfigModal({
           setCurrentInstanceName(instanceDetails.name || `Instance ${instanceId}`);
           // Store host name for Scripts and Factories tabs
           setScriptHostName(instanceDetails.host_name || null);
+          setHostOsType(instanceDetails.host_os_type || null);
           const fetchedConfigs = {};
           CONFIG_FILES_ORDER.forEach(file => {
             const raw = configData[file] || '';
@@ -247,8 +253,13 @@ function EditInstanceConfigModal({
   };
 
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
+  const canToggleLanRate = canEnableLanRate({ osType: hostOsType, currentEnabled: lanRateEnabled });
+  const lanRateUnsupportedReason = !canToggleLanRate && !lanRateEnabled
+    ? getLanRateUnsupportedReason(hostOsType)
+    : null;
 
   const handleLanRateToggle = () => {
+    if (!canToggleLanRate) return;
     setLanRateEnabled(prev => {
       const next = !prev;
       if (next !== originalLanRateEnabled) setRestartAfterSave(true);
@@ -609,7 +620,7 @@ function EditInstanceConfigModal({
                               <button
                                 type="button"
                                 onClick={handleLanRateToggle}
-                                disabled={saving || loading}
+                                disabled={saving || loading || !canToggleLanRate}
                                 className="neu-toggle"
                                 aria-pressed={lanRateEnabled}
                               >
@@ -622,6 +633,11 @@ function EditInstanceConfigModal({
                                 <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
                                 99k LAN Rate
                               </span>
+                              {lanRateUnsupportedReason && (
+                                <span className="text-sm" style={{ color: 'var(--accent-danger)' }}>
+                                  {lanRateUnsupportedReason}
+                                </span>
+                              )}
                             </div>
 
                             {/* Restart Toggle */}

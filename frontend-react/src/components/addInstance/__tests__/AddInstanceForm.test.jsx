@@ -23,7 +23,25 @@ vi.mock('../../../services/api', () => ({
 }));
 
 vi.mock('../InstanceBasicInfoForm', () => ({
-  default: () => <div>basic-info</div>,
+  default: ({
+    lanRateDisabled,
+    lanRateEnabled,
+    lanRateUnavailableReason,
+    onHostChange,
+    onLanRateChange,
+    selectedHostId,
+  }) => (
+    <div>
+      <div>basic-info</div>
+      <div data-testid="selected-host">{selectedHostId || 'none'}</div>
+      <div data-testid="lan-rate-enabled">{String(lanRateEnabled)}</div>
+      <div data-testid="lan-rate-disabled">{String(lanRateDisabled)}</div>
+      <div data-testid="lan-rate-reason">{lanRateUnavailableReason || ''}</div>
+      <button type="button" onClick={() => onHostChange('1')}>Select Host 1</button>
+      <button type="button" onClick={() => onHostChange('2')}>Select Host 2</button>
+      <button type="button" onClick={() => onLanRateChange(!lanRateEnabled)}>Toggle 99k</button>
+    </div>
+  ),
 }));
 
 vi.mock('../InstanceConfigTabs', () => ({
@@ -126,5 +144,73 @@ describe('AddInstanceForm draft lifecycle', () => {
       }),
       { consumeDraft: mocks.consumeDraft }
     );
+  });
+
+  it('disables 99k lan rate for ubuntu hosts', async () => {
+    render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [
+            { id: 1, name: 'deb-host', os_type: 'debian' },
+            { id: 2, name: 'ubu-host', os_type: 'ubuntu' },
+          ],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+        }}
+        initialHostId={2}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+    expect(screen.getByTestId('lan-rate-disabled')).toHaveTextContent('true');
+    expect(screen.getByTestId('lan-rate-reason')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
+  });
+
+  it('resets lan rate when switching from debian to ubuntu', async () => {
+    render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [
+            { id: 1, name: 'deb-host', os_type: 'debian' },
+            { id: 2, name: 'ubu-host', os_type: 'ubuntu' },
+          ],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+        }}
+        initialHostId={1}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+    fireEvent.click(screen.getByRole('button', { name: /toggle 99k/i }));
+    expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('true');
+
+    fireEvent.click(screen.getByRole('button', { name: /select host 2/i }));
+
+    await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+    await waitFor(() => expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('false'));
+    expect(screen.getByTestId('lan-rate-disabled')).toHaveTextContent('true');
   });
 });

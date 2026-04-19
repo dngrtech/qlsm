@@ -10,6 +10,10 @@ import QlColorString from '../common/QlColorString';
 import LiveServerStatusModal from './LiveServerStatusModal';
 import { validateInstanceName, INSTANCE_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
 import { copyToClipboard } from '../../utils/clipboard';
+import {
+  canEnableLanRate,
+  getLanRateUnsupportedReason,
+} from '../../utils/lanRateCompatibility';
 
 const POLLING_INTERVAL = 3000;
 const POLLABLE_STATUSES = ['PENDING', 'DEPLOYING', 'CONFIGURING', 'STARTING', 'STOPPING', 'RESTARTING', 'DELETING'];
@@ -165,7 +169,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
   };
 
   const handleToggleLanRate = async () => {
-    if (!instanceId || !instance) return;
+    if (!instanceId || !instance || !canToggleLanRate) return;
     setLanRateUpdating(true); setActionError(null);
     try {
       const newEnabled = !instance.lan_rate_enabled;
@@ -217,9 +221,17 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
   const hostIp = instance?.host?.ip_address || instance?.host_ip_address;
   const hostId = instance?.host?.id || instance?.host_id;
   const hostName = instance?.host?.name || instance?.host_name;
+  const hostOsType = instance?.host?.os_type || instance?.host_os_type;
   const statusUpper = instance?.status?.toUpperCase();
   const isActionableStatus = ['ACTIVE', 'RUNNING', 'UPDATED', 'ERROR', 'STOPPED', 'IDLE', 'INACTIVE'].includes(statusUpper);
   const isBusyStatus = ['DEPLOYING', 'CONFIGURING', 'RESTARTING', 'DELETING', 'STOPPING', 'STARTING'].includes(statusUpper);
+  const canToggleLanRate = canEnableLanRate({
+    osType: hostOsType,
+    currentEnabled: instance?.lan_rate_enabled,
+  });
+  const lanRateUnsupportedReason = !canToggleLanRate && !instance?.lan_rate_enabled
+    ? getLanRateUnsupportedReason(hostOsType)
+    : null;
 
   const Field = ({ label, children }) => (
     <dl className="drawer-field">
@@ -309,17 +321,26 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                         <Field label="Hostname">{instance.hostname || 'N/A'}</Field>
                         <Field label="Status"><StatusIndicator status={instance.status} /></Field>
                         <Field label="99k LAN Rate">
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={handleToggleLanRate}
-                              disabled={lanRateUpdating || actionLoading || isBusyStatus}
-                              className="neu-toggle neu-toggle--sm">
-                              <span className={`neu-toggle__track ${instance.lan_rate_enabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-                                <span className={`neu-toggle__knob ${instance.lan_rate_enabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                          <div className="flex flex-col items-start gap-2">
+                            <div className="flex items-center gap-2">
+                              <button type="button" onClick={handleToggleLanRate}
+                                disabled={lanRateUpdating || actionLoading || isBusyStatus || !canToggleLanRate}
+                                className="neu-toggle neu-toggle--sm"
+                                aria-label="Toggle 99k LAN Rate"
+                                aria-pressed={instance.lan_rate_enabled}>
+                                <span className={`neu-toggle__track ${instance.lan_rate_enabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+                                  <span className={`neu-toggle__knob ${instance.lan_rate_enabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                                </span>
+                              </button>
+                              <span className="text-xs text-theme-secondary">
+                                {lanRateUpdating ? 'Updating...' : (instance.lan_rate_enabled ? 'Enabled' : 'Disabled')}
                               </span>
-                            </button>
-                            <span className="text-xs text-theme-secondary">
-                              {lanRateUpdating ? 'Updating...' : (instance.lan_rate_enabled ? 'Enabled' : 'Disabled')}
-                            </span>
+                            </div>
+                            {lanRateUnsupportedReason && (
+                              <span className="text-xs" style={{ color: 'var(--accent-danger)' }}>
+                                {lanRateUnsupportedReason}
+                              </span>
+                            )}
                           </div>
                         </Field>
                         <Field label="Created">{formatDateTime(instance.created_at)}</Field>
