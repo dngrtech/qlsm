@@ -156,7 +156,7 @@ function AddHostFormFields({
               border: '1px solid rgba(0, 255, 157, 0.2)',
             }}
           >
-            Deploys game servers on this machine. SSH keys are generated and configured automatically.
+            Deploys Quake Live servers on this machine.
           </div>
           <SelfHostFields
             ipAddress={ipAddress}
