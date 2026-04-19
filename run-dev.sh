@@ -108,6 +108,13 @@ trap cleanup SIGINT SIGTERM
 source .venv/bin/activate
 export PYTHONUNBUFFERED=1
 
+# Install missing dependencies only when requirements.txt has changed since last run
+STAMP_FILE=".venv/.requirements_stamp"
+if [[ ! -f "$STAMP_FILE" || requirements.txt -nt "$STAMP_FILE" ]]; then
+  echo "requirements.txt changed — syncing dependencies..."
+  pip install -q -r requirements.txt && touch "$STAMP_FILE"
+fi
+
 # Kill orphaned processes from previous dev sessions (crashed, SSH disconnect, etc.)
 # Only kills processes owned by current user that match this dev environment's config.
 kill_orphans() {
