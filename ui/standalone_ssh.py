@@ -119,15 +119,10 @@ def _parse_os_release(os_release_text):
 
 def _detect_supported_os_type(os_release_values):
     distro_id = os_release_values.get("ID", "").strip().lower()
-    version_id = os_release_values.get("VERSION_ID", "").strip()
 
     if distro_id == "debian":
         return "debian"
-    if distro_id == "ubuntu" and version_id.startswith("20."):
-        return "ubuntu"
-    if distro_id == "ubuntu" and version_id.startswith("22."):
-        return "ubuntu"
-    if distro_id == "ubuntu" and version_id.startswith("24."):
+    if distro_id == "ubuntu":
         return "ubuntu"
     return None
 

@@ -221,7 +221,7 @@ def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
     )
 
     assert detected["pretty_name"] == "Ubuntu 18.04.6 LTS"
-    assert detected["os_type"] is None
+    assert detected["os_type"] == "ubuntu"
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")
