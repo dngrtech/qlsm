@@ -64,14 +64,14 @@ services:
           systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
         '
         HOST_OS_RELEASE=$(nsenter -t 1 -m -- cat /etc/os-release 2>/dev/null || echo "")
-        HOST_OS_ID=$(printf '%s\n' "$HOST_OS_RELEASE" | grep "^ID=" | cut -d= -f2 | tr -d '"')
-        HOST_OS_PRETTY=$(printf '%s\n' "$HOST_OS_RELEASE" | grep "^PRETTY_NAME=" | cut -d= -f2- | tr -d '"')
-        case "${HOST_OS_ID:-}" in
+        HOST_OS_ID=$(printf '%s\n' "$$HOST_OS_RELEASE" | grep "^ID=" | cut -d= -f2 | tr -d '"')
+        HOST_OS_PRETTY=$(printf '%s\n' "$$HOST_OS_RELEASE" | grep "^PRETTY_NAME=" | cut -d= -f2- | tr -d '"')
+        case "$${HOST_OS_ID:-}" in
           debian) HOST_OS_TYPE="debian" ;;
           ubuntu) HOST_OS_TYPE="ubuntu" ;;
           *) HOST_OS_TYPE="" ;;
         esac
-        printf '{"os_type":"%s","pretty_name":"%s"}\n' "$HOST_OS_TYPE" "$HOST_OS_PRETTY" > /qlsm-ssh/host-os-type || true
+        printf '{"os_type":"%s","pretty_name":"%s"}\n' "$$HOST_OS_TYPE" "$$HOST_OS_PRETTY" > /qlsm-ssh/host-os-type || true
     restart: "no"
 
   # ── Redis ──────────────────────────────────────────────────────────────────
