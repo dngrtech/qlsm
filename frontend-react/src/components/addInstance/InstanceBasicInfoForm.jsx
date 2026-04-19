@@ -1,5 +1,6 @@
 import { Listbox, Transition } from '@headlessui/react';
 import { Check, ChevronsUpDown, Zap } from 'lucide-react';
+import InfoTooltip from '../common/InfoTooltip';
 
 function InstanceBasicInfoForm({
   name, onNameChange,
@@ -166,16 +167,14 @@ function InstanceBasicInfoForm({
             <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
           </span>
         </button>
-        <span className="flex items-center text-sm font-medium text-[var(--text-primary)]">
+        <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
           <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
-          99k LAN Rate
+          <span>99k LAN Rate</span>
+          {lanRateUnavailableReason && (
+            <InfoTooltip text={lanRateUnavailableReason} variant="danger" size={14} />
+          )}
         </span>
       </div>
-      {lanRateUnavailableReason && (
-        <p className="mt-2 text-sm text-theme-danger">
-          {lanRateUnavailableReason}
-        </p>
-      )}
     </>
   );
 }

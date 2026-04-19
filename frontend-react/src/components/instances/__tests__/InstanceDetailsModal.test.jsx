@@ -54,6 +54,10 @@ vi.mock('../../common/QlColorString', () => ({
   default: ({ children }) => <span>{children}</span>,
 }));
 
+vi.mock('../../common/InfoTooltip', () => ({
+  default: ({ text }) => <span data-testid="info-tooltip">{text}</span>,
+}));
+
 describe('InstanceDetailsModal lan rate guard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,7 +98,7 @@ describe('InstanceDetailsModal lan rate guard', () => {
 
     const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     expect(toggle).toBeDisabled();
-    expect(screen.getByText('99k LAN rate is not compatible with Ubuntu.')).toBeInTheDocument();
+    expect(screen.getByTestId('info-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
   });
 
   it('allows disabling 99k for ubuntu when already enabled', async () => {

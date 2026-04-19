@@ -84,7 +84,7 @@ vi.mock('../../addInstance/FactoryManager/FactoryManager', () => ({
 }));
 
 vi.mock('../../common/InfoTooltip', () => ({
-  default: () => null,
+  default: ({ text }) => <span data-testid="info-tooltip">{text}</span>,
 }));
 
 vi.mock('../../addInstance/ScriptManager', () => ({
@@ -211,7 +211,7 @@ describe('EditInstanceConfigModal preset saving', () => {
 
     const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     expect(toggle).toBeDisabled();
-    expect(screen.getByText('99k LAN rate is not compatible with Ubuntu.')).toBeInTheDocument();
+    expect(screen.getByTestId('info-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
   });
 
   it('allows disabling an already-enabled ubuntu instance', async () => {

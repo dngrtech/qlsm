@@ -632,15 +632,13 @@ function EditInstanceConfigModal({
                                   <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
                                 </span>
                               </button>
-                              <span className="flex items-center text-sm font-medium text-[var(--text-primary)]">
+                              <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
                                 <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
-                                99k LAN Rate
+                                <span>99k LAN Rate</span>
+                                {lanRateUnsupportedReason && (
+                                  <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={14} />
+                                )}
                               </span>
-                              {lanRateUnsupportedReason && (
-                                <span className="text-sm text-theme-danger">
-                                  {lanRateUnsupportedReason}
-                                </span>
-                              )}
                             </div>
 
                             {/* Restart Toggle */}

@@ -7,6 +7,7 @@ import { useNotification } from '../NotificationProvider';
 import { formatDateTime } from '../../utils/uiUtils';
 import StatusIndicator from '../StatusIndicator';
 import QlColorString from '../common/QlColorString';
+import InfoTooltip from '../common/InfoTooltip';
 import LiveServerStatusModal from './LiveServerStatusModal';
 import { validateInstanceName, INSTANCE_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
 import { copyToClipboard } from '../../utils/clipboard';
@@ -320,7 +321,16 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                         <Field label="Port"><span className="font-mono">{instance.port}</span></Field>
                         <Field label="Hostname">{instance.hostname || 'N/A'}</Field>
                         <Field label="Status"><StatusIndicator status={instance.status} /></Field>
-                        <Field label="99k LAN Rate">
+                        <Field
+                          label={(
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>99k LAN Rate</span>
+                              {lanRateUnsupportedReason && (
+                                <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={13} />
+                              )}
+                            </span>
+                          )}
+                        >
                           <div className="flex flex-col items-start gap-2">
                             <div className="flex items-center gap-2">
                               <button type="button" onClick={handleToggleLanRate}
@@ -336,11 +346,6 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                                 {lanRateUpdating ? 'Updating...' : (instance.lan_rate_enabled ? 'Enabled' : 'Disabled')}
                               </span>
                             </div>
-                            {lanRateUnsupportedReason && (
-                              <span className="text-xs text-theme-danger">
-                                {lanRateUnsupportedReason}
-                              </span>
-                            )}
                           </div>
                         </Field>
                         <Field label="Created">{formatDateTime(instance.created_at)}</Field>

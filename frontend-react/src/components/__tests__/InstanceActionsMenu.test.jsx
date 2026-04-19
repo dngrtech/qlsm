@@ -32,6 +32,10 @@ vi.mock('@floating-ui/react-dom', () => ({
   }),
 }));
 
+vi.mock('../common/InfoTooltip', () => ({
+  default: ({ text }) => <span data-testid="lan-rate-tooltip">{text}</span>,
+}));
+
 function renderMenu(instanceOverrides = {}) {
   const handleToggleLanRate = vi.fn();
   render(
@@ -69,8 +73,8 @@ describe('InstanceActionsMenu lan rate guard', () => {
     });
 
     const actionButton = screen.getByRole('button', { name: /99k lan rate/i });
-    expect(actionButton).toBeDisabled();
-    expect(screen.getByText('99k LAN rate is not compatible with Ubuntu.')).toBeInTheDocument();
+    expect(actionButton).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
 
     fireEvent.click(actionButton);
     expect(handleToggleLanRate).not.toHaveBeenCalled();

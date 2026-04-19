@@ -3,6 +3,7 @@ import React, { Fragment } from 'react'; // Removed useEffect
 import { Menu, Transition, Portal } from '@headlessui/react';
 import { useFloating, shift, offset, autoUpdate, flip } from '@floating-ui/react-dom';
 import { Trash2, RefreshCw, SlidersHorizontal, Zap, FileText, ExternalLink, Check, Square, Play, Terminal, MessageSquare } from 'lucide-react';
+import InfoTooltip from './common/InfoTooltip';
 import {
   canEnableLanRate,
   getLanRateUnsupportedReason,
@@ -40,6 +41,7 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
     osType: instance.host_os_type,
     currentEnabled: instance.lan_rate_enabled,
   });
+  const lanRateActionDisabled = !isActionable || !canToggleLanRate;
   const lanRateUnsupportedReason = !canToggleLanRate && !instance.lan_rate_enabled
     ? getLanRateUnsupportedReason(instance.host_os_type)
     : null;
@@ -137,11 +139,26 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                 <div className="px-1 py-1" style={{ borderTop: '1px solid var(--surface-border)' }}>
                   <Menu.Item>
                     {({ active }) => (
-                      <button onClick={() => handleToggleLanRate(instance.id, instance.name, instance.lan_rate_enabled)}
-                        disabled={!isActionable || !canToggleLanRate}
-                        className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          if (lanRateActionDisabled) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            return;
+                          }
+                          handleToggleLanRate(instance.id, instance.name, instance.lan_rate_enabled);
+                        }}
+                        aria-disabled={lanRateActionDisabled}
+                        className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors ${lanRateActionDisabled ? 'opacity-40 cursor-not-allowed' : ''} ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}
+                      >
                         <Zap size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
-                        <span className="flex-1 text-left">99k LAN Rate</span>
+                        <span className="flex flex-1 items-center gap-1.5 text-left">
+                          <span>99k LAN Rate</span>
+                          {lanRateUnsupportedReason && (
+                            <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={13} />
+                          )}
+                        </span>
                         <span className={`ml-2 inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${instance.lan_rate_enabled ? 'text-emerald-400' : 'text-theme-muted'}`}
                           style={instance.lan_rate_enabled ? { background: 'rgba(34,217,127,0.12)' } : { background: 'rgba(100,116,139,0.12)' }}>
                           {instance.lan_rate_enabled ? <><Check size={10} /> ON</> : 'OFF'}
@@ -149,11 +166,6 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                       </button>
                     )}
                   </Menu.Item>
-                  {lanRateUnsupportedReason && (
-                    <p className="px-3 pb-2 text-xs text-theme-danger">
-                      {lanRateUnsupportedReason}
-                    </p>
-                  )}
                   <Menu.Item>
                     {({ active }) => (
                       <button onClick={() => handleRestart(instance.id, instance.name)}
