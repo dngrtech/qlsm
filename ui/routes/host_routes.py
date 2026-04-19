@@ -165,6 +165,7 @@ def _handle_cloud_host_creation(name, provider, data):
             region=region,
             machine_size=machine_size,
             timezone=timezone,
+            os_type='debian',
             is_standalone=False,
             status=HostStatus.PENDING
         )
