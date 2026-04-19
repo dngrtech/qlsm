@@ -110,7 +110,10 @@ export PYTHONUNBUFFERED=1
 
 # Install missing dependencies only when requirements.txt has changed since last run
 STAMP_FILE=".venv/.requirements_stamp"
-if [[ ! -f "$STAMP_FILE" || requirements.txt -nt "$STAMP_FILE" ]]; then
+if [[ ! -f "$STAMP_FILE" ]]; then
+  echo "Installing dependencies..."
+  pip install -q -r requirements.txt && touch "$STAMP_FILE"
+elif [[ requirements.txt -nt "$STAMP_FILE" ]]; then
   echo "requirements.txt changed — syncing dependencies..."
   pip install -q -r requirements.txt && touch "$STAMP_FILE"
 fi
