@@ -64,3 +64,24 @@ it('renders the detected OS message after a successful connection test', () => {
 
   expect(screen.getByText(/Detected OS: Debian GNU\/Linux 12/i)).toBeInTheDocument();
 });
+
+it('renders success details in green and the Ubuntu warning in red', () => {
+  render(
+    <StandaloneAuthSection
+      authMethod="password"
+      onAuthMethodChange={() => {}}
+      sshKey=""
+      onSshKeyChange={() => {}}
+      sshPassword="bootstrap-secret"
+      onSshPasswordChange={() => {}}
+      ipAddress="203.0.113.10"
+      sshUser="root"
+      connectionTestStatus="success"
+      connectionTestMessage="Connection successful. Detected OS: Ubuntu 24.04.2 LTS. Warning: 99k LAN rate is not compatible with Ubuntu."
+      onTestConnection={() => {}}
+    />
+  );
+
+  expect(screen.getByText(/Detected OS: Ubuntu 24\.04\.2 LTS/i)).toHaveStyle('color: #22d97f');
+  expect(screen.getByText(/Warning: 99k LAN rate is not compatible with Ubuntu\./i)).toHaveStyle('color: var(--accent-danger)');
+});

@@ -5,6 +5,8 @@ const inputClass = 'mt-1 block w-full px-3 py-2 rounded-lg text-sm text-theme-pr
 const inputFocusRing = 'focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]';
 const inputStyle = { background: 'var(--surface-elevated)', border: '1px solid var(--surface-border)' };
 const labelClass = 'block text-sm font-medium text-theme-secondary';
+const successTextColor = '#22d97f';
+const warningDelimiter = ' Warning: ';
 
 const AUTH_OPTIONS = [
   {
@@ -16,6 +18,19 @@ const AUTH_OPTIONS = [
     label: 'Password',
   },
 ];
+
+function splitSuccessMessage(message) {
+  if (!message) {
+    return { successMessage: '', warningMessage: '' };
+  }
+
+  const [successMessage, ...warningParts] = message.split(warningDelimiter);
+
+  return {
+    successMessage: successMessage?.trim() || '',
+    warningMessage: warningParts.length ? `Warning: ${warningParts.join(warningDelimiter).trim()}` : '',
+  };
+}
 
 function StandaloneAuthSection({
   authMethod,
@@ -39,6 +54,9 @@ function StandaloneAuthSection({
     && (isPasswordAuth ? sshPassword?.trim() : sshKey?.trim())
     && connectionTestStatus !== 'testing'
   );
+  const { successMessage, warningMessage } = connectionTestStatus === 'success'
+    ? splitSuccessMessage(connectionTestMessage)
+    : { successMessage: '', warningMessage: '' };
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -182,7 +200,7 @@ function StandaloneAuthSection({
           </button>
 
           {connectionTestStatus === 'success' && (
-            <div className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#22d97f' }}>
+            <div className="flex items-center gap-1.5 text-sm font-medium" style={{ color: successTextColor }}>
               <CheckCircle size={16} />
               <span>Connected</span>
             </div>
@@ -200,8 +218,13 @@ function StandaloneAuthSection({
           <p className="mt-2 text-xs" style={{ color: 'var(--accent-danger)' }}>{connectionTestMessage}</p>
         )}
 
-        {connectionTestMessage && connectionTestStatus === 'success' && (
-          <p className="mt-2 text-xs" style={{ color: '#22d97f' }}>{connectionTestMessage}</p>
+        {successMessage && connectionTestStatus === 'success' && (
+          <div className="mt-2 space-y-1 text-xs">
+            <p style={{ color: successTextColor }}>{successMessage}</p>
+            {warningMessage && (
+              <p style={{ color: 'var(--accent-danger)' }}>{warningMessage}</p>
+            )}
+          </div>
         )}
 
         {connectionTestStatus === 'idle' && (
