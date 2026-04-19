@@ -144,7 +144,6 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                         onClick={(event) => {
                           if (lanRateActionDisabled) {
                             event.preventDefault();
-                            event.stopPropagation();
                             return;
                           }
                           handleToggleLanRate(instance.id, instance.name, instance.lan_rate_enabled);

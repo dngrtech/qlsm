@@ -28,5 +28,7 @@ case "${HOST_OS_ID:-}" in
   *)      HOST_OS_TYPE="" ;;
 esac
 
-printf '{"os_type":"%s","pretty_name":"%s"}\n' "$HOST_OS_TYPE" "$HOST_OS_PRETTY" \
+HOST_OS_TYPE_SAFE=$(printf '%s' "$HOST_OS_TYPE" | sed 's/\\/\\\\/g; s/"/\\"/g')
+HOST_OS_PRETTY_SAFE=$(printf '%s' "$HOST_OS_PRETTY" | sed 's/\\/\\\\/g; s/"/\\"/g')
+printf '{"os_type":"%s","pretty_name":"%s"}\n' "$HOST_OS_TYPE_SAFE" "$HOST_OS_PRETTY_SAFE" \
   > /qlsm-ssh/host-os-type || true

@@ -255,7 +255,7 @@ function EditInstanceConfigModal({
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
   const canToggleLanRate = canEnableLanRate({
     osType: hostOsType,
-    currentEnabled: originalLanRateEnabled,
+    currentEnabled: originalLanRateEnabled && lanRateEnabled,
   });
   const lanRateUnsupportedReason = !canToggleLanRate && !lanRateEnabled
     ? getLanRateUnsupportedReason(hostOsType)
