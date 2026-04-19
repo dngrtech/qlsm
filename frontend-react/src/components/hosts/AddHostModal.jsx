@@ -19,7 +19,7 @@ const DEFAULT_SELF_HOST_DEFAULTS = {
   host_ip: null,
   provider_capabilities: {
     vultr: {
-      configured: true,
+      configured: false,
     },
   },
 };
@@ -40,7 +40,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [loading, setLoading] = useState(false);
   const { showSuccess, showError } = useNotification();
   const [selfHostDefaults, setSelfHostDefaults] = useState(DEFAULT_SELF_HOST_DEFAULTS);
-  const [vultrConfigured, setVultrConfigured] = useState(true);
+  const [vultrConfigured, setVultrConfigured] = useState(false);
 
   // Standalone-specific state
   const [ipAddress, setIpAddress] = useState('');
@@ -88,7 +88,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           const message = defaultsResult.reason?.error?.message || defaultsResult.reason?.message || 'Failed to load self-host defaults.';
           showError(message);
           setSelfHostDefaults(DEFAULT_SELF_HOST_DEFAULTS);
-          setVultrConfigured(true);
+          setVultrConfigured(false);
         }
 
         setProviderOptionsReady(true);
@@ -136,7 +136,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
     setSelfHostDefaults(DEFAULT_SELF_HOST_DEFAULTS);
-    setVultrConfigured(true);
+    setVultrConfigured(false);
     setProviderOptionsReady(false);
   };
 
