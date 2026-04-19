@@ -19,6 +19,8 @@ function AddHostFormFields({
   provider,
   providerListOptions,
   onProviderChange,
+  vultrConfigured,
+  vultrUnavailableMessage,
   selectedContinent,
   onContinentChange,
   vultrContinentOptions,
@@ -48,6 +50,7 @@ function AddHostFormFields({
 }) {
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
+  const isVultrUnavailable = provider === 'vultr' && !vultrConfigured;
 
   return (
     <>
@@ -90,13 +93,29 @@ function AddHostFormFields({
 
       {/* Cloud provider fields */}
       {!isStandalone && !isSelf && (
-        <>
+        <div
+          data-testid="vultr-cloud-fields"
+          className={`space-y-5 transition-opacity ${isVultrUnavailable ? 'opacity-50' : 'opacity-100'}`}
+        >
+          {isVultrUnavailable && (
+            <div
+              className="rounded-lg px-3.5 py-3 text-sm"
+              style={{
+                background: 'rgba(255, 51, 102, 0.08)',
+                border: '1px solid rgba(255, 51, 102, 0.2)',
+                color: 'var(--accent-danger)',
+              }}
+            >
+              {vultrUnavailableMessage}
+            </div>
+          )}
           {provider === 'vultr' && (
             <FloatingListbox
               label="Continent"
               value={selectedContinent}
               onChange={onContinentChange}
               options={vultrContinentOptions}
+              disabled={isVultrUnavailable}
               getOptionKey={(opt) => opt.id}
               getOptionValue={(opt) => opt.name}
               getOptionDisplay={(opt) => opt.name}
@@ -113,7 +132,7 @@ function AddHostFormFields({
             value={region}
             onChange={onRegionChange}
             options={provider === 'vultr' ? vultrFilteredRegions : (providerOptions[provider]?.regions || [])}
-            disabled={(provider === 'vultr' && !selectedContinent) || (provider !== 'vultr' && (providerOptions[provider]?.regions?.length || 0) === 0)}
+            disabled={isVultrUnavailable || (provider === 'vultr' && !selectedContinent) || (provider !== 'vultr' && (providerOptions[provider]?.regions?.length || 0) === 0)}
             getOptionKey={(opt) => opt.id}
             getOptionDisplay={(opt) => provider === 'vultr' ? `${opt.city} (${opt.country})` : opt.name}
             getSelectedDisplay={(val, opts) => {
@@ -134,7 +153,7 @@ function AddHostFormFields({
             value={machineSize}
             onChange={onMachineSizeChange}
             options={currentSizes}
-            disabled={!provider || currentSizes.length === 0}
+            disabled={isVultrUnavailable || !provider || currentSizes.length === 0}
             getOptionKey={(opt) => opt.id}
             getOptionDisplay={(opt) => opt.name}
             getSelectedDisplay={(val, opts) => {
@@ -144,7 +163,7 @@ function AddHostFormFields({
             }}
             noOptionsMessage="No sizes available for this provider."
           />
-        </>
+        </div>
       )}
 
       {isSelf && (

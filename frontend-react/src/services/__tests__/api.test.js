@@ -30,12 +30,19 @@ describe('getSelfHostDefaults', () => {
 
   it('fetches self-host defaults', async () => {
     mocks.get.mockResolvedValue({
-      data: { data: { ssh_user: 'rage', host_ip: '203.0.113.10' } },
+      data: {
+        data: {
+          ssh_user: 'rage',
+          host_ip: '203.0.113.10',
+          provider_capabilities: { vultr: { configured: false } },
+        },
+      },
     });
 
     await expect(getSelfHostDefaults()).resolves.toEqual({
       ssh_user: 'rage',
       host_ip: '203.0.113.10',
+      provider_capabilities: { vultr: { configured: false } },
     });
     expect(mocks.get).toHaveBeenCalledWith('/hosts/self/defaults');
   });

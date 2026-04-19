@@ -32,6 +32,7 @@ vi.mock('../AddHostFormFields', () => ({
     <div>
       <div data-testid="provider-value">{props.provider}</div>
       <div data-testid="auth-method-value">{props.standaloneAuthMethod || ''}</div>
+      <div data-testid="vultr-configured">{String(props.vultrConfigured)}</div>
       {(props.providerListOptions || []).map((option) => (
         <div key={option.id}>{option.name}</div>
       ))}
@@ -41,6 +42,9 @@ vi.mock('../AddHostFormFields', () => ({
       )}
       {(props.providerListOptions || []).some((option) => option.id === 'standalone') && (
         <button type="button" onClick={() => props.onProviderChange('standalone')}>Choose standalone</button>
+      )}
+      {(props.providerListOptions || []).some((option) => option.id === 'vultr') && (
+        <button type="button" onClick={() => props.onProviderChange('vultr')}>Choose vultr</button>
       )}
       <button type="button" onClick={() => props.onTimezoneChange('UTC')}>Set timezone</button>
       <input aria-label="Server address" value={props.ipAddress || ''} onChange={props.onIpAddressChange} />
@@ -60,7 +64,11 @@ describe('AddHostModal self provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getHosts.mockResolvedValue([]);
-    mocks.getSelfHostDefaults.mockResolvedValue({ ssh_user: 'rage', host_ip: '203.0.113.10' });
+    mocks.getSelfHostDefaults.mockResolvedValue({
+      ssh_user: 'rage',
+      host_ip: '203.0.113.10',
+      provider_capabilities: { vultr: { configured: true } },
+    });
   });
 
   it('defaults to self when no self host exists and omits linode', async () => {
@@ -97,12 +105,12 @@ describe('AddHostModal self provider', () => {
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
 
     await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getSelfHostDefaults).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('provider-value')).toHaveTextContent('standalone'));
     expect(screen.queryByText('QLSM Host (self-deployment)')).not.toBeInTheDocument();
     expect(screen.getByText('Standalone')).toBeInTheDocument();
     expect(screen.getByText('VULTR')).toBeInTheDocument();
     expect(screen.queryByText(/linode/i)).not.toBeInTheDocument();
-    expect(mocks.getSelfHostDefaults).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /choose self/i })).not.toBeInTheDocument();
   });
 
@@ -158,5 +166,25 @@ describe('AddHostModal self provider', () => {
       ssh_password: 'bootstrap-secret',
       timezone: 'UTC',
     }));
+  });
+
+  it('disables Vultr submission when the env-backed capability is unavailable', async () => {
+    mocks.getSelfHostDefaults.mockResolvedValue({
+      ssh_user: 'rage',
+      host_ip: '203.0.113.10',
+      provider_capabilities: { vultr: { configured: false } },
+    });
+
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getSelfHostDefaults).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /choose vultr/i }));
+
+    await waitFor(() => expect(screen.getByTestId('provider-value')).toHaveTextContent('vultr'));
+    expect(screen.getByTestId('vultr-configured')).toHaveTextContent('false');
+    expect(screen.getByRole('button', { name: /add host/i })).toBeDisabled();
+
+    fireEvent.submit(screen.getByRole('button', { name: /add host/i }).closest('form'));
+    expect(mocks.createHost).not.toHaveBeenCalled();
   });
 });
