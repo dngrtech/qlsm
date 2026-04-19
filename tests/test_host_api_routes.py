@@ -428,8 +428,9 @@ def test_create_standalone_host_rejects_unsafe_ssh_user(client, app):
     assert 'SSH username contains invalid characters' in response.get_json()['error']['message']
 
 
+@patch('ui.routes.host_routes.detect_local_os', return_value=None)
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
-def test_get_self_host_defaults_no_env(mock_user, client, app, monkeypatch):
+def test_get_self_host_defaults_no_env(mock_user, mock_os, client, app, monkeypatch):
     """Without QLSM_HOST_IP env var, host_ip is None."""
     monkeypatch.delenv('QLSM_HOST_IP', raising=False)
     monkeypatch.delenv('VULTR_API_KEY', raising=False)
@@ -442,8 +443,9 @@ def test_get_self_host_defaults_no_env(mock_user, client, app, monkeypatch):
     assert data['provider_capabilities']['vultr']['configured'] is False
 
 
+@patch('ui.routes.host_routes.detect_local_os', return_value=None)
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
-def test_get_self_host_defaults_with_env(mock_user, client, app, monkeypatch):
+def test_get_self_host_defaults_with_env(mock_user, mock_os, client, app, monkeypatch):
     """QLSM_HOST_IP env var is returned as host_ip."""
     monkeypatch.setenv('QLSM_HOST_IP', '203.0.113.10')
     monkeypatch.setenv('VULTR_API_KEY', 'test-vultr-key')
@@ -453,6 +455,36 @@ def test_get_self_host_defaults_with_env(mock_user, client, app, monkeypatch):
     data = response.get_json()['data']
     assert data['host_ip'] == '203.0.113.10'
     assert data['provider_capabilities']['vultr']['configured'] is True
+
+
+@patch('ui.routes.host_routes.detect_local_os', return_value={
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+})
+@patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
+def test_get_self_host_defaults_includes_os_info(mock_user, mock_os, client, app, monkeypatch):
+    """os_info is returned when local OS detection succeeds."""
+    monkeypatch.delenv('QLSM_HOST_IP', raising=False)
+    monkeypatch.delenv('VULTR_API_KEY', raising=False)
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/hosts/self/defaults', headers=headers)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['os_info']['pretty_name'] == 'Debian GNU/Linux 12 (bookworm)'
+    assert data['os_info']['os_type'] == 'debian'
+
+
+@patch('ui.routes.host_routes.detect_local_os', return_value=None)
+@patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
+def test_get_self_host_defaults_os_info_none_when_detection_fails(mock_user, mock_os, client, app, monkeypatch):
+    """os_info is None when local OS detection fails."""
+    monkeypatch.delenv('QLSM_HOST_IP', raising=False)
+    monkeypatch.delenv('VULTR_API_KEY', raising=False)
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/hosts/self/defaults', headers=headers)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['os_info'] is None
 
 
 @patch('ui.routes.host_routes.enqueue_task')

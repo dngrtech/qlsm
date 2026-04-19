@@ -41,6 +41,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const { showSuccess, showError } = useNotification();
   const [selfHostDefaults, setSelfHostDefaults] = useState(DEFAULT_SELF_HOST_DEFAULTS);
   const [vultrConfigured, setVultrConfigured] = useState(false);
+  const [selfHostOsInfo, setSelfHostOsInfo] = useState(null);
 
   // Standalone-specific state
   const [ipAddress, setIpAddress] = useState('');
@@ -83,6 +84,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
         if (defaultsResult.status === 'fulfilled') {
           const defaults = defaultsResult.value || DEFAULT_SELF_HOST_DEFAULTS;
           setSelfHostDefaults(defaults);
+          setSelfHostOsInfo(defaults.os_info || null);
           setVultrConfigured(defaults.provider_capabilities?.vultr?.configured ?? true);
         } else {
           const message = defaultsResult.reason?.error?.message || defaultsResult.reason?.message || 'Failed to load self-host defaults.';
@@ -136,6 +138,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
     setSelfHostDefaults(DEFAULT_SELF_HOST_DEFAULTS);
+    setSelfHostOsInfo(null);
     setVultrConfigured(false);
     setProviderOptionsReady(false);
   };
@@ -404,6 +407,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         connectionTestStatus={connectionTestStatus}
                         connectionTestMessage={connectionTestMessage}
                         onTestConnection={handleTestConnection}
+                        osInfo={selfHostOsInfo}
                       />
                     ) : (
                       <div className="text-sm text-theme-muted">Loading host options...</div>

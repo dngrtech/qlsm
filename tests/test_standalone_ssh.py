@@ -1,11 +1,13 @@
 from pathlib import Path
 from unittest.mock import MagicMock
+from unittest.mock import mock_open
 from unittest.mock import patch
 
 import paramiko
 import pytest
 
 from ui.standalone_ssh import _AuditedAutoAddPolicy
+from ui.standalone_ssh import detect_local_os
 from ui.standalone_ssh import _format_host_key_fingerprint
 from ui.standalone_ssh import StandaloneSSHError
 from ui.standalone_ssh import bootstrap_managed_key
@@ -219,7 +221,7 @@ def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
     )
 
     assert detected["pretty_name"] == "Ubuntu 18.04.6 LTS"
-    assert detected["os_type"] is None
+    assert detected["os_type"] == "ubuntu"
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")
@@ -229,3 +231,25 @@ def test_bootstrap_managed_key_fails_when_password_login_rejected(mock_client_cl
     with patch("ui.standalone_ssh.verify_password_login", return_value=False):
         with pytest.raises(StandaloneSSHError, match="Password authentication failed"):
             bootstrap_managed_key("203.0.113.10", 22, "ansible", "secret", "/tmp/host_id_rsa")
+
+
+def test_detect_local_os_debian():
+    os_release = 'ID=debian\nVERSION_ID="12"\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
+    with patch("builtins.open", mock_open(read_data=os_release)):
+        result = detect_local_os()
+    assert result["pretty_name"] == "Debian GNU/Linux 12 (bookworm)"
+    assert result["os_type"] == "debian"
+
+
+def test_detect_local_os_ubuntu():
+    os_release = 'ID=ubuntu\nVERSION_ID="22.04"\nPRETTY_NAME="Ubuntu 22.04.4 LTS"\n'
+    with patch("builtins.open", mock_open(read_data=os_release)):
+        result = detect_local_os()
+    assert result["pretty_name"] == "Ubuntu 22.04.4 LTS"
+    assert result["os_type"] == "ubuntu"
+
+
+def test_detect_local_os_returns_none_on_missing_file():
+    with patch("builtins.open", side_effect=OSError("no such file")):
+        result = detect_local_os()
+    assert result is None

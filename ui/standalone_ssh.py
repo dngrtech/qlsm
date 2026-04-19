@@ -119,15 +119,10 @@ def _parse_os_release(os_release_text):
 
 def _detect_supported_os_type(os_release_values):
     distro_id = os_release_values.get("ID", "").strip().lower()
-    version_id = os_release_values.get("VERSION_ID", "").strip()
 
     if distro_id == "debian":
         return "debian"
-    if distro_id == "ubuntu" and version_id.startswith("20."):
-        return "ubuntu"
-    if distro_id == "ubuntu" and version_id.startswith("22."):
-        return "ubuntu"
-    if distro_id == "ubuntu" and version_id.startswith("24."):
+    if distro_id == "ubuntu":
         return "ubuntu"
     return None
 
@@ -182,6 +177,25 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
     return {
         "id": os_release_values.get("ID", "").strip().lower() or None,
         "version_id": os_release_values.get("VERSION_ID", "").strip() or None,
+        "pretty_name": detected_name,
+        "os_type": _detect_supported_os_type(os_release_values),
+    }
+
+
+def detect_local_os(path="/etc/os-release"):
+    """Read /etc/os-release on the local machine and return OS info dict, or None on failure."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError:
+        return None
+
+    os_release_values = _parse_os_release(content)
+    detected_name = _format_detected_os_name(os_release_values)
+    if not detected_name:
+        return None
+
+    return {
         "pretty_name": detected_name,
         "os_type": _detect_supported_os_type(os_release_values),
     }

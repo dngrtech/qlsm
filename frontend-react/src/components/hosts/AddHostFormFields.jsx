@@ -47,6 +47,7 @@ function AddHostFormFields({
   connectionTestStatus,
   connectionTestMessage,
   onTestConnection,
+  osInfo,
 }) {
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
@@ -184,6 +185,7 @@ function AddHostFormFields({
             onSshUserChange={onSshUserChange}
             timezone={timezone}
             onTimezoneChange={onTimezoneChange}
+            osInfo={osInfo}
           />
         </>
       )}

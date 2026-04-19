@@ -8,9 +8,24 @@ const inputFocusRing = 'focus:ring-[var(--accent-primary)] focus:border-[var(--a
 const inputStyle = { background: 'var(--surface-elevated)', border: '1px solid var(--surface-border)' };
 const labelClass = 'block text-sm font-medium text-theme-secondary';
 
-function SelfHostFields({ ipAddress, onIpAddressChange, sshUser, onSshUserChange, timezone, onTimezoneChange }) {
+function SelfHostFields({ ipAddress, onIpAddressChange, sshUser, onSshUserChange, timezone, onTimezoneChange, osInfo }) {
   return (
     <>
+      {osInfo && (
+        <p className="text-xs text-theme-secondary">
+          Detected OS: {osInfo.pretty_name}
+        </p>
+      )}
+
+      {osInfo?.os_type === 'ubuntu' && (
+        <p
+          className="text-xs font-medium"
+          style={{ color: 'var(--accent-danger)' }}
+        >
+          Warning: 99k LAN rate is not compatible with Ubuntu.
+        </p>
+      )}
+
       <div>
         <label htmlFor="modal-self-ip" className={labelClass}>
           <span className="inline-flex items-center gap-1.5">
