@@ -14,6 +14,18 @@ const PROVIDER_LIST_OPTIONS = [
   { id: 'vultr', name: 'VULTR' },
 ];
 
+const DEFAULT_SELF_HOST_DEFAULTS = {
+  ssh_user: 'root',
+  host_ip: null,
+  provider_capabilities: {
+    vultr: {
+      configured: false,
+    },
+  },
+};
+
+const VULTR_UNAVAILABLE_MESSAGE = 'Vultr deployment is unavailable until VULTR_API_KEY is added to the environment.';
+
 function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
@@ -27,6 +39,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const { showSuccess, showError } = useNotification();
+  const [selfHostDefaults, setSelfHostDefaults] = useState(DEFAULT_SELF_HOST_DEFAULTS);
+  const [vultrConfigured, setVultrConfigured] = useState(false);
 
   // Standalone-specific state
   const [ipAddress, setIpAddress] = useState('');
@@ -44,26 +58,39 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const availableProviderOptions = PROVIDER_LIST_OPTIONS.filter(
     (option) => option.id !== 'self' || !selfHostExists
   );
+  const isVultrUnavailable = provider === 'vultr' && !vultrConfigured;
 
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
     setProviderOptionsReady(false);
 
-    getHosts()
-      .then((hosts) => {
+    Promise.allSettled([getHosts(), getSelfHostDefaults()])
+      .then(([hostsResult, defaultsResult]) => {
         if (cancelled) return;
-        const hasSelfHost = hosts.some((host) => host.provider === 'self');
-        setSelfHostExists(hasSelfHost);
-        setProvider(hasSelfHost ? 'standalone' : 'self');
-        setProviderOptionsReady(true);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message = err.error?.message || err.message || 'Failed to load host options.';
-        showError(message);
-        setSelfHostExists(false);
-        setProvider('self');
+
+        if (hostsResult.status === 'fulfilled') {
+          const hasSelfHost = hostsResult.value.some((host) => host.provider === 'self');
+          setSelfHostExists(hasSelfHost);
+          setProvider(hasSelfHost ? 'standalone' : 'self');
+        } else {
+          const message = hostsResult.reason?.error?.message || hostsResult.reason?.message || 'Failed to load host options.';
+          showError(message);
+          setSelfHostExists(false);
+          setProvider('self');
+        }
+
+        if (defaultsResult.status === 'fulfilled') {
+          const defaults = defaultsResult.value || DEFAULT_SELF_HOST_DEFAULTS;
+          setSelfHostDefaults(defaults);
+          setVultrConfigured(defaults.provider_capabilities?.vultr?.configured ?? true);
+        } else {
+          const message = defaultsResult.reason?.error?.message || defaultsResult.reason?.message || 'Failed to load self-host defaults.';
+          showError(message);
+          setSelfHostDefaults(DEFAULT_SELF_HOST_DEFAULTS);
+          setVultrConfigured(false);
+        }
+
         setProviderOptionsReady(true);
       });
 
@@ -86,23 +113,9 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
 
   useEffect(() => {
     if (!isOpen || !providerOptionsReady || provider !== 'self') return;
-    let cancelled = false;
-
-    getSelfHostDefaults()
-      .then((defaults) => {
-        if (cancelled) return;
-        if (defaults?.ssh_user) setSshUser(defaults.ssh_user);
-        if (defaults?.host_ip) setIpAddress(defaults.host_ip);
-      })
-      .catch((err) => {
-        const message = err.error?.message || err.message || 'Failed to load self-host defaults.';
-        showError(message);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, provider, providerOptionsReady, showError]);
+    setSshUser(selfHostDefaults?.ssh_user || 'root');
+    setIpAddress(selfHostDefaults?.host_ip || '');
+  }, [isOpen, provider, providerOptionsReady, selfHostDefaults]);
 
   const resetForm = () => {
     setName('');
@@ -122,6 +135,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setTimezone('');
     setConnectionTestStatus('idle');
     setConnectionTestMessage('');
+    setSelfHostDefaults(DEFAULT_SELF_HOST_DEFAULTS);
+    setVultrConfigured(false);
     setProviderOptionsReady(false);
   };
 
@@ -183,6 +198,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+
+    if (isVultrUnavailable) {
+      return;
+    }
 
     const validationError = validateHostName(name);
     if (validationError) {
@@ -354,8 +373,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         providerListOptions={availableProviderOptions}
                         onProviderChange={(value) => {
                           setProvider(value);
+                          setError(null);
                           resetConnectionTest();
                         }}
+                        vultrConfigured={vultrConfigured}
+                        vultrUnavailableMessage={VULTR_UNAVAILABLE_MESSAGE}
                         selectedContinent={selectedContinent}
                         onContinentChange={setSelectedContinent}
                         vultrContinentOptions={vultrContinentOptions}
@@ -417,7 +439,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                     </button>
                     <button
                       type="submit"
-                      disabled={loading || !providerOptionsReady || (provider === 'standalone' && connectionTestStatus !== 'success')}
+                      disabled={loading || !providerOptionsReady || isVultrUnavailable || (provider === 'standalone' && connectionTestStatus !== 'success')}
                       className="px-5 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white dark:text-[#0A0E14]"
                       style={{
                         background: 'var(--accent-primary)',

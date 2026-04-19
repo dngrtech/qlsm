@@ -154,6 +154,20 @@ def test_create_host_cloud_missing_region(client, app):
     assert response.status_code == 400
 
 
+def test_create_vultr_host_requires_configured_api_key(client, app, monkeypatch):
+    """Vultr host creation is blocked when the runtime API key is missing."""
+    monkeypatch.delenv('VULTR_API_KEY', raising=False)
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'missing-vultr-key',
+        'provider': 'vultr',
+        'region': 'ewr',
+        'machine_size': 'vc2-1c-1gb'
+    })
+    assert response.status_code == 400
+    assert 'VULTR_API_KEY' in response.get_json()['error']['message']
+
+
 def test_create_host_unauthenticated(client, app):
     """Unauthenticated request returns 401."""
     response = client.post('/api/hosts/', json={
@@ -415,25 +429,30 @@ def test_create_standalone_host_rejects_unsafe_ssh_user(client, app):
 
 
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
-def test_get_self_host_defaults_no_env(mock_user, client, app):
+def test_get_self_host_defaults_no_env(mock_user, client, app, monkeypatch):
     """Without QLSM_HOST_IP env var, host_ip is None."""
+    monkeypatch.delenv('QLSM_HOST_IP', raising=False)
+    monkeypatch.delenv('VULTR_API_KEY', raising=False)
     headers = auth_headers(app, DEFAULT_USER)
     response = client.get('/api/hosts/self/defaults', headers=headers)
     assert response.status_code == 200
     data = response.get_json()['data']
     assert data['ssh_user'] == 'rage'
     assert data['host_ip'] is None
+    assert data['provider_capabilities']['vultr']['configured'] is False
 
 
 @patch('ui.routes.host_routes.detect_default_self_ssh_user', return_value='rage')
 def test_get_self_host_defaults_with_env(mock_user, client, app, monkeypatch):
     """QLSM_HOST_IP env var is returned as host_ip."""
     monkeypatch.setenv('QLSM_HOST_IP', '203.0.113.10')
+    monkeypatch.setenv('VULTR_API_KEY', 'test-vultr-key')
     headers = auth_headers(app, DEFAULT_USER)
     response = client.get('/api/hosts/self/defaults', headers=headers)
     assert response.status_code == 200
     data = response.get_json()['data']
     assert data['host_ip'] == '203.0.113.10'
+    assert data['provider_capabilities']['vultr']['configured'] is True
 
 
 @patch('ui.routes.host_routes.enqueue_task')

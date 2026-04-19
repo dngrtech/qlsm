@@ -72,6 +72,10 @@ VALID_TIMEZONES = {
     'Pacific/Auckland', 'Pacific/Honolulu', 'UTC',
 }
 
+
+def is_vultr_configured():
+    return bool(os.environ.get('VULTR_API_KEY', '').strip())
+
 # Import task functions
 from ui.tasks import provision_host, destroy_host, \
     install_qlfilter_task, uninstall_qlfilter_task, check_qlfilter_status_task, \
@@ -135,6 +139,13 @@ def _handle_cloud_host_creation(name, provider, data):
     region = data.get('region')
     machine_size = data.get('machine_size')
     timezone = data.get('timezone')
+
+    if provider == 'vultr' and not is_vultr_configured():
+        return jsonify({
+            "error": {
+                "message": "Vultr deployment is unavailable until VULTR_API_KEY is added to the environment."
+            }
+        }), 400
 
     if not region or not machine_size:
         return jsonify({"error": {"message": "Region and Machine Size are required for cloud providers."}}), 400
@@ -556,7 +567,17 @@ def _handle_standalone_host_creation(name, data):
 def get_self_host_defaults_api():
     ssh_user = detect_default_self_ssh_user()
     host_ip = os.environ.get('QLSM_HOST_IP', '').strip() or None
-    return jsonify({"data": {"ssh_user": ssh_user, "host_ip": host_ip}})
+    return jsonify({
+        "data": {
+            "ssh_user": ssh_user,
+            "host_ip": host_ip,
+            "provider_capabilities": {
+                "vultr": {
+                    "configured": is_vultr_configured(),
+                }
+            },
+        }
+    })
 
 
 def _validate_self_ssh_user(value):
