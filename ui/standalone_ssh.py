@@ -187,6 +187,25 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
     }
 
 
+def detect_local_os(path="/etc/os-release"):
+    """Read /etc/os-release on the local machine and return OS info dict, or None on failure."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError:
+        return None
+
+    os_release_values = _parse_os_release(content)
+    detected_name = _format_detected_os_name(os_release_values)
+    if not detected_name:
+        return None
+
+    return {
+        "pretty_name": detected_name,
+        "os_type": _detect_supported_os_type(os_release_values),
+    }
+
+
 def verify_password_login(host, port, username, password, timeout=30):
     """Check whether the supplied password can open an SSH session."""
     try:
