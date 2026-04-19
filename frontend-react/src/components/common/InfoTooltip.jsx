@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useFloating, offset, flip, shift, arrow, autoUpdate } from '@floating-ui/react-dom';
 import { Info } from 'lucide-react';
 
@@ -93,7 +94,7 @@ function InfoTooltip({ text, size = 14, placement = 'top', iconClassName = '', c
         <Info size={size} />
       </span>
 
-      {open && (
+      {open && createPortal(
         <div
           ref={refs.setFloating}
           role="tooltip"
@@ -103,7 +104,7 @@ function InfoTooltip({ text, size = 14, placement = 'top', iconClassName = '', c
             position: strategy,
             top: y ?? 0,
             left: x ?? 0,
-            zIndex: 50,
+            zIndex: 9999,
           }}
         >
           <div
@@ -129,7 +130,8 @@ function InfoTooltip({ text, size = 14, placement = 'top', iconClassName = '', c
               }}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </span>
   );
