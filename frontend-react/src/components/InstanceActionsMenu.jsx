@@ -150,7 +150,7 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                     )}
                   </Menu.Item>
                   {lanRateUnsupportedReason && (
-                    <p className="px-3 pb-2 text-xs" style={{ color: 'var(--accent-danger)' }}>
+                    <p className="px-3 pb-2 text-xs text-theme-danger">
                       {lanRateUnsupportedReason}
                     </p>
                   )}
@@ -189,8 +189,7 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                     {({ active }) => (
                       <button onClick={() => handleDelete(instance.id, instance.name)}
                         disabled={[InstanceStatus.DELETING, InstanceStatus.DEPLOYING, InstanceStatus.CONFIGURING].includes(instance.status?.toLowerCase())}
-                        className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-red-500/10' : ''}`}
-                        style={{ color: 'var(--accent-danger)' }}>
+                        className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-theme-danger ${active ? 'bg-red-500/10' : ''}`}>
                         <Trash2 size={15} className="mr-3 flex-shrink-0" /> Delete
                       </button>
                     )}

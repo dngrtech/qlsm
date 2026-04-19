@@ -490,7 +490,11 @@ def test_get_self_host_defaults_os_info_none_when_detection_fails(mock_user, moc
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.generate_self_host_keys', return_value=('/tmp/self-key', 'ssh-rsa pub'))
-def test_create_self_host_success(mock_keys, mock_lock, mock_enqueue, client, app):
+@patch('ui.routes.host_routes.detect_local_os', return_value={
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+})
+def test_create_self_host_success(mock_os, mock_keys, mock_lock, mock_enqueue, client, app):
     """Valid self-host with user-provided IP stores that IP."""
     headers = auth_headers(app, DEFAULT_USER)
 
@@ -508,8 +512,30 @@ def test_create_self_host_success(mock_keys, mock_lock, mock_enqueue, client, ap
     assert data['ip_address'] == '203.0.113.10'
     assert data['ssh_key_path'] == '/tmp/self-key'
     assert data['is_standalone'] is True
+    assert data['os_type'] == 'debian'
     assert data['status'] == HostStatus.PROVISIONED_PENDING_SETUP.value
     mock_enqueue.assert_called_once()
+
+
+@patch('ui.routes.host_routes.enqueue_task')
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+@patch('ui.routes.host_routes.generate_self_host_keys', return_value=('/tmp/self-key', 'ssh-rsa pub'))
+@patch('ui.routes.host_routes.detect_local_os', return_value=None)
+def test_create_self_host_leaves_os_type_unknown_when_detection_fails(
+    mock_os, mock_keys, mock_lock, mock_enqueue, client, app
+):
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/', headers=headers, json={
+        'name': 'self-host',
+        'provider': 'self',
+        'ip_address': '203.0.113.10',
+        'timezone': 'UTC',
+        'ssh_user': 'rage',
+    })
+
+    assert response.status_code == 201
+    assert response.get_json()['data']['os_type'] is None
 
 
 def test_create_self_host_missing_ip_returns_400(client, app):

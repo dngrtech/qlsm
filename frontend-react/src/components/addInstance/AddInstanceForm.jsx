@@ -509,8 +509,11 @@ function AddInstanceForm({
   const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
   const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
   const selectedHostOsType = selectedHost?.os_type ?? null;
-  const lanRateSupported = isLanRateSupported(selectedHostOsType);
-  const lanRateUnavailableReason = !lanRateSupported ? getLanRateUnsupportedReason(selectedHostOsType) : null;
+  const hasSelectedHost = Boolean(selectedHost);
+  const lanRateSupported = !hasSelectedHost || isLanRateSupported(selectedHostOsType);
+  const lanRateUnavailableReason = hasSelectedHost && !lanRateSupported
+    ? getLanRateUnsupportedReason(selectedHostOsType)
+    : null;
 
   useEffect(() => {
     if (!lanRateSupported && lanRateEnabled) {

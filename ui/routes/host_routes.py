@@ -638,6 +638,8 @@ def _handle_self_host_creation(name, data):
     key_path = None
     public_key = None
     lock_token = None
+    local_os_info = detect_local_os()
+    local_os_type = local_os_info.get('os_type') if local_os_info else None
     try:
         key_path, public_key = generate_self_host_keys(name)
         host = create_host(
@@ -647,7 +649,7 @@ def _handle_self_host_creation(name, data):
             ssh_user=ssh_user,
             ssh_key_path=key_path,
             ssh_port=22,
-            os_type='debian',
+            os_type=local_os_type,
             is_standalone=True,
             timezone=timezone,
             status=HostStatus.PENDING,

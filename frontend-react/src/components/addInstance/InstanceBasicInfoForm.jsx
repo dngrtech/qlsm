@@ -172,7 +172,7 @@ function InstanceBasicInfoForm({
         </span>
       </div>
       {lanRateUnavailableReason && (
-        <p className="mt-2 text-sm" style={{ color: 'var(--accent-danger)' }}>
+        <p className="mt-2 text-sm text-theme-danger">
           {lanRateUnavailableReason}
         </p>
       )}

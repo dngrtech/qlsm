@@ -239,6 +239,11 @@ describe('EditInstanceConfigModal preset saving', () => {
 
     fireEvent.click(toggle);
 
+    expect(toggle).not.toBeDisabled();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
 });

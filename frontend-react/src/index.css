@@ -160,6 +160,10 @@ body {
   color: var(--text-muted);
 }
 
+.text-theme-danger {
+  color: var(--accent-danger);
+}
+
 /* ============================================
    Typography Classes
    ============================================ */

@@ -92,7 +92,7 @@ Self provider:
 }
 ```
 
-Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist.
+Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
 ### Self-Host Defaults
 
@@ -106,12 +106,21 @@ Response:
 {
   "data": {
     "ssh_user": "rage",
-    "host_ip": "203.0.113.10"
+    "host_ip": "203.0.113.10",
+    "os_info": {
+      "pretty_name": "Debian GNU/Linux 12 (bookworm)",
+      "os_type": "debian"
+    },
+    "provider_capabilities": {
+      "vultr": {
+        "configured": true
+      }
+    }
   }
 }
 ```
 
-`host_ip` may be `null` if `QLSM_HOST_IP` is not set.
+`host_ip` may be `null` if `QLSM_HOST_IP` is not set. `os_info` may also be `null` if local OS detection is unavailable.
 
 Self-host error cases:
 
@@ -149,7 +158,7 @@ Password mode:
 }
 ```
 
-Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive. Connection tests auto-detect the remote OS from `/etc/os-release` and reject unsupported releases. Ubuntu detections succeed, but the response includes a warning that `99k LAN rate` is not compatible with Ubuntu.
+Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive. Connection tests auto-detect the remote OS from `/etc/os-release` and reject unsupported releases. Ubuntu detections succeed, but the response includes a warning that `99k LAN rate` is not compatible with Ubuntu. That warning is actionable: new `99k LAN rate` enables are allowed only on Debian hosts.
 
 Example success response:
 
@@ -213,6 +222,8 @@ Example success response:
 }
 ```
 
+`lan_rate_enabled: true` is accepted only when the instance host has detected `host_os_type = "debian"`. Ubuntu hosts and hosts with missing or unrecognized OS type reject new enables. Legacy instances that already have `lan_rate_enabled = true` can still disable it through the same endpoint or the config-save flow.
+
 ### Update LAN Rate Response (202 Accepted)
 ```json
 {
@@ -236,6 +247,7 @@ Example success response:
     "host_id": 1,
     "host_name": "my-host-1",
     "host_ip_address": "144.202.73.249",
+    "host_os_type": "debian",
     "port": 27960,
     "hostname": "My Duel Server",
     "lan_rate_enabled": false,

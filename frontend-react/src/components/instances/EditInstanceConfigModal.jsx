@@ -253,7 +253,10 @@ function EditInstanceConfigModal({
   };
 
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
-  const canToggleLanRate = canEnableLanRate({ osType: hostOsType, currentEnabled: lanRateEnabled });
+  const canToggleLanRate = canEnableLanRate({
+    osType: hostOsType,
+    currentEnabled: originalLanRateEnabled,
+  });
   const lanRateUnsupportedReason = !canToggleLanRate && !lanRateEnabled
     ? getLanRateUnsupportedReason(hostOsType)
     : null;
@@ -610,7 +613,7 @@ function EditInstanceConfigModal({
 
                         <div className="mb-2 lg:mb-4 flex-shrink-0 flex flex-wrap items-end gap-4">
                           {presetError && (
-                            <p className="text-sm font-medium text-[var(--accent-danger)]">{presetError}</p>
+                            <p className="text-sm font-medium text-theme-danger">{presetError}</p>
                           )}
 
                           {/* Toggle Switches Container */}
@@ -634,7 +637,7 @@ function EditInstanceConfigModal({
                                 99k LAN Rate
                               </span>
                               {lanRateUnsupportedReason && (
-                                <span className="text-sm" style={{ color: 'var(--accent-danger)' }}>
+                                <span className="text-sm text-theme-danger">
                                   {lanRateUnsupportedReason}
                                 </span>
                               )}

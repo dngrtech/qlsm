@@ -284,7 +284,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                                 <X size={18} />
                               </button>
                             </div>
-                            {editedNameError && <p className="text-sm" style={{ color: 'var(--accent-danger)' }}>{editedNameError}</p>}
+                            {editedNameError && <p className="text-sm text-theme-danger">{editedNameError}</p>}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -337,7 +337,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                               </span>
                             </div>
                             {lanRateUnsupportedReason && (
-                              <span className="text-xs" style={{ color: 'var(--accent-danger)' }}>
+                              <span className="text-xs text-theme-danger">
                                 {lanRateUnsupportedReason}
                               </span>
                             )}
