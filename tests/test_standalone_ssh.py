@@ -265,8 +265,6 @@ def test_detect_local_os_uses_host_info_file():
 
 def test_detect_local_os_host_info_empty_os_type_normalized_to_none():
     host_info = '{"os_type":"","pretty_name":"Arch Linux"}'
-    os_release = 'ID=debian\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
-    open_calls = [mock_open(read_data=host_info)(), mock_open(read_data=os_release)()]
     with patch("builtins.open", side_effect=[
         mock_open(read_data=host_info).return_value,
     ]):
