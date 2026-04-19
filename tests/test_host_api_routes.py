@@ -50,7 +50,8 @@ def test_list_hosts_unauthenticated(client, app):
 
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
-def test_create_cloud_host_success(mock_lock, mock_enqueue, client, app):
+@patch('ui.routes.host_routes.is_vultr_configured', return_value=True)
+def test_create_cloud_host_success(mock_vultr, mock_lock, mock_enqueue, client, app):
     """Valid cloud host data creates host and queues provision task."""
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post('/api/hosts/', headers=headers, json={

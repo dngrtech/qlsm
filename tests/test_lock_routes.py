@@ -17,7 +17,7 @@ def app_with_instance():
         db.create_all()
         host = Host(id=1, name='test-host', provider='vultr',
                      status=HostStatus.ACTIVE, ip_address='1.2.3.4',
-                     ssh_key_path='/fake/key', ssh_user='root')
+                     ssh_key_path='/fake/key', ssh_user='root', os_type='debian')
         db.session.add(host)
         inst = QLInstance(id=1, name='test-inst', host_id=1, hostname='test-host',
                           port=27960, status=InstanceStatus.RUNNING)

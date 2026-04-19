@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import logging
 import shlex
 from contextlib import contextmanager
@@ -182,8 +183,18 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
     }
 
 
-def detect_local_os(path="/etc/os-release"):
-    """Read /etc/os-release on the local machine and return OS info dict, or None on failure."""
+def detect_local_os(path="/etc/os-release", host_info_path="/host-ssh/host-os-type"):
+    """Return OS info dict. In Docker, reads host-written info first; falls back to /etc/os-release."""
+    if host_info_path:
+        try:
+            with open(host_info_path, "r", encoding="utf-8") as f:
+                info = json.loads(f.read().strip())
+            if info.get("pretty_name") or info.get("os_type"):
+                info["os_type"] = info.get("os_type") or None
+                return info
+        except (OSError, json.JSONDecodeError, ValueError):
+            pass
+
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()

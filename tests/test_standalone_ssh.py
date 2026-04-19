@@ -236,7 +236,7 @@ def test_bootstrap_managed_key_fails_when_password_login_rejected(mock_client_cl
 def test_detect_local_os_debian():
     os_release = 'ID=debian\nVERSION_ID="12"\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
     with patch("builtins.open", mock_open(read_data=os_release)):
-        result = detect_local_os()
+        result = detect_local_os(host_info_path=None)
     assert result["pretty_name"] == "Debian GNU/Linux 12 (bookworm)"
     assert result["os_type"] == "debian"
 
@@ -244,12 +244,54 @@ def test_detect_local_os_debian():
 def test_detect_local_os_ubuntu():
     os_release = 'ID=ubuntu\nVERSION_ID="22.04"\nPRETTY_NAME="Ubuntu 22.04.4 LTS"\n'
     with patch("builtins.open", mock_open(read_data=os_release)):
-        result = detect_local_os()
+        result = detect_local_os(host_info_path=None)
     assert result["pretty_name"] == "Ubuntu 22.04.4 LTS"
     assert result["os_type"] == "ubuntu"
 
 
 def test_detect_local_os_returns_none_on_missing_file():
     with patch("builtins.open", side_effect=OSError("no such file")):
-        result = detect_local_os()
+        result = detect_local_os(host_info_path=None)
     assert result is None
+
+
+def test_detect_local_os_uses_host_info_file():
+    host_info = '{"os_type":"ubuntu","pretty_name":"Ubuntu 22.04.5 LTS"}'
+    with patch("builtins.open", mock_open(read_data=host_info)):
+        result = detect_local_os()
+    assert result["os_type"] == "ubuntu"
+    assert result["pretty_name"] == "Ubuntu 22.04.5 LTS"
+
+
+def test_detect_local_os_host_info_empty_os_type_normalized_to_none():
+    host_info = '{"os_type":"","pretty_name":"Arch Linux"}'
+    os_release = 'ID=debian\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
+    open_calls = [mock_open(read_data=host_info)(), mock_open(read_data=os_release)()]
+    with patch("builtins.open", side_effect=[
+        mock_open(read_data=host_info).return_value,
+    ]):
+        result = detect_local_os()
+    assert result["os_type"] is None
+    assert result["pretty_name"] == "Arch Linux"
+
+
+def test_detect_local_os_falls_back_when_host_info_missing():
+    os_release = 'ID=debian\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
+    def open_side_effect(path, *args, **kwargs):
+        if "host-os-type" in str(path):
+            raise OSError("not found")
+        return mock_open(read_data=os_release)()
+    with patch("builtins.open", side_effect=open_side_effect):
+        result = detect_local_os()
+    assert result["os_type"] == "debian"
+
+
+def test_detect_local_os_falls_back_when_host_info_invalid_json():
+    os_release = 'ID=debian\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
+    def open_side_effect(path, *args, **kwargs):
+        if "host-os-type" in str(path):
+            return mock_open(read_data="not valid json")()
+        return mock_open(read_data=os_release)()
+    with patch("builtins.open", side_effect=open_side_effect):
+        result = detect_local_os()
+    assert result["os_type"] == "debian"
