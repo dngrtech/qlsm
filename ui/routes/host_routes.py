@@ -91,7 +91,7 @@ from ui.routes.self_host_helpers import (
     generate_self_host_keys,
 )
 from ui.standalone_ssh import StandaloneSSHError, bootstrap_managed_key
-from ui.standalone_ssh import detect_remote_os
+from ui.standalone_ssh import detect_local_os, detect_remote_os
 from ui.standalone_ssh import remove_managed_key
 from ui.standalone_ssh import verify_password_login, verify_passwordless_sudo
 from flask_jwt_extended import jwt_required # Import the decorator from Flask-JWT-Extended
@@ -567,10 +567,12 @@ def _handle_standalone_host_creation(name, data):
 def get_self_host_defaults_api():
     ssh_user = detect_default_self_ssh_user()
     host_ip = os.environ.get('QLSM_HOST_IP', '').strip() or None
+    os_info = detect_local_os()
     return jsonify({
         "data": {
             "ssh_user": ssh_user,
             "host_ip": host_ip,
+            "os_info": os_info,
             "provider_capabilities": {
                 "vultr": {
                     "configured": is_vultr_configured(),
