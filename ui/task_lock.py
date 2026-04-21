@@ -70,3 +70,18 @@ def release_lock(entity_type, entity_id, token):
     else:
         log.debug(f"Lock not released (not owner or expired): {key}")
     return bool(result)
+
+
+def force_release_lock(entity_type, entity_id):
+    """Unconditionally delete a stale lock regardless of owner.
+
+    Only call this when the lock is known to be stale (e.g. the task that
+    held it crashed without releasing it and its TTL has long since expired).
+    Returns True if a key was deleted, False if there was nothing to delete.
+    """
+    redis_client = _get_redis()
+    key = f"task_lock:{entity_type}:{entity_id}"
+    result = redis_client.delete(key)
+    if result:
+        log.warning(f"Stale lock force-released: {key}")
+    return bool(result)

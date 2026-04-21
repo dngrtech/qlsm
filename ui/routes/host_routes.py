@@ -10,7 +10,7 @@ import ipaddress
 import subprocess
 import tempfile
 import uuid
-from ui.task_lock import acquire_lock, release_lock
+from ui.task_lock import acquire_lock, release_lock, force_release_lock
 
 # Host name validation constants
 HOST_NAME_MAX_LENGTH = 20
@@ -724,6 +724,29 @@ def delete_host_api(host_id): # Renamed function
 
     host_name = host.name
     is_standalone = host.is_standalone
+
+    # Stale-lock detection: if the host has been in a transitional state with
+    # no DB activity for longer than the max provisioning lock TTL (1500s), the
+    # task that holds the lock is almost certainly dead (worker crash, OOM kill).
+    # Force-release the stale lock so the delete can proceed.
+    STALE_LOCK_THRESHOLD_SECONDS = 1800
+    STALE_TRANSITIONAL_STATUSES = {
+        HostStatus.PROVISIONING,
+        HostStatus.PROVISIONED_PENDING_SETUP,
+        HostStatus.CONFIGURING,
+        HostStatus.REBOOTING,
+    }
+    import datetime as _dt
+    if (
+        host.status in STALE_TRANSITIONAL_STATUSES
+        and host.last_updated is not None
+        and (_dt.datetime.utcnow() - host.last_updated).total_seconds() > STALE_LOCK_THRESHOLD_SECONDS
+    ):
+        current_app.logger.warning(
+            f'Host "{host_name}" ({host_id}) has been in {host.status.value} for '
+            f'>{STALE_LOCK_THRESHOLD_SECONDS}s with no activity. Force-releasing stale lock.'
+        )
+        force_release_lock('host', host.id)
 
     lock_token = str(uuid.uuid4())
     if not acquire_lock('host', host.id, lock_token, ttl=240):
