@@ -16,26 +16,26 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 2. Press **Send**.
 3. Read output in the console panel.
 
-## Live Event Stream
+## Real-Time Game Events
 
-The RCON console shows more than just command responses. As long as the console is open, you see a live stream of server events alongside your commands:
+The console has a **Show real-time game events** checkbox. When enabled, the output panel shows a live stats stream alongside command responses.
 
-- Player connects / disconnects
-- Match state changes (warmup → countdown → in-progress → ended)
-- Kill feed entries
-- Chat messages
-
-This means you can watch what's happening on the server in real time without running a separate tool.
+Note: this only works when the QLSM backend is running in DEBUG mode. In production mode the subscription is silently ignored.
 
 ## Quality-of-Life
 
-- Use Up/Down arrow keys to reuse recent commands.
-- Use `Ctrl+F` in output panel to search text.
-- Keep commands short and explicit.
+- Use Up/Down arrow keys to cycle through the last 50 commands.
+- Output auto-trims to ~1000 lines; use `Ctrl+F` to search within it.
+- Quake color codes are rendered in the output panel.
 
-## Recommended First Commands
+## Troubleshooting
 
-Use whichever commands your server policy allows to confirm response and current match state.
+| Symptom | Likely cause |
+|---|---|
+| RCON button disabled | Instance not in `running` / `active` / `updated` state |
+| "RCON not configured" | Missing IP, port, or password on the instance or host |
+| "Not authorized for this instance" | Room join did not complete before command was sent |
+| Connection errors | Check Redis service and host reachability |
 
 ## Related Pages
 
