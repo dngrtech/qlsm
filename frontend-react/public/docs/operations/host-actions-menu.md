@@ -15,16 +15,14 @@ Open from host row **Actions** in the Servers page.
 
 ## What QLFilter Is
 
-QLFilter is a host-level Quake Live filtering/moderation component.
+QLFilter is a host-level anti-DDoS filter. It uses eBPF/XDP to drop reflection garbage (DNS, SSDP, and similar noise) at the network driver level before it ever reaches QLDS. One installation covers all instances on the host.
 
-- It is installed once per host, not per instance.
-- All instances on that host use the same QLFilter installation.
-- The menu action controls lifecycle only: install or uninstall.
+For a full explanation: [QLFilter](/docs/features/qlfilter)
 
 Operationally:
 
-- Use **Install QLFilter** on new hosts before regular production use.
-- Use **Uninstall QLFilter** only when you intentionally want it removed from that host.
+- Use **Install QLFilter** on new production hosts.
+- Use **Uninstall QLFilter** only when you intentionally want it removed.
 
 ## QLFilter Behavior In Menu
 
