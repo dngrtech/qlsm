@@ -1,37 +1,40 @@
 # Presets And Default Config
 
-## What Loads By Default
+A preset is a reusable bundle of config files, plugin selections, and factory file selections. Use presets to spin up new instances with a consistent starting point, or to save a working setup so you can replicate it later.
 
-Opening **Deploy New Instance** loads config from the `default` preset.
-
-That gives a consistent starting point for:
+## What A Preset Contains
 
 - `server.cfg`
 - `mappool.txt`
 - `access.txt`
 - `workshop.txt`
-- default plugins/factories
+- A set of selected minqlx plugins (checkboxes, not a raw `qlx_plugins` string)
+- A set of selected factory files
 
-## Default Preset Rules
+## Default Preset
 
-- Treat `default` as read-only baseline.
-- Use **Load Preset** for custom templates.
-- Use **Save as Preset** or **Save As New** to create your own variants.
+Opening **Deploy New Instance** pre-loads config from the `default` preset. It is a baseline template. Treat it as read-only — use **Save As New** to create your own variants.
+
+## Plugin and Factory Selection
+
+Instead of editing `qlx_plugins` manually, presets use checkboxes. Check the plugins you want; uncheck the ones you don't. The same applies to factory files — select the factories that should be included when this preset is deployed.
+
+This means you can have completely different plugin and factory sets per instance. Two instances on the same host can each have their own independent selection.
 
 ## Custom Preset Workflow
 
-1. Load baseline (default or existing preset).
-2. Edit config/plugins/factories for your mode.
-3. Save as named preset.
-4. Reuse that preset on future deployments.
+1. Open **Deploy New Instance** (or **Edit Config** on an existing instance).
+2. Adjust config files, plugin selections, and factory selections for your gamemode.
+3. Click **Save As Preset** and give it a name.
+4. On future deployments, click **Load Preset** and select your saved preset.
 
 ## Instance-Specific Ownership
 
-Preset is only input at deploy time.
-After instance creation, each instance keeps its own file set.
+A preset is only input at deploy time. After the instance is created, it keeps its own independent file set.
 
-- Editing instance config later affects only that instance.
-- Preset files are not auto-overwritten by instance edits.
+- Editing an instance's config later affects only that instance.
+- Other instances are not affected.
+- The original preset files are not modified.
 
 ## Related Pages
 
