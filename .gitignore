@@ -119,6 +119,11 @@ logging-stack/*
 !logging-stack/promtail/
 !logging-stack/promtail/**
 
+# ── Claude Code rules ─────────────────────────────────────────────────────────
+!.claude/
+!.claude/rules/
+!.claude/rules/**
+
 # ── Docs (selected only) ──────────────────────────────────────────────────────
 !docs/
 docs/*
