@@ -16,6 +16,17 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 2. Press **Send**.
 3. Read output in the console panel.
 
+## Live Event Stream
+
+The RCON console shows more than just command responses. As long as the console is open, you see a live stream of server events alongside your commands:
+
+- Player connects / disconnects
+- Match state changes (warmup → countdown → in-progress → ended)
+- Kill feed entries
+- Chat messages
+
+This means you can watch what's happening on the server in real time without running a separate tool.
+
 ## Quality-of-Life
 
 - Use Up/Down arrow keys to reuse recent commands.
