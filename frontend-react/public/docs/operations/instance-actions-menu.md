@@ -54,6 +54,18 @@ Open from instance row **Actions** in the Servers page.
 Config edits from this menu are instance-local.
 Changes do not modify other instances and do not modify default preset files.
 
+## File Upload In Edit Config
+
+Each config tab (server.cfg, mappool.txt, access.txt, workshop.txt) has an **Upload** button. Use it to drop in a file from your machine instead of typing or pasting.
+
+You can also upload:
+
+- **Plugin files** — `.py` files for custom minqlx plugins, uploaded via the Plugins tab
+- **Factory files** — `.factories` files, uploaded via the Factories tab
+- **Plugin binaries** — `.so` shared library files for native minqlx extensions
+
+This makes it easy to migrate an existing server setup: if you already have a working config and plugin pack, upload everything through the UI rather than manually copying files over SSH.
+
 ## Related Pages
 
 - [Deploy A New Instance](/docs/getting-started/deploy-new-instance)
