@@ -48,6 +48,16 @@
         "path": "/docs/operations/logs-and-chat.md"
       },
       {
+        "id": "server-logs",
+        "title": "Server Logs",
+        "path": "/docs/operations/server-logs.md"
+      },
+      {
+        "id": "chat-logs",
+        "title": "Chat Logs",
+        "path": "/docs/operations/chat-logs.md"
+      },
+      {
         "id": "rcon-basics",
         "title": "RCON Basics",
         "path": "/docs/operations/rcon-basics.md"

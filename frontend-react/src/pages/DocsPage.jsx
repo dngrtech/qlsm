@@ -77,10 +77,10 @@ export default function DocsPage() {
 
         return (
           <a
+            {...linkProps}
             href={isDocsRoute ? docsTarget : href}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
-            {...linkProps}
           />
         );
       },
