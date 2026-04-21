@@ -5,8 +5,11 @@ Host setup reference: [Add A Host (Cloud Or Standalone)](/docs/getting-started/a
 
 ## Why It Is Needed
 
-Running servers do not automatically pull Workshop updates while they stay online.
-Scheduled restart provides a controlled window for instances to restart and load updated Workshop content.
+Scheduled restarts serve two purposes:
+
+**1. Workshop updates.** Running servers do not automatically pull Steam Workshop updates while they stay online. A restart is the only way to load updated Workshop content. QLSM auto-restarts also trigger a full Workshop update pull across all instances on that host — so once a Workshop item owner publishes an update, your servers will pick it up on the next scheduled restart without any manual intervention.
+
+**2. General maintenance.** Long-running game server processes can accumulate state. A scheduled weekly or monthly restart gives a clean slate.
 
 ## Schedule Modes
 
