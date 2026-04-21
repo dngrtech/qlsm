@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { BookOpen } from 'lucide-react';
 import '../styles/docs-markdown.css';
 
@@ -246,7 +247,7 @@ export default function DocsPage() {
               </div>
             ) : (
               <article className="docs-markdown">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
                   {markdownContent}
                 </ReactMarkdown>
               </article>
