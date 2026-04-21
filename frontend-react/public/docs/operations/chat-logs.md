@@ -2,6 +2,8 @@
 
 Use **View Chat Logs** from the instance action menu to read `chat.log` and rotated chat archives.
 
+![Instance Actions: View Chat Logs](/docs/images/instance-actions-menu-view-chat-logs.png)
+
 ## Data Source
 
 - File list endpoint: `GET /api/instances/<id>/chat-logs/list`

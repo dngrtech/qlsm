@@ -5,11 +5,11 @@ Hosts are added from **Servers** -> **Add New Host**.
 ## Supported OS
 
 Use **Debian 12**.
-Ubuntu support is planned, but this guide and production workflow assume Debian 12.
+Ubuntu is support as well, but [99k LAN rate](/docs/features/99k-lan-rate.md) is not compatible with Ubuntu. This guide and production workflow assume Debian 12.
 
-## Cloud Workflow
+## Vultr Cloud Workflow
 
-1. Set **Provider** to your cloud provider (for example `VULTR`).
+1. Set **Provider** to `VULTR` cloud provider.
 2. Select **Continent**, **Region**, and **Machine Size / Plan**.
 3. Submit the form.
 4. Wait until host status reaches **Active**.

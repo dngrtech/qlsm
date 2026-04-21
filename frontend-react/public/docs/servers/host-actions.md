@@ -2,6 +2,8 @@
 
 Open the host row menu via **Actions** (three-dot button on the right of each host row).
 
+![Host Actions Menu](/docs/images/host-actions-menu.png)
+
 ## Action Reference
 
 | Action | What it does | UI availability | Backend constraints |

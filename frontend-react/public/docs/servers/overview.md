@@ -2,10 +2,6 @@
 
 The **Servers** page is the operational control center for hosts and QLDS instances.
 
-![Servers Page Placeholder](/docs/images/servers-page.png)
-
-> Screenshot placeholder: replace `/docs/images/servers-page.png` with a real capture from the running UI.
-
 ## Page Structure
 
 - **Host rows**: provider, region/timezone, IP, host status, host actions.

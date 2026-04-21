@@ -48,9 +48,9 @@
         "path": "/docs/operations/manage-instance.md"
       },
       {
-        "id": "rcon-basics",
-        "title": "RCON Basics",
-        "path": "/docs/operations/rcon-basics.md"
+        "id": "rcon-console",
+        "title": "RCON Console",
+        "path": "/docs/operations/rcon-console.md"
       },
       {
         "id": "server-logs",

@@ -4,7 +4,7 @@
 
 ## Background: The 25k Rate Limit
 
-Quake Live internet servers (sv_serverType 2) are capped at 25k rate per client. This cap was designed for internet connections of an earlier era. On modern connections it creates bandwidth bottlenecks: sound choking under load, inconsistent weapon registration, and the familiar "laggy even though ping is fine" feeling.
+Quake Live internet servers (`sv_serverType 2`) are capped at 25k rate per client. This cap was designed for internet connections of an earlier era. On modern connections it creates bandwidth bottlenecks: sound choking under load, inconsistent weapon registration, and the familiar "laggy even though ping is fine" feeling.
 
 LAN servers run at 99k rate because they are assumed to be on local network. The 99k LAN rate feature exploits this: NAT rules make the server believe all player traffic is arriving from `127.0.0.1`, which puts it on the LAN rate path even though players are connecting over the internet.
 
@@ -16,7 +16,7 @@ The improvement is most noticeable when:
 - **Large Clan Arena matches** — multiple simultaneous fights, high sustained bandwidth demand.
 - **Large Free For All** — same reasoning. The more simultaneous exchanges, the more the 25k ceiling shows.
 
-On small servers (2–4 players, low-intensity gametypes) the difference is less pronounced.
+On small servers (2–4 players, low-intensity gametypes) there is effectively no practical difference.
 
 ## OS Requirement
 

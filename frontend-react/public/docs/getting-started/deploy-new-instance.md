@@ -84,6 +84,6 @@ Next pages:
 
 - [Instance Actions Menu](/docs/operations/instance-actions-menu)
 - [Host Actions Menu](/docs/operations/host-actions-menu)
-- [RCON Basics](/docs/operations/rcon-basics)
+- [RCON Console](/docs/operations/rcon-console)
 - [Use Logs And Chat Logs](/docs/operations/logs-and-chat)
 - [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)

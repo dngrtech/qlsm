@@ -34,5 +34,5 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 
 - [Server Logs](/docs/operations/server-logs)
 - [Chat Logs](/docs/operations/chat-logs)
-- [RCON Basics](/docs/operations/rcon-basics)
+- [RCON Console](/docs/operations/rcon-console)
 - [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)

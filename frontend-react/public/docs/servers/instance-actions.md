@@ -2,6 +2,8 @@
 
 Open the instance row menu via **Actions** (three-dot button on the right of each instance row).
 
+<img src="/docs/images/instance-actions-menu-general.png" width="263" />
+
 ## Action Reference
 
 | Action | What it does | UI availability | Backend constraints |

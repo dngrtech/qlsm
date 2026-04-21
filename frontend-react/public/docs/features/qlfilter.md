@@ -4,7 +4,7 @@ QLFilter is an optional host-level anti-DDoS filter for Quake Live servers. It d
 
 ## The Problem It Solves
 
-Public game servers attract a specific type of noise: DNS queries, SSDP packets, and other reflection traffic sent to your QLDS UDP ports. These don't come from players — they come from bots probing for amplification targets. At high enough volume they can degrade server performance or fill your bandwidth.
+Public-facing QLDS UDP ports can be targeted by malicious actors with junk or reflected UDP traffic. This can include DNS, SSDP, and similar amplification/reflection packets sent at the server rather than legitimate player traffic. At high enough volume, these attacks can waste bandwidth, add load, and interfere with real game traffic.
 
 ## How It Works
 
@@ -19,6 +19,9 @@ QLFilter is installed per host, not per instance. All instances on a host share 
 1. Go to **Servers**.
 2. Open the host's [Actions menu](/docs/operations/host-actions-menu).
 3. Click **Install QLFilter**.
+
+![](/docs/images/install-qlfilter.png)
+
 4. Wait for the status indicator to show **Active**.
 
 While QLFilter is installing, other host management actions are temporarily locked.
@@ -27,6 +30,9 @@ While QLFilter is installing, other host management actions are temporarily lock
 
 1. Open the host's [Actions menu](/docs/operations/host-actions-menu).
 2. Click **Uninstall QLFilter**.
+
+![](/docs/images/uninstall-qlfilter.png)
+
 3. Wait for the status to return to **Not Installed**.
 
 ## Status Reference
@@ -39,11 +45,6 @@ While QLFilter is installing, other host management actions are temporarily lock
 | Inactive | Installed but not currently running |
 | Uninstalling | Removal in progress |
 | Error | Install or uninstall failed — see [Deployment Troubleshooting](/docs/help/deployment-troubleshooting) |
-
-## Requirements
-
-- Debian 12 host
-- Host must be in [Active status](/docs/getting-started/add-host) before installing
 
 ## Related Pages
 

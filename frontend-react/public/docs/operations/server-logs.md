@@ -2,6 +2,8 @@
 
 Use **View Server Logs** from the instance action menu to fetch remote service logs.
 
+![Instance Actions: View Server Logs](/docs/images/instance-actions-menu-view-server-logs.png)
+
 ## Data Source
 
 - UI endpoint: `GET /api/instances/<id>/remote-logs`

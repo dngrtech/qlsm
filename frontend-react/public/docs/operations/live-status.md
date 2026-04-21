@@ -4,7 +4,7 @@ Live status shows near-real-time player and match state for each running instanc
 
 ## Where to Open
 
-- Player count pill in instance row (for example `3/16`)
+- Player count pill in instance row (for example `3/16`) <img src="/docs/images/player-count.png" width="80" style="display:inline-block; vertical-align:middle; margin-left:6px" />
 - Instance details drawer -> Live Status section
 
 ## Refresh Model
@@ -18,6 +18,8 @@ Live status shows near-real-time player and match state for each running instanc
 - Gametype/map/score/time metadata
 - Player list with team-aware grouping/sorting rules
 - Colored Quake names rendered in UI
+
+![Instance Live Status](/docs/images/instance-live-status.png)
 
 ## Player Sorting Logic
 

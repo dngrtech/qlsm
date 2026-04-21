@@ -1,4 +1,4 @@
-# RCON Basics
+# RCON Console
 
 RCON lets you send live commands to a running server.
 
@@ -7,14 +7,18 @@ RCON lets you send live commands to a running server.
 - Go to instance **Actions**.
 - Click **RCON Console**.
 
+![](/docs/images/instance-actions-menu-rcon.png)
+
 If the button is disabled, the instance is usually not in a ready state yet.
 Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu)
 
 ## Basic Use
 
-1. Type command in the input box.
+1. Type command in the input box, ie `status`.
 2. Press **Send**.
 3. Read output in the console panel.
+
+<img src="/docs/images/rcon-console.png" width="800" />
 
 ## Real-Time Game Events
 

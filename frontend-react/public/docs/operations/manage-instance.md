@@ -40,5 +40,5 @@ Instance config edits are isolated to that instance.
 
 - [Configure Auto-Restart](/docs/operations/auto-restart)
 - [Use Logs And Chat Logs](/docs/operations/logs-and-chat)
-- [RCON Basics](/docs/operations/rcon-basics)
+- [RCON Console](/docs/operations/rcon-console)
 - [Presets And Default Config](/docs/presets/overview)
