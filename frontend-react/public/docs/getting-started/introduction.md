@@ -28,6 +28,5 @@ QLSM supports three ways to run your Quake Live servers:
 
 ## Where To Start
 
-- [Install QLSM](/docs/getting-started/installation)
 - [Add A Host](/docs/getting-started/add-host)
 - [Deploy A New Instance](/docs/getting-started/deploy-new-instance)

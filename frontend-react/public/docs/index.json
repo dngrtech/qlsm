@@ -8,11 +8,6 @@
         "path": "/docs/getting-started/introduction.md"
       },
       {
-        "id": "installation",
-        "title": "Install QLSM",
-        "path": "/docs/getting-started/installation.md"
-      },
-      {
         "id": "add-host",
         "title": "Add A Host (Cloud Or Standalone)",
         "path": "/docs/getting-started/add-host.md"
