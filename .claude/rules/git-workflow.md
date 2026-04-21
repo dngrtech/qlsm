@@ -7,6 +7,10 @@ branch creation → implementation → commit → PR → review → (wait for us
 
 Never edit files directly on `main`.
 
+## NEVER close or merge a PR without explicit user instruction
+
+Never close a PR for any reason (stale, duplicate, already merged, etc.) unless the user explicitly says to close it.
+
 ## NEVER merge a PR without explicit user instruction
 
 This is a hard rule. After creating a PR:
