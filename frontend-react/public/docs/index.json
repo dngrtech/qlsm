@@ -1,0 +1,77 @@
+[
+  {
+    "category": "Getting Started",
+    "articles": [
+      {
+        "id": "add-host",
+        "title": "Add A Host (Cloud Or Standalone)",
+        "path": "/docs/getting-started/add-host.md"
+      },
+      {
+        "id": "auto-restart",
+        "title": "Configure Auto-Restart",
+        "path": "/docs/operations/auto-restart.md"
+      },
+      {
+        "id": "deploy-instance",
+        "title": "Deploy A New Instance",
+        "path": "/docs/getting-started/deploy-new-instance.md"
+      },
+      {
+        "id": "presets-overview",
+        "title": "Presets And Default Config",
+        "path": "/docs/presets/overview.md"
+      }
+    ]
+  },
+  {
+    "category": "Operations",
+    "articles": [
+      {
+        "id": "host-actions",
+        "title": "Host Actions Menu",
+        "path": "/docs/operations/host-actions-menu.md"
+      },
+      {
+        "id": "instance-actions",
+        "title": "Instance Actions Menu",
+        "path": "/docs/operations/instance-actions-menu.md"
+      },
+      {
+        "id": "manage-instance",
+        "title": "Manage A Running Server",
+        "path": "/docs/operations/manage-instance.md"
+      },
+      {
+        "id": "logs-chat",
+        "title": "Use Logs And Chat Logs",
+        "path": "/docs/operations/logs-and-chat.md"
+      },
+      {
+        "id": "server-logs",
+        "title": "Server Logs",
+        "path": "/docs/operations/server-logs.md"
+      },
+      {
+        "id": "chat-logs",
+        "title": "Chat Logs",
+        "path": "/docs/operations/chat-logs.md"
+      },
+      {
+        "id": "rcon-basics",
+        "title": "RCON Basics",
+        "path": "/docs/operations/rcon-basics.md"
+      }
+    ]
+  },
+  {
+    "category": "Help",
+    "articles": [
+      {
+        "id": "deployment-troubleshooting",
+        "title": "Deployment Troubleshooting",
+        "path": "/docs/help/deployment-troubleshooting.md"
+      }
+    ]
+  }
+]

@@ -58,87 +58,92 @@ def destroy_host_logic(host_id):
         ssh_key_path = host.ssh_key_path # Get key path before potential deletion
         host_name_for_files = host.name # Get name for file cleanup before deletion
 
+        # --- Terraform Workflow (skipped if no workspace was ever created) ---
         if not workspace_name:
-            raise ValueError("Workspace name not found for host. Cannot destroy.")
-        if not host.provider:
-             raise ValueError("Provider not found for host. Cannot determine Terraform directory.")
-
-        # --- Determine Terraform Root Directory ---
-        if host.provider == 'vultr':
-            terraform_root_dir = os.path.abspath('terraform/vultr-root')
-            # Construct expected inventory snippet path based on convention in main.tf
-            inventory_snippet_path = os.path.abspath(f"ansible/inventory/{host_name_for_files}_vultr_host.yml")
-        # Add elif for other providers if needed
+            # Host never reached Terraform provisioning (e.g. stuck in PROVISIONING/ERROR
+            # before workspace creation). Nothing to destroy remotely — skip to cleanup.
+            log.warning(f"Host {host_id} has no workspace name. Skipping Terraform destroy.")
+            append_log(host, "No Terraform workspace found — skipping destroy, cleaning up local resources.")
         else:
-            raise ValueError(f"Unsupported provider: {host.provider}")
+            if not host.provider:
+                raise ValueError("Provider not found for host. Cannot determine Terraform directory.")
 
-        if not os.path.isdir(terraform_root_dir):
-             raise FileNotFoundError(f"Terraform root directory not found: {terraform_root_dir}")
+            # --- Determine Terraform Root Directory ---
+            if host.provider == 'vultr':
+                terraform_root_dir = os.path.abspath('terraform/vultr-root')
+                # Construct expected inventory snippet path based on convention in main.tf
+                inventory_snippet_path = os.path.abspath(f"ansible/inventory/{host_name_for_files}_vultr_host.yml")
+            # Add elif for other providers if needed
+            else:
+                raise ValueError(f"Unsupported provider: {host.provider}")
 
-        # --- Execute Terraform Workflow ---
-        # 1. Init (might be needed if state backend is configured)
-        _, error = _run_terraform_command(host, ['init', '-input=false', '-no-color'], terraform_root_dir)
-        if error:
-            host.status = HostStatus.ERROR
-            db.session.commit()
-            return f"Error during terraform init: {error}"
+            if not os.path.isdir(terraform_root_dir):
+                raise FileNotFoundError(f"Terraform root directory not found: {terraform_root_dir}")
 
-        # 2. Select Workspace (check if it exists first)
-        _, error = _run_terraform_command(host, ['workspace', 'select', workspace_name], terraform_root_dir)
-        if error:
-            # If workspace doesn't exist, maybe it was already destroyed? Log and proceed to cleanup.
-            log.warning(f"Workspace '{workspace_name}' not found during destroy. Assuming already destroyed or error state.")
-            append_log(host, f"Warning: Workspace '{workspace_name}' not found. Proceeding with cleanup.")
-            # Skip destroy and workspace delete commands, go straight to file/DB cleanup
-            # Do not set ERROR status here, as this is considered a success path (already destroyed)
-        else:
-            # 3. Destroy (only if workspace was selected successfully)
-            # Construct variables needed for destroy command
-            destroy_vars = [
-                f"-var=instance_name={host.name}",
-                f"-var=vultr_region={host.region}",
-                f"-var=vultr_plan={host.machine_size}" # Assuming machine_size maps directly to plan ID
-                # Add other vars if needed by the destroy process
-            ]
-            _, error = _run_terraform_command(host, ['destroy', '-auto-approve', '-input=false', '-no-color'] + destroy_vars, terraform_root_dir)
+            # --- Execute Terraform Workflow ---
+            # 1. Init (might be needed if state backend is configured)
+            _, error = _run_terraform_command(host, ['init', '-input=false', '-no-color'], terraform_root_dir)
             if error:
-                # Check if the error is because the instance is already gone (404)
-                if 'status":404' in error or 'not found' in error.lower():
-                    log.warning(f"Terraform destroy failed because resource is already gone. Cleaning up state.")
-                    append_log(host, "Resource already deleted externally. Cleaning up Terraform state...")
+                host.status = HostStatus.ERROR
+                db.session.commit()
+                return f"Error during terraform init: {error}"
 
-                    # Remove the resource from Terraform state
-                    _, state_rm_error = _run_terraform_command(host, ['state', 'rm', 'module.vultr_host_instance.vultr_instance.this'], terraform_root_dir)
-                    if state_rm_error and 'No matching objects found' not in state_rm_error:
-                        log.warning(f"Error removing vultr_instance from state: {state_rm_error}")
-
-                    # Also try to remove SSH key resource if it exists
-                    _, _ = _run_terraform_command(host, ['state', 'rm', 'vultr_ssh_key.instance_ssh_key'], terraform_root_dir)
-
-                    # Run destroy again to clean up any remaining resources (like local files, tls keys)
-                    _, retry_error = _run_terraform_command(host, ['destroy', '-auto-approve', '-input=false', '-no-color'] + destroy_vars, terraform_root_dir)
-                    if retry_error:
-                        log.warning(f"Retry destroy had errors (may be OK): {retry_error}")
-                        append_log(host, f"Cleanup destroy completed with warnings: {retry_error}")
-                else:
-                    host.status = HostStatus.ERROR
-                    db.session.commit()
-                    return f"Error during terraform destroy: {error}"
-
-            # 4. Select Default Workspace and Delete Old Workspace
-            _, error = _run_terraform_command(host, ['workspace', 'select', 'default'], terraform_root_dir)
+            # 2. Select Workspace (check if it exists first)
+            _, error = _run_terraform_command(host, ['workspace', 'select', workspace_name], terraform_root_dir)
             if error:
-                # Log error but don't necessarily fail the whole process if cleanup is next
-                log.error(f"Error selecting default workspace after destroy: {error}")
-                append_log(host, f"Warning: Failed to select default workspace: {error}")
-                # Don't set ERROR status here, proceed to workspace delete attempt
+                # If workspace doesn't exist, maybe it was already destroyed? Log and proceed to cleanup.
+                log.warning(f"Workspace '{workspace_name}' not found during destroy. Assuming already destroyed or error state.")
+                append_log(host, f"Warning: Workspace '{workspace_name}' not found. Proceeding with cleanup.")
+                # Skip destroy and workspace delete commands, go straight to file/DB cleanup
+                # Do not set ERROR status here, as this is considered a success path (already destroyed)
+            else:
+                # 3. Destroy (only if workspace was selected successfully)
+                # Construct variables needed for destroy command
+                destroy_vars = [
+                    f"-var=instance_name={host.name}",
+                    f"-var=vultr_region={host.region}",
+                    f"-var=vultr_plan={host.machine_size}" # Assuming machine_size maps directly to plan ID
+                    # Add other vars if needed by the destroy process
+                ]
+                _, error = _run_terraform_command(host, ['destroy', '-auto-approve', '-input=false', '-no-color'] + destroy_vars, terraform_root_dir)
+                if error:
+                    # Check if the error is because the instance is already gone (404)
+                    if 'status":404' in error or 'not found' in error.lower():
+                        log.warning(f"Terraform destroy failed because resource is already gone. Cleaning up state.")
+                        append_log(host, "Resource already deleted externally. Cleaning up Terraform state...")
 
-            _, error = _run_terraform_command(host, ['workspace', 'delete', workspace_name], terraform_root_dir)
-            if error:
-                # Log error but don't necessarily fail the whole process if cleanup is next
-                log.error(f"Error deleting workspace {workspace_name} after destroy: {error}")
-                append_log(host, f"Warning: Failed to delete workspace {workspace_name}: {error}")
-                # Don't set ERROR status here, proceed to file/DB cleanup
+                        # Remove the resource from Terraform state
+                        _, state_rm_error = _run_terraform_command(host, ['state', 'rm', 'module.vultr_host_instance.vultr_instance.this'], terraform_root_dir)
+                        if state_rm_error and 'No matching objects found' not in state_rm_error:
+                            log.warning(f"Error removing vultr_instance from state: {state_rm_error}")
+
+                        # Also try to remove SSH key resource if it exists
+                        _, _ = _run_terraform_command(host, ['state', 'rm', 'vultr_ssh_key.instance_ssh_key'], terraform_root_dir)
+
+                        # Run destroy again to clean up any remaining resources (like local files, tls keys)
+                        _, retry_error = _run_terraform_command(host, ['destroy', '-auto-approve', '-input=false', '-no-color'] + destroy_vars, terraform_root_dir)
+                        if retry_error:
+                            log.warning(f"Retry destroy had errors (may be OK): {retry_error}")
+                            append_log(host, f"Cleanup destroy completed with warnings: {retry_error}")
+                    else:
+                        host.status = HostStatus.ERROR
+                        db.session.commit()
+                        return f"Error during terraform destroy: {error}"
+
+                # 4. Select Default Workspace and Delete Old Workspace
+                _, error = _run_terraform_command(host, ['workspace', 'select', 'default'], terraform_root_dir)
+                if error:
+                    # Log error but don't necessarily fail the whole process if cleanup is next
+                    log.error(f"Error selecting default workspace after destroy: {error}")
+                    append_log(host, f"Warning: Failed to select default workspace: {error}")
+                    # Don't set ERROR status here, proceed to workspace delete attempt
+
+                _, error = _run_terraform_command(host, ['workspace', 'delete', workspace_name], terraform_root_dir)
+                if error:
+                    # Log error but don't necessarily fail the whole process if cleanup is next
+                    log.error(f"Error deleting workspace {workspace_name} after destroy: {error}")
+                    append_log(host, f"Warning: Failed to delete workspace {workspace_name}: {error}")
+                    # Don't set ERROR status here, proceed to file/DB cleanup
 
         # --- Cleanup and Finalize ---
         append_log(host, "Terraform destroy/cleanup successful. Removing associated files and DB record...")

@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import ThemeToggleButton from './ThemeToggleButton';
 import { useAuth } from '../contexts/AuthContext';
-import { Settings, Users, ChevronDown, Terminal, LogOut, Server, SlidersHorizontal, Menu as MenuIcon } from 'lucide-react';
+import { Settings, Users, ChevronDown, Terminal, LogOut, Server, SlidersHorizontal, Menu as MenuIcon, BookOpen } from 'lucide-react';
 
 function Navbar() {
   const navigate = useNavigate();
@@ -59,6 +59,14 @@ function Navbar() {
             >
               <Server size={16} strokeWidth={2} />
               <span>SERVERS</span>
+            </Link>
+
+            <Link
+              to="/docs"
+              className={`navbar-nav-link ${isActive('docs') ? 'navbar-nav-link-active' : ''}`}
+            >
+              <BookOpen size={16} strokeWidth={2} />
+              <span>DOCS</span>
             </Link>
 
             {/* Settings dropdown */}
@@ -138,6 +146,17 @@ function Navbar() {
                         >
                           <Server size={16} strokeWidth={2} />
                           <span>Servers</span>
+                        </Link>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <Link
+                          to="/docs"
+                          className={`navbar-dropdown-item ${active || isActive('docs') ? 'navbar-dropdown-item-active' : ''}`}
+                        >
+                          <BookOpen size={16} strokeWidth={2} />
+                          <span>Documentation</span>
                         </Link>
                       )}
                     </Menu.Item>
