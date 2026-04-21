@@ -10,6 +10,7 @@ import EditPresetPage from './pages/EditPresetPage';
 import UserManagementPage from './pages/UserManagementPage';
 import SettingsPage from './pages/SettingsPage';
 import ServersPage from './pages/ServersPage';
+import DocsPage from './pages/DocsPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -31,6 +32,7 @@ function App() {
                   <Route path="/presets" element={<PresetsPage />} />
                   <Route path="/presets/add" element={<AddPresetPage />} />
                   <Route path="/presets/edit/:presetId" element={<EditPresetPage />} />
+                  <Route path="/docs/*" element={<DocsPage />} />
                   <Route path="/settings/users" element={<UserManagementPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Route>
