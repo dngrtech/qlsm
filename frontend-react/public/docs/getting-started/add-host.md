@@ -20,16 +20,29 @@ Cloud hosts inherit timezone from selected region. That timezone is later used b
 
 1. Set **Provider** to `Standalone`.
 2. Fill:
-- Host Name
-- IP Address
-- SSH Port
-- SSH Username
-- SSH Private Key
-- Operating System (`Debian 12`)
-- Timezone
-3. Run **Test Connection** and confirm it shows **Connected**.
+   - Host Name
+   - IP Address
+   - SSH Port
+   - SSH Username
+   - SSH Private Key (or password for bootstrap — QLSM installs a managed key then discards the password)
+   - Timezone
+3. Run **Test Connection** and confirm it shows **Connected**. OS is auto-detected during the connection test.
 4. Submit the form.
 5. Wait until setup finishes and host is **Active**.
+
+## Self-Host Workflow
+
+The **QLSM Host (self)** provider runs game servers on the same machine that runs the QLSM Docker stack. Useful when you already have a spare Linux box and don't want a separate VM just for game servers.
+
+1. Set **Provider** to `QLSM Host (self)`.
+2. The form pre-fills the detected IP address, OS, and SSH user — verify these are correct.
+3. Set **Timezone**.
+4. Submit the form.
+5. Wait until setup finishes and host is **Active**.
+
+QLSM generates and manages its own SSH key for self-host automation. Your personal SSH keys are never accessed.
+
+Only one self host may exist at a time.
 
 ## Timezone Requirement
 
