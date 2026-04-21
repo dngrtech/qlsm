@@ -14,7 +14,7 @@ The easiest path. Requires a Vultr account.
 
 You never open a terminal. The startup script handles everything.
 
-**Recommended spec:** 1 vCPU, 2 GB RAM, Debian 12. Add a Vultr API key in the QLSM settings later if you want to provision additional game server hosts from within the UI.
+**Recommended spec:** 1 vCPU, 2 GB RAM, Debian 12. If you want to provision additional game server hosts from within the UI, create a Vultr API key and set `VULTR_API_KEY` in the QLSM environment.
 
 ## Option 2 — One-Line Install Script
 
@@ -28,6 +28,18 @@ With a custom domain (enables automatic HTTPS via Caddy):
 
 ```bash
 SITE_ADDRESS=qlsm.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+```
+
+With Vultr provisioning enabled from the start:
+
+```bash
+VULTR_API_KEY=your_vultr_api_key bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+```
+
+With both a custom domain and Vultr provisioning:
+
+```bash
+SITE_ADDRESS=qlsm.example.com VULTR_API_KEY=your_vultr_api_key bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
 The script:

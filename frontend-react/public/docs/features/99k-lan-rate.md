@@ -31,9 +31,7 @@ See [Add A Host](/docs/getting-started/add-host) for how OS detection works duri
 ### At deploy time
 
 1. Open [Deploy New Instance](/docs/getting-started/deploy-new-instance).
-  2. In the Basic Info block, check **99k LAN Rate**  <img 
-  src="/docs/images/99k-lan-rate-toggle.png" width="120" style="display:inline;
-  vertical-align:middle; margin:0 4px" />
+2. In the Basic Info block, check **99k LAN Rate**  <img src="/docs/images/99k-lan-rate-toggle.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
 3. Deploy as normal.
 
 ### On an existing instance

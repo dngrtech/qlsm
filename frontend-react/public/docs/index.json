@@ -43,6 +43,11 @@
         "path": "/docs/operations/instance-actions-menu.md"
       },
       {
+        "id": "edit-configs",
+        "title": "Edit Configs, Plugins, And Factories",
+        "path": "/docs/operations/edit-configs.md"
+      },
+      {
         "id": "manage-instance",
         "title": "Manage A Running Server",
         "path": "/docs/operations/manage-instance.md"

@@ -2,7 +2,9 @@
 
 Open from **Servers** -> host row -> **Add QLDS Instance to &lt;host&gt;**.
 
-Host not ready yet: [Add A Host (Cloud Or Standalone)](/docs/getting-started/add-host)
+![](/docs/images/add-new-instance-button.png)   
+
+Prerequisite: [Add A Host (Cloud Or Standalone)](/docs/getting-started/add-host)
 
 ## Default Preset Behavior
 
@@ -16,6 +18,9 @@ Preset details: [Presets And Default Config](/docs/presets/overview)
 
 ## Basic Info Block
 
+![](/docs/images/add-new-instance-basic.png)
+
+
 Required fields:
 
 - **Instance Name**
@@ -25,7 +30,7 @@ Required fields:
 
 Optional toggle:
 
-- **99k LAN Rate**
+- [**99k LAN Rate**](/docs/features/99k-lan-rate)
 
 `99k LAN Rate` controls LAN-rate profile for the instance.
 Changing this later from the actions menu triggers reconfigure/restart.
@@ -33,38 +38,7 @@ Reference: [Instance Actions Menu](/docs/operations/instance-actions-menu)
 
 ## Main Tabs In Deploy Form
 
-### Configuration Files
-
-This tab has file-level sub-tabs:
-
-- `server.cfg`
-- `mappool.txt`
-- `access.txt`
-- `workshop.txt`
-
-Editor controls per file:
-
-- Upload file content
-- Copy content
-- Expand to full-screen editor
-
-Linting:
-
-- `server.cfg` shows inline lint diagnostics.
-- Deploy is blocked if `server.cfg` has blocking lint errors.
-
-### Plugins
-
-Python plugin management for this instance:
-
-- File tree + editor
-- Checkbox selection for which plugins are included
-- **Validate** button runs Python validation and reports line-level errors
-
-### Factories
-
-Factory files included in the deployment bundle.
-Only selected/edited factory files are applied to the new instance.
+Config editing details live here: [Edit Configs, Plugins, And Factories](/docs/operations/edit-configs)
 
 ## Create Instance
 
