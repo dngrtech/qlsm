@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { BookOpen, List } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import '../styles/docs-markdown.css';
 
 const getSlugFromPath = (path = '') =>
@@ -19,8 +19,6 @@ export default function DocsPage() {
   const [indexLoading, setIndexLoading] = useState(true);
   const [indexError, setIndexError] = useState('');
   const [activeSlug, setActiveSlug] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState('');
   const [markdownContent, setMarkdownContent] = useState('');
@@ -128,10 +126,6 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
-    setIsSidebarOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
     if (articles.length === 0) {
       return;
     }
@@ -189,25 +183,16 @@ export default function DocsPage() {
 
   const handleSelectArticle = (slug) => {
     setActiveSlug(slug);
-    setIsSidebarOpen(false);
     navigate(`/docs/${slug}`);
   };
 
   return (
     <div className="max-w-[1280px] mx-auto py-8 px-4 md:px-8">
-      <div className="mb-6 flex items-center justify-between gap-3">
+      <div className="mb-6 flex items-center gap-3">
         <h1 className="heading-display text-[30px] tracking-wider text-theme-primary flex items-center gap-2">
           <BookOpen size={24} />
           Documentation
         </h1>
-        <button
-          type="button"
-          onClick={() => setIsSidebarOpen((open) => !open)}
-          className="btn btn-secondary gap-2 lg:hidden"
-        >
-          <List size={16} />
-          Contents
-        </button>
       </div>
 
       {indexLoading ? (
@@ -219,7 +204,7 @@ export default function DocsPage() {
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <aside className={`${isSidebarOpen ? 'block' : 'hidden'} lg:block`}>
+          <aside>
             <div className="card p-4 sticky top-4 max-h-[70vh] overflow-y-auto">
               <h2 className="label-tech mb-3 text-theme-secondary">Contents</h2>
               {sections.map((section) => (
