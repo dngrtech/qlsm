@@ -128,6 +128,10 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
     if (articles.length === 0) {
       return;
     }
