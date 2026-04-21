@@ -6,11 +6,25 @@ from ui.database import (
 )
 import re
 import os
+import datetime
 import ipaddress
 import subprocess
 import tempfile
 import uuid
-from ui.task_lock import acquire_lock, release_lock
+from ui.task_lock import acquire_lock, release_lock, force_release_lock
+
+# Stale-lock detection constants for delete_host_api.
+# Threshold is intentionally below the minimum host lock TTL (1260s for standalone
+# setup, 1500s for provisioning) so force_release_lock fires while the Redis key
+# may still be alive. DELETING is excluded: its TTL is only 240s, so the lock
+# auto-expires long before any reasonable retry.
+_STALE_LOCK_THRESHOLD_SECONDS = 1200
+_STALE_TRANSITIONAL_STATUSES = {
+    HostStatus.PROVISIONING,
+    HostStatus.PROVISIONED_PENDING_SETUP,
+    HostStatus.CONFIGURING,
+    HostStatus.REBOOTING,
+}
 
 # Host name validation constants
 HOST_NAME_MAX_LENGTH = 20
@@ -724,6 +738,21 @@ def delete_host_api(host_id): # Renamed function
 
     host_name = host.name
     is_standalone = host.is_standalone
+
+    # If the host has been stuck in a transitional state with no DB activity for
+    # longer than _STALE_LOCK_THRESHOLD_SECONDS, the task that held the lock is
+    # almost certainly dead (worker crash, OOM kill). Force-release the stale
+    # lock so the delete can proceed.
+    if (
+        host.status in _STALE_TRANSITIONAL_STATUSES
+        and host.last_updated is not None
+        and (datetime.datetime.utcnow() - host.last_updated).total_seconds() > _STALE_LOCK_THRESHOLD_SECONDS
+    ):
+        current_app.logger.warning(
+            f'Host "{host_name}" ({host_id}) has been in {host.status.value} for '
+            f'>{_STALE_LOCK_THRESHOLD_SECONDS}s with no activity. Force-releasing stale lock.'
+        )
+        force_release_lock('host', host.id)
 
     lock_token = str(uuid.uuid4())
     if not acquire_lock('host', host.id, lock_token, ttl=240):
