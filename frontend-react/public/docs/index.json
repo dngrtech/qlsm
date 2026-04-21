@@ -3,14 +3,19 @@
     "category": "Getting Started",
     "articles": [
       {
+        "id": "introduction",
+        "title": "What Is QLSM?",
+        "path": "/docs/getting-started/introduction.md"
+      },
+      {
+        "id": "installation",
+        "title": "Install QLSM",
+        "path": "/docs/getting-started/installation.md"
+      },
+      {
         "id": "add-host",
         "title": "Add A Host (Cloud Or Standalone)",
         "path": "/docs/getting-started/add-host.md"
-      },
-      {
-        "id": "auto-restart",
-        "title": "Configure Auto-Restart",
-        "path": "/docs/operations/auto-restart.md"
       },
       {
         "id": "deploy-instance",
@@ -21,6 +26,11 @@
         "id": "presets-overview",
         "title": "Presets And Default Config",
         "path": "/docs/presets/overview.md"
+      },
+      {
+        "id": "auto-restart",
+        "title": "Configure Auto-Restart",
+        "path": "/docs/operations/auto-restart.md"
       }
     ]
   },
@@ -43,9 +53,9 @@
         "path": "/docs/operations/manage-instance.md"
       },
       {
-        "id": "logs-chat",
-        "title": "Use Logs And Chat Logs",
-        "path": "/docs/operations/logs-and-chat.md"
+        "id": "rcon-basics",
+        "title": "RCON Basics",
+        "path": "/docs/operations/rcon-basics.md"
       },
       {
         "id": "server-logs",
@@ -56,11 +66,31 @@
         "id": "chat-logs",
         "title": "Chat Logs",
         "path": "/docs/operations/chat-logs.md"
+      }
+    ]
+  },
+  {
+    "category": "Features",
+    "articles": [
+      {
+        "id": "qlfilter",
+        "title": "QLFilter",
+        "path": "/docs/features/qlfilter.md"
       },
       {
-        "id": "rcon-basics",
-        "title": "RCON Basics",
-        "path": "/docs/operations/rcon-basics.md"
+        "id": "99k-lan-rate",
+        "title": "99k LAN Rate",
+        "path": "/docs/features/99k-lan-rate.md"
+      }
+    ]
+  },
+  {
+    "category": "Administration",
+    "articles": [
+      {
+        "id": "user-management",
+        "title": "User Management & API Keys",
+        "path": "/docs/administration/user-management.md"
       }
     ]
   },
