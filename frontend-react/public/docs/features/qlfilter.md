@@ -17,7 +17,7 @@ The result: your Quake Live server only sees legitimate player traffic.
 QLFilter is installed per host, not per instance. All instances on a host share one QLFilter installation.
 
 1. Go to **Servers**.
-2. Open the host's **Actions** menu.
+2. Open the host's [Actions menu](/docs/operations/host-actions-menu).
 3. Click **Install QLFilter**.
 4. Wait for the status indicator to show **Active**.
 
@@ -25,7 +25,7 @@ While QLFilter is installing, other host management actions are temporarily lock
 
 ## Uninstallation
 
-1. Open the host's **Actions** menu.
+1. Open the host's [Actions menu](/docs/operations/host-actions-menu).
 2. Click **Uninstall QLFilter**.
 3. Wait for the status to return to **Not Installed**.
 
@@ -38,14 +38,15 @@ While QLFilter is installing, other host management actions are temporarily lock
 | Active | QLFilter running and filtering |
 | Inactive | Installed but not currently running |
 | Uninstalling | Removal in progress |
-| Error | Install or uninstall failed — check host logs |
+| Error | Install or uninstall failed — see [Deployment Troubleshooting](/docs/help/deployment-troubleshooting) |
 
 ## Requirements
 
 - Debian 12 host
-- Host must be in **Active** status before installing
+- Host must be in [Active status](/docs/getting-started/add-host) before installing
 
 ## Related Pages
 
 - [Host Actions Menu](/docs/operations/host-actions-menu)
 - [Add A Host (Cloud Or Standalone)](/docs/getting-started/add-host)
+- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
