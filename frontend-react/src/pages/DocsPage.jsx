@@ -222,7 +222,7 @@ export default function DocsPage() {
 
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
           <aside className={`${isSidebarOpen ? 'block' : 'hidden'} lg:block`}>
-            <div className="card p-4 lg:sticky lg:top-4 lg:max-h-[70vh] lg:overflow-y-auto">
+            <div className="card p-4 lg:sticky lg:top-4">
               <h2 className="label-tech mb-3 text-theme-secondary">Contents</h2>
               {sections.map((section) => (
                 <div key={section.category} className="mb-5 last:mb-0 docs-sidebar-section">
