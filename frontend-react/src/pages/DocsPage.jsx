@@ -183,6 +183,12 @@ export default function DocsPage() {
     return () => controller.abort();
   }, [activeArticle]);
 
+  useEffect(() => {
+    if (activeSlug) {
+      window.scrollTo(0, 0);
+    }
+  }, [activeSlug]);
+
   const handleSelectArticle = (slug) => {
     setActiveSlug(slug);
     setIsSidebarOpen(false);
