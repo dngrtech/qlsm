@@ -17,7 +17,14 @@ The **QLSM Host (self)** provider runs game servers on the same machine that run
 4. Click `Add Host` button to submit the form.
 5. Wait until setup finishes and host is **Active**.
 
+![](/docs/images/qlsm-self-deployment.png)
+
+
 QLSM generates and manages its own SSH key for self-host automation. Your personal SSH keys are never accessed.
+
+For self-host setup, the SSH user can be `root` or another account with passwordless `sudo` privileges. QLSM uses that account as the management login for automation tasks.
+
+During setup, QLSM creates a dedicated `ql` system user for Quake Live files and services. Game server assets and processes run under `ql`, but QLSM continues to connect as the configured management account when it needs to automate the host later.
 
 Only one `QLSM Host (self)` deployment may exist at a time.
 
@@ -34,6 +41,9 @@ Only one `QLSM Host (self)` deployment may exist at a time.
 3. Run **Test Connection** and confirm it shows **Connected**. OS is auto-detected during the connection test.
 4. Click `Add Host` button to submit the form.
 5. Wait until setup finishes and host is **Active**.
+
+![](/docs/images/qlsm-standalone-deployment.png)
+
 
 ## Vultr Cloud Deployment
 
@@ -61,6 +71,8 @@ SITE_ADDRESS=qlsm.example.com VULTR_API_KEY=your_vultr_api_key bash <(curl -fsSL
 2. Select **Continent**, **Region**, and **Machine Size / Plan**.
 3. Click `Add Host` button to submit the form.
 4. Wait until host status reaches **Active**.
+
+![](/docs/images/qlsm-vultr-deployment.png)
 
 Cloud hosts inherit timezone from selected region. That timezone is later used by [Configure Auto-Restart](/docs/operations/auto-restart).
 

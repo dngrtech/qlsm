@@ -184,6 +184,12 @@
   margin: 0.65rem 0;
 }
 
+.docs-markdown img.docs-inline-icon {
+  display: inline-block;
+  margin: 0 0 0 0.4rem;
+  vertical-align: middle;
+}
+
 .docs-markdown kbd {
   font-family: 'Share Tech Mono', Consolas, monospace;
   font-size: 0.82rem;

@@ -13,7 +13,7 @@ QLSM supports three ways to run your Quake Live servers:
 
 ## Key Features
 
-- **Live server status** — current map, gametype, match state, players, and scores visible at a glance. ZMQ credentials auto-generated and displayed. See [Manage A Running Server](/docs/operations/manage-instance).
+- **Live server status** — current map, gametype, match state, players, and scores visible at a glance. ZMQ credentials auto-generated and displayed.
 - **In-browser config editors** — CodeMirror-powered editors for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`. Syntax highlighting, search/replace, and inline validation.
 - **minqlx plugin management** — enable plugins with checkboxes. Python validation built in.
 - **Factory file management** — select which factory files deploy to each instance.

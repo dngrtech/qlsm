@@ -42,6 +42,8 @@ Time is selected in 12-hour format in the modal but submitted as 24-hour `HH:MM:
 - Stopped instances are visible but restart toggle is disabled.
 - The request sends `restart_instances` as an array of instance IDs.
 
+Guide: [Update Workshop Item](/docs/operations/update-workshop-item)
+
 ## Troubleshooting
 
 - If a restart/update action is visible but fails, check whether host status is truly `ACTIVE` at request time.

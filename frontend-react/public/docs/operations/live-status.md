@@ -2,10 +2,14 @@
 
 Live status shows near-real-time player and match state for each running instance.
 
-## Where to Open
+## Open Live Status
 
-- Player count pill in instance row (for example `3/16`) <img src="/docs/images/player-count.png" width="80" style="display:inline-block; vertical-align:middle; margin-left:6px" />
-- Instance details drawer -> Live Status section
+1. In the **Servers** page, click the player count pill in the instance row: <img class="docs-inline-icon" src="/docs/images/player-count.png" width="80" />.
+2. QLSM opens the full **Live Status** drawer.
+
+![Instance Live Status](/docs/images/instance-live-status.png)
+
+You can also open **View Details** for an instance and use the **Live Status** section there. Clicking the **Players** count pill in that section opens the same Live Status drawer.
 
 ## Refresh Model
 
@@ -18,8 +22,6 @@ Live status shows near-real-time player and match state for each running instanc
 - Gametype/map/score/time metadata
 - Player list with team-aware grouping/sorting rules
 - Colored Quake names rendered in UI
-
-![Instance Live Status](/docs/images/instance-live-status.png)
 
 ## Player Sorting Logic
 
@@ -43,3 +45,9 @@ Non-team modes:
 ## Notes
 
 Live status is observational data. Operational actions (restart/stop/logs/RCON) remain in the instance action menu.
+
+## Related Pages
+
+- [Instance Actions Menu](/docs/operations/instance-actions-menu)
+- [Server Logs](/docs/operations/server-logs)
+- [Chat Logs](/docs/operations/chat-logs)

@@ -18,13 +18,12 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 2. Press **Send**.
 3. Read output in the console panel.
 
-<img src="/docs/images/rcon-console.png" width="800" />
+<img src="/docs/images/rcon-console-full.png" width="800" />
 
 ## Real-Time Game Events
 
-The console has a **Show real-time game events** checkbox. When enabled, the output panel shows a live stats stream alongside command responses.
+The console has a **Show real-time game events** checkbox enabled by default. When enabled, the output panel shows a live stats stream alongside command output.
 
-Note: this only works when the QLSM backend is running in DEBUG mode. In production mode the subscription is silently ignored.
 
 ## Quality-of-Life
 
@@ -44,5 +43,4 @@ Note: this only works when the QLSM backend is running in DEBUG mode. In product
 ## Related Pages
 
 - [Use Logs And Chat Logs](/docs/operations/logs-and-chat)
-- [Manage A Running Server](/docs/operations/manage-instance)
 - [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)

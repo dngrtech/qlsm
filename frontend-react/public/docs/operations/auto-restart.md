@@ -1,7 +1,10 @@
 # Configure Auto-Restart
 
 Open from **Servers** -> host row **Actions** -> **Configure Auto-Restart**.
-Host setup reference: [Add A Host (Cloud Or Standalone)](/docs/getting-started/add-host)
+
+<img src="/docs/images/host-actions-auto-restart.png" />
+
+
 
 ## Why It Is Needed
 
@@ -9,21 +12,30 @@ Scheduled restarts serve two purposes:
 
 **1. Workshop updates.** Running servers do not automatically pull Steam Workshop updates while they stay online. A restart is the only way to load updated Workshop content. QLSM auto-restarts also trigger a full Workshop update pull across all instances on that host — so once a Workshop item owner publishes an update, your servers will pick it up on the next scheduled restart without any manual intervention.
 
-**2. General maintenance.** Long-running game server processes can accumulate state. A scheduled weekly or monthly restart gives a clean slate.
+**2. General maintenance.** Long-running game server processes can accumulate state. A scheduled daily or weekly restart gives a clean slate.
 
 ## Schedule Modes
 
 - **Disabled**: no scheduled restart.
 - **Daily**: every day at selected time.
+
+<img src="/docs/images/auto-restart-daily.png" width="400" />
+
 - **Weekly**: selected weekdays at selected time.
+
+<img src="/docs/images/auto-restart-weekly.png" width="400" />
+
 - **Monthly**: selected month days at selected time.
+
+<img src="/docs/images/auto-restart-monthly.png" width="400" />
+
 
 ## Timezone Rule
 
 Schedule time is evaluated in the host local timezone.
 
-- Standalone: timezone is the value selected when the host was added.
-- Cloud: timezone is tied to selected region.
+- Standalone and QLSM (self): timezone is the value selected when the host was added.
+- Vultr Cloud: timezone is tied to selected `Region`.
 
 If timezone is wrong, restart happens at the wrong local time.
 
@@ -36,5 +48,4 @@ If timezone is wrong, restart happens at the wrong local time.
 ## Related Pages
 
 - [Host Actions Menu](/docs/operations/host-actions-menu)
-- [Manage A Running Server](/docs/operations/manage-instance)
 - [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)

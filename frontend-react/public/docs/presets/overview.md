@@ -55,7 +55,7 @@ Loading a preset overwrites the current draft config with the saved preset conte
 
 ## Update A Loaded Preset
 
-If you load a non-default preset and then change the draft, the form exposes an **Update "<preset>"** button.
+If you load a non-default preset and then change the draft, the form exposes an **Update Preset** button.
 
 <img src="/docs/images/update-preset-button.png" width="230" />
 
@@ -77,4 +77,3 @@ A preset is only input at deploy time. After the instance is created, it keeps i
 
 - [Deploy A New Instance](/docs/getting-started/deploy-new-instance)
 - [Instance Actions Menu](/docs/operations/instance-actions-menu)
-- [Manage A Running Server](/docs/operations/manage-instance)

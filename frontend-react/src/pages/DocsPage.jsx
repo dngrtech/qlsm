@@ -187,6 +187,9 @@ export default function DocsPage() {
     navigate(`/docs/${slug}`);
   };
 
+  const showInitialArticleLoading = contentLoading && !markdownContent;
+  const showInlineArticleLoading = contentLoading && !!markdownContent && !contentError;
+
   return (
     <div className="max-w-[1280px] mx-auto py-8 px-4 md:px-8">
       <div className="mb-6 flex items-center gap-3">
@@ -238,7 +241,7 @@ export default function DocsPage() {
           </aside>
 
           <section className="card p-5 md:p-7 min-h-[420px]">
-            {contentLoading ? (
+            {showInitialArticleLoading ? (
               <div className="text-theme-secondary">Loading article...</div>
             ) : contentError ? (
               <div className="alert-error">
@@ -246,11 +249,18 @@ export default function DocsPage() {
                 <p className="text-sm mt-1">{contentError}</p>
               </div>
             ) : (
-              <article className="docs-markdown">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
-                  {markdownContent}
-                </ReactMarkdown>
-              </article>
+              <>
+                {showInlineArticleLoading ? (
+                  <div className="mb-4 text-xs font-mono uppercase tracking-[0.18em] text-theme-secondary">
+                    Loading article...
+                  </div>
+                ) : null}
+                <article className="docs-markdown">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
+                    {markdownContent}
+                  </ReactMarkdown>
+                </article>
+              </>
             )}
           </section>
         </div>

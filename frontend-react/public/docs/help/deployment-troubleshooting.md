@@ -33,7 +33,7 @@ Use this page when a new instance does not become playable or stable.
 
 ## Problem: Workshop item updated in Steam, but server still runs old content
 
-- Use host **Actions** -> **Update Workshop Item** and provide numeric item ID: [Host Actions Menu](/docs/operations/host-actions-menu)
+- Use host **Actions** -> **Update Workshop Item** and provide numeric item ID: [Update Workshop Item](/docs/operations/update-workshop-item)
 - Restart affected instances (manual or from the workshop update modal).
 - Configure scheduled host restart to keep updates consistent: [Configure Auto-Restart](/docs/operations/auto-restart)
 
