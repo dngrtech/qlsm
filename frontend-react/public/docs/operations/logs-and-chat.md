@@ -32,7 +32,7 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 
 ## Related Pages
 
-- [Server Logs](/docs/operations/server-logs)
-- [Chat Logs](/docs/operations/chat-logs)
+- [Server Logs](/docs/operations/server-logs.md)
+- [Chat Logs](/docs/operations/chat-logs.md)
 - [RCON Console](/docs/operations/rcon-console)
 - [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)

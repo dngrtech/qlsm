@@ -23,6 +23,7 @@ export default function DocsPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState('');
   const [markdownContent, setMarkdownContent] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const articles = useMemo(
     () =>
@@ -184,6 +185,7 @@ export default function DocsPage() {
 
   const handleSelectArticle = (slug) => {
     setActiveSlug(slug);
+    setIsSidebarOpen(false);
     navigate(`/docs/${slug}`);
   };
 
@@ -207,9 +209,20 @@ export default function DocsPage() {
           <p className="text-sm mt-1">{indexError}</p>
         </div>
       ) : (
+        <>
+        <div className="lg:hidden mb-3">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className="btn-secondary text-sm"
+          >
+            {isSidebarOpen ? 'Hide Contents' : 'Contents'}
+          </button>
+        </div>
+
         <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-          <aside>
-            <div className="card p-4">
+          <aside className={`${isSidebarOpen ? 'block' : 'hidden'} lg:block`}>
+            <div className="card p-4 lg:sticky lg:top-4 lg:max-h-[70vh] lg:overflow-y-auto">
               <h2 className="label-tech mb-3 text-theme-secondary">Contents</h2>
               {sections.map((section) => (
                 <div key={section.category} className="mb-5 last:mb-0 docs-sidebar-section">
@@ -264,6 +277,7 @@ export default function DocsPage() {
             )}
           </section>
         </div>
+        </>
       )}
     </div>
   );

@@ -32,7 +32,7 @@ Required fields:
 
 Optional toggle:
 
-- [**99k LAN Rate**](/docs/features/99k-lan-rate)
+- [**99k LAN Rate**](/docs/features/99k-lan-rate.md)
 
 `99k LAN Rate` controls LAN-rate profile for the instance.
 Changing this later from the actions menu triggers reconfigure/restart.
