@@ -1,0 +1,54 @@
+# Host Actions Menu
+
+Open from host row **Actions** in the Servers page.
+
+![Host Actions Menu](../images/host-actions-menu.png)
+
+## Actions In This Menu
+
+- **View Details**: opens host details drawer.
+- **Restart Host**: queues host reboot flow.
+- **[Configure Auto-Restart](auto-restart.md)**: opens restart schedule modal.
+- **[Update Workshop Item](update-workshop-item.md)**: triggers workshop update on this host.
+- **[Install/Uninstall QLFilter](../features/qlfilter.md)**: depends on current QLFilter state.
+- **Delete / Remove**: removes host from management (or destroys cloud host).
+
+## What QLFilter Is
+
+QLFilter is a host-level anti-DDoS filter. It uses eBPF/XDP to drop reflection garbage (DNS, SSDP, and similar noise) at the network driver level before it ever reaches QLDS. One installation covers all instances on the host.
+
+For a full explanation: [QLFilter](../features/qlfilter.md)
+
+Operationally:
+
+- Use **Install QLFilter** on new production hosts.
+- Use **Uninstall QLFilter** only when you intentionally want it removed.
+
+## QLFilter Behavior In Menu
+
+The QLFilter action changes based on current QLFilter status:
+
+- `not_installed`, `error`, `unknown` -> **Install QLFilter**
+- `active`, `inactive` -> **Uninstall QLFilter**
+- `installing`, `uninstalling` -> action shows busy state and is locked
+
+While QLFilter is installing/uninstalling, other host management actions are also blocked.
+
+## Update Workshop Item: Practical Use
+
+1. Open **Update Workshop Item** from host actions.
+2. Enter numeric Workshop Item ID.
+3. Optionally pick running instances for automatic restart after update.
+4. Submit and monitor instance status.
+
+Full guide: [Update Workshop Item](update-workshop-item.md)
+
+This is commonly paired with scheduled restart policy:
+[Configure Auto-Restart](auto-restart.md)
+
+## Related Pages
+
+- [Instance Actions Menu](instance-actions-menu.md)
+- [Update Workshop Item](update-workshop-item.md)
+- [Use Logs And Chat Logs](logs-and-chat.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

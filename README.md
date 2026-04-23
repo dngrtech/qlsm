@@ -1,5 +1,7 @@
 # QLSM — Quake Live Server Management
 
+📚 **[Documentation →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
+
 Features:
 - Three deployment modes (Debian 12 and Ubuntu 22 are tested and recommended):
   * QLSM self-deployment: run QLDS instances on the same machine as QLSM

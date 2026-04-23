@@ -24,6 +24,7 @@
 !Caddyfile
 !redis.conf
 !ansible.cfg
+!mkdocs.yml
 
 # ── Backend ───────────────────────────────────────────────────────────────────
 !ui/
@@ -125,6 +126,9 @@ docs/*
 !docs/setup.md
 !docs/technical.md
 !docs/architecture.md
+!docs/requirements.txt
+!docs/user/
+!docs/user/**
 
 # ── Re-ignore runtime artifacts inside included dirs ──────────────────────────
 __pycache__/
