@@ -15,11 +15,11 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 
 Opening **Deploy New Instance** pre-loads config from the `default` preset. It is a baseline template. Treat it as read-only — use **Save As New** to create your own variants.
 
-<img src="../images/save-preset-button.png" width="146" />
+<img src="../../images/save-preset-button.png" width="146" />
 
 Use **Save as Preset** or **Save As New** when you want to turn the current draft into a reusable preset.
 
-<img src="../images/load-preset-button.png" width="146" />
+<img src="../../images/load-preset-button.png" width="146" />
 
 Use **Load Preset** any time you want to replace the default draft with one of your saved configurations.
 
@@ -27,11 +27,11 @@ Use **Load Preset** any time you want to replace the default draft with one of y
 
 Instead of editing `qlx_plugins` manually, presets use checkboxes. Check the plugins you want; uncheck the ones you don't.
 
-<img src="../images/plugins.png" />
+<img src="../../images/plugins.png" />
 
 The same applies to factory files — select the factories that should be included when this preset is deployed.
 
-<img src="../images/factories.png" />
+<img src="../../images/factories.png" />
 
 This means you can have completely different plugin and factory sets per instance. Two instances on the same host can each have their own independent selection.
 
@@ -39,7 +39,7 @@ This means you can have completely different plugin and factory sets per instanc
 
 Use **Load Preset** in the deploy form or in **Edit Config** to open the preset picker.
 
-<img src="../images/load-preset-modal.png" width="463" />
+<img src="../../images/load-preset-modal.png" width="463" />
 
 Loading a preset overwrites the current draft config with the saved preset contents.
 
@@ -57,7 +57,7 @@ Loading a preset overwrites the current draft config with the saved preset conte
 
 If you load a non-default preset and then change the draft, the form exposes an **Update Preset** button.
 
-<img src="../images/update-preset-button.png" width="230" />
+<img src="../../images/update-preset-button.png" width="230" />
 
 Use **Update Preset** to overwrite the saved preset with your current draft.
 

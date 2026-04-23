@@ -18,7 +18,7 @@ Action reference: [Instance Actions Menu](instance-actions-menu.md)
 2. Press **Send**.
 3. Read output in the console panel.
 
-<img src="../images/rcon-console-full.png" width="800" />
+<img src="../../images/rcon-console-full.png" width="800" />
 
 ## Real-Time Game Events
 

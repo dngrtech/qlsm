@@ -9,7 +9,7 @@ Use this when a Steam Workshop item was updated and you want QLSM to pull the la
 2. Open the host row **Actions** menu.
 3. Click **Update Workshop Item**.
 
-<img src="../images/host-actions-update-workshop-item.png" />
+<img src="../../images/host-actions-update-workshop-item.png" />
 
 ## Fill The Modal
 
@@ -17,7 +17,7 @@ Use this when a Steam Workshop item was updated and you want QLSM to pull the la
 2. Optionally enable **Auto-Restart Instances** for running servers that should restart right after the workshop update finishes.
 3. Click **Update Workshop**.
 
-<img src="../images/update-workshop-item.png" width="420" />
+<img src="../../images/update-workshop-item.png" width="420" />
 
 ## What The Restart Toggles Mean
 

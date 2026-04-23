@@ -2,7 +2,7 @@
 
 Open from instance row **Actions** in the Servers page.
 
-<img src="../images/instance-actions-menu-general.png" width="263" />
+<img src="../../images/instance-actions-menu-general.png" width="263" />
 
 Use this menu for day-to-day instance operations: change config, run live admin commands, inspect logs, toggle LAN rate, restart, stop/start, or remove the instance.
 
@@ -33,8 +33,8 @@ The menu is grouped by intent, which makes it faster to scan once you know the p
 
 Use **Edit Config** when the change belongs to this instance only.
 
-<img src="../images/instance-actions-menu-edit-config.png" width="212" />
-<img src="../images/instance-edit-config.png" width="800" />
+<img src="../../images/instance-actions-menu-edit-config.png" width="212" />
+<img src="../../images/instance-edit-config.png" width="800" />
 
 Inside the modal you can change:
 
@@ -65,7 +65,7 @@ Use logs when something failed. Use details when you want context. Use chat logs
 
 Use **RCON Console** for live administration on a server that is already running.
 
-<img src="../images/instance-actions-menu-rcon.png" width="211" />
+<img src="../../images/instance-actions-menu-rcon.png" width="211" />
 
 RCON is the fastest option when you need an immediate game-side command such as `status`, map changes, or plugin commands. If the menu item is disabled, the instance is usually not in a ready state or is missing RCON connectivity details.
 
@@ -75,7 +75,7 @@ Reference: [RCON Console](rcon-console.md)
 
 `99k LAN Rate` is a per-instance toggle shown directly in the menu.
 
-<img src="../images/instance-actions-menu-99k-lan-rate.png" width="213" />
+<img src="../../images/instance-actions-menu-99k-lan-rate.png" width="213" />
 
 What to expect:
 

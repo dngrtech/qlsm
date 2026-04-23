@@ -16,9 +16,9 @@ The config editor has file-level tabs for:
 
 Each file editor includes these controls:
 
-- Upload file content <img class="docs-inline-icon" src="../images/file-upload-button.png" width="34" />
-- Copy content <img class="docs-inline-icon" src="../images/file-copy-button.png" width="34" />
-- Expand to full-screen editor <img class="docs-inline-icon" src="../images/expand-fulls-screen-button.png" width="34" />
+- Upload file content <img class="docs-inline-icon" src="../../images/file-upload-button.png" width="34" />
+- Copy content <img class="docs-inline-icon" src="../../images/file-copy-button.png" width="34" />
+- Expand to full-screen editor <img class="docs-inline-icon" src="../../images/expand-fulls-screen-button.png" width="34" />
 
 Use **Upload** when you want to paste in an existing file from another server. Use **Copy** when you want to export the current contents. Use **Expand** when you need more room for editing.
 
@@ -29,7 +29,7 @@ Use **Upload** when you want to paste in an existing file from another server. U
 
 ## Restart After Saving
 
-<img src="../images/forced-restart.png" width="220" />
+<img src="../../images/forced-restart.png" width="220" />
 
 - If **Restart after saving** is enabled, QLSM syncs the updated config to the instance and immediately restarts it, so the new config is applied right away.
 - If **Restart after saving** is disabled, QLSM still pushes and syncs the updated config to the instance, but it is not applied until that instance is restarted later.

@@ -1,6 +1,6 @@
 # Add A Host (Cloud Or Standalone)
 
-Hosts are added from **Servers** -> **Add New Host**. <img src="../images/add-new-host-button.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
+Hosts are added from **Servers** -> **Add New Host**. <img src="../../images/add-new-host-button.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
 
 ## Supported OS
 
