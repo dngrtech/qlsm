@@ -69,5 +69,5 @@ You will be prompted to change your password on first login.
 
 ## Next Steps
 
-- [Add A Host (Cloud Or Standalone)](/docs/getting-started/add-host)
-- [Deploy A New Instance](/docs/getting-started/deploy-new-instance)
+- [Add A Host (Cloud Or Standalone)](add-host.md)
+- [Deploy A New Instance](deploy-new-instance.md)

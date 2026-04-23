@@ -2,7 +2,7 @@
 
 Use **View Chat Logs** from the instance action menu to read `chat.log` and rotated chat archives.
 
-![Instance Actions: View Chat Logs](/docs/images/instance-actions-menu-view-chat-logs.png)
+![Instance Actions: View Chat Logs](../images/instance-actions-menu-view-chat-logs.png)
 
 
 ## File Selection
@@ -24,7 +24,7 @@ The UI keeps at most 11 entries (current file + 10 archives).
 Line presets: `100`, `250`, `500`, `1000`, `2500`
 
 
-![](/docs/images/chat-logs.png)
+![](../images/chat-logs.png)
 
 
 ## Viewer Behavior

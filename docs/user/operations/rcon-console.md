@@ -7,10 +7,10 @@ RCON lets you send live commands to a running server.
 - Go to instance **Actions**.
 - Click **RCON Console**.
 
-![](/docs/images/instance-actions-menu-rcon.png)
+![](../images/instance-actions-menu-rcon.png)
 
 If the button is disabled, the instance is usually not in a ready state yet.
-Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu)
+Action reference: [Instance Actions Menu](instance-actions-menu.md)
 
 ## Basic Use
 
@@ -18,7 +18,7 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 2. Press **Send**.
 3. Read output in the console panel.
 
-<img src="/docs/images/rcon-console-full.png" width="800" />
+<img src="../images/rcon-console-full.png" width="800" />
 
 ## Real-Time Game Events
 
@@ -42,5 +42,5 @@ The console has a **Show real-time game events** checkbox enabled by default. Wh
 
 ## Related Pages
 
-- [Use Logs And Chat Logs](/docs/operations/logs-and-chat)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Use Logs And Chat Logs](logs-and-chat.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

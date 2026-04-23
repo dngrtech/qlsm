@@ -2,7 +2,7 @@
 
 Open from **Servers** -> host row **Actions** -> **Configure Auto-Restart**.
 
-<img src="/docs/images/host-actions-auto-restart.png" />
+<img src="../images/host-actions-auto-restart.png" />
 
 
 
@@ -19,15 +19,15 @@ Scheduled restarts serve two purposes:
 - **Disabled**: no scheduled restart.
 - **Daily**: every day at selected time.
 
-<img src="/docs/images/auto-restart-daily.png" width="400" />
+<img src="../images/auto-restart-daily.png" width="400" />
 
 - **Weekly**: selected weekdays at selected time.
 
-<img src="/docs/images/auto-restart-weekly.png" width="400" />
+<img src="../images/auto-restart-weekly.png" width="400" />
 
 - **Monthly**: selected month days at selected time.
 
-<img src="/docs/images/auto-restart-monthly.png" width="400" />
+<img src="../images/auto-restart-monthly.png" width="400" />
 
 
 ## Timezone Rule
@@ -47,5 +47,5 @@ If timezone is wrong, restart happens at the wrong local time.
 
 ## Related Pages
 
-- [Host Actions Menu](/docs/operations/host-actions-menu)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Host Actions Menu](host-actions-menu.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

@@ -2,7 +2,7 @@
 
 Use **View Server Logs** from the instance action menu to fetch remote service logs.
 
-![Instance Actions: View Server Logs](/docs/images/instance-actions-menu-view-server-logs.png)
+![Instance Actions: View Server Logs](../images/instance-actions-menu-view-server-logs.png)
 
 ## Filters in UI
 
@@ -20,7 +20,7 @@ Use **View Server Logs** from the instance action menu to fetch remote service l
 `15 min`, `30 min`, `1 hour`, `3 hours`, `12 hours`, `24 hours`
 
 
-![](/docs/images/server-logs.png)
+![](../images/server-logs.png)
 
 
 

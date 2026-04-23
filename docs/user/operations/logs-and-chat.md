@@ -9,7 +9,7 @@ From instance **Actions** menu:
 - **View Server Logs** for service/runtime output
 - **View Chat Logs** for player chat history
 
-Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu)
+Action reference: [Instance Actions Menu](instance-actions-menu.md)
 
 ## Server Logs: Practical Usage
 
@@ -32,7 +32,7 @@ Action reference: [Instance Actions Menu](/docs/operations/instance-actions-menu
 
 ## Related Pages
 
-- [Server Logs](/docs/operations/server-logs.md)
-- [Chat Logs](/docs/operations/chat-logs.md)
-- [RCON Console](/docs/operations/rcon-console)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Server Logs](server-logs.md)
+- [Chat Logs](chat-logs.md)
+- [RCON Console](rcon-console.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

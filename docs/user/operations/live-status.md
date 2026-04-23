@@ -4,10 +4,10 @@ Live status shows near-real-time player and match state for each running instanc
 
 ## Open Live Status
 
-1. In the **Servers** page, click the player count pill in the instance row: <img class="docs-inline-icon" src="/docs/images/player-count.png" width="80" />.
+1. In the **Servers** page, click the player count pill in the instance row: <img class="docs-inline-icon" src="../images/player-count.png" width="80" />.
 2. QLSM opens the full **Live Status** drawer.
 
-![Instance Live Status](/docs/images/instance-live-status.png)
+![Instance Live Status](../images/instance-live-status.png)
 
 You can also open **View Details** for an instance and use the **Live Status** section there. Clicking the **Players** count pill in that section opens the same Live Status drawer.
 
@@ -48,6 +48,6 @@ Live status is observational data. Operational actions (restart/stop/logs/RCON) 
 
 ## Related Pages
 
-- [Instance Actions Menu](/docs/operations/instance-actions-menu)
-- [Server Logs](/docs/operations/server-logs)
-- [Chat Logs](/docs/operations/chat-logs)
+- [Instance Actions Menu](instance-actions-menu.md)
+- [Server Logs](server-logs.md)
+- [Chat Logs](chat-logs.md)

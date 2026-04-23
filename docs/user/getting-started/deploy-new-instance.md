@@ -2,9 +2,9 @@
 
 Open from **Servers** -> host row -> **Add QLDS Instance to &lt;host&gt;**.
 
-![](/docs/images/add-new-instance-button.png)   
+![](../images/add-new-instance-button.png)   
 
-Prerequisite: [Add A Host](/docs/getting-started/add-host)
+Prerequisite: [Add A Host](add-host.md)
 
 Host limit: each host can have a maximum of **4 instances**. If a host already has 4, deploy the new instance to a different host or remove an existing one first.
 
@@ -16,11 +16,11 @@ When the add new QLDS instance form opens, config is preloaded from the **defaul
 - You can edit the default preset or load another preset, then modify values before deploy.
 - Default preset itself is read-only.
 
-Preset details: [Presets And Default Config](/docs/presets/overview)
+Preset details: [Presets And Default Config](../presets/overview.md)
 
 ## Basic Info Block
 
-![](/docs/images/add-new-instance-basic.png)
+![](../images/add-new-instance-basic.png)
 
 
 Required fields:
@@ -32,15 +32,15 @@ Required fields:
 
 Optional toggle:
 
-- [**99k LAN Rate**](/docs/features/99k-lan-rate.md)
+- [**99k LAN Rate**](../features/99k-lan-rate.md)
 
 `99k LAN Rate` controls LAN-rate profile for the instance.
 Changing this later from the actions menu triggers reconfigure/restart.
-Reference: [Instance Actions Menu](/docs/operations/instance-actions-menu)
+Reference: [Instance Actions Menu](../operations/instance-actions-menu.md)
 
 ## Main Tabs In Deploy Form
 
-Config editing details live here: [Edit Configs, Plugins, And Factories](/docs/operations/edit-configs)
+Config editing details live here: [Edit Configs, Plugins, And Factories](../operations/edit-configs.md)
 
 ## Create Instance
 
@@ -58,8 +58,8 @@ QLSM deploys QLDS instance and pushes full config snapshot (configs, plugins, an
 
 Next pages:
 
-- [Instance Actions Menu](/docs/operations/instance-actions-menu)
-- [Host Actions Menu](/docs/operations/host-actions-menu)
-- [RCON Console](/docs/operations/rcon-console)
-- [Use Logs And Chat Logs](/docs/operations/logs-and-chat)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Instance Actions Menu](../operations/instance-actions-menu.md)
+- [Host Actions Menu](../operations/host-actions-menu.md)
+- [RCON Console](../operations/rcon-console.md)
+- [Use Logs And Chat Logs](../operations/logs-and-chat.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

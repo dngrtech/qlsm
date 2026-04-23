@@ -17,10 +17,10 @@ The result: your Quake Live server only sees legitimate player traffic.
 QLFilter is installed per host, not per instance. All instances on a host share one QLFilter installation.
 
 1. Go to **Servers**.
-2. Open the host's [Actions menu](/docs/operations/host-actions-menu).
+2. Open the host's [Actions menu](../operations/host-actions-menu.md).
 3. Click **Install QLFilter**.
 
-![](/docs/images/install-qlfilter.png)
+![](../images/install-qlfilter.png)
 
 4. Wait for the status indicator to show **Active**.
 
@@ -28,10 +28,10 @@ While QLFilter is installing, other host management actions are temporarily lock
 
 ## Uninstallation
 
-1. Open the host's [Actions menu](/docs/operations/host-actions-menu).
+1. Open the host's [Actions menu](../operations/host-actions-menu.md).
 2. Click **Uninstall QLFilter**.
 
-![](/docs/images/uninstall-qlfilter.png)
+![](../images/uninstall-qlfilter.png)
 
 3. Wait for the status to return to **Not Installed**.
 
@@ -44,10 +44,10 @@ While QLFilter is installing, other host management actions are temporarily lock
 | Active | QLFilter running and filtering |
 | Inactive | Installed but not currently running |
 | Uninstalling | Removal in progress |
-| Error | Install or uninstall failed — see [Deployment Troubleshooting](/docs/help/deployment-troubleshooting) |
+| Error | Install or uninstall failed — see [Deployment Troubleshooting](../help/deployment-troubleshooting.md) |
 
 ## Related Pages
 
-- [Host Actions Menu](/docs/operations/host-actions-menu)
-- [Add A Host (Cloud Or Standalone)](/docs/getting-started/add-host)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Host Actions Menu](../operations/host-actions-menu.md)
+- [Add A Host (Cloud Or Standalone)](../getting-started/add-host.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

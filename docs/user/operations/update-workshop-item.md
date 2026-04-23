@@ -1,7 +1,7 @@
 # Update Workshop Item
 
 
-Use this when a Steam Workshop item was updated and you want QLSM to pull the latest version on a host without waiting for the next [scheduled restart](/docs/operations/auto-restart).
+Use this when a Steam Workshop item was updated and you want QLSM to pull the latest version on a host without waiting for the next [scheduled restart](auto-restart.md).
 
 ## Open The Update Modal
 
@@ -9,7 +9,7 @@ Use this when a Steam Workshop item was updated and you want QLSM to pull the la
 2. Open the host row **Actions** menu.
 3. Click **Update Workshop Item**.
 
-<img src="/docs/images/host-actions-update-workshop-item.png" />
+<img src="../images/host-actions-update-workshop-item.png" />
 
 ## Fill The Modal
 
@@ -17,7 +17,7 @@ Use this when a Steam Workshop item was updated and you want QLSM to pull the la
 2. Optionally enable **Auto-Restart Instances** for running servers that should restart right after the workshop update finishes.
 3. Click **Update Workshop**.
 
-<img src="/docs/images/update-workshop-item.png" width="420" />
+<img src="../images/update-workshop-item.png" width="420" />
 
 ## What The Restart Toggles Mean
 
@@ -35,11 +35,11 @@ Use this when a Steam Workshop item was updated and you want QLSM to pull the la
 
 1. Watch the affected instance statuses.
 2. If you enabled auto-restart, wait for selected instances to return healthy.
-3. If needed, confirm behavior in-game or with [Server Logs](/docs/operations/server-logs).
+3. If needed, confirm behavior in-game or with [Server Logs](server-logs.md).
 
 ## Related Pages
 
-- [Host Actions Menu](/docs/operations/host-actions-menu)
-- [Configure Auto-Restart](/docs/operations/auto-restart)
-- [Use Logs And Chat Logs](/docs/operations/logs-and-chat)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Host Actions Menu](host-actions-menu.md)
+- [Configure Auto-Restart](auto-restart.md)
+- [Use Logs And Chat Logs](logs-and-chat.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

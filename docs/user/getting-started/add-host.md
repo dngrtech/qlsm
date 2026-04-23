@@ -1,11 +1,11 @@
 # Add A Host (Cloud Or Standalone)
 
-Hosts are added from **Servers** -> **Add New Host**. <img src="/docs/images/add-new-host-button.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
+Hosts are added from **Servers** -> **Add New Host**. <img src="../images/add-new-host-button.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
 
 ## Supported OS
 
 Use **Debian 12**.
-Ubuntu is supported as well, but [99k LAN rate](/docs/features/99k-lan-rate.md) is not compatible with Ubuntu. This guide and production workflow assume Debian 12.
+Ubuntu is supported as well, but [99k LAN rate](../features/99k-lan-rate.md) is not compatible with Ubuntu. This guide and production workflow assume Debian 12.
 
 ## Self-Host Deployment
 
@@ -17,7 +17,7 @@ The **QLSM Host (self)** provider runs game servers on the same machine that run
 4. Click `Add Host` button to submit the form.
 5. Wait until setup finishes and host is **Active**.
 
-![](/docs/images/qlsm-self-deployment.png)
+![](../images/qlsm-self-deployment.png)
 
 
 QLSM generates and manages its own SSH key for self-host automation. Your personal SSH keys are never accessed.
@@ -42,7 +42,7 @@ Only one `QLSM Host (self)` deployment may exist at a time.
 4. Click `Add Host` button to submit the form.
 5. Wait until setup finishes and host is **Active**.
 
-![](/docs/images/qlsm-standalone-deployment.png)
+![](../images/qlsm-standalone-deployment.png)
 
 
 ## Vultr Cloud Deployment
@@ -72,22 +72,22 @@ SITE_ADDRESS=qlsm.example.com VULTR_API_KEY=your_vultr_api_key bash <(curl -fsSL
 3. Click `Add Host` button to submit the form.
 4. Wait until host status reaches **Active**.
 
-![](/docs/images/qlsm-vultr-deployment.png)
+![](../images/qlsm-vultr-deployment.png)
 
-Cloud hosts inherit timezone from selected region. That timezone is later used by [Configure Auto-Restart](/docs/operations/auto-restart).
+Cloud hosts inherit timezone from selected region. That timezone is later used by [Configure Auto-Restart](../operations/auto-restart.md).
 
 ## Timezone Requirement
 
 Timezone is operational, not cosmetic.
 
-- [Configure Auto-Restart](/docs/operations/auto-restart) executes in host local timezone.
+- [Configure Auto-Restart](../operations/auto-restart.md) executes in host local timezone.
 - Wrong timezone means restart at the wrong local hour.
 - Wrong restart time delays Workshop item refresh on running servers.
 
-Continue with: [Configure Auto-Restart](/docs/operations/auto-restart)
+Continue with: [Configure Auto-Restart](../operations/auto-restart.md)
 
 ## Related Pages
 
-- [Deploy A New Instance](/docs/getting-started/deploy-new-instance)
-- [Host Actions Menu](/docs/operations/host-actions-menu)
-- [Deployment Troubleshooting](/docs/help/deployment-troubleshooting)
+- [Deploy A New Instance](deploy-new-instance.md)
+- [Host Actions Menu](../operations/host-actions-menu.md)
+- [Deployment Troubleshooting](../help/deployment-troubleshooting.md)
