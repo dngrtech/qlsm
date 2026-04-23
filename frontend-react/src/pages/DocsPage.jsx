@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { BookOpen } from 'lucide-react';
 import '../styles/docs-markdown.css';
+import { resolveDocPath } from '../utils/resolveDocPath';
 
 const getSlugFromPath = (path = '') =>
   path.replace(/^\/docs\//, '').replace(/\.md$/, '').replace(/^\//, '');
@@ -55,12 +56,16 @@ export default function DocsPage() {
       },
       a: (props) => {
         const linkProps = { ...props };
-        const href = typeof linkProps.href === 'string' ? linkProps.href : '';
-        const isExternal = /^https?:\/\//.test(href);
-        const isDocsRoute = href.startsWith('/docs/') || href.startsWith('docs/');
+        const rawHref = typeof linkProps.href === 'string' ? linkProps.href : '';
+        const isExternal = /^(https?:)?\/\//.test(rawHref);
+        const resolved = isExternal
+          ? rawHref
+          : resolveDocPath(rawHref, activeArticle?.path || '');
+        const isDocsRoute =
+          !isExternal && (resolved.startsWith('/docs/') || resolved.startsWith('docs/'));
         const docsTarget = isDocsRoute
-          ? (href.startsWith('/') ? href : `/${href}`).replace(/\.md$/, '')
-          : href;
+          ? (resolved.startsWith('/') ? resolved : `/${resolved}`).replace(/\.md(?=#|$)/, '')
+          : resolved;
 
         delete linkProps.node;
         const originalOnClick = linkProps.onClick;
@@ -73,19 +78,30 @@ export default function DocsPage() {
             }
           };
           linkProps.href = docsTarget;
+        } else {
+          linkProps.href = resolved;
         }
 
         return (
           <a
             {...linkProps}
-            href={isDocsRoute ? docsTarget : href}
+            href={isDocsRoute ? docsTarget : resolved}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
           />
         );
       },
+      img: (props) => {
+        const imgProps = { ...props };
+        delete imgProps.node;
+        const rawSrc = typeof imgProps.src === 'string' ? imgProps.src : '';
+        imgProps.src = /^(https?:)?\/\//.test(rawSrc)
+          ? rawSrc
+          : resolveDocPath(rawSrc, activeArticle?.path || '');
+        return <img {...imgProps} alt={imgProps.alt || ''} />;
+      },
     }),
-    [navigate]
+    [navigate, activeArticle?.path]
   );
 
   useEffect(() => {
