@@ -3,24 +3,24 @@
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
 Features:
-- Three deployment modes (Debian 12 and Ubuntu 22 are tested and recommended):
+- Three deployment modes (Debian 12 and Ubuntu 22 are tested, Debian 12 is recommended):
   * QLSM self-deployment: run QLDS instances on the same machine as QLSM
   * Standalone remote server
   * VULTR cloud provisioning via Terraform
-- Optional 99k LAN rate mode. Only Debian 12 supports this feature
-- Optional `QLFilter` deployment for supported hosts (anti-DDOS protection)
-- Per-instance RCON console with command line and live feed of all server events
-- Live server status with current map, gametype, mode/factory, match timer, player list, and scores
-- Syntax-aware editors (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, featuring a Python linter for minqlx plugin's code validation. The editor includes search and replace functionality for easy editing
+- Optional [99k LAN rate mode](https://dngrtech.github.io/qlsm/features/99k-lan-rate/). Only Debian 12 supports this feature
+- Optional [`QLFilter` deployment](https://dngrtech.github.io/qlsm/features/qlfilter/) for supported hosts (anti-DDOS protection)
+- Per-instance [RCON console](https://dngrtech.github.io/qlsm/operations/rcon-console/) with command line and live feed of all server events
+- [Live server status](https://dngrtech.github.io/qlsm/operations/live-status/) with current map, gametype, mode/factory, match timer, player list, and scores
+- [Syntax-aware editors](https://dngrtech.github.io/qlsm/operations/edit-configs/) (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, featuring a Python linter for minqlx plugin's code validation. The editor includes search and replace functionality for easy editing
 - Upload common config files, factories, custom minqlx plugins, or `*.so` binary files
-- Preset manager to load/save/update/delete qlds presets. Each preset includes custom `server.cfg`, `access.cfg`, `mappool.cfg`, `workshop.txt`, set of minqlx-plugins and `*.factories` files
+- [Preset manager](https://dngrtech.github.io/qlsm/presets/overview/) to load/save/update/delete qlds presets. Each preset includes custom `server.cfg`, `access.cfg`, `mappool.cfg`, `workshop.txt`, set of minqlx-plugins and `*.factories` files
   - Minqlx plugins can be enabled in the UI by selecting checkboxes. This eliminates the need to manually edit the `qlx_plugins` cvar, as QLSM handles it automatically.
   - UI-driven Factory Management: Enable factories directly via checkboxes
-- Chat logs (including rotated archived chat log files) and server logs retrieval with convenient search capability. 
-- Daily/weekly/monthly host auto-restart scheduling; scheduled restarts trigger workshop refresh across deployed instances
-- Manual workshop item update by Steam Workshop ID, with optional restart of selected instances
+- [Chat logs](https://dngrtech.github.io/qlsm/operations/chat-logs/) (including rotated archived chat log files) and [server logs](https://dngrtech.github.io/qlsm/operations/server-logs/) retrieval with convenient search capability.
+- [Daily/weekly/monthly host auto-restart scheduling](https://dngrtech.github.io/qlsm/operations/auto-restart/); scheduled restarts trigger workshop refresh across deployed instances
+- [Manual workshop item update](https://dngrtech.github.io/qlsm/operations/update-workshop-item/) by Steam Workshop ID, with optional restart of selected instances
 - ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI
-- User management: create users, delete users, and reset passwords
+- [User management](https://dngrtech.github.io/qlsm/administration/user-management/): create users, delete users, and reset passwords
 - External API key management for service-to-service access
 - External REST API for authenticated instance inventory lookups
 - Per-user host/instance ordering and expanded-state preferences stored in browser local storage
