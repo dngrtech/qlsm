@@ -40,15 +40,15 @@ Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers
 
 ## Requirements
 
-Ubuntu 22.04 recommended:
+Debian 12 recommended (Ubuntu 22 is also supported, but the [99k LAN rate](https://dngrtech.github.io/qlsm/features/99k-lan-rate/) feature requires Debian 12):
 
-- **Docker** — [install guide](https://docs.docker.com/engine/install/ubuntu/)
+- **Docker** — [install guide](https://docs.docker.com/engine/install/debian/)
 - **Docker Compose** (usually included with Docker)
 - A user with `sudo` access
 
 Redis, Caddy, the app itself run inside Docker.
 
-To install Docker on a fresh Ubuntu server:
+To install Docker on a fresh Debian server:
 
 ```bash
 curl -fsSL https://get.docker.com | sh
@@ -58,7 +58,11 @@ newgrp docker
 
 ## Quick start
 
-### Option 1 — one-liner
+### Option 1 — Vultr (no terminal required)
+
+The easiest option. Register a [Vultr](https://www.vultr.com) account, go to **Manage → Startup Scripts**, and add the [vultr-startup.sh](https://github.com/dngrtech/qlsm/blob/main/vultr-startup.sh) script. Then deploy a shared CPU VPS (**Debian 12**, vc2-1c-1gb at $5/month works fine) selecting that startup script under the **Configure Software** tab — QLSM will be up and running in about 10 minutes with no terminal interaction needed. After deployment, open http://[vultr-provided-ip] in your browser to access the web interface.
+
+### Option 2 — one-liner
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
@@ -70,7 +74,7 @@ With a custom domain (enables HTTPS via Caddy):
 SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
-### Option 2 — git clone
+### Option 3 — git clone
 
 ```bash
 git clone https://github.com/dngrtech/qlsm.git && cd qlsm
@@ -78,10 +82,6 @@ cp .env.example .env
 # edit .env: set SITE_ADDRESS, REDIS_PASSWORD, and VULTR_API_KEY if using Vultr
 docker compose up -d
 ```
-
-### Option 3 — Vultr (no terminal required)
-
-The easiest option. Register a [Vultr](https://www.vultr.com) account, go to **Orchestration → Startup Scripts**, and add the [vultr-startup.sh](https://github.com/dngrtech/qlsm/blob/main/vultr-startup.sh) script. Then deploy a shared CPU VPS (Ubuntu 22.04, $5/month works fine) selecting that startup script in the drop-down menu under the Server Settings — QLSM will be up and running in about 10 minutes with no terminal interaction needed. After deployment, open http://[vultr-provided-ip] in your browser to access the web interface.
 
 Default login is `admin` / `admin`. A password change is enforced on first login.
 
