@@ -1,6 +1,6 @@
 # QLFilter
 
-QLFilter is an optional host-level anti-DDoS filter for Quake Live servers. It drops reflection garbage before it ever reaches the QLDS process.
+QLFilter is an optional host-level anti-DDoS filter for Quake Live servers. It drops reflection network traffic before it ever reaches the QLDS process.
 
 ## The Problem It Solves
 
