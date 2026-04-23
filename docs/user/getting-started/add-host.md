@@ -51,13 +51,22 @@ Only one `QLSM Host (self)` deployment may exist at a time.
 
 Create a Vultr API key by following Vultr's official guide: [Create New API Key](https://docs.vultr.com/platform/other/api/other-user/create-api-key). Copy and store the key immediately because Vultr only shows it once.
 
-Set `VULTR_API_KEY` in the QLSM environment before using Vultr provisioning. For existing Docker installs, add it to `.env`.
+Set `VULTR_API_KEY` in the QLSM environment before using Vultr provisioning.
 
-One-line install example with Vultr provisioning enabled:
+**One-liner install** — pass the key inline:
 
 ```bash
 VULTR_API_KEY=your_vultr_api_key bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
+
+**Git clone / manual install** — edit `.env` before starting:
+
+```bash
+# In .env, find and uncomment this line:
+VULTR_API_KEY=your_vultr_api_key
+```
+
+Then start with `docker compose up -d`.
 
 One-line install example with both a domain and Vultr provisioning:
 

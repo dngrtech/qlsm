@@ -7,7 +7,7 @@
 !.env.example
 !.dockerignore
 !qlsm-install.sh
-!vultr-startup-ubuntu22.sh
+!vultr-startup.sh
 !.github/
 !.github/**
 !README.md

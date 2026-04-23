@@ -158,6 +158,13 @@ info "Downloading Caddyfile..."
 curl -fsSL "${REPO_RAW}/Caddyfile" -o Caddyfile
 success "Caddyfile"
 
+info "Downloading host-init..."
+mkdir -p host-init
+curl -fsSL "${REPO_RAW}/host-init/Dockerfile" -o host-init/Dockerfile
+curl -fsSL "${REPO_RAW}/host-init/init.sh" -o host-init/init.sh
+chmod +x host-init/init.sh
+success "host-init"
+
 # ── 4. Generate .env ──────────────────────────────────────────────────────────
 if [[ -f .env ]]; then
     warn ".env already exists — skipping generation. Edit it manually if needed."

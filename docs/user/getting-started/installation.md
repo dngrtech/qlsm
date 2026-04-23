@@ -7,14 +7,14 @@ There are three ways to get QLSM running, from easiest to most hands-on.
 The easiest path. Requires a Vultr account.
 
 1. Log in to [Vultr](https://vultr.com) and go to **Manage → Startup Scripts**.
-2. Create a new startup script and paste in the QLSM install script (link in the project README).
+2. Create a new startup script and paste the  [QLSM install script](https://raw.githubusercontent.com/dngrtech/qlsm/main/vultr-startup.sh).
 3. Deploy a new VM and select that startup script during setup.
 4. Wait approximately 10 minutes after the VM boots.
 5. QLSM will be running at the VM's IP address on port 80.
 
 You never open a terminal. The startup script handles everything.
 
-**Recommended spec:** 1 vCPU, 2 GB RAM, Debian 12. If you want to provision additional game server hosts from within the UI, create a Vultr API key and set `VULTR_API_KEY` in the QLSM environment.
+If you want to provision additional QLDS game servers from within the UI, [create a Vultr API key](https://docs.vultr.com/platform/other/api/other-user/create-api-key), then in the startup script find the line `# export VULTR_API_KEY=""`, uncomment it, and paste your key between the quotes before saving the script.  
 
 ## Option 2 — One-Line Install Script
 
