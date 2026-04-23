@@ -227,14 +227,11 @@
   letter-spacing: 0.03em;
   background: var(--ql-surface-el);
   color: var(--ql-text);
+  border-color: var(--ql-border);
 }
 
 .md-typeset table:not([class]) td {
   color: var(--ql-text-sec);
-  border-color: var(--ql-border);
-}
-
-.md-typeset table:not([class]) th {
   border-color: var(--ql-border);
 }
 
