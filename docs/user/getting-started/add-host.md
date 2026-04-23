@@ -32,12 +32,12 @@ Only one `QLSM Host (self)` deployment may exist at a time.
 
 1. Set **Provider** to `Standalone`.
 2. Fill:
-   - Host Name
-   - IP Address
-   - SSH Port
-   - SSH Username
-   - SSH Private Key (or password for bootstrap — QLSM installs a managed key then discards the password)
-   - Timezone
+   * Host Name
+   * IP Address
+   * SSH Port
+   * SSH Username
+   * SSH Private Key (or password for bootstrap — QLSM installs a managed key then discards the password)
+   * Timezone
 3. Run **Test Connection** and confirm it shows **Connected**. OS is auto-detected during the connection test.
 4. Click `Add Host` button to submit the form.
 5. Wait until setup finishes and host is **Active**.
