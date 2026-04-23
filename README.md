@@ -21,7 +21,7 @@ Features:
 - [Manual workshop item update](https://dngrtech.github.io/qlsm/operations/update-workshop-item/) by Steam Workshop ID, with optional restart of selected instances
 - ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI
 - [User management](https://dngrtech.github.io/qlsm/administration/user-management/): create users, delete users, and reset passwords
-- External API key management for service-to-service access
+- [External API key management](https://dngrtech.github.io/qlsm/administration/user-management/) for service-to-service access
 - External REST API for authenticated instance inventory lookups
 - Per-user host/instance ordering and expanded-state preferences stored in browser local storage
 
