@@ -59,6 +59,33 @@ These cvars are ignored by QLSM regardless of whether they are present in `serve
 | `zmq_stats_password` | Generated and stored by QLSM. | Ignored. QLSM injects the instance secret. |
 | `qlx_plugins` | Built from the **Plugins** tab selection. | Ignored. QLSM injects the Plugins tab selection. |
 
+### What the command line looks like
+
+QLSM assembles all managed cvars into a single argument string that is passed to the QLDS binary at launch. The two examples below use real variable names from the instance record.
+
+**Example command line arguments with 99k LAN rate enabled** (`sv_serverType 1`, `sv_lanForceRate 1`):
+
+```
+/home/ql/qlds-$port/run_server_x64_minqlx.sh
+  +set sv_serverType 1
+  +set sv_lanForceRate 1
+  +set net_strict 1
+  +set net_port $port
+  +set sv_hostname "$hostname"
+  +set qlx_serverBrandName "$hostname"
+  +set qlx_redisAddress "127.0.0.1:6379"
+  +set qlx_redisPassword "$redis_password"
+  +set qlx_redisDatabase $redis_db_index
+  +set fs_homepath /home/ql/qlds-$port
+  +set qlx_pluginsPath /home/ql/qlds-$port/minqlx-plugins
+  +set zmq_rcon_enable 1
+  +set zmq_rcon_port $zmq_rcon_port
+  +set zmq_rcon_password "$zmq_rcon_password"
+  +set zmq_stats_port $zmq_stats_port
+  +set zmq_stats_password "$zmq_stats_password"
+  +set qlx_plugins "names of plugins from the Plugins tab selection"
+```
+
 ## Plugins
 
 The **Plugins** tab manages Python plugins for this instance:

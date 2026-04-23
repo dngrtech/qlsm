@@ -1,0 +1,259 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+/* ─────────────────────────────────────────────
+   CSS Custom Properties — mirroring the app
+   ───────────────────────────────────────────── */
+
+[data-md-color-scheme="default"] {
+  --ql-accent:          #0D9668;
+  --ql-accent-dim:      #087A53;
+  --ql-surface:         #FAFBFC;
+  --ql-surface-el:      #E8ECF1;
+  --ql-border:          #D0D7E0;
+  --ql-border-strong:   #B0BAC6;
+  --ql-text:            #0F172A;
+  --ql-text-sec:        #3E4C5E;
+  --ql-text-muted:      #7E8D9F;
+  --ql-code-bg:         #FFFFFF;
+}
+
+[data-md-color-scheme="slate"] {
+  --ql-accent:          #00FF9D;
+  --ql-accent-dim:      #00CC7D;
+  --ql-surface:         #111820;
+  --ql-surface-el:      #1C2530;
+  --ql-border:          #2A3441;
+  --ql-border-strong:   #3D4A5C;
+  --ql-text:            #F1F5F9;
+  --ql-text-sec:        #94A3B8;
+  --ql-text-muted:      #64748B;
+  --ql-code-bg:         #141B22;
+
+  /* Override Material dark bg to match app */
+  --md-default-bg-color:              #0A0E14;
+  --md-default-fg-color:              #F1F5F9;
+  --md-default-fg-color--light:       #94A3B8;
+  --md-default-fg-color--lighter:     #64748B;
+  --md-default-fg-color--lightest:    rgba(241,245,249,0.07);
+  --md-accent-fg-color:               #00FF9D;
+  --md-accent-fg-color--transparent:  rgba(0,255,157,0.1);
+  --md-primary-fg-color:              #111820;
+  --md-primary-bg-color:              #F1F5F9;
+  --md-code-bg-color:                 #141B22;
+  --md-code-fg-color:                 #F1F5F9;
+}
+
+/* ─────────────────────────────────────────────
+   Sidebar — match the app's aside card
+   ───────────────────────────────────────────── */
+
+/* Section group headers (e.g. "Getting Started", "Operations") */
+.md-nav--primary .md-nav__item--section > .md-nav__link {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ql-text-muted);
+  margin-top: 0.6rem;
+  padding-left: 0.5rem;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.md-nav--primary .md-nav__item--section > .md-nav__link::before,
+.md-nav--primary .md-nav__item--section > .md-nav__link::after {
+  display: none !important;
+}
+
+/* Nav links — base */
+.md-nav__link {
+  position: relative;
+  border-radius: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--ql-text-sec);
+  overflow: hidden;
+  border: 1px solid transparent;
+  margin: 1px 4px;
+  padding: 0.28rem 0.6rem 0.28rem 0.8rem;
+  transition: color 150ms ease, background 150ms ease, transform 150ms ease, border-color 150ms ease;
+}
+
+/* Left accent bar (hidden by default) */
+.md-nav__link::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--ql-accent);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition: opacity 150ms ease, transform 150ms ease;
+  pointer-events: none;
+}
+
+/* Gradient overlay from left */
+.md-nav__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ql-accent) 20%, transparent),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+
+/* Hover */
+.md-nav__link:hover {
+  color: var(--ql-text);
+  border-color: var(--ql-border);
+  background: var(--ql-surface-el);
+  transform: translateX(2px);
+}
+
+.md-nav__link:hover::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.md-nav__link:hover::after {
+  opacity: 0.55;
+}
+
+/* Active */
+.md-nav__link--active,
+.md-nav__link--active:hover {
+  color: var(--ql-text) !important;
+  border-color: var(--ql-border) !important;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ql-accent) 15%, transparent),
+    transparent 65%
+  ) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ql-accent) 22%, transparent);
+  font-weight: 600;
+  transform: none;
+}
+
+.md-nav__link--active::before,
+.md-nav__link--active:hover::before {
+  opacity: 1 !important;
+  transform: scaleY(1) !important;
+}
+
+/* ─────────────────────────────────────────────
+   Content — match docs-markdown.css
+   ───────────────────────────────────────────── */
+
+/* Headings: Rajdhani font, uppercase h1/h2 */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4 {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  letter-spacing: 0.035em;
+  line-height: 1.2;
+}
+
+.md-typeset h1 {
+  font-size: 1.85rem;
+  text-transform: uppercase;
+}
+
+.md-typeset h2 {
+  font-size: 1.35rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--ql-border);
+  padding-bottom: 0.3rem;
+}
+
+.md-typeset h3 { font-size: 1.12rem; }
+.md-typeset h4 { font-size: 1rem; }
+
+/* Code font */
+.md-typeset code,
+.md-typeset pre code {
+  font-family: 'Share Tech Mono', Consolas, monospace;
+  font-size: 0.92em;
+}
+
+/* Inline code */
+.md-typeset :not(pre) > code {
+  background: var(--ql-code-bg);
+  border: 1px solid var(--ql-border);
+  border-radius: 0.35rem;
+  padding: 0.08rem 0.38rem;
+  color: var(--ql-text);
+}
+
+/* Code block */
+.md-typeset pre {
+  background: var(--ql-code-bg) !important;
+  border: 1px solid var(--ql-border);
+  border-radius: 0.6rem;
+}
+
+/* Blockquote — amber left border like app */
+.md-typeset blockquote {
+  border-left: 3px solid var(--ql-accent);
+  background: color-mix(in srgb, var(--ql-accent) 8%, transparent);
+  border-radius: 0 8px 8px 0;
+  color: var(--ql-text-sec);
+}
+
+/* Tables */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--ql-border);
+  border-radius: 0.7rem;
+  overflow: hidden;
+}
+
+/* First column (variable names, keys) — never wrap */
+.md-typeset table:not([class]) th:first-child,
+.md-typeset table:not([class]) td:first-child {
+  white-space: nowrap;
+}
+
+.md-typeset table:not([class]) th {
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  background: var(--ql-surface-el);
+  color: var(--ql-text);
+  border-color: var(--ql-border);
+}
+
+.md-typeset table:not([class]) td {
+  color: var(--ql-text-sec);
+  border-color: var(--ql-border);
+}
+
+/* Images */
+.md-typeset img {
+  border: 1px solid var(--ql-border);
+  border-radius: 0.65rem;
+}
+
+/* List markers in accent color */
+.md-typeset ul > li::marker,
+.md-typeset ol > li::marker {
+  color: var(--ql-accent);
+}
+
+/* Links */
+.md-typeset a {
+  color: var(--ql-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.md-typeset a:hover {
+  color: var(--ql-accent-dim);
+}
