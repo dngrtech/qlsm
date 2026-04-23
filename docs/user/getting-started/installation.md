@@ -28,7 +28,7 @@ export SITE_ADDRESS="qlsm.custom-domain.com"
 
 QLSM will obtain a free HTTPS certificate automatically via Let's Encrypt. Your domain's A record must point to the VM's IP before it boots.
 
-**Vultr API key (optional):** If you want to provision additional QLDS game servers from within the UI, [create a Vultr API key](https://docs.vultr.com/platform/other/api/other-user/create-api-key), then find this line in the startup script and uncomment it before saving it:
+**Vultr API key (optional):** If you want to provision additional Vultr-hosted QLDS game servers from within the UI, [create a Vultr API key](https://docs.vultr.com/platform/other/api/other-user/create-api-key), then find this line in the startup script and uncomment it before saving it:
 
 ```bash
 # export VULTR_API_KEY=""
