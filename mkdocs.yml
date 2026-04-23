@@ -1,0 +1,72 @@
+site_name: QLSM Documentation
+site_description: Quake Live Server Management — deploy and manage Quake Live servers without a terminal.
+site_url: https://dngrtech.github.io/qlsm/
+repo_url: https://github.com/dngrtech/qlsm
+repo_name: dngrtech/qlsm
+edit_uri: edit/main/docs/user/
+
+docs_dir: docs/user
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - What Is QLSM?: getting-started/introduction.md
+    - Installation: getting-started/installation.md
+    - Add A Host: getting-started/add-host.md
+    - Deploy A New Instance: getting-started/deploy-new-instance.md
+    - Presets And Default Config: presets/overview.md
+    - Configure Auto-Restart: operations/auto-restart.md
+  - Operations:
+    - Host Actions Menu: operations/host-actions-menu.md
+    - Update Workshop Item: operations/update-workshop-item.md
+    - Instance Actions Menu: operations/instance-actions-menu.md
+    - Live Status: operations/live-status.md
+    - Edit Configs, Plugins, And Factories: operations/edit-configs.md
+    - RCON Console: operations/rcon-console.md
+    - Server Logs: operations/server-logs.md
+    - Chat Logs: operations/chat-logs.md
+  - Features:
+    - QLFilter: features/qlfilter.md
+    - 99k LAN Rate: features/99k-lan-rate.md
+  - Administration:
+    - User Management & API Keys: administration/user-management.md
+  - Help:
+    - Deployment Troubleshooting: help/deployment-troubleshooting.md
