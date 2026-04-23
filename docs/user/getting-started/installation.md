@@ -7,14 +7,34 @@ There are three ways to get QLSM running, from easiest to most hands-on.
 The easiest path. Requires a Vultr account.
 
 1. Log in to [Vultr](https://vultr.com) and go to **Manage → Startup Scripts**.
-2. Create a new startup script and paste the  [QLSM install script](https://raw.githubusercontent.com/dngrtech/qlsm/main/vultr-startup.sh).
-3. Deploy a new VM and select that startup script during setup.
+2. Create a new startup script and paste the  [Vultr QLSM startup script](https://raw.githubusercontent.com/dngrtech/qlsm/main/vultr-startup.sh).
+3. Deploy a new VM. Under the **Configure Software** tab, select that startup script from the drop-down menu. Choose **Debian 12** as the OS — Ubuntu is supported too, but [99k LAN rate](../features/99k-lan-rate.md) is not compatible with it. For the plan, **vc2-1c-1gb** ($5/month) works fine.
 4. Wait approximately 10 minutes after the VM boots.
 5. QLSM will be running at the VM's IP address on port 80.
 
 You never open a terminal. The startup script handles everything.
 
-If you want to provision additional QLDS game servers from within the UI, [create a Vultr API key](https://docs.vultr.com/platform/other/api/other-user/create-api-key), then in the startup script find the line `# export VULTR_API_KEY=""`, uncomment it, and paste your key between the quotes before saving the script.  
+**Custom domain (optional):** If you have a domain pointing to the VM's IP, find this line in the startup script before saving it:
+
+```bash
+export SITE_ADDRESS=":80"
+```
+
+Replace `:80` with your domain:
+
+```bash
+export SITE_ADDRESS="qlsm.custom-domain.com"
+```
+
+QLSM will obtain a free HTTPS certificate automatically via Let's Encrypt. Your domain's A record must point to the VM's IP before it boots.
+
+**Vultr API key (optional):** If you want to provision additional QLDS game servers from within the UI, [create a Vultr API key](https://docs.vultr.com/platform/other/api/other-user/create-api-key), then find this line in the startup script and uncomment it before saving it:
+
+```bash
+# export VULTR_API_KEY=""
+```
+
+Paste your key between the quotes before saving the script.  
 
 ## Option 2 — One-Line Install Script
 
