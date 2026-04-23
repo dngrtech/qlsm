@@ -1,6 +1,6 @@
 # QLSM — Quake Live Server Management
 
-📚 **[Documentation →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
+📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
 Features:
 - Three deployment modes (Debian 12 and Ubuntu 22 are tested and recommended):
