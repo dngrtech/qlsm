@@ -126,6 +126,7 @@ docs/*
 !docs/setup.md
 !docs/technical.md
 !docs/architecture.md
+!docs/requirements.txt
 !docs/user/
 !docs/user/**
 
