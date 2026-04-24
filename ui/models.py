@@ -203,6 +203,7 @@ class ConfigPreset(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text, nullable=True)
     path = db.Column(db.String(255), nullable=False)  # Filesystem path to preset folder
+    is_builtin = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
     last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -216,6 +217,7 @@ class ConfigPreset(db.Model):
             'name': self.name,
             'description': self.description,
             'path': self.path,
+            'is_builtin': self.is_builtin,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

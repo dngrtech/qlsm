@@ -195,6 +195,28 @@ def test_create_preset(app_context):
     assert preset.description == 'A test preset'
     assert preset.path == 'configs/presets/test-preset-create'
 
+
+def test_create_preset_defaults_is_builtin_false(app_context):
+    preset = create_preset(
+        name='User Preset',
+        description='A user preset',
+        path='configs/presets/user-preset'
+    )
+
+    assert preset.is_builtin is False
+
+
+def test_config_preset_to_dict_includes_is_builtin(app_context):
+    preset = create_preset(
+        name='Builtin Preset',
+        description='A built-in preset',
+        path='configs/presets/_builtin/builtin-preset',
+        is_builtin=True
+    )
+
+    assert preset.to_dict()['is_builtin'] is True
+
+
 def test_get_preset(app_context):
     """Test retrieving a ConfigPreset by ID."""
     preset = create_preset(name='Test Preset Get', path='configs/presets/test-preset-get')
