@@ -6,6 +6,8 @@ import os
 import uuid
 import time
 from flask_jwt_extended import create_access_token
+from ui import db
+from ui.models import ConfigPreset
 
 @pytest.fixture
 def drafts_base(app):
@@ -50,6 +52,31 @@ class TestCreateDraft:
         assert os.path.exists(os.path.join(draft_dir, 'balance.py'))
         assert os.path.exists(os.path.join(draft_dir, 'ban.py'))
         assert os.path.exists(os.path.join(draft_dir, 'readme.txt'))
+
+    def test_create_draft_from_builtin_default_preset(self, client, app, auth_headers, tmp_path, monkeypatch, drafts_base):
+        configs_base = tmp_path / 'configs'
+        scripts_dir = configs_base / 'presets' / '_builtin' / 'default' / 'scripts'
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / 'balance.py').write_text('# builtin balance\n')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(configs_base))
+
+        with app.app_context():
+            db.session.add(ConfigPreset(
+                name='default',
+                description='Default',
+                path=str(configs_base / 'presets' / '_builtin' / 'default'),
+                is_builtin=True,
+            ))
+            db.session.commit()
+
+        response = client.post('/api/drafts/', json={
+            'source': 'preset',
+            'preset': 'default'
+        }, headers=auth_headers)
+
+        assert response.status_code == 201
+        draft_dir = os.path.join(drafts_base, response.get_json()['data']['draft_id'], 'scripts')
+        assert os.path.exists(os.path.join(draft_dir, 'balance.py'))
 
     def test_create_draft_returns_uuid(self, client, auth_headers, preset_with_scripts, monkeypatch):
         monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))

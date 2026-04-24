@@ -301,6 +301,36 @@ def test_get_preset_scripts_merges_defaults(client, app, tmp_path):
     assert 'balance.py' in scripts
 
 
+def test_get_preset_scripts_merges_builtin_default_scripts(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    builtin_scripts_dir = os.path.join('configs', 'presets', '_builtin', 'default', 'scripts')
+    os.makedirs(builtin_scripts_dir, exist_ok=True)
+    with open(os.path.join(builtin_scripts_dir, 'balance.py'), 'w') as f:
+        f.write('# builtin balance')
+
+    with app.app_context():
+        create_preset(
+            name='default',
+            description='default',
+            path=os.path.join('configs', 'presets', '_builtin', 'default'),
+            is_builtin=True,
+        )
+        preset_path = os.path.join('configs', 'presets', 'custom')
+        scripts_dir = os.path.join(preset_path, 'scripts')
+        os.makedirs(scripts_dir, exist_ok=True)
+        with open(os.path.join(scripts_dir, 'custom.py'), 'w') as f:
+            f.write('# custom')
+        preset = create_preset(name='custom', description='', path=preset_path)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+
+    scripts = response.get_json()['data']['scripts']
+    assert scripts['balance.py'] == '# builtin balance'
+    assert scripts['custom.py'] == '# custom'
+
+
 def test_get_preset_includes_txt_scripts(client, app, tmp_path):
     """Getting a preset with .txt scripts returns them alongside .py scripts."""
     default_scripts_dir = os.path.join(str(tmp_path), 'configs', 'presets', 'default', 'scripts')

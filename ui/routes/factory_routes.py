@@ -7,13 +7,13 @@ Provides endpoints for browsing and reading factory files (.factories).
 import os
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
+from ui.preset_support import resolve_preset_subdir
 
 # Create blueprint
 factory_api_bp = Blueprint('factory_api_routes', __name__)
 
 # Constants
 CONFIGS_BASE = 'configs'
-PRESETS_DIR = 'presets'
 FACTORIES_DIR = 'factories' # Directory name for factory files
 
 
@@ -33,12 +33,12 @@ def _get_factories_base_path(preset=None, host=None, instance_id=None):
 
     if preset:
         # For presets, factories are stored in a 'factories' subdirectory
-        return os.path.join(base, PRESETS_DIR, preset, FACTORIES_DIR)
+        return os.path.abspath(resolve_preset_subdir(preset, FACTORIES_DIR, CONFIGS_BASE))
     elif host and instance_id:
         return os.path.join(base, host, str(instance_id), FACTORIES_DIR)
     else:
         # Default to default preset
-        return os.path.join(base, PRESETS_DIR, 'default', FACTORIES_DIR)
+        return os.path.abspath(resolve_preset_subdir('default', FACTORIES_DIR, CONFIGS_BASE))
 
 
 def _is_safe_path(base_path, requested_path):

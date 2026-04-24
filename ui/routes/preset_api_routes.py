@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from ui import db
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
-from ui.preset_support import PRESETS_DIR, validate_user_preset_name
+from ui.preset_support import PRESETS_DIR, resolve_preset_subdir, validate_user_preset_name
 
 preset_api_bp = Blueprint('preset_api_routes', __name__)  # url_prefix will be /presets
 
@@ -53,7 +53,7 @@ def _read_preset_scripts(preset_path):
     # only needs to store its customisations (new or overridden files).
     # Use the basename of preset_path (the preset name) rather than a
     # CWD-dependent os.path.abspath comparison for robustness.
-    default_scripts_dir = os.path.join(PRESETS_DIR, 'default', 'scripts')
+    default_scripts_dir = resolve_preset_subdir('default', 'scripts')
     if os.path.basename(preset_path) != 'default' and os.path.exists(default_scripts_dir):
         for root, _, files in os.walk(default_scripts_dir):
             for filename in files:

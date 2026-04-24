@@ -5,6 +5,8 @@ import os
 import tempfile
 import shutil
 from flask_jwt_extended import create_access_token
+from ui import db
+from ui.models import ConfigPreset
 
 
 @pytest.fixture
@@ -85,6 +87,26 @@ class TestGetScriptTree:
         assert extras['type'] == 'folder'
         assert len(extras['children']) == 1
         assert extras['children'][0]['name'] == 'extra_plugin.py'
+
+    def test_tree_uses_builtin_default_db_path(self, client, app, tmp_path, auth_headers, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        builtin_scripts = tmp_path / 'configs' / 'presets' / '_builtin' / 'default' / 'scripts'
+        builtin_scripts.mkdir(parents=True)
+        (builtin_scripts / 'builtin.py').write_text('# builtin plugin\n')
+
+        with app.app_context():
+            db.session.add(ConfigPreset(
+                name='default',
+                description='Default',
+                path='configs/presets/_builtin/default',
+                is_builtin=True,
+            ))
+            db.session.commit()
+
+        response = client.get('/api/scripts/tree?preset=default', headers=auth_headers)
+
+        assert response.status_code == 200
+        assert [item['name'] for item in response.json['data']] == ['builtin.py']
 
     def test_tree_requires_auth(self, client):
         """Test that tree endpoint requires authentication."""

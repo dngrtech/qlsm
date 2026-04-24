@@ -9,7 +9,9 @@ BUILTIN_PRESETS_DIR = os.path.join(PRESETS_DIR, '_builtin')
 PRESET_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
 
 
-def user_preset_path(name):
+def user_preset_path(name, configs_base=None):
+    if configs_base is not None:
+        return os.path.join(configs_base, 'presets', name)
     return os.path.join(PRESETS_DIR, name)
 
 
@@ -17,15 +19,15 @@ def builtin_preset_path(name):
     return os.path.join(BUILTIN_PRESETS_DIR, name)
 
 
-def resolve_preset_path(name):
+def resolve_preset_path(name, configs_base=None):
     preset = get_preset_by_name(name)
     if preset:
         return preset.path
-    return user_preset_path(name)
+    return user_preset_path(name, configs_base=configs_base)
 
 
-def resolve_preset_subdir(name, subdir):
-    return os.path.join(resolve_preset_path(name), subdir)
+def resolve_preset_subdir(name, subdir, configs_base=None):
+    return os.path.join(resolve_preset_path(name, configs_base=configs_base), subdir)
 
 
 def validate_preset_name_format(name):

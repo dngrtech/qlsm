@@ -10,6 +10,7 @@ from ui.lan_rate_policy import (
     lan_rate_unsupported_message,
     would_enable_unsupported_lan_rate,
 )
+from ui.preset_support import resolve_preset_path, resolve_preset_subdir
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
     get_host,
@@ -43,8 +44,8 @@ def ping_instances_api():
 
 # Helper function to read default config files - needed for creating new instances if not provided in API
 def _read_default_config(filename):
-    """Reads content from a file in configs/presets/default/."""
-    default_config_path = os.path.join('configs', 'presets', 'default', filename)
+    """Reads content from the registered default preset."""
+    default_config_path = os.path.join(resolve_preset_path('default'), filename)
     try:
         with open(default_config_path, 'r') as f:
             return f.read()
@@ -153,7 +154,7 @@ def add_instance_api():
             shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
         else:
             # No draft — copy defaults
-            default_scripts_dir = os.path.join('configs', 'presets', 'default', 'scripts')
+            default_scripts_dir = resolve_preset_subdir('default', 'scripts')
             if os.path.exists(default_scripts_dir):
                 shutil.copytree(default_scripts_dir, instance_scripts_dir, dirs_exist_ok=True)
             else:
@@ -183,7 +184,7 @@ def add_instance_api():
             current_app.logger.info(f"User selected {len(factories_data)} factories for instance {instance.id}")
         else:
             # No factories key in request - copy all defaults (legacy/fallback behavior)
-            default_factories_dir = os.path.join('configs', 'presets', 'default', 'factories')
+            default_factories_dir = resolve_preset_subdir('default', 'factories')
             if os.path.exists(default_factories_dir):
                 shutil.copytree(default_factories_dir, instance_factories_dir, dirs_exist_ok=True)
                 current_app.logger.info(f"Copied default factories to {instance_factories_dir} for instance {instance.id}")

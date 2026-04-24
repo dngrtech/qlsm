@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from flask_jwt_extended import create_access_token
-from ui.models import QLInstance, Host, HostStatus, InstanceStatus
+from ui.models import QLInstance, Host, HostStatus, InstanceStatus, ConfigPreset
 from ui import db
 from ui.database import create_instance, create_host
 
@@ -94,6 +94,26 @@ def test_view_instance_includes_host_os_type(client, app):
 
     assert response.status_code == 200
     assert response.get_json()['data']['host_os_type'] == 'ubuntu'
+
+
+def test_read_default_config_uses_builtin_default_path(app, tmp_path, monkeypatch):
+    from ui.routes.instance_routes import _read_default_config
+
+    monkeypatch.chdir(tmp_path)
+    builtin_default = tmp_path / 'configs' / 'presets' / '_builtin' / 'default'
+    builtin_default.mkdir(parents=True)
+    (builtin_default / 'server.cfg').write_text('set sv_hostname "Builtin"\n')
+
+    with app.app_context():
+        db.session.add(ConfigPreset(
+            name='default',
+            description='Default',
+            path='configs/presets/_builtin/default',
+            is_builtin=True,
+        ))
+        db.session.commit()
+
+        assert _read_default_config('server.cfg') == 'set sv_hostname "Builtin"\n'
 
 
 @patch('ui.routes.instance_routes.enqueue_task')
