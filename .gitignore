@@ -105,6 +105,8 @@ ql-assets/data/*
 configs/*
 !configs/presets/
 configs/presets/*
+!configs/presets/_builtin/
+!configs/presets/_builtin/**
 !configs/presets/default/
 !configs/presets/default/**
 
