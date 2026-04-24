@@ -107,8 +107,6 @@ configs/*
 configs/presets/*
 !configs/presets/_builtin/
 !configs/presets/_builtin/**
-!configs/presets/default/
-!configs/presets/default/**
 
 # ── Logging stack ─────────────────────────────────────────────────────────────
 !logging-stack/
