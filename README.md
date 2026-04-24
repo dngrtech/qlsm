@@ -119,7 +119,7 @@ sudo bash -c '(crontab -l 2>/dev/null | grep -v "qlsm-install.sh"; echo "0 9 * *
 
 ---
 
-Full setup guide: [docs/setup.md](docs/setup.md)
+Full installation guide: [docs/user/getting-started/installation.md](https://dngrtech.github.io/qlsm/getting-started/installation/)
 
 ## Development
 
@@ -143,7 +143,7 @@ pytest tests/
 
 ## Docs
 
-- [docs/setup.md](docs/setup.md) — install and configure
+- [docs/user/getting-started/installation.md](https://dngrtech.github.io/qlsm/getting-started/installation/) — install and configure
 - [docs/architecture.md](docs/architecture.md) — how it fits together
 - [docs/technical.md](docs/technical.md) — implementation details
 
