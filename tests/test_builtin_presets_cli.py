@@ -97,3 +97,37 @@ def test_sync_builtin_presets_remove_orphaned_deletes_missing_builtin_row(
     assert remove_result.exit_code == 0
     with app.app_context():
         assert ConfigPreset.query.filter_by(name='old-builtin').first() is None
+
+
+def test_add_preset_rejects_builtin_name(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        db.session.add(ConfigPreset(
+            name='duel',
+            description='Duel',
+            path=builtin_preset_path('duel'),
+            is_builtin=True,
+        ))
+        db.session.commit()
+
+    result = runner.invoke(args=['add-preset', '--name', 'duel'])
+
+    assert result.exit_code == 0
+    assert 'reserved by a built-in preset' in result.output
+
+
+def test_delete_preset_rejects_builtin(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        db.session.add(ConfigPreset(
+            name='default',
+            description='Default',
+            path=builtin_preset_path('default'),
+            is_builtin=True,
+        ))
+        db.session.commit()
+
+    result = runner.invoke(args=['delete-preset', '--name', 'default'])
+
+    assert result.exit_code == 0
+    assert "Cannot delete built-in preset 'default'" in result.output

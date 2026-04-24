@@ -1,5 +1,4 @@
 import os
-import re
 import shutil
 
 import click
@@ -14,10 +13,7 @@ from ui.database import (
     get_preset_by_name,
     get_presets,
 )
-
-PRESETS_DIR = os.path.join('configs', 'presets')
-PRESET_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
-RESERVED_PRESET_NAMES = ['default']
+from ui.preset_support import user_preset_path, validate_user_preset_name
 
 
 @click.command('add-preset')
@@ -31,19 +27,12 @@ RESERVED_PRESET_NAMES = ['default']
 @with_appcontext
 def add_preset_command(name, description, server_cfg_path, mappool_path, access_path, workshop_path, factory_path):
     """CLI command to add a new configuration preset."""
-    if not PRESET_NAME_PATTERN.match(name):
-        click.echo("Error: Preset name can only contain letters, numbers, hyphens, and underscores.")
+    is_valid, error, _ = validate_user_preset_name(name)
+    if not is_valid:
+        click.echo(f"Error: {error}")
         return
 
-    if name.lower() in RESERVED_PRESET_NAMES:
-        click.echo(f"Error: '{name}' is a reserved preset name.")
-        return
-
-    if get_preset_by_name(name):
-        click.echo(f"Error: Preset with name '{name}' already exists.")
-        return
-
-    preset_path = os.path.join(PRESETS_DIR, name)
+    preset_path = user_preset_path(name)
 
     def read_content(path, field_name):
         if path:
@@ -120,8 +109,8 @@ def delete_preset_command(id, name):
             click.echo(f"Error: Preset with name '{name}' not found.")
         return
 
-    if preset.name.lower() in RESERVED_PRESET_NAMES:
-        click.echo(f"Error: Cannot delete the '{preset.name}' preset (reserved).")
+    if preset.is_builtin:
+        click.echo(f"Error: Cannot delete built-in preset '{preset.name}'.")
         return
 
     try:
