@@ -65,11 +65,11 @@ COPY . .
 # Copy built frontend from stage 1
 COPY --from=frontend-build /build/dist/ /app/frontend-react/dist/
 
-# Preserve bundled default preset outside /app/configs so entrypoint can seed
-# an empty runtime volume on first boot.
-RUN if [ -d /app/configs/presets/default ]; then \
+# Preserve bundled built-in presets outside /app/configs so entrypoint can seed
+# an empty runtime volume on first boot without mixing files into user presets.
+RUN if [ -d /app/configs/presets/_builtin ]; then \
       mkdir -p /app/.image-defaults/presets && \
-      cp -a /app/configs/presets/default /app/.image-defaults/presets/default; \
+      cp -a /app/configs/presets/_builtin /app/.image-defaults/presets/_builtin; \
     fi
 
 # Create directories that will be overlaid by named volumes at runtime
