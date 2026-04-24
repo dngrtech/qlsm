@@ -25,6 +25,12 @@ BUILTIN_DEFAULT_DIR = os.path.join(PRESETS_DIR, '_builtin', 'default')
 
 def _migrate_default_folder():
     os.makedirs(os.path.dirname(BUILTIN_DEFAULT_DIR), exist_ok=True)
+    if os.path.isdir(LEGACY_DEFAULT_DIR) and os.path.exists(BUILTIN_DEFAULT_DIR):
+        raise RuntimeError(
+            "Cannot migrate default preset: both configs/presets/default and "
+            "configs/presets/_builtin/default exist. Preserve the legacy default "
+            "folder manually, remove the conflicting destination, then rerun migrations."
+        )
     if os.path.isdir(LEGACY_DEFAULT_DIR) and not os.path.exists(BUILTIN_DEFAULT_DIR):
         shutil.move(LEGACY_DEFAULT_DIR, BUILTIN_DEFAULT_DIR)
 
