@@ -17,13 +17,13 @@
 !frontend-react/
 
 # ── Bundled bootstrap data (seed first-run runtime volume) ────────────────────
-# Keep only the default preset in the build context.
+# Keep only built-in presets in the build context.
 !configs/
 configs/*
 !configs/presets/
 configs/presets/*
-!configs/presets/default/
-!configs/presets/default/**
+!configs/presets/_builtin/
+!configs/presets/_builtin/**
 
 # ── Game assets (plugins, scripts, qlfilter, rcon) ────────────────────────────
 # Everything ships in the image except steamapps (large binary workshop files).

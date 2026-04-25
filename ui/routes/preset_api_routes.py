@@ -1,17 +1,18 @@
 import json
 import os
-import re
 import shutil
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from ui import db
-from ui.models import ConfigPreset
-from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset, get_preset_by_name
+from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
+from ui.preset_support import (
+    PRESETS_DIR,
+    is_internal_preset_name,
+    resolve_preset_subdir,
+    validate_user_preset_name,
+)
 
 preset_api_bp = Blueprint('preset_api_routes', __name__)  # url_prefix will be /presets
-
-# Base path for presets (relative to project root)
-PRESETS_DIR = os.path.join('configs', 'presets')
 
 # Config file mapping for API response keys
 CONFIG_FILE_MAP = {
@@ -23,13 +24,6 @@ CONFIG_FILE_MAP = {
 
 # Reverse mapping for writing files from API request
 API_TO_FILE_MAP = {v: k for k, v in CONFIG_FILE_MAP.items()}
-
-# Valid preset name pattern
-PRESET_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
-
-# Reserved preset names
-RESERVED_NAMES = ['default']
-
 
 def _read_preset_configs(preset_path):
     """Read all config files from a preset folder."""
@@ -64,7 +58,7 @@ def _read_preset_scripts(preset_path):
     # only needs to store its customisations (new or overridden files).
     # Use the basename of preset_path (the preset name) rather than a
     # CWD-dependent os.path.abspath comparison for robustness.
-    default_scripts_dir = os.path.join(PRESETS_DIR, 'default', 'scripts')
+    default_scripts_dir = resolve_preset_subdir('default', 'scripts')
     if os.path.basename(preset_path) != 'default' and os.path.exists(default_scripts_dir):
         for root, _, files in os.walk(default_scripts_dir):
             for filename in files:
@@ -197,23 +191,8 @@ def _write_preset_configs(preset_path, config_data):
             current_app.logger.info(f"Wrote preset config file: {filepath}")
 
 
-def _validate_preset_name(name):
-    """Validate preset name format and availability.
-    Returns (is_valid, error_message)
-    """
-    if not name:
-        return False, "Preset name is required."
-
-    if not PRESET_NAME_PATTERN.match(name):
-        return False, "Preset name can only contain letters, numbers, hyphens, and underscores."
-
-    if name.lower() in RESERVED_NAMES:
-        return False, f"'{name}' is a reserved preset name."
-
-    if get_preset_by_name(name):
-        return False, f"Preset with name '{name}' already exists."
-
-    return True, None
+def _validation_status(reason):
+    return 400 if reason == 'format' else 409
 
 
 @preset_api_bp.route('/validate-name', methods=['GET'], endpoint='validate_preset_name_api')
@@ -222,7 +201,7 @@ def validate_preset_name_api():
     """Check if a preset name is valid and available."""
     name = request.args.get('name', '').strip()
 
-    is_valid, error = _validate_preset_name(name)
+    is_valid, error, _ = validate_user_preset_name(name)
 
     return jsonify({
         "data": {
@@ -252,9 +231,9 @@ def create_preset_api():
     name = data.get('name', '').strip()
 
     # Validate name
-    is_valid, error = _validate_preset_name(name)
+    is_valid, error, reason = validate_user_preset_name(name)
     if not is_valid:
-        return jsonify({"error": {"message": error}}), 400 if "required" in error or "can only contain" in error else 409
+        return jsonify({"error": {"message": error}}), _validation_status(reason)
 
     if 'checked_plugins' in data and not isinstance(data['checked_plugins'], list):
         return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
@@ -364,26 +343,27 @@ def update_preset_api(preset_id):
     if not preset:
         return jsonify({"error": {"message": "Preset not found."}}), 404
 
-    # Prevent updating the 'default' preset name
-    if preset.name.lower() in RESERVED_NAMES and data.get('name') and data.get('name').lower() != preset.name.lower():
-        return jsonify({"error": {"message": "Cannot rename the default preset."}}), 403
+    name_provided = 'name' in data
+    requested_name = data.get('name')
+    new_name = None
+    if name_provided:
+        if not isinstance(requested_name, str):
+            return jsonify({"error": {"message": "Preset name must be a string."}}), 400
+        new_name = requested_name.strip()
+        data['name'] = new_name
+        if preset.is_builtin and new_name != preset.name:
+            return jsonify({"error": {"message": "Cannot rename a built-in preset."}}), 403
 
     if 'checked_plugins' in data and not isinstance(data['checked_plugins'], list):
         return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
 
     # Check for name change
-    new_name = data.get('name')
-    if new_name and new_name != preset.name:
-        # Validate new name
-        if not PRESET_NAME_PATTERN.match(new_name):
-            return jsonify({"error": {"message": "Preset name can only contain letters, numbers, hyphens, and underscores."}}), 400
-
-        if new_name.lower() in RESERVED_NAMES:
-            return jsonify({"error": {"message": f"'{new_name}' is a reserved preset name."}}), 400
-
-        existing_preset = get_preset_by_name(new_name)
-        if existing_preset:
-            return jsonify({"error": {"message": f"Preset with name '{new_name}' already exists."}}), 409
+    if name_provided and new_name != preset.name:
+        is_valid, error, reason = validate_user_preset_name(
+            new_name, current_preset_id=preset.id
+        )
+        if not is_valid:
+            return jsonify({"error": {"message": error}}), _validation_status(reason)
 
     # Validate draft before any filesystem mutations
     draft_id = data.get('draft_id')
@@ -424,7 +404,7 @@ def update_preset_api(preset_id):
             _write_preset_checked_plugins(preset.path, data['checked_plugins'])
 
         # Handle name change (rename folder)
-        if new_name and new_name != preset.name:
+        if name_provided and new_name != preset.name:
             old_path = preset.path
             new_path = os.path.join(PRESETS_DIR, new_name)
             shutil.move(old_path, new_path)
@@ -470,9 +450,10 @@ def delete_preset_api(preset_id):
     if not preset:
         return jsonify({"error": {"message": "Preset not found."}}), 404
 
-    # Prevent deleting the 'default' preset
-    if preset.name.lower() in RESERVED_NAMES:
-        return jsonify({"error": {"message": "Cannot delete the default preset."}}), 403
+    if preset.is_builtin:
+        return jsonify({"error": {"message": "Cannot delete a built-in preset."}}), 403
+    if is_internal_preset_name(preset.name):
+        return jsonify({"error": {"message": "Cannot delete an internal preset namespace."}}), 403
 
     try:
         preset_name = preset.name

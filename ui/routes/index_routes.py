@@ -1,5 +1,6 @@
 from flask import Blueprint, current_app, send_from_directory, jsonify
 import os
+from ui.preset_support import resolve_preset_path
 
 # Create a Blueprint for index routes
 index_bp = Blueprint('index_routes', __name__, url_prefix='/')
@@ -28,15 +29,15 @@ def spa_assets(path):
 
 @index_bp.route('/api/default-config/<path:filename>')
 def get_default_config_file(filename):
-    """Serves a default configuration file from configs/presets/default/."""
-    # Construct the path relative to the application's instance folder or a known 'configs' directory
-    # Assuming 'configs/presets/default' is at the root of the project, relative to the app's root path
-    config_dir = os.path.join(current_app.root_path, '..', 'configs', 'presets', 'default')
+    """Serves a default configuration file from the registered default preset."""
+    config_dir = os.path.abspath(resolve_preset_path('default'))
     try:
         # Attempt to send the file directly. 
         # For text files, we might want to read and return as JSON with content.
         # For now, let's read and return its content as plain text.
-        file_path = os.path.join(config_dir, filename)
+        file_path = os.path.abspath(os.path.join(config_dir, filename))
+        if not file_path.startswith(config_dir + os.sep):
+            return jsonify({"error": "File not found"}), 404
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
             return jsonify({"error": "File not found"}), 404
         

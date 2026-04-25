@@ -83,7 +83,7 @@ The Flask application follows the application factory pattern, which provides se
 -   **Configuration (`ui/config.py`):** Loads settings from environment variables. Includes settings for `Flask-JWT-Extended` (e.g., `JWT_TOKEN_LOCATION`, `JWT_COOKIE_SECURE`, `JWT_COOKIE_SAMESITE`, `JWT_ACCESS_COOKIE_NAME`) and general session cookie attributes.
 -   **Database Models (`ui/models.py`):** Defines the SQLAlchemy ORM models (User, Host, QLInstance, ConfigPreset).
 -   **Database Helpers (`ui/database.py`):** Provides CRUD operations for models and database initialization.
--   **CLI Modules (`ui/user_cli.py`, `ui/preset_cli.py`):** Provide focused Flask CLI commands such as `flask create-user`, `flask create-default-admin`, and preset management commands.
+-   **CLI Modules (`ui/user_cli.py`, `ui/preset_cli.py`, `ui/builtin_presets.py`):** Provide focused Flask CLI commands such as `flask create-user`, `flask create-default-admin`, and preset management commands including `flask sync-builtin-presets` (idempotently seeds built-in presets from the image into the database; run automatically by the Docker entrypoint on each container start).
 -   **Authentication (`Flask-JWT-Extended`):**
     *   JWTs are issued upon successful login and stored in `HttpOnly` cookies.
     *   The `SECRET_KEY` from `ui/config.py` is used for signing JWTs.
@@ -97,7 +97,7 @@ The Flask application follows the application factory pattern, which provides se
     -   `index_routes.py`: Handles the main index page.
     *   `host_routes.py`: Handles CRUD operations for Hosts, protected by `@jwt_required()`.
     *   `instance_routes.py`: Handles CRUD operations for QLInstances, protected by `@jwt_required()`.
-    *   `preset_api_routes.py`: Handles CRUD operations for ConfigPresets, protected by `@jwt_required()`.
+    *   `preset_api_routes.py`: Handles CRUD operations for ConfigPresets, protected by `@jwt_required()`. Mutating operations (rename, content update, delete) are rejected with `403` for any preset where `is_builtin = True`.
     *   `server_status_routes.py`: Handles live status retrieval (`GET /api/server-status`) and workshop preview lookup (`GET /api/server-status/workshop-preview/<workshop_id>`).
     *   `settings_routes.py`: Handles application settings management (API keys, rate limit config).
     *   `user_routes.py`: Handles user management endpoints.
@@ -186,7 +186,7 @@ class QLInstance(db.Model):
 
 ```
 
-**ConfigPreset Model:** Stores preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer to the preset directory.
+**ConfigPreset Model:** Stores preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer to the preset directory. Built-in presets (e.g., `default`) are flagged with `is_builtin = True` and are read-only — the API rejects any attempt to rename, update, or delete them.
 
 ```python
 class ConfigPreset(db.Model):
@@ -194,6 +194,7 @@ class ConfigPreset(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text, nullable=True)
     path = db.Column(db.String(500), nullable=True)  # filesystem path to preset config folder
+    is_builtin = db.Column(db.Boolean, nullable=False, default=False)  # True for QLSM-shipped presets
     last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 ```

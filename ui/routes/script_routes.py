@@ -12,6 +12,7 @@ import tempfile
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
+from ui.preset_support import resolve_preset_subdir
 
 # Create blueprint
 script_api_bp = Blueprint('script_api_routes', __name__)
@@ -20,7 +21,6 @@ script_api_bp = Blueprint('script_api_routes', __name__)
 ALLOWED_EXTENSIONS = {'.py'}
 MAX_FILE_SIZE = 256 * 1024  # 256KB
 CONFIGS_BASE = 'configs'
-PRESETS_DIR = 'presets'
 SCRIPTS_DIR = 'scripts'
 
 
@@ -39,12 +39,12 @@ def _get_scripts_base_path(preset=None, host=None, instance_id=None):
     base = os.path.abspath(CONFIGS_BASE)
 
     if preset:
-        return os.path.join(base, PRESETS_DIR, preset, SCRIPTS_DIR)
+        return os.path.abspath(resolve_preset_subdir(preset, SCRIPTS_DIR, CONFIGS_BASE))
     elif host and instance_id:
         return os.path.join(base, host, str(instance_id), SCRIPTS_DIR)
     else:
         # Default to default preset
-        return os.path.join(base, PRESETS_DIR, 'default', SCRIPTS_DIR)
+        return os.path.abspath(resolve_preset_subdir('default', SCRIPTS_DIR, CONFIGS_BASE))
 
 
 def _build_file_tree(path, base_path=None, filter_py=True):

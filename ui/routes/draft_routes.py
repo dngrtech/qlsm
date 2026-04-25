@@ -12,6 +12,7 @@ import uuid
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
+from ui.preset_support import resolve_preset_subdir
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
 
@@ -80,8 +81,8 @@ def _seed_draft(draft_scripts_path, source_path):
     plugin list is always visible.  Preset-specific files overlay on top.
     This mirrors _read_preset_scripts() in preset_api_routes.py.
     """
-    default_scripts = os.path.join(
-        os.path.abspath(CONFIGS_BASE), PRESETS_DIR, 'default', SCRIPTS_DIR
+    default_scripts = os.path.abspath(
+        resolve_preset_subdir('default', SCRIPTS_DIR, CONFIGS_BASE)
     )
     presets_root = os.path.join(os.path.abspath(CONFIGS_BASE), PRESETS_DIR)
     is_non_default_preset = (
@@ -207,7 +208,7 @@ def _get_source_path(data):
         if not _is_safe_name(preset):
             return None
         allowed_root = os.path.join(base, PRESETS_DIR)
-        path = os.path.join(base, PRESETS_DIR, preset, SCRIPTS_DIR)
+        path = os.path.abspath(resolve_preset_subdir(preset, SCRIPTS_DIR, CONFIGS_BASE))
     elif source == 'instance':
         host = data.get('host')
         instance_id = data.get('instance_id')
@@ -487,7 +488,7 @@ def _get_commit_target_path(data):
         if not _is_safe_name(preset):
             return None
         allowed_root = os.path.join(base, PRESETS_DIR)
-        path = os.path.join(base, PRESETS_DIR, preset, SCRIPTS_DIR)
+        path = os.path.abspath(resolve_preset_subdir(preset, SCRIPTS_DIR, CONFIGS_BASE))
     else:
         return None
 

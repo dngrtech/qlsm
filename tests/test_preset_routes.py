@@ -35,14 +35,20 @@ def test_validate_preset_name_valid(client, app):
     assert data['data']['error'] is None
 
 
-def test_validate_preset_name_reserved(client, app):
-    """Reserved name 'default' returns is_valid=False."""
+def test_validate_preset_name_reserved(client, app, tmp_path, monkeypatch):
+    """Name owned by a built-in preset returns is_valid=False."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', '_builtin', 'default')
+        os.makedirs(preset_path, exist_ok=True)
+        create_preset(name='default', description='default', path=preset_path, is_builtin=True)
+
     headers = auth_headers(app, DEFAULT_USER)
     response = client.get('/api/presets/validate-name?name=default', headers=headers)
     assert response.status_code == 200
     data = response.get_json()
     assert data['data']['is_valid'] is False
-    assert 'reserved' in data['data']['error']
+    assert 'reserved by a built-in preset' in data['data']['error']
 
 
 def test_validate_preset_name_invalid_chars(client, app):
@@ -110,6 +116,20 @@ def test_list_presets_with_data(client, app, tmp_path, monkeypatch):
     assert data[0]['name'] == 'mypreset'
 
 
+def test_list_presets_includes_is_builtin(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', '_builtin', 'default')
+        os.makedirs(preset_path, exist_ok=True)
+        create_preset(name='default', description='default', path=preset_path, is_builtin=True)
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/presets/', headers=headers)
+
+    assert response.status_code == 200
+    assert response.get_json()['data'][0]['is_builtin'] is True
+
+
 def test_list_presets_unauthenticated(client, app):
     """Unauthenticated request returns 401."""
     response = client.get('/api/presets/')
@@ -150,15 +170,21 @@ def test_create_preset_no_body(client, app):
     assert response.status_code in (400, 415)
 
 
-def test_create_preset_reserved_name(client, app):
-    """Reserved name 'default' returns 4xx error with 'reserved' in message."""
+def test_create_preset_reserved_name(client, app, tmp_path, monkeypatch):
+    """Built-in preset names are reserved for user-created presets."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', '_builtin', 'default')
+        os.makedirs(preset_path, exist_ok=True)
+        create_preset(name='default', description='default', path=preset_path, is_builtin=True)
+
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post('/api/presets/', headers=headers, json={
         'name': 'default',
         'description': ''
     })
-    assert response.status_code in (400, 409)
-    assert 'reserved' in response.get_json()['error']['message']
+    assert response.status_code == 409
+    assert 'reserved by a built-in preset' in response.get_json()['error']['message']
 
 
 def test_create_preset_invalid_name(client, app):
@@ -273,6 +299,36 @@ def test_get_preset_scripts_merges_defaults(client, app, tmp_path):
     # Both the preset-specific upload and the default script should be present
     assert 'my_upload.py' in scripts
     assert 'balance.py' in scripts
+
+
+def test_get_preset_scripts_merges_builtin_default_scripts(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    builtin_scripts_dir = os.path.join('configs', 'presets', '_builtin', 'default', 'scripts')
+    os.makedirs(builtin_scripts_dir, exist_ok=True)
+    with open(os.path.join(builtin_scripts_dir, 'balance.py'), 'w') as f:
+        f.write('# builtin balance')
+
+    with app.app_context():
+        create_preset(
+            name='default',
+            description='default',
+            path=os.path.join('configs', 'presets', '_builtin', 'default'),
+            is_builtin=True,
+        )
+        preset_path = os.path.join('configs', 'presets', 'custom')
+        scripts_dir = os.path.join(preset_path, 'scripts')
+        os.makedirs(scripts_dir, exist_ok=True)
+        with open(os.path.join(scripts_dir, 'custom.py'), 'w') as f:
+            f.write('# custom')
+        preset = create_preset(name='custom', description='', path=preset_path)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+
+    scripts = response.get_json()['data']['scripts']
+    assert scripts['balance.py'] == '# builtin balance'
+    assert scripts['custom.py'] == '# custom'
 
 
 def test_get_preset_includes_txt_scripts(client, app, tmp_path):
@@ -400,6 +456,56 @@ def test_update_preset_checked_plugins(client, app, tmp_path, monkeypatch):
     assert response.get_json()['data'].get('checked_plugins') == plugins
 
 
+def test_rename_user_preset_to_builtin_name_rejected(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        builtin_path = os.path.join('configs', 'presets', '_builtin', 'duel')
+        user_path = os.path.join('configs', 'presets', 'custom')
+        os.makedirs(builtin_path, exist_ok=True)
+        os.makedirs(user_path, exist_ok=True)
+        create_preset(name='duel', description='Duel', path=builtin_path, is_builtin=True)
+        user = create_preset(name='custom', description='', path=user_path)
+        user_id = user.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{user_id}', headers=headers, json={'name': 'duel'})
+
+    assert response.status_code == 409
+    assert 'reserved by a built-in preset' in response.get_json()['error']['message']
+
+
+def test_rename_builtin_preset_prevented(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', '_builtin', 'default')
+        os.makedirs(preset_path, exist_ok=True)
+        preset = create_preset(name='default', description='default', path=preset_path, is_builtin=True)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={'name': 'renamed'})
+
+    assert response.status_code == 403
+    assert 'Cannot rename a built-in preset' in response.get_json()['error']['message']
+
+
+def test_update_builtin_preset_content_allowed(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', '_builtin', 'default')
+        os.makedirs(preset_path, exist_ok=True)
+        preset = create_preset(name='default', description='default', path=preset_path, is_builtin=True)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'server_cfg': 'set sv_hostname "Updated"\n'
+    })
+
+    assert response.status_code == 200
+    assert 'Updated' in response.get_json()['data']['server_cfg']
+
+
 def test_create_preset_checked_plugins_invalid_type(client, app):
     """checked_plugins that is not a list returns 400."""
     headers = auth_headers(app, DEFAULT_USER)
@@ -492,15 +598,16 @@ def test_delete_preset_unauthenticated(client, app):
 
 
 def test_delete_default_preset_prevented(client, app, tmp_path, monkeypatch):
-    """Deleting the 'default' preset returns 403."""
+    """Deleting a built-in preset returns 403."""
     monkeypatch.chdir(tmp_path)
     with app.app_context():
-        preset_path = os.path.join('configs', 'presets', 'default')
+        preset_path = os.path.join('configs', 'presets', '_builtin', 'default')
         os.makedirs(preset_path, exist_ok=True)
-        preset = create_preset(name='default', description='default', path=preset_path)
+        preset = create_preset(name='default', description='default', path=preset_path, is_builtin=True)
         preset_id = preset.id
 
     headers = auth_headers(app, DEFAULT_USER)
     response = client.delete(f'/api/presets/{preset_id}', headers=headers)
     assert response.status_code == 403
-    assert 'Cannot delete the default preset' in response.get_json()['error']['message']
+    assert 'Cannot delete a built-in preset' in response.get_json()['error']['message']
+

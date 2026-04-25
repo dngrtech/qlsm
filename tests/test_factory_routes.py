@@ -1,6 +1,8 @@
 import os
 import pytest
 from tests.helpers import make_user, auth_headers
+from ui import db
+from ui.models import ConfigPreset
 
 DEFAULT_USER = 'factoryadmin'
 DEFAULT_PASS = 'factorypass1'
@@ -37,6 +39,32 @@ def test_get_factory_tree_with_files(client, app, tmp_path, monkeypatch):
     names = [item['name'] for item in data]
     assert 'ca.factories' in names
     assert 'duel.factories' in names
+
+
+def test_get_factory_tree_uses_builtin_default_db_path(client, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    factories_dir = tmp_path / 'configs' / 'presets' / '_builtin' / 'default' / 'factories'
+    factories_dir.mkdir(parents=True)
+    (factories_dir / 'builtin.factories').write_text('factory content')
+
+    with app.app_context():
+        db.session.add(ConfigPreset(
+            name='default',
+            description='Default',
+            path='configs/presets/_builtin/default',
+            is_builtin=True,
+        ))
+        db.session.commit()
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/factories/tree?preset=default', headers=headers)
+
+    assert response.status_code == 200
+    assert response.get_json()['data'] == [{
+        'name': 'builtin.factories',
+        'type': 'file',
+        'path': 'builtin.factories',
+    }]
 
 
 def test_get_factory_tree_ignores_non_factories_files(client, app, tmp_path, monkeypatch):

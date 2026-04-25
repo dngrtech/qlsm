@@ -105,8 +105,8 @@ ql-assets/data/*
 configs/*
 !configs/presets/
 configs/presets/*
-!configs/presets/default/
-!configs/presets/default/**
+!configs/presets/_builtin/
+!configs/presets/_builtin/**
 
 # ── Logging stack ─────────────────────────────────────────────────────────────
 !logging-stack/

@@ -34,15 +34,23 @@ fi
 # Flask CLI commands in this entrypoint need an app import target.
 export FLASK_APP="${FLASK_APP:-ui:create_app()}"
 
-# ── Seed default preset into runtime configs volume (first run) ───────────────
-# /app/configs is a named volume in docker-compose, which masks image files.
-# Keep a baked copy under /app/.image-defaults and copy missing files at startup.
-DEFAULT_PRESET_SRC=/app/.image-defaults/presets/default
-DEFAULT_PRESET_DST=/app/configs/presets/default
-if [ -d "$DEFAULT_PRESET_SRC" ]; then
-    mkdir -p "$DEFAULT_PRESET_DST"
-    cp -an "$DEFAULT_PRESET_SRC/." "$DEFAULT_PRESET_DST/"
-fi
+seed_builtin_presets() {
+    BUILTIN_PRESETS_SRC=/app/.image-defaults/presets/_builtin
+    BUILTIN_PRESETS_DST=/app/configs/presets/_builtin
+    if [ -d "$BUILTIN_PRESETS_SRC" ]; then
+        mkdir -p "$BUILTIN_PRESETS_DST"
+        for preset_dir in "$BUILTIN_PRESETS_SRC"/*; do
+            [ -d "$preset_dir" ] || continue
+            preset_name="${preset_dir##*/}"
+            if [ "$preset_name" = "default" ] && [ -d /app/configs/presets/default ] && [ ! -d "$BUILTIN_PRESETS_DST/default" ]; then
+                continue
+            fi
+            cp -an "$preset_dir" "$BUILTIN_PRESETS_DST/"
+        done
+    fi
+}
+
+seed_builtin_presets
 
 # ── Database init + migrations ─────────────────────────────────────────────────
 # Only the web service runs migrations (RUN_MIGRATIONS=true set in compose).
@@ -76,6 +84,12 @@ print('yes' if 'alembic_version' in tables else 'no')
             echo "[entrypoint] Migrations complete."
         fi
     fi
+
+    echo "[entrypoint] Seeding built-in presets..."
+    seed_builtin_presets
+    echo "[entrypoint] Syncing built-in presets..."
+    flask sync-builtin-presets
+    echo "[entrypoint] Built-in presets ready."
 
     USER_COUNT=$(python3 -c "
 import sqlite3

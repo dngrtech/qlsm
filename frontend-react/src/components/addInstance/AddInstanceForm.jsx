@@ -83,9 +83,7 @@ function AddInstanceForm({
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
-  const [checkedPlugins, setCheckedPlugins] = useState(new Set([
-    'balance.py', 'ban.py', 'clan.py', 'essentials.py', 'log.py', 'motd.py', 'names.py', 'permission.py', 'plugin_manager.py', 'silence.py', 'workshop.py'
-  ]));
+  const [checkedPlugins, setCheckedPlugins] = useState(new Set(initialData.defaultCheckedPlugins || []));
   const scriptManagerRef = useRef(null);
   const [draftPreset, setDraftPreset] = useState('default');
   const draft = useDraftWorkspace({
@@ -321,7 +319,7 @@ function AddInstanceForm({
       initialConfigContentsRef.current = newConfigs;
 
       // Track which preset was loaded (for update feature)
-      setLoadedPreset({ id: presetId, name: presetData.name, description: presetData.description || '' });
+      setLoadedPreset({ id: presetId, name: presetData.name, description: presetData.description || '', is_builtin: !!presetData.is_builtin });
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
@@ -682,15 +680,17 @@ function AddInstanceForm({
           <div className="flex gap-2">
             {loadedPreset ? (
               <>
-                <button
-                  type="button"
-                  onClick={handleUpdatePresetClick}
-                  disabled={!isPresetModified || isUpdatingPreset || loadedPreset.name === 'default'}
-                  className="btn btn-secondary"
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${isUpdatingPreset ? 'animate-spin' : ''}`} />
-                  {isUpdatingPreset ? 'Updating...' : `Update "${loadedPreset.name}"`}
-                </button>
+                {!loadedPreset.is_builtin && (
+                  <button
+                    type="button"
+                    onClick={handleUpdatePresetClick}
+                    disabled={!isPresetModified || isUpdatingPreset}
+                    className="btn btn-secondary"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${isUpdatingPreset ? 'animate-spin' : ''}`} />
+                    {isUpdatingPreset ? 'Updating...' : `Update "${loadedPreset.name}"`}
+                  </button>
+                )}
                 <button type="button" onClick={() => setShowSavePresetModal(true)} className="btn btn-secondary">
                   <Save className="w-4 h-4 mr-2" />
                   Save As New
