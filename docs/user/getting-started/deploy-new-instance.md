@@ -12,9 +12,9 @@ Host limit: each host can have a maximum of **4 instances**. If a host already h
 
 When the add new QLDS instance form opens, config is preloaded from the **default preset**.
 
-- Default preset is a baseline template.
-- You can edit the default preset or load another preset, then modify values before deploy.
-- Default preset itself is read-only.
+- Default preset is a built-in baseline template — it cannot be modified or deleted.
+- Modify the preloaded values freely before deploying; those changes only affect this instance.
+- To save a customized starting point, use **Save As New** to create your own preset.
 
 Preset details: [Presets And Default Config](../presets/overview.md)
 

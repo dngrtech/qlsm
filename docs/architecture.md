@@ -67,7 +67,7 @@ graph TD
 *   **SQLite DB:** A simple file-based database storing application metadata:
     * **Host Model:** Stores information about target servers: name, provisioned IP address, provider, region/size, status (Enum), `qlfilter_status` (Enum), SSH key path, `ssh_port`, `os_type`, `is_standalone`, `timezone`, `auto_restart_schedule`, and logs. For standalone hosts, `ssh_key_path` remains the single persisted automation credential even when the operator initially onboarded with password auth, and `os_type` is populated from SSH-based OS auto-detection rather than a user-selected dropdown. Self hosts snapshot local `/etc/os-release` detection into `os_type` when available; if detection fails, the field remains `null` instead of assuming Debian.
     * **QLInstance Model:** Stores information about Quake Live server instances: name, port, hostname, `lan_rate_enabled`, `qlx_plugins`, ZMQ connection fields (`zmq_rcon_port`, `zmq_rcon_password`, `zmq_stats_port`, `zmq_stats_password`), status (Enum), logs, and a foreign key (`host_id`) linking it to its parent `Host`. Config files are stored on the filesystem.
-    * **ConfigPreset Model:** Stores reusable configuration preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer.
+    * **ConfigPreset Model:** Stores reusable configuration preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer. Rows include an `is_builtin` flag; built-in presets live under `configs/presets/_builtin/<name>/` and are read-only — the API blocks renames, content updates, and deletes on them. Built-in presets are seeded from the Docker image on container start via `flask sync-builtin-presets` (run automatically by the entrypoint).
     * **ApiKey Model:** Stores API keys for external service authentication (Bearer token auth for `/api/v1/` endpoints).
     * **AppSetting Model:** Generic key-value store for application settings (e.g., rate limit configuration).
 *   **FileSystem (Instance Configs):** Instance-specific configuration files (e.g., `server.cfg`, `mappool.txt`) are stored directly on the application server's filesystem under `configs/<host_name>/<instance_id>/`.
@@ -172,12 +172,16 @@ qlsm/
 │   └── <instance-name>/         # Per-host Terraform state and config
 │
 ├── configs/                     # Instance configurations (on management server)
-│   └── <host_name>/             # Per-host folder
-│       └── <instance_id>/       # Per-instance configs
-│           ├── server.cfg       # Main QLDS config
-│           ├── mappool.txt      # Map rotation
-│           ├── access.txt       # Access control
-│           └── workshop.txt     # Workshop items
+│   ├── <host_name>/             # Per-host folder
+│   │   └── <instance_id>/       # Per-instance configs
+│   │       ├── server.cfg       # Main QLDS config
+│   │       ├── mappool.txt      # Map rotation
+│   │       ├── access.txt       # Access control
+│   │       └── workshop.txt     # Workshop items
+│   └── presets/                 # Preset config bundles
+│       ├── _builtin/            # Read-only presets shipped with QLSM
+│       │   └── default/         # Default baseline preset
+│       └── <user-preset>/       # User-created presets
 │
 └── docs/                        # Documentation
 ```

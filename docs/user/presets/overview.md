@@ -11,9 +11,13 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 - A set of selected minqlx plugins (checkboxes, not a raw `qlx_plugins` string)
 - A set of selected factory files
 
-## Default Preset
+## Built-in Presets
 
-Opening **Deploy New Instance** pre-loads config from the `default` preset. It is a baseline template. Treat it as read-only — use **Save As New** to create your own variants.
+QLSM ships a set of **built-in presets** that provide ready-to-use baselines. Built-in presets **cannot be modified, renamed, or deleted** — they are read-only. The **Update Preset** button is hidden when a built-in preset is loaded, and the Load Preset picker does not show a delete option for them.
+
+The `default` preset is always available as the standard baseline. Additional built-in presets may appear in the list depending on your QLSM version.
+
+To customize a built-in preset, load it and use **Save As New** to create your own editable copy.
 
 <img src="../../images/save-preset-button.png" width="146" />
 
@@ -43,8 +47,8 @@ Use **Load Preset** in the deploy form or in **Edit Config** to open the preset 
 
 Loading a preset overwrites the current draft config with the saved preset contents.
 
-- `default` stays available as the built-in baseline.
-- Non-default presets can also be deleted from this modal.
+- Built-in presets (e.g., `default`) are always available and cannot be deleted.
+- User-created presets can be deleted from this modal.
 
 ## Custom Preset Workflow
 
@@ -55,15 +59,15 @@ Loading a preset overwrites the current draft config with the saved preset conte
 
 ## Update A Loaded Preset
 
-If you load a non-default preset and then change the draft, the form exposes an **Update Preset** button.
+If you load a user-created preset and then change the draft, the form exposes an **Update Preset** button.
 
 <img src="../../images/update-preset-button.png" width="230" />
 
 Use **Update Preset** to overwrite the saved preset with your current draft.
 
-- The button stays disabled until the loaded preset has changes.
-- The built-in `default` preset cannot be updated.
-- Use **Save As New** instead when you want a variant rather than replacing the original preset.
+- The button stays disabled (greyed out) until the loaded preset has unsaved changes.
+- The **Update Preset** button is not shown at all for built-in presets — they cannot be modified.
+- Use **Save As New** to create your own editable copy of any preset, including built-ins.
 
 ## Instance-Specific Ownership
 
