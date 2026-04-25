@@ -49,6 +49,8 @@ def _migrate_default_folder():
     os.makedirs(BUILTIN_PRESETS_DIR, exist_ok=True)
     if os.path.isdir(LEGACY_DEFAULT_DIR) and not os.path.exists(BUILTIN_DEFAULT_DIR):
         shutil.move(LEGACY_DEFAULT_DIR, BUILTIN_DEFAULT_DIR)
+        return True
+    return False
 
 
 def _restore_default_folder():
@@ -103,7 +105,6 @@ def _mark_default_legacy(conn):
 def upgrade():
     conn = op.get_bind()
     _ensure_no_internal_namespace_collision(conn)
-    _migrate_default_folder()
 
     if not _has_config_preset_column(conn, 'is_builtin'):
         with op.batch_alter_table('config_preset', schema=None) as batch_op:
@@ -114,7 +115,13 @@ def upgrade():
                 server_default=sa.text('0'),
             ))
 
-    _mark_default_builtin(conn)
+    moved = _migrate_default_folder()
+    try:
+        _mark_default_builtin(conn)
+    except Exception:
+        if moved and os.path.isdir(BUILTIN_DEFAULT_DIR) and not os.path.exists(LEGACY_DEFAULT_DIR):
+            shutil.move(BUILTIN_DEFAULT_DIR, LEGACY_DEFAULT_DIR)
+        raise
 
 
 def downgrade():
