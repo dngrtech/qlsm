@@ -118,6 +118,14 @@ elif [[ requirements.txt -nt "$STAMP_FILE" ]]; then
   pip install -q -r requirements.txt && touch "$STAMP_FILE"
 fi
 
+# Apply any pending database migrations
+echo "Applying database migrations..."
+flask db upgrade
+
+# Sync built-in presets (idempotent)
+echo "Syncing built-in presets..."
+flask sync-builtin-presets
+
 # Kill orphaned processes from previous dev sessions (crashed, SSH disconnect, etc.)
 # Only kills processes owned by current user that match this dev environment's config.
 kill_orphans() {
