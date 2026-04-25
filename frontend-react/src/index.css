@@ -260,6 +260,21 @@ body {
   ring-color: var(--surface-border-strong);
 }
 
+.btn-secondary:disabled,
+.btn-secondary:disabled:hover {
+  @apply opacity-40 cursor-not-allowed shadow-none;
+  color: var(--text-secondary);
+  background-color: var(--surface-elevated);
+  border-color: var(--surface-border-strong);
+  transform: none;
+}
+
+.dark .btn-secondary:disabled,
+.dark .btn-secondary:disabled:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-raised);
+}
+
 .btn-danger {
   background-color: var(--accent-danger);
   @apply text-white font-semibold;

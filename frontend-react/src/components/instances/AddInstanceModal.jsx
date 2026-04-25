@@ -2,7 +2,7 @@ import React, { useState, useEffect, Fragment, useCallback } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { AlertTriangle, LoaderCircle, X } from 'lucide-react';
 import AddInstanceForm from '../addInstance/AddInstanceForm';
-import { getHosts, getPresets, getDefaultConfigFile, createInstance } from '../../services/api';
+import { getHosts, getPresets, getPresetById, getDefaultConfigFile, createInstance } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import ConfirmationModal from '../ConfirmationModal';
 
@@ -15,6 +15,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
     hosts: [],
     presets: [],
     defaultConfigContents: CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {}),
+    defaultCheckedPlugins: [],
   });
   const [isLoadingSubmit, setIsLoadingSubmit] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -47,10 +48,24 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
         }
       }
 
+      let defaultCheckedPlugins = [];
+      const defaultPreset = (presetsData || []).find(p => p.is_builtin && p.name === 'default');
+      if (defaultPreset) {
+        try {
+          const detail = await getPresetById(defaultPreset.id);
+          if (Array.isArray(detail?.checked_plugins)) {
+            defaultCheckedPlugins = detail.checked_plugins;
+          }
+        } catch (presetErr) {
+          console.error('Failed to fetch default preset checked_plugins:', presetErr);
+        }
+      }
+
       setFetchedInitialData({
         hosts: hostsData || [],
         presets: presetsData || [],
         defaultConfigContents,
+        defaultCheckedPlugins,
       });
     } catch (error) {
       console.error('Failed to load initial data for AddInstanceModal:', error);
@@ -59,6 +74,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
         hosts: [],
         presets: [],
         defaultConfigContents: CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: `// Error loading ${fileName}` }), {}),
+        defaultCheckedPlugins: [],
       });
     } finally {
       setLoadingInitialData(false);
