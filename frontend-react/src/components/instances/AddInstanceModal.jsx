@@ -58,6 +58,11 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
           }
         } catch (presetErr) {
           console.error('Failed to fetch default preset checked_plugins:', presetErr);
+          defaultCheckedPlugins = [
+            'balance.py', 'ban.py', 'clan.py', 'essentials.py', 'log.py',
+            'motd.py', 'names.py', 'permission.py', 'plugin_manager.py',
+            'silence.py', 'workshop.py',
+          ];
         }
       }
 
