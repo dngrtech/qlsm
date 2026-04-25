@@ -24,6 +24,13 @@ LEGACY_DEFAULT_DIR = os.path.join(PRESETS_DIR, 'default')
 BUILTIN_DEFAULT_DIR = os.path.join(BUILTIN_PRESETS_DIR, 'default')
 
 
+def _has_config_preset_column(conn, column_name):
+    return any(
+        column['name'] == column_name
+        for column in sa.inspect(conn).get_columns('config_preset')
+    )
+
+
 def _migrate_default_folder():
     if os.path.isdir(LEGACY_DEFAULT_DIR) and os.path.exists(BUILTIN_DEFAULT_DIR):
         raise RuntimeError(
@@ -44,11 +51,23 @@ def _migrate_default_folder():
         shutil.move(LEGACY_DEFAULT_DIR, BUILTIN_DEFAULT_DIR)
 
 
+def _restore_default_folder():
+    if os.path.isdir(BUILTIN_DEFAULT_DIR) and os.path.exists(LEGACY_DEFAULT_DIR):
+        raise RuntimeError(
+            "Cannot downgrade default preset: both configs/presets/_builtin/default "
+            "and configs/presets/default exist. Preserve the built-in default folder "
+            "manually, remove the conflicting destination, then rerun migrations."
+        )
+    if os.path.isdir(BUILTIN_DEFAULT_DIR) and not os.path.exists(LEGACY_DEFAULT_DIR):
+        os.makedirs(PRESETS_DIR, exist_ok=True)
+        shutil.move(BUILTIN_DEFAULT_DIR, LEGACY_DEFAULT_DIR)
+
+
 def _ensure_no_internal_namespace_collision(conn):
     existing = conn.execute(
         sa.text("""
             SELECT id FROM config_preset
-            WHERE lower(name) = '_builtin' AND is_builtin = 0
+            WHERE lower(name) = '_builtin'
             LIMIT 1
         """)
     ).first()
@@ -59,19 +78,7 @@ def _ensure_no_internal_namespace_collision(conn):
         )
 
 
-def upgrade():
-    with op.batch_alter_table('config_preset', schema=None) as batch_op:
-        batch_op.add_column(sa.Column(
-            'is_builtin',
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text('0'),
-        ))
-
-    conn = op.get_bind()
-    _ensure_no_internal_namespace_collision(conn)
-    _migrate_default_folder()
-
+def _mark_default_builtin(conn):
     conn.execute(
         sa.text("""
             UPDATE config_preset
@@ -82,6 +89,39 @@ def upgrade():
     )
 
 
+def _mark_default_legacy(conn):
+    conn.execute(
+        sa.text("""
+            UPDATE config_preset
+            SET path = :path
+            WHERE name = 'default'
+        """),
+        {'path': LEGACY_DEFAULT_DIR},
+    )
+
+
+def upgrade():
+    conn = op.get_bind()
+    _ensure_no_internal_namespace_collision(conn)
+    _migrate_default_folder()
+
+    if not _has_config_preset_column(conn, 'is_builtin'):
+        with op.batch_alter_table('config_preset', schema=None) as batch_op:
+            batch_op.add_column(sa.Column(
+                'is_builtin',
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text('0'),
+            ))
+
+    _mark_default_builtin(conn)
+
+
 def downgrade():
-    with op.batch_alter_table('config_preset', schema=None) as batch_op:
-        batch_op.drop_column('is_builtin')
+    conn = op.get_bind()
+    _restore_default_folder()
+    _mark_default_legacy(conn)
+
+    if _has_config_preset_column(conn, 'is_builtin'):
+        with op.batch_alter_table('config_preset', schema=None) as batch_op:
+            batch_op.drop_column('is_builtin')

@@ -343,22 +343,27 @@ def update_preset_api(preset_id):
     if not preset:
         return jsonify({"error": {"message": "Preset not found."}}), 404
 
+    name_provided = 'name' in data
     requested_name = data.get('name')
-    new_name = requested_name.strip() if isinstance(requested_name, str) else requested_name
-    if preset.is_builtin and new_name and new_name != preset.name:
-        return jsonify({"error": {"message": "Cannot rename a built-in preset."}}), 403
+    new_name = None
+    if name_provided:
+        if not isinstance(requested_name, str):
+            return jsonify({"error": {"message": "Preset name must be a string."}}), 400
+        new_name = requested_name.strip()
+        data['name'] = new_name
+        if preset.is_builtin and new_name != preset.name:
+            return jsonify({"error": {"message": "Cannot rename a built-in preset."}}), 403
 
     if 'checked_plugins' in data and not isinstance(data['checked_plugins'], list):
         return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
 
     # Check for name change
-    if new_name and new_name != preset.name:
+    if name_provided and new_name != preset.name:
         is_valid, error, reason = validate_user_preset_name(
             new_name, current_preset_id=preset.id
         )
         if not is_valid:
             return jsonify({"error": {"message": error}}), _validation_status(reason)
-        data['name'] = new_name
 
     # Validate draft before any filesystem mutations
     draft_id = data.get('draft_id')
@@ -399,7 +404,7 @@ def update_preset_api(preset_id):
             _write_preset_checked_plugins(preset.path, data['checked_plugins'])
 
         # Handle name change (rename folder)
-        if new_name and new_name != preset.name:
+        if name_provided and new_name != preset.name:
             old_path = preset.path
             new_path = os.path.join(PRESETS_DIR, new_name)
             shutil.move(old_path, new_path)

@@ -39,9 +39,18 @@ seed_builtin_presets() {
     BUILTIN_PRESETS_DST=/app/configs/presets/_builtin
     if [ -d "$BUILTIN_PRESETS_SRC" ]; then
         mkdir -p "$BUILTIN_PRESETS_DST"
-        cp -an "$BUILTIN_PRESETS_SRC/." "$BUILTIN_PRESETS_DST/"
+        for preset_dir in "$BUILTIN_PRESETS_SRC"/*; do
+            [ -d "$preset_dir" ] || continue
+            preset_name="${preset_dir##*/}"
+            if [ "$preset_name" = "default" ] && [ -d /app/configs/presets/default ] && [ ! -d "$BUILTIN_PRESETS_DST/default" ]; then
+                continue
+            fi
+            cp -an "$preset_dir" "$BUILTIN_PRESETS_DST/"
+        done
     fi
 }
+
+seed_builtin_presets
 
 # ── Database init + migrations ─────────────────────────────────────────────────
 # Only the web service runs migrations (RUN_MIGRATIONS=true set in compose).
