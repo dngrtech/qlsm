@@ -16,6 +16,9 @@
 # ── Frontend source (Stage 1 — build only) ─────────────────────────────────────
 !frontend-react/
 
+# ── User-facing docs (symlinked into frontend public/ for the /docs route) ─────
+!docs/
+
 # ── Bundled bootstrap data (seed first-run runtime volume) ────────────────────
 # Keep only built-in presets in the build context.
 !configs/
