@@ -19,20 +19,44 @@ depends_on = None
 
 
 PRESETS_DIR = os.path.join('configs', 'presets')
+BUILTIN_PRESETS_DIR = os.path.join(PRESETS_DIR, '_builtin')
 LEGACY_DEFAULT_DIR = os.path.join(PRESETS_DIR, 'default')
-BUILTIN_DEFAULT_DIR = os.path.join(PRESETS_DIR, '_builtin', 'default')
+BUILTIN_DEFAULT_DIR = os.path.join(BUILTIN_PRESETS_DIR, 'default')
 
 
 def _migrate_default_folder():
-    os.makedirs(os.path.dirname(BUILTIN_DEFAULT_DIR), exist_ok=True)
     if os.path.isdir(LEGACY_DEFAULT_DIR) and os.path.exists(BUILTIN_DEFAULT_DIR):
         raise RuntimeError(
             "Cannot migrate default preset: both configs/presets/default and "
             "configs/presets/_builtin/default exist. Preserve the legacy default "
             "folder manually, remove the conflicting destination, then rerun migrations."
         )
+    if os.path.isdir(LEGACY_DEFAULT_DIR) and os.path.isdir(BUILTIN_PRESETS_DIR):
+        existing_entries = os.listdir(BUILTIN_PRESETS_DIR)
+        if existing_entries:
+            raise RuntimeError(
+                "Cannot migrate default preset: configs/presets/_builtin already "
+                "exists and is not empty. Rename the existing _builtin user preset "
+                "folder, then rerun migrations."
+            )
+    os.makedirs(BUILTIN_PRESETS_DIR, exist_ok=True)
     if os.path.isdir(LEGACY_DEFAULT_DIR) and not os.path.exists(BUILTIN_DEFAULT_DIR):
         shutil.move(LEGACY_DEFAULT_DIR, BUILTIN_DEFAULT_DIR)
+
+
+def _ensure_no_internal_namespace_collision(conn):
+    existing = conn.execute(
+        sa.text("""
+            SELECT id FROM config_preset
+            WHERE lower(name) = '_builtin' AND is_builtin = 0
+            LIMIT 1
+        """)
+    ).first()
+    if existing:
+        raise RuntimeError(
+            "Cannot migrate built-in presets: a user preset named '_builtin' "
+            "already exists. Rename or delete that preset before running migrations."
+        )
 
 
 def upgrade():
@@ -44,9 +68,10 @@ def upgrade():
             server_default=sa.text('0'),
         ))
 
+    conn = op.get_bind()
+    _ensure_no_internal_namespace_collision(conn)
     _migrate_default_folder()
 
-    conn = op.get_bind()
     conn.execute(
         sa.text("""
             UPDATE config_preset

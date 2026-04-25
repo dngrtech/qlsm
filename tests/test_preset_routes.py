@@ -610,3 +610,4 @@ def test_delete_default_preset_prevented(client, app, tmp_path, monkeypatch):
     response = client.delete(f'/api/presets/{preset_id}', headers=headers)
     assert response.status_code == 403
     assert 'Cannot delete a built-in preset' in response.get_json()['error']['message']
+

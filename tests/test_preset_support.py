@@ -24,6 +24,14 @@ def test_validate_preset_name_format_rejects_bad_names():
     assert validate_preset_name_format('duel-2026')[0] is True
 
 
+def test_validate_user_preset_name_rejects_internal_namespace(app_context):
+    ok, error, reason = validate_user_preset_name('_builtin')
+
+    assert ok is False
+    assert reason == 'internal'
+    assert 'reserved for internal preset storage' in error
+
+
 def test_validate_user_preset_name_rejects_builtin_collision(app_context):
     preset = ConfigPreset(
         name='duel',

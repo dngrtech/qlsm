@@ -7,6 +7,7 @@ from ui.database import get_preset_by_name
 PRESETS_DIR = os.path.join('configs', 'presets')
 BUILTIN_PRESETS_DIR = os.path.join(PRESETS_DIR, '_builtin')
 PRESET_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+INTERNAL_PRESET_NAMES = {'_builtin'}
 
 
 def user_preset_path(name, configs_base=None):
@@ -17,6 +18,10 @@ def user_preset_path(name, configs_base=None):
 
 def builtin_preset_path(name):
     return os.path.join(BUILTIN_PRESETS_DIR, name)
+
+
+def is_internal_preset_name(name):
+    return isinstance(name, str) and name.lower() in INTERNAL_PRESET_NAMES
 
 
 def resolve_preset_path(name, configs_base=None):
@@ -42,6 +47,8 @@ def validate_user_preset_name(name, current_preset_id=None):
     is_valid, error = validate_preset_name_format(name)
     if not is_valid:
         return False, error, 'format'
+    if is_internal_preset_name(name):
+        return False, f"The name '{name}' is reserved for internal preset storage.", 'internal'
 
     existing = get_preset_by_name(name)
     if existing and existing.id != current_preset_id:

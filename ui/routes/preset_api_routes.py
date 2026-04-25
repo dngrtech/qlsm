@@ -5,7 +5,12 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from ui import db
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
-from ui.preset_support import PRESETS_DIR, resolve_preset_subdir, validate_user_preset_name
+from ui.preset_support import (
+    PRESETS_DIR,
+    is_internal_preset_name,
+    resolve_preset_subdir,
+    validate_user_preset_name,
+)
 
 preset_api_bp = Blueprint('preset_api_routes', __name__)  # url_prefix will be /presets
 
@@ -442,6 +447,8 @@ def delete_preset_api(preset_id):
 
     if preset.is_builtin:
         return jsonify({"error": {"message": "Cannot delete a built-in preset."}}), 403
+    if is_internal_preset_name(preset.name):
+        return jsonify({"error": {"message": "Cannot delete an internal preset namespace."}}), 403
 
     try:
         preset_name = preset.name

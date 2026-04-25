@@ -9,6 +9,7 @@ from ui.models import ConfigPreset
 from ui.preset_support import (
     BUILTIN_PRESETS_DIR,
     builtin_preset_path,
+    is_internal_preset_name,
     validate_preset_name_format,
 )
 
@@ -52,6 +53,10 @@ def sync_builtin_presets(remove_orphaned=False):
         is_valid, error = validate_preset_name_format(name)
         if not is_valid:
             raise BuiltinPresetError(f"Invalid built-in preset name '{name}': {error}")
+        if is_internal_preset_name(name):
+            raise BuiltinPresetError(
+                f"Invalid built-in preset name '{name}': name is reserved for internal preset storage."
+            )
 
         manifest = _load_manifest(preset_dir)
         expected_path = builtin_preset_path(name)

@@ -75,6 +75,16 @@ def test_sync_builtin_presets_rejects_invalid_manifest(runner, tmp_path, monkeyp
     assert 'description must be a non-empty string' in result.output
 
 
+def test_sync_builtin_presets_rejects_internal_namespace_name(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_manifest('_builtin', 'Bad internal name')
+
+    result = runner.invoke(args=['sync-builtin-presets'])
+
+    assert result.exit_code != 0
+    assert 'reserved for internal preset storage' in result.output
+
+
 def test_sync_builtin_presets_remove_orphaned_deletes_missing_builtin_row(
     runner, app, tmp_path, monkeypatch
 ):
@@ -116,6 +126,16 @@ def test_add_preset_rejects_builtin_name(runner, app, tmp_path, monkeypatch):
     assert 'reserved by a built-in preset' in result.output
 
 
+def test_add_preset_rejects_internal_namespace(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(args=['add-preset', '--name', '_builtin'])
+
+    assert result.exit_code == 0
+    assert 'reserved for internal preset storage' in result.output
+    assert not os.path.exists(os.path.join('configs', 'presets', '_builtin'))
+
+
 def test_delete_preset_rejects_builtin(runner, app, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with app.app_context():
@@ -131,3 +151,25 @@ def test_delete_preset_rejects_builtin(runner, app, tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert "Cannot delete built-in preset 'default'" in result.output
+
+
+def test_delete_preset_rejects_internal_namespace(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    marker = os.path.join('configs', 'presets', '_builtin', 'default', 'server.cfg')
+    os.makedirs(os.path.dirname(marker), exist_ok=True)
+    with open(marker, 'w') as handle:
+        handle.write('set sv_hostname "default"\n')
+    with app.app_context():
+        db.session.add(ConfigPreset(
+            name='_builtin',
+            description='Internal namespace row',
+            path=os.path.join('configs', 'presets', '_builtin'),
+            is_builtin=False,
+        ))
+        db.session.commit()
+
+    result = runner.invoke(args=['delete-preset', '--name', '_builtin'])
+
+    assert result.exit_code == 0
+    assert "Cannot delete internal preset namespace '_builtin'" in result.output
+    assert os.path.exists(marker)

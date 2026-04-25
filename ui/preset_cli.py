@@ -13,7 +13,11 @@ from ui.database import (
     get_preset_by_name,
     get_presets,
 )
-from ui.preset_support import user_preset_path, validate_user_preset_name
+from ui.preset_support import (
+    is_internal_preset_name,
+    user_preset_path,
+    validate_user_preset_name,
+)
 
 
 @click.command('add-preset')
@@ -111,6 +115,9 @@ def delete_preset_command(id, name):
 
     if preset.is_builtin:
         click.echo(f"Error: Cannot delete built-in preset '{preset.name}'.")
+        return
+    if is_internal_preset_name(preset.name):
+        click.echo(f"Error: Cannot delete internal preset namespace '{preset.name}'.")
         return
 
     try:
