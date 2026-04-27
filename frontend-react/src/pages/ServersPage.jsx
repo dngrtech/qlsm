@@ -235,7 +235,7 @@ export default function ServersPage() {
                                     {host.provider || 'standalone'}
                                 </span>
                                 <span className="host-region-cell text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
-                                    <span className="host-region-mobile-provider capitalize">{host.provider || 'standalone'}</span>
+                                    <span className="host-region-mobile-provider capitalize" aria-hidden="true">{host.provider || 'standalone'}</span>
                                     <MapPin size={14} className="host-region-icon text-theme-muted flex-shrink-0" />
                                     {host.is_standalone
                                         ? (host.timezone || '—')
