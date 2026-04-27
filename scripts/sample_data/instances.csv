@@ -1,0 +1,4 @@
+name,host_name,port,hostname,lan_rate_enabled,qlx_plugins,zmq_rcon_port,zmq_rcon_password,zmq_stats_port,zmq_stats_password,status,config
+paris-ffa,paris-01,27960,Paris FFA #1,false,,,,,,running,
+home-duel,home-server,27960,Home Duel Server,false,,,,,,idle,
+berlin-ctf,berlin-01,27961,Berlin CTF #1,false,,,,,,running,

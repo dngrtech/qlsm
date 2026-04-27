@@ -1,0 +1,4 @@
+name,provider,ip_address,region,machine_size,is_standalone,ssh_user,ssh_port,ssh_key_path,os_type,timezone,status,qlfilter_status,auto_restart_schedule,workspace_name
+paris-01,vultr,,cdg,vc2-2c-4gb,false,ansible,22,,debian,Europe/Paris,active,active,,paris-01
+home-server,standalone,192.168.1.100,,,true,ansible,22,,ubuntu,America/New_York,active,not_installed,,
+berlin-01,vultr,,fra,vc2-1c-2gb,false,ansible,22,,debian,Europe/Berlin,active,,,,
