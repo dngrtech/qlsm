@@ -53,12 +53,12 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
           <div>
             <Menu.Button
               ref={refs.setReference}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md text-theme-muted hover:text-theme-secondary hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus:outline-none transition-all ${open ? 'bg-black/[0.04] dark:bg-white/[0.04] text-theme-secondary' : ''
+              className={`instance-actions-trigger inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md text-theme-muted hover:text-theme-secondary hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus:outline-none transition-all ${open ? 'bg-black/[0.04] dark:bg-white/[0.04] text-theme-secondary' : ''
                 }`}
               title="Instance Settings"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></svg>
-              Actions
+              <span className="instance-actions-label">Actions</span>
             </Menu.Button>
           </div>
           <Portal>

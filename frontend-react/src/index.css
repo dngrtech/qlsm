@@ -1067,6 +1067,15 @@ body {
     display: none;
   }
 
+  .instance-actions-trigger {
+    gap: 0;
+    padding: 6px;
+  }
+
+  .instance-actions-label {
+    display: none;
+  }
+
   .instance-name-cell {
     grid-column: 2;
     grid-row: 1;
