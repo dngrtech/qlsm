@@ -1016,7 +1016,7 @@ body {
     grid-column: 3;
     grid-row: 1;
     justify-self: end;
-    padding-right: 28px;
+    padding-right: 64px;
   }
 
   .host-qlfilter-cell {
@@ -1028,8 +1028,19 @@ body {
 
   .host-actions-cell {
     grid-column: 3;
-    grid-row: 2 / span 2;
-    align-self: start;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    padding-right: 28px;
+  }
+
+  .host-actions-trigger {
+    gap: 0;
+    padding: 6px;
+  }
+
+  .host-actions-label {
+    display: none;
   }
 
   .instance-name-cell {
