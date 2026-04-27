@@ -1175,6 +1175,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  padding-top: 64px;
   padding-bottom: var(--footer-height);
   background: var(--surface-overlay);
   border-left: 1px solid var(--surface-border);
