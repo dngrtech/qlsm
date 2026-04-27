@@ -1,8 +1,9 @@
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Menu, Transition, Portal } from '@headlessui/react';
 import { useFloating, shift, offset, autoUpdate, flip } from '@floating-ui/react-dom';
 import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon } from 'lucide-react';
 import { HostStatus, QLFILTER_STATUS } from '../utils/statusEnums';
+import ConfirmationModal from './ConfirmationModal';
 
 function HostActionsMenu({
   host,
@@ -14,6 +15,8 @@ function HostActionsMenu({
   onOpenUpdateWorkshop,
   onOpenAutoRestart
 }) {
+  const [isInstallQlFilterModalOpen, setIsInstallQlFilterModalOpen] = useState(false);
+
   const { x, y, refs, strategy } = useFloating({
     placement: 'bottom-end',
     middleware: [
@@ -31,6 +34,16 @@ function HostActionsMenu({
   const isHostReady = hostStatus === HostStatus.ACTIVE.toLowerCase() || hostStatus === HostStatus.ERROR.toLowerCase();
 
   return (
+    <>
+    <ConfirmationModal
+      isOpen={isInstallQlFilterModalOpen}
+      onClose={() => setIsInstallQlFilterModalOpen(false)}
+      onConfirm={() => { if (typeof onInstallQlfilter === 'function') onInstallQlfilter(host.id); setIsInstallQlFilterModalOpen(false); }}
+      title="Install QLFilter"
+      message="Installing QLFilter will reconfigure this host. Any running instances will be temporarily unavailable during the configuration process."
+      confirmButtonText="Install"
+      confirmButtonVariant="primary"
+    />
     <Menu as="div" className="relative inline-block text-left ml-2">
       {({ open, close: closeMenu }) => (
         <>
@@ -157,7 +170,7 @@ function HostActionsMenu({
                       } else if (canInstall) {
                         buttonText = 'Install QLFilter';
                         Icon = ShieldCheck;
-                        action = () => { if (typeof onInstallQlfilter === 'function') onInstallQlfilter(host.id); closeMenu(); };
+                        action = () => { closeMenu(); setIsInstallQlFilterModalOpen(true); };
                       } else {
                         buttonText = 'QLFilter Unknown';
                         Icon = ShieldCheck;
@@ -208,6 +221,7 @@ function HostActionsMenu({
         </>
       )}
     </Menu>
+    </>
   );
 }
 
