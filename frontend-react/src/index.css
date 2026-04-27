@@ -973,7 +973,8 @@ body {
     padding: 6px;
   }
 
-  .host-actions-label {
+  .host-actions-label,
+  .instance-actions-label {
     display: none;
   }
 }
