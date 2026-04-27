@@ -749,16 +749,11 @@ body {
 
 .server-grid {
   display: grid;
-  grid-template-columns: 56px 1.2fr 1fr 1.25fr 70px 60px 70px 220px 80px;
+  column-gap: 12px;
+  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 80px;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
-}
-
-.server-grid.host-header-row,
-.server-grid.host-row {
-  column-gap: 12px;
-  grid-template-columns: 48px minmax(0, 1.2fr) minmax(0, 0.95fr) minmax(0, 1.1fr) 64px 54px 64px 124px 60px 80px;
 }
 
 /* Expand/collapse animation */
@@ -809,6 +804,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.instance-actions-cell {
+  grid-column: 10;
 }
 
 /* Instance row border */
@@ -880,7 +879,8 @@ body {
 /* DragOverlay floating row */
 .instance-row-overlay {
   display: grid;
-  grid-template-columns: 40px 1.2fr 1fr 1.25fr 70px 60px 70px 220px 80px;
+  column-gap: 12px;
+  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 80px;
   align-items: center;
   padding: 14px 20px;
   background: var(--surface-raised);
@@ -958,10 +958,10 @@ body {
 }
 
 @media (min-width: 640px) and (max-width: 900px) {
-  .server-grid.host-header-row,
-  .server-grid.host-row {
+  .server-grid,
+  .instance-row-overlay {
     column-gap: 14px;
-    grid-template-columns: 48px minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) 58px 48px 58px 112px 54px 32px;
+    grid-template-columns: 48px minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) 58px 48px 58px 112px 44px 32px;
   }
 
   .host-actions-trigger {
