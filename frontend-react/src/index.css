@@ -755,6 +755,11 @@ body {
   padding-right: 20px;
 }
 
+.server-grid.host-header-row,
+.server-grid.host-row {
+  grid-template-columns: 56px 1.2fr 1fr 1.25fr 70px 60px 70px 150px 86px 80px;
+}
+
 /* Expand/collapse animation */
 .expand-icon {
   transition: transform 0.25s ease;
@@ -792,6 +797,17 @@ body {
 /* Host column header row */
 .host-header-row {
   border-bottom: 1px solid var(--surface-border);
+}
+
+.host-qlfilter-header,
+.host-qlfilter-cell {
+  justify-self: center;
+}
+
+.host-qlfilter-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Instance row border */
@@ -1001,9 +1017,15 @@ body {
     justify-self: end;
   }
 
+  .host-qlfilter-cell {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+  }
+
   .host-actions-cell {
     grid-column: 3;
-    grid-row: 2 / span 2;
+    grid-row: 3;
     align-self: start;
   }
 

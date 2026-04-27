@@ -4,6 +4,7 @@ import { copyToClipboard as copyTextToClipboard } from '../utils/clipboard';
 import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, MapPin, GripVertical } from 'lucide-react';
 import { useServers } from '../hooks/useServers';
 import StatusIndicator from '../components/StatusIndicator';
+import QLFilterIndicator from '../components/hosts/QLFilterIndicator';
 import ConfirmationModal from '../components/ConfirmationModal';
 import HostDetailDrawer from '../components/hosts/HostDetailDrawer';
 import AddHostModal from '../components/hosts/AddHostModal';
@@ -206,6 +207,7 @@ export default function ServersPage() {
                                 <span className="col-label">Region</span>
                                 <span className="col-label" style={{ gridColumn: 'span 3' }}>IP Address</span>
                                 <span className="col-label">Status</span>
+                                <span className="col-label host-qlfilter-header">QL-Filter</span>
                                 <span />
                             </div>
 
@@ -255,6 +257,9 @@ export default function ServersPage() {
                                         ? <StatusIndicator status="configuring" pollableStatuses={['configuring']} />
                                         : <StatusIndicator status={host.status} pollableStatuses={POLLABLE_HOST_STATUSES} />
                                     }
+                                </div>
+                                <div className="host-qlfilter-cell" onClick={(e) => e.stopPropagation()}>
+                                    <QLFilterIndicator qlfilterStatus={host.qlfilter_status} />
                                 </div>
                                 <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
                                     <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} POLLABLE_STATUSES={POLLABLE_HOST_STATUSES} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenAutoRestart={openAutoRestartModal} />
