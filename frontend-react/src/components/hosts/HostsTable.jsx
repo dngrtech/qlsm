@@ -68,6 +68,9 @@ function HostsTable({
                 Status {getSortIcon('status')}
               </button>
             </th>
+            <th className="py-2 px-2 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider w-[8%]">
+              QL-Filter
+            </th>
             {/* Increased font weight */}
             <th className="py-2 px-2 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider w-[5%]">
               {/* Actions */}

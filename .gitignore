@@ -89,6 +89,8 @@ terraform/vultr-root/*
 # ── Scripts ───────────────────────────────────────────────────────────────────
 !scripts/
 !scripts/**
+scripts/seed_db.py
+scripts/sample_data/
 
 # ── QL Assets ────────────────────────────────────────────────────────────────
 !ql-assets/

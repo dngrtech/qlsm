@@ -4,6 +4,7 @@ import { Copy, Check } from 'lucide-react';
 import { formatVultrPlan, formatVultrRegion } from '../../utils/formatters';
 import HostActionsMenu from '../HostActionsMenu'; // Path relative to HostsTableRow.jsx
 import StatusIndicator from '../StatusIndicator'; // Import the new component
+import QLFilterIndicator from './QLFilterIndicator';
 
 function HostsTableRow({
   host,
@@ -90,6 +91,9 @@ function HostsTableRow({
       <td className="py-2 px-2 text-sm">
         {/* Use the StatusIndicator component */}
         <StatusIndicator status={host.status} pollableStatuses={POLLABLE_STATUSES} />
+      </td>
+      <td className="py-2 px-2 text-sm text-center">
+        <QLFilterIndicator qlfilterStatus={host.qlfilter_status} />
       </td>
       {/* Adjusted dark text color to slate-400 */}
       <td className="py-2 px-2 text-sm text-gray-500 dark:text-slate-400 text-right">
