@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { copyToClipboard as copyTextToClipboard } from '../utils/clipboard';
-import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, MapPin, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, Globe2, MapPin, GripVertical } from 'lucide-react';
 import { useServers } from '../hooks/useServers';
 import StatusIndicator from '../components/StatusIndicator';
 import QLFilterIndicator from '../components/hosts/QLFilterIndicator';
@@ -233,11 +233,15 @@ export default function ServersPage() {
                                 >
                                     {host.name}
                                 </button>
-                                <span className="host-provider-cell text-[13px] capitalize truncate text-theme-secondary">
-                                    {host.provider || 'standalone'}
+                                <span className="host-provider-cell text-[13px] capitalize truncate text-theme-secondary flex items-center gap-1.5">
+                                    <Globe2 size={14} className="host-provider-icon text-theme-muted flex-shrink-0" aria-hidden="true" />
+                                    <span className="truncate">{host.provider || 'standalone'}</span>
                                 </span>
                                 <span className="host-region-cell text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
-                                    <span className="host-region-mobile-provider capitalize" aria-hidden="true">{host.provider || 'standalone'}</span>
+                                    <span className="host-region-mobile-provider capitalize">
+                                        <Globe2 size={14} className="host-provider-icon text-theme-muted flex-shrink-0" aria-hidden="true" />
+                                        {host.provider || 'standalone'}
+                                    </span>
                                     <MapPin size={14} className="host-region-icon text-theme-muted flex-shrink-0" />
                                     {host.is_standalone
                                         ? (host.timezone || '—')

@@ -841,6 +841,10 @@ body {
   display: none;
 }
 
+.host-provider-icon {
+  color: var(--text-muted);
+}
+
 /* Drag handle for sortable instance rows */
 .drag-handle {
   display: flex;
@@ -996,7 +1000,9 @@ body {
   }
 
   .host-region-mobile-provider {
-    display: inline;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-weight: 600;
     color: var(--text-secondary);
   }
