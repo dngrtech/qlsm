@@ -1802,7 +1802,7 @@ body {
   animation: navbar-fade-in 0.4s ease-out 0.2s backwards;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .navbar-section-center {
     display: none;
   }
@@ -2498,7 +2498,7 @@ body {
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   .navbar-content {
     gap: 16px;
     padding: 0 16px;
@@ -2954,7 +2954,7 @@ body {
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
 
   .logs-modal-filter-option,
   .logs-modal-value-btn {
