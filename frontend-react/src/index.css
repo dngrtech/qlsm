@@ -958,7 +958,8 @@ body {
     display: none;
   }
 
-  .server-grid {
+  .server-grid,
+  .server-grid.host-row {
     grid-template-columns: 36px minmax(0, 1fr) auto;
     gap: 8px 12px;
     padding-left: 12px;
@@ -1015,17 +1016,19 @@ body {
     grid-column: 3;
     grid-row: 1;
     justify-self: end;
+    padding-right: 28px;
   }
 
   .host-qlfilter-cell {
     grid-column: 3;
-    grid-row: 2;
+    grid-row: 1;
+    align-self: center;
     justify-self: end;
   }
 
   .host-actions-cell {
     grid-column: 3;
-    grid-row: 3;
+    grid-row: 2 / span 2;
     align-self: start;
   }
 
