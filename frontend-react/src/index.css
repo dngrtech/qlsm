@@ -1007,10 +1007,6 @@ body {
     color: var(--text-secondary);
   }
 
-  .host-region-icon {
-    display: none;
-  }
-
   .host-ip-cell {
     grid-column: 2 / 4 !important;
     grid-row: 3;
