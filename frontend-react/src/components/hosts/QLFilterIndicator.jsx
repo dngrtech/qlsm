@@ -10,7 +10,17 @@ function QLFilterIndicator({ qlfilterStatus }) {
 
   const isEnabled = qlfilterStatus === QLFILTER_STATUS.ACTIVE;
   const iconSrc = isEnabled ? '/images/qlfilter-on.png' : '/images/qlfilter-off.png';
-  const tooltipText = isEnabled ? 'QLFilter enabled' : 'QLFilter not installed';
+
+  const STATUS_LABEL = {
+    [QLFILTER_STATUS.ACTIVE]:        'QLFilter enabled',
+    [QLFILTER_STATUS.INACTIVE]:      'QLFilter installed (inactive)',
+    [QLFILTER_STATUS.INSTALLING]:    'QLFilter installing…',
+    [QLFILTER_STATUS.UNINSTALLING]:  'QLFilter uninstalling…',
+    [QLFILTER_STATUS.ERROR]:         'QLFilter error',
+    [QLFILTER_STATUS.NOT_INSTALLED]: 'QLFilter not installed',
+    [QLFILTER_STATUS.UNKNOWN]:       'QLFilter status unknown',
+  };
+  const tooltipText = STATUS_LABEL[qlfilterStatus] ?? STATUS_LABEL[QLFILTER_STATUS.UNKNOWN];
 
   const { x, y, refs, strategy, middlewareData, placement: finalPlacement } = useFloating({
     placement: 'top',
@@ -47,7 +57,10 @@ function QLFilterIndicator({ qlfilterStatus }) {
         ref={refs.setReference}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
-        className="inline-flex cursor-default transition-opacity duration-150 hover:opacity-75"
+        onFocus={handleEnter}
+        onBlur={handleLeave}
+        tabIndex={0}
+        className="inline-flex cursor-default transition-opacity duration-150 hover:opacity-75 focus:outline-none"
       >
         <img
           src={iconSrc}
