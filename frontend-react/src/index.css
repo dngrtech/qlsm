@@ -750,7 +750,7 @@ body {
 .server-grid {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 80px;
+  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 90px;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
@@ -798,6 +798,10 @@ body {
 .host-qlfilter-header,
 .host-qlfilter-cell {
   justify-self: center;
+}
+
+.host-qlfilter-header {
+  white-space: nowrap;
 }
 
 .host-qlfilter-cell {
@@ -880,7 +884,7 @@ body {
 .instance-row-overlay {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 80px;
+  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 90px;
   align-items: center;
   padding: 14px 20px;
   background: var(--surface-raised);

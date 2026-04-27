@@ -134,6 +134,9 @@ def poll_all_hosts():
         ]
         if not running:
             continue
+        if not host.ssh_key_path:
+            logger.debug("Skipping host %s — no SSH key configured", host.name)
+            continue
         total_instances += len(running)
         _fetch_and_cache_host(host, running, redis_client)
 
