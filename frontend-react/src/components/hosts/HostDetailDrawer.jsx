@@ -337,6 +337,7 @@ export default function HostDetailDrawer({
         message="Installing QLFilter will reconfigure this host. Any running instances will be temporarily unavailable during the configuration process."
         confirmButtonText="Install"
         confirmButtonVariant="primary"
+        zIndexClass="z-50"
       />
     </>
   );
