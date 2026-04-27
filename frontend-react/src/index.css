@@ -1024,6 +1024,7 @@ body {
     grid-row: 1;
     align-self: center;
     justify-self: end;
+    padding-right: 28px;
   }
 
   .host-actions-cell {
@@ -1031,7 +1032,6 @@ body {
     grid-row: 1;
     align-self: center;
     justify-self: end;
-    padding-right: 28px;
   }
 
   .host-actions-trigger {
