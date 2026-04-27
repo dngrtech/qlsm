@@ -821,6 +821,10 @@ body {
   background: rgba(255, 255, 255, 0.015);
 }
 
+.host-region-mobile-provider {
+  display: none;
+}
+
 /* Drag handle for sortable instance rows */
 .drag-handle {
   display: flex;
@@ -965,20 +969,28 @@ body {
   }
 
   .host-provider-cell {
+    display: none;
+  }
+
+  .host-region-cell {
     grid-column: 2;
     grid-row: 2;
     min-width: 0;
   }
 
-  .host-region-cell {
-    grid-column: 2;
-    grid-row: 3;
-    min-width: 0;
+  .host-region-mobile-provider {
+    display: inline;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .host-region-icon {
+    display: none;
   }
 
   .host-ip-cell {
     grid-column: 2 / 4 !important;
-    grid-row: 4;
+    grid-row: 3;
     min-width: 0;
     flex-wrap: wrap;
   }
