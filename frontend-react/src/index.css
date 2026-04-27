@@ -757,7 +757,8 @@ body {
 
 .server-grid.host-header-row,
 .server-grid.host-row {
-  grid-template-columns: 56px 1.2fr 1fr 1.25fr 70px 60px 70px 150px 86px 80px;
+  column-gap: 12px;
+  grid-template-columns: 48px minmax(0, 1.2fr) minmax(0, 0.95fr) minmax(0, 1.1fr) 64px 54px 64px 124px 60px 80px;
 }
 
 /* Expand/collapse animation */
@@ -954,6 +955,23 @@ body {
   transform: translateX(-50%);
   border: 5px solid transparent;
   border-top-color: var(--surface-border-strong);
+}
+
+@media (min-width: 640px) and (max-width: 900px) {
+  .server-grid.host-header-row,
+  .server-grid.host-row {
+    column-gap: 14px;
+    grid-template-columns: 48px minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) 58px 48px 58px 112px 54px 32px;
+  }
+
+  .host-actions-trigger {
+    gap: 0;
+    padding: 6px;
+  }
+
+  .host-actions-label {
+    display: none;
+  }
 }
 
 @media (max-width: 639px) {

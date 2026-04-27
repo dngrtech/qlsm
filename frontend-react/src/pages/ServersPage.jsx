@@ -228,28 +228,30 @@ export default function ServersPage() {
                                 </div>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); handleOpenHostDrawer(host.id); }}
-                                    className="host-name-cell text-[15px] font-semibold hover:underline text-left truncate"
+                                    className="host-name-cell text-[15px] font-semibold hover:underline text-left truncate min-w-0"
                                     style={{ color: 'var(--accent-primary)' }}
                                 >
                                     {host.name}
                                 </button>
-                                <span className="host-provider-cell text-[13px] capitalize truncate text-theme-secondary flex items-center gap-1.5">
+                                <span className="host-provider-cell text-[13px] capitalize truncate text-theme-secondary flex items-center gap-1.5 min-w-0">
                                     <Globe size={14} className="host-provider-icon text-theme-muted flex-shrink-0" aria-hidden="true" />
                                     <span className="truncate">{host.provider || 'standalone'}</span>
                                 </span>
-                                <span className="host-region-cell text-[13px] truncate text-theme-secondary flex items-center gap-1.5">
+                                <span className="host-region-cell text-[13px] truncate text-theme-secondary flex items-center gap-1.5 min-w-0">
                                     <span className="host-region-mobile-provider capitalize">
                                         <Globe size={14} className="host-provider-icon text-theme-muted flex-shrink-0" aria-hidden="true" />
                                         {host.provider || 'standalone'}
                                     </span>
                                     <MapPin size={14} className="host-region-icon text-theme-muted flex-shrink-0" />
-                                    {host.is_standalone
-                                        ? (host.timezone || '—')
-                                        : (formatVultrRegion(host.region) || '—')
-                                    }
+                                    <span className="truncate">
+                                        {host.is_standalone
+                                            ? (host.timezone || '—')
+                                            : (formatVultrRegion(host.region) || '—')
+                                        }
+                                    </span>
                                 </span>
-                                <div className="host-ip-cell flex items-center gap-2 truncate" style={{ gridColumn: 'span 3' }} onClick={(e) => e.stopPropagation()}>
-                                    <span className="font-mono text-[13px] text-theme-secondary">{host.ip_address || '—'}</span>
+                                <div className="host-ip-cell flex items-center gap-2 truncate min-w-0" style={{ gridColumn: 'span 3' }} onClick={(e) => e.stopPropagation()}>
+                                    <span className="font-mono text-[13px] text-theme-secondary truncate">{host.ip_address || '—'}</span>
                                     {host.ip_address && (
                                         <button onClick={(e) => copyToClipboard(host.ip_address, host.id, e)} className="p-1 text-theme-muted hover:text-theme-secondary rounded transition-colors hover:bg-black/5 dark:hover:bg-white/5">
                                             {copiedIp === host.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
