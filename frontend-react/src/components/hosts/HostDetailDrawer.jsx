@@ -176,12 +176,12 @@ export default function HostDetailDrawer({
         <div className="fixed inset-0 z-40 overflow-hidden pointer-events-none">
           <div className="fixed inset-y-0 right-0 flex max-w-full pointer-events-none">
             <Transition.Child as={Fragment} enter="transform transition ease-out duration-300" enterFrom="translate-x-full" enterTo="translate-x-0" leave="transform transition ease-in duration-200" leaveFrom="translate-x-0" leaveTo="translate-x-full">
-              <div ref={panelRef} className="drawer-panel w-[420px] pointer-events-auto">
+              <div ref={panelRef} className="drawer-panel w-full sm:w-[420px] pointer-events-auto">
                 {/* Header */}
                 <div className="drawer-header">
                   <h2 className="heading-display text-lg text-theme-primary tracking-wider">Host Details</h2>
-                  <button onClick={onClose} className="p-1.5 rounded-lg text-theme-muted hover:text-theme-secondary hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                    <X size={20} />
+                  <button onClick={onClose} className="logs-modal-close-btn" aria-label="Close">
+                    <X size={18} />
                   </button>
                 </div>
 
