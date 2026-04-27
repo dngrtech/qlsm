@@ -1046,6 +1046,10 @@ body {
     align-self: start;
   }
 
+  .btn-connect {
+    display: none;
+  }
+
   .add-instance-area {
     padding-inline: 12px;
   }
