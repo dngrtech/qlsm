@@ -5,7 +5,7 @@ from rq import get_current_job
 
 # Import database and models - requires app context
 from ui import db
-from ui.models import Host, HostStatus # Need Host and HostStatus
+from ui.models import Host, HostStatus, QLFilterStatus
 from .common import append_log # Import from the common module
 # Note: No need to import _run_ansible_playbook as this task uses direct subprocess calls
 
@@ -163,6 +163,7 @@ def setup_host_ansible_logic(host_id):
 
             # --- Final Success ---
             host.status = HostStatus.ACTIVE
+            host.qlfilter_status = QLFilterStatus.NOT_INSTALLED
             append_log(host, f"Task finished successfully. Host is ACTIVE.")
             db.session.commit()
             log.info(f"Finished task setup_host_ansible for host_id: {host_id}. Status: ACTIVE")
