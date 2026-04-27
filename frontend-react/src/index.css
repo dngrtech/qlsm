@@ -750,20 +750,10 @@ body {
 .server-grid {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 90px;
+  grid-template-columns: 56px minmax(0, 1.6fr) minmax(0, 0.95fr) minmax(0, 1fr) 70px 60px 70px 140px 60px 90px;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
-}
-
-@media (min-width: 901px) {
-  .server-grid.host-header-row,
-  .server-grid.host-row {
-    /* Keep columns 5-10 aligned with instance rows while giving host names more room. */
-    grid-template-columns:
-      56px minmax(0, 1.85fr) minmax(0, 0.7fr) minmax(0, 0.9fr)
-      70px 60px 70px 220px 60px 90px;
-  }
 }
 
 /* Expand/collapse animation */
@@ -818,6 +808,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.instance-status-cell {
+  grid-column: 8 / span 2;
 }
 
 .instance-actions-cell {
@@ -894,7 +888,7 @@ body {
 .instance-row-overlay {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.25fr) 70px 60px 70px 220px 60px 90px;
+  grid-template-columns: 56px minmax(0, 1.6fr) minmax(0, 0.95fr) minmax(0, 1fr) 70px 60px 70px 140px 60px 90px;
   align-items: center;
   padding: 14px 20px;
   background: var(--surface-raised);
