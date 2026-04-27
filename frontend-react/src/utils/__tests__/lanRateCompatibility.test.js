@@ -12,6 +12,12 @@ describe('lanRateCompatibility', () => {
     expect(canEnableLanRate({ osType: 'debian', currentEnabled: false })).toBe(true);
   });
 
+  it('supports legacy debian12 host records', () => {
+    expect(isLanRateSupported('debian12')).toBe(true);
+    expect(canEnableLanRate({ osType: 'debian12', currentEnabled: false })).toBe(true);
+    expect(getLanRateUnsupportedReason('debian12')).toBe(null);
+  });
+
   it('blocks enabling on ubuntu', () => {
     expect(isLanRateSupported('ubuntu')).toBe(false);
     expect(canEnableLanRate({ osType: 'ubuntu', currentEnabled: false })).toBe(false);

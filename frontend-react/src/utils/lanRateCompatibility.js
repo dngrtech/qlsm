@@ -2,10 +2,15 @@ export const SUPPORTED_LAN_RATE_OS_TYPES = new Set(['debian']);
 export const UBUNTU_99K_LAN_RATE_MESSAGE = '99k LAN rate is not compatible with Ubuntu.';
 export const UNKNOWN_99K_LAN_RATE_MESSAGE = '99k LAN rate is only supported on Debian hosts.';
 
+const OS_TYPE_ALIASES = {
+  debian12: 'debian',
+};
+
 function normalizeOsType(osType) {
   if (typeof osType !== 'string') return null;
   const normalized = osType.trim().toLowerCase();
-  return normalized || null;
+  if (!normalized) return null;
+  return OS_TYPE_ALIASES[normalized] || normalized;
 }
 
 export function isLanRateSupported(osType) {

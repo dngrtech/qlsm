@@ -12,6 +12,15 @@ def test_host_supports_lan_rate_for_debian():
     assert host_supports_lan_rate(SimpleNamespace(os_type='debian')) is True
 
 
+def test_host_supports_lan_rate_for_legacy_debian12():
+    assert host_supports_lan_rate(SimpleNamespace(os_type='debian12')) is True
+    assert would_enable_unsupported_lan_rate(
+        SimpleNamespace(os_type='debian12'),
+        current_enabled=False,
+        requested_enabled=True,
+    ) is False
+
+
 def test_host_supports_lan_rate_for_ubuntu():
     assert host_supports_lan_rate(SimpleNamespace(os_type='ubuntu')) is False
 
