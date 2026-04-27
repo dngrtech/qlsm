@@ -50,7 +50,7 @@ function HostActionsMenu({
       onClose={() => setIsUninstallQlFilterModalOpen(false)}
       onConfirm={() => { if (typeof onUninstallQlfilter === 'function') onUninstallQlfilter(host.id); setIsUninstallQlFilterModalOpen(false); }}
       title="Uninstall QLFilter"
-      message="Uninstalling QLFilter will reconfigure this host. Any running instances will be temporarily unavailable during the configuration process."
+      message="Uninstalling QLFilter will remove packet filtering from this host and reconfigure it. Any running instances will be temporarily unavailable during the process."
       confirmButtonText="Uninstall"
       confirmButtonVariant="danger"
     />
