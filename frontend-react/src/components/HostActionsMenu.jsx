@@ -16,6 +16,7 @@ function HostActionsMenu({
   onOpenAutoRestart
 }) {
   const [isInstallQlFilterModalOpen, setIsInstallQlFilterModalOpen] = useState(false);
+  const [isUninstallQlFilterModalOpen, setIsUninstallQlFilterModalOpen] = useState(false);
 
   const { x, y, refs, strategy } = useFloating({
     placement: 'bottom-end',
@@ -43,6 +44,15 @@ function HostActionsMenu({
       message="Installing QLFilter will reconfigure this host. Any running instances will be temporarily unavailable during the configuration process."
       confirmButtonText="Install"
       confirmButtonVariant="primary"
+    />
+    <ConfirmationModal
+      isOpen={isUninstallQlFilterModalOpen}
+      onClose={() => setIsUninstallQlFilterModalOpen(false)}
+      onConfirm={() => { if (typeof onUninstallQlfilter === 'function') onUninstallQlfilter(host.id); setIsUninstallQlFilterModalOpen(false); }}
+      title="Uninstall QLFilter"
+      message="Uninstalling QLFilter will reconfigure this host. Any running instances will be temporarily unavailable during the configuration process."
+      confirmButtonText="Uninstall"
+      confirmButtonVariant="danger"
     />
     <Menu as="div" className="relative inline-block text-left ml-2">
       {({ open, close: closeMenu }) => (
@@ -166,7 +176,7 @@ function HostActionsMenu({
                       } else if (isInstalled) {
                         buttonText = 'Uninstall QLFilter';
                         Icon = ShieldOff;
-                        action = () => { if (typeof onUninstallQlfilter === 'function') onUninstallQlfilter(host.id); closeMenu(); };
+                        action = () => { closeMenu(); setIsUninstallQlFilterModalOpen(true); };
                       } else if (canInstall) {
                         buttonText = 'Install QLFilter';
                         Icon = ShieldCheck;
