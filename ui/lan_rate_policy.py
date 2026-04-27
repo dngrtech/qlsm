@@ -1,6 +1,9 @@
 """Shared rules for 99k LAN rate compatibility."""
 
 SUPPORTED_LAN_RATE_OS_TYPES = frozenset({"debian"})
+OS_TYPE_ALIASES = {
+    "debian12": "debian",
+}
 UBUNTU_99K_LAN_RATE_MESSAGE = "99k LAN rate is not compatible with Ubuntu."
 UNKNOWN_99K_LAN_RATE_MESSAGE = "99k LAN rate is only supported on Debian hosts."
 
@@ -10,7 +13,9 @@ def _normalized_os_type(host):
     if not isinstance(os_type, str):
         return None
     normalized = os_type.strip().lower()
-    return normalized or None
+    if not normalized:
+        return None
+    return OS_TYPE_ALIASES.get(normalized, normalized)
 
 
 def host_supports_lan_rate(host):

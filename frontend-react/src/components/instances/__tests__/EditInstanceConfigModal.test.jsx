@@ -239,11 +239,33 @@ describe('EditInstanceConfigModal preset saving', () => {
 
     fireEvent.click(toggle);
 
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('99k LAN rate is not compatible with Ubuntu.')).toBeInTheDocument();
+  });
+
+  it('allows enabling 99k lan rate for legacy debian12 host records', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      host_name: 'debian-host',
+      host_os_type: 'debian12',
+      lan_rate_enabled: false,
+      name: 'DebianInst',
+      qlx_plugins: '',
+    });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={9}
+        instanceName="DebianInst"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     expect(toggle).not.toBeDisabled();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(toggle);
-
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('99k LAN rate is only supported on Debian hosts.')).not.toBeInTheDocument();
   });
 });
