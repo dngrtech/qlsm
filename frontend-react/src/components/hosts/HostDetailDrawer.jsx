@@ -144,6 +144,8 @@ export default function HostDetailDrawer({
     if (actionable && !busy && !qlBusy) isRestartDisabled = false;
   }
 
+  const [isInstallQlFilterModalOpen, setIsInstallQlFilterModalOpen] = useState(false);
+
   // QLFilter button logic
   let qlBtn = { text: 'QLFilter Unknown', Icon: ShieldCheck, action: null, disabled: true, loading: false, variant: 'secondary' };
   if (internalHost && onQlfilterAction) {
@@ -156,7 +158,7 @@ export default function HostDetailDrawer({
     if (qs === QLFILTER_STATUS.ACTIVE || qs === QLFILTER_STATUS.INACTIVE) {
       qlBtn = { ...qlBtn, text: 'Uninstall QLFilter', Icon: ShieldOff, action: () => onQlfilterAction(internalHost.id, 'uninstall'), variant: 'warning' };
     } else if ([QLFILTER_STATUS.NOT_INSTALLED, QLFILTER_STATUS.ERROR, QLFILTER_STATUS.UNKNOWN].includes(qs)) {
-      qlBtn = { ...qlBtn, text: 'Install QLFilter', Icon: ShieldCheck, action: () => onQlfilterAction(internalHost.id, 'install'), variant: 'primary' };
+      qlBtn = { ...qlBtn, text: 'Install QLFilter', Icon: ShieldCheck, action: () => setIsInstallQlFilterModalOpen(true), variant: 'primary' };
     } else if (processing) {
       qlBtn.text = qs === QLFILTER_STATUS.INSTALLING.toLowerCase() ? 'Installing QLFilter' : 'Uninstalling QLFilter';
       qlBtn.Icon = Loader2;
@@ -325,6 +327,16 @@ export default function HostDetailDrawer({
           : `Are you sure you want to delete the host "${internalHost?.name || ''}"? This action cannot be undone.`}
         confirmButtonText={internalHost?.is_standalone ? 'Remove' : 'Delete'}
         confirmButtonVariant={internalHost?.is_standalone ? 'orange' : 'danger'}
+      />
+
+      <ConfirmationModal
+        isOpen={isInstallQlFilterModalOpen}
+        onClose={() => setIsInstallQlFilterModalOpen(false)}
+        onConfirm={() => { onQlfilterAction(internalHost?.id, 'install'); setIsInstallQlFilterModalOpen(false); }}
+        title="Install QLFilter"
+        message="Installing QLFilter will reconfigure this host. Any running instances will be temporarily unavailable during the configuration process."
+        confirmButtonText="Install"
+        confirmButtonVariant="primary"
       />
     </>
   );
