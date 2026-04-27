@@ -1,9 +1,10 @@
-"""Backfill qlfilter_status UNKNOWN -> NOT_INSTALLED for active hosts
+"""Backfill qlfilter_status UNKNOWN -> NOT_INSTALLED for all hosts
 
 QLFilter cannot be configured during host creation — it is only enabled
-explicitly by the user after a host is set up. Any host with UNKNOWN
-qlfilter_status that is ACTIVE was set up before this status was tracked
-correctly; NOT_INSTALLED is the accurate state for those hosts.
+explicitly by the user after a host is set up. Any host with UNKNOWN or NULL
+qlfilter_status was created before this status was tracked correctly;
+NOT_INSTALLED is the accurate state for all such hosts regardless of their
+current host status.
 
 Revision ID: 20260427000000
 Revises: 20260424103000
