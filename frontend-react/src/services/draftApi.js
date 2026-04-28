@@ -55,3 +55,23 @@ export const commitDraft = async (draftId, target) => {
   const response = await apiClient.post(`/drafts/${draftId}/commit`, target);
   return response.data.data;
 };
+
+export const getBinaryMeta = async (draftId, path, contextType, contextKey) => {
+  const params = new URLSearchParams({
+    path,
+    context_type: contextType,
+    context_key: contextKey,
+  });
+  const response = await apiClient.get(`/drafts/${draftId}/binary-meta?${params}`);
+  return response.data.data;
+};
+
+export const saveBinaryMeta = async (draftId, path, description, contextType, contextKey) => {
+  const response = await apiClient.patch(`/drafts/${draftId}/binary-meta`, {
+    path,
+    description,
+    context_type: contextType,
+    context_key: contextKey,
+  });
+  return response.data.data;
+};
