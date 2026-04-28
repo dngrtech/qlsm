@@ -65,8 +65,20 @@
             address {{ current_ip }}
             netmask {{ current_netmask }}
             gateway {{ current_gateway }}
-            dns-nameservers 1.1.1.1 8.8.8.8
+            dns-nameservers 8.8.8.8 9.9.9.9
       notify: restart networking
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Configure resolv.conf resolver options
+      copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 8.8.8.8
+          nameserver 9.9.9.9
+          options timeout:2 attempts:2 rotate
+        owner: root
+        group: root
+        mode: '0644'
       when: ansible_facts['os_family'] == 'Debian' and not is_standalone
 
   #######################################################################
