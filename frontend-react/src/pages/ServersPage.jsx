@@ -279,7 +279,7 @@ export default function ServersPage() {
                                 <div className="server-grid py-2.5 instances-header-row">
                                     <span />
                                     <span className="col-label">Name</span>
-                                    <span className="col-label">Server Hostname</span>
+                                    <span className="col-label">Hostname</span>
                                     <span />
                                     <span className="col-label">Port</span>
                                     <span className="col-label">Rate</span>
