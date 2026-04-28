@@ -20,7 +20,7 @@ Each file editor includes these controls:
 - Copy content <img class="docs-inline-icon" src="../../images/file-copy-button.png" width="34" />
 - Expand to full-screen editor <img class="docs-inline-icon" src="../../images/expand-fulls-screen-button.png" width="34" />
 
-Use **Upload** when you want to paste in an existing file from another server. Use **Copy** when you want to export the current contents. Use **Expand** when you need more room for editing.
+Use `Upload` when you want to paste in an existing file from another server. Use **Copy** when you want to export the current contents. Use **Expand** when you need more room for editing.
 
 ## Linting
 
@@ -88,13 +88,29 @@ QLSM assembles all managed cvars into a single argument string that is passed to
 
 ## Plugins
 
-The **Plugins** tab manages Python plugins for this instance:
+The `Plugins` tab manages Python plugins for this instance:
 
 - file tree plus editor
 - checkbox selection for which plugins are included
-- **Validate** button runs Python validation and reports line-level errors
+- `Validate` button for checking Python plugin files
 
 ![](../images/plugins.png)
+
+### Validate Plugin Changes
+
+The **Validate** button appears when a Python plugin file is open.
+
+<img src="../images/validate-plugin.png" alt="Validate plugin button" width="92" />
+
+Use `Validate` to check the current editor contents before saving or applying plugin changes.
+
+When validation succeeds, QLSM confirms that the current plugin file passed its Python checks.
+
+![Successful plugin validation](../images/validate-success.png)
+
+When validation fails, QLSM shows line-level errors above the editor. Fix the reported lines, then run **Validate** again.
+
+![Failed plugin validation](../images/validate-failure.png)
 
 
 ## Factories
