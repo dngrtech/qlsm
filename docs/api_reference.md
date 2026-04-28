@@ -313,6 +313,40 @@ Example success response:
 }
 ```
 
+## Draft Workspaces
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/drafts/<draft_id>/binary-meta` | GET | Get the description for a `.so` file in a preset or instance context |
+| `/drafts/<draft_id>/binary-meta` | PATCH | Create or update the description for a `.so` file in a preset or instance context |
+
+### Get Binary Metadata Request
+```
+GET /drafts/<draft_id>/binary-meta?path=plugins/hook.so&context_type=preset&context_key=default
+```
+
+Returns an empty description when no row exists.
+
+```json
+{
+  "data": {
+    "description": ""
+  }
+}
+```
+
+### Save Binary Metadata Request
+```json
+{
+  "path": "plugins/hook.so",
+  "description": "Fast movement hook",
+  "context_type": "instance",
+  "context_key": "3"
+}
+```
+
+Descriptions are trimmed, may be empty, must be 100 characters or fewer, and cannot contain `<`, `>`, `{`, `}`, or `"`. `context_type` must be `preset` or `instance`; `context_key` cannot contain path separators or `..`; `path` must end in `.so`.
+
 ## Presets
 
 Config presets are stored on the filesystem at `configs/presets/<name>/`. The database stores metadata (name, description, path) while config files are read/written to disk.
@@ -350,9 +384,15 @@ GET /presets/validate-name?name=my-preset
   "mappool_txt": "aerowalk\ncampgrounds\n...",
   "access_txt": "",
   "workshop_txt": "",
-  "factories": {}
+  "factories": {},
+  "binary_meta_source": {
+    "context_type": "preset",
+    "context_key": "default"
+  }
 }
 ```
+
+`binary_meta_source` is optional on `POST /presets` and `PUT /presets/<id>`. When provided, matching `.so` file descriptions are copied from the source context into the target preset context. Use this when saving an instance or another preset as a new preset.
 
 ### Preset Response (GET /presets/<id>)
 ```json
