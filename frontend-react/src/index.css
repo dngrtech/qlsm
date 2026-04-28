@@ -1099,17 +1099,7 @@ body {
   }
 
   .btn-connect {
-    width: 34px;
-    height: 30px;
-    justify-content: center;
-    gap: 0;
-    padding: 0;
-    font-size: 0;
-  }
-
-  .btn-connect svg {
-    width: 13px;
-    height: 13px;
+    display: none;
   }
 }
 
@@ -1162,21 +1152,7 @@ body {
   }
 
   .btn-connect {
-    width: 34px;
-    height: 30px;
-    justify-content: center;
-    gap: 0;
-    padding: 0;
-    font-size: 0;
-  }
-
-  .btn-connect svg {
-    width: 13px;
-    height: 13px;
-  }
-
-  .btn-connect .connect-tooltip {
-    font-size: 11px;
+    display: none;
   }
 
   .col-label {
