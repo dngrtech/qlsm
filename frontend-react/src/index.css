@@ -1275,7 +1275,7 @@ body {
 
   .host-row-first-col,
   .drag-handle {
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 4;
     align-self: start;
     padding-top: 2px;
   }
@@ -1312,10 +1312,10 @@ body {
   }
 
   .host-status-cell {
-    grid-column: 3;
-    grid-row: 1;
-    justify-self: end;
-    padding-right: 64px;
+    grid-column: 2 / 4;
+    grid-row: 4;
+    justify-self: start;
+    padding-right: 0;
   }
 
   .host-qlfilter-cell {
