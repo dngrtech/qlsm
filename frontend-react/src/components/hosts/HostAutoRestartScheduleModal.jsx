@@ -310,7 +310,13 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                                                 </WheelPickerWrapper>
                                                             </div>
                                                             <p className="text-xs text-[var(--text-muted)] mt-2 text-center">
-                                                                Scroll or drag to change. Uses the host's local timezone.
+                                                                Scroll or drag to change.
+                                                            </p>
+                                                            <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
+                                                                Timezone:{' '}
+                                                                <span className="font-medium text-[var(--accent-primary)]">
+                                                                    {host.timezone || 'UTC'}
+                                                                </span>
                                                             </p>
                                                         </div>
                                                     </motion.div>
