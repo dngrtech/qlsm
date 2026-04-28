@@ -223,6 +223,32 @@ def _copy_binary_metadata(from_type, from_key, to_key):
     return len(rows)
 
 
+def _rename_binary_metadata(old_key, new_key):
+    """Stage BinaryMetadata re-keying when a preset is renamed."""
+    if old_key == new_key:
+        return 0
+
+    rows = BinaryMetadata.query.filter_by(
+        context_type='preset',
+        context_key=old_key,
+    ).all()
+
+    for row in rows:
+        existing = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key=new_key,
+            file_path=row.file_path,
+        ).first()
+        if existing:
+            existing.description = row.description
+            db.session.delete(row)
+        else:
+            row.context_key = new_key
+
+    db.session.flush()
+    return len(rows)
+
+
 def _validate_binary_meta_source(source):
     """Return a normalized binary metadata source tuple, or (None, None)."""
     if not isinstance(source, dict):
@@ -402,6 +428,7 @@ def update_preset_api(preset_id):
     if not preset:
         return jsonify({"error": {"message": "Preset not found."}}), 404
 
+    original_preset_name = preset.name
     name_provided = 'name' in data
     requested_name = data.get('name')
     new_name = None
@@ -417,7 +444,7 @@ def update_preset_api(preset_id):
         return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
 
     # Check for name change
-    if name_provided and new_name != preset.name:
+    if name_provided and new_name != original_preset_name:
         is_valid, error, reason = validate_user_preset_name(
             new_name, current_preset_id=preset.id
         )
@@ -463,7 +490,8 @@ def update_preset_api(preset_id):
             _write_preset_checked_plugins(preset.path, data['checked_plugins'])
 
         # Handle name change (rename folder)
-        if name_provided and new_name != preset.name:
+        renamed_preset = name_provided and new_name != original_preset_name
+        if renamed_preset:
             old_path = preset.path
             new_path = os.path.join(PRESETS_DIR, new_name)
             shutil.move(old_path, new_path)
@@ -487,6 +515,12 @@ def update_preset_api(preset_id):
         if updated_preset:
             current_app.logger.info(f"ConfigPreset '{updated_preset.name}' (ID: {preset_id}) updated.")
 
+            metadata_renamed = False
+            if renamed_preset:
+                metadata_renamed = (
+                    _rename_binary_metadata(original_preset_name, updated_preset.name) > 0
+                )
+
             binary_meta_source = data.get('binary_meta_source')
             metadata_copied = False
             if binary_meta_source:
@@ -502,7 +536,7 @@ def update_preset_api(preset_id):
             response_data['factories'] = _read_preset_factories(updated_preset.path)
             response_data['checked_plugins'] = _read_preset_checked_plugins(updated_preset.path)
 
-            if metadata_copied:
+            if metadata_copied or metadata_renamed:
                 db.session.commit()
 
             return jsonify({"data": response_data, "message": "Preset updated successfully."})

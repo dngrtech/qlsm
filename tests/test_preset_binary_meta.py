@@ -181,6 +181,19 @@ class TestPresetUpdateCopiesMeta:
 
         assert _get_meta(app, 'preset', 'mypreset', 'hook.so') == 'New description'
 
+    def test_renames_existing_preset_meta_on_preset_rename(
+        self, app, client, auth_headers, presets_base,
+    ):
+        preset_id = self._create_preset(app, presets_base, name='oldpreset')
+        _seed_meta(app, 'preset', 'oldpreset', 'hook.so', 'Kept description')
+
+        resp = client.put(f'/api/presets/{preset_id}', json={'name': 'newpreset'},
+                          headers=auth_headers)
+        assert resp.status_code == 200
+
+        assert _get_meta(app, 'preset', 'newpreset', 'hook.so') == 'Kept description'
+        assert _get_meta(app, 'preset', 'oldpreset', 'hook.so') is None
+
     def test_no_copy_when_binary_meta_source_absent_on_update(
         self, app, client, auth_headers, presets_base,
     ):
