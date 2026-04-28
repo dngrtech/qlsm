@@ -148,7 +148,7 @@ export default function ServersPage() {
     }
 
     return (
-        <div className="max-w-[1280px] mx-auto px-4 py-6 sm:px-8 sm:py-8">
+        <div className="servers-page-shell max-w-[1280px] mx-auto px-4 py-6 sm:px-8 sm:py-8">
             {/* Page Header */}
             <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div className="min-w-0">
@@ -230,6 +230,7 @@ export default function ServersPage() {
                                     onClick={(e) => { e.stopPropagation(); handleOpenHostDrawer(host.id); }}
                                     className="host-name-cell text-[15px] font-semibold hover:underline text-left truncate min-w-0"
                                     style={{ color: 'var(--accent-primary)' }}
+                                    title={host.name}
                                 >
                                     {host.name}
                                 </button>

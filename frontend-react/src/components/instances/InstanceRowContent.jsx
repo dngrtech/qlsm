@@ -24,6 +24,7 @@ export default function InstanceRowContent({
             <button
                 onClick={() => onOpenDetails(inst.id)}
                 className="instance-name-cell truncate pl-2 text-left text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                title={inst.name}
             >
                 {inst.name}
             </button>

@@ -983,6 +983,78 @@ body {
   }
 }
 
+@media (min-width: 901px) and (max-width: 1180px) {
+  .servers-page-shell {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .server-grid,
+  .instance-row-overlay {
+    column-gap: 10px;
+    grid-template-columns: 42px minmax(160px, 1.6fr) minmax(78px, 0.8fr) minmax(92px, 1fr) 64px 46px 54px 112px 38px 34px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .host-actions-trigger,
+  .instance-actions-trigger {
+    gap: 0;
+    padding: 6px;
+  }
+
+  .host-actions-label,
+  .instance-actions-label {
+    display: none;
+  }
+
+  .host-provider-cell,
+  .host-region-cell,
+  .host-ip-cell,
+  .instance-hostname-cell {
+    font-size: 12px;
+  }
+
+  .host-ip-cell {
+    gap: 4px;
+  }
+
+  .host-ip-cell button {
+    padding: 3px;
+  }
+
+  .instance-status-cell {
+    gap: 8px;
+  }
+
+  .live-status-toggle {
+    width: 56px;
+  }
+
+  .btn-connect {
+    width: 34px;
+    height: 30px;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .btn-connect svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .btn-connect .connect-tooltip {
+    font-size: 11px;
+  }
+
+  .col-label {
+    font-size: 10px;
+    letter-spacing: 0.8px;
+  }
+}
+
 @media (max-width: 639px) {
   .host-header-row,
   .instances-header-row {
