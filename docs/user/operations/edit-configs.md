@@ -108,7 +108,7 @@ When validation succeeds, QLSM confirms that the current plugin file passed its 
 
 ![Successful plugin validation](../images/validate-success.png)
 
-When validation fails, QLSM shows line-level errors above the editor. Fix the reported lines, then run **Validate** again.
+When validation fails, QLSM shows line-level errors above the editor. Fix the reported lines, then run `Validate` again.
 
 ![Failed plugin validation](../images/validate-failure.png)
 
