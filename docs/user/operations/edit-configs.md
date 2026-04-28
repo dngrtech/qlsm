@@ -96,13 +96,9 @@ The `Plugins` tab manages Python plugins for this instance:
 
 ![](../images/plugins.png)
 
-### Validate Plugin Changes
+### Validate Plugin
 
-The **Validate** button appears when a Python plugin file is open.
-
-<img src="../images/validate-plugin.png" alt="Validate plugin button" width="92" />
-
-Use `Validate` to check the current editor contents before saving or applying plugin changes.
+The **Validate** button appears when a Python plugin file is open. Use it to check the current editor contents for errors before saving or applying plugin changes.
 
 When validation succeeds, QLSM confirms that the current plugin file passed its Python checks.
 
