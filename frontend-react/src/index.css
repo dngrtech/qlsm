@@ -1291,7 +1291,7 @@ body {
   }
 
   .host-region-cell {
-    grid-column: 2;
+    grid-column: 2 / 4;
     grid-row: 2;
     min-width: 0;
   }
