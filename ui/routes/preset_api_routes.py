@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from ui import db
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
+from ui.models import BinaryMetadata
 from ui.preset_support import (
     PRESETS_DIR,
     is_internal_preset_name,
@@ -195,6 +196,79 @@ def _validation_status(reason):
     return 400 if reason == 'format' else 409
 
 
+def _copy_binary_metadata(from_type, from_key, to_key):
+    """Stage BinaryMetadata upserts from a source context to a preset context."""
+    rows = BinaryMetadata.query.filter_by(
+        context_type=from_type,
+        context_key=from_key,
+    ).all()
+
+    for row in rows:
+        existing = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key=to_key,
+            file_path=row.file_path,
+        ).first()
+        if existing:
+            existing.description = row.description
+        else:
+            db.session.add(BinaryMetadata(
+                context_type='preset',
+                context_key=to_key,
+                file_path=row.file_path,
+                description=row.description,
+            ))
+
+    db.session.flush()
+    return len(rows)
+
+
+def _rename_binary_metadata(old_key, new_key):
+    """Stage BinaryMetadata re-keying when a preset is renamed."""
+    if old_key == new_key:
+        return 0
+
+    rows = BinaryMetadata.query.filter_by(
+        context_type='preset',
+        context_key=old_key,
+    ).all()
+
+    for row in rows:
+        existing = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key=new_key,
+            file_path=row.file_path,
+        ).first()
+        if existing:
+            existing.description = row.description
+            db.session.delete(row)
+        else:
+            row.context_key = new_key
+
+    db.session.flush()
+    return len(rows)
+
+
+def _validate_binary_meta_source(source):
+    """Return a normalized binary metadata source tuple, or (None, None)."""
+    if not isinstance(source, dict):
+        return None, None
+
+    src_type = source.get('context_type')
+    src_key = source.get('context_key')
+    if not isinstance(src_type, str) or not isinstance(src_key, str):
+        return None, None
+
+    src_type = src_type.strip()
+    src_key = src_key.strip()
+    if src_type not in ('preset', 'instance'):
+        return None, None
+    if not src_key or '/' in src_key or '\\' in src_key or '..' in src_key:
+        return None, None
+
+    return src_type, src_key
+
+
 @preset_api_bp.route('/validate-name', methods=['GET'], endpoint='validate_preset_name_api')
 @jwt_required()
 def validate_preset_name_api():
@@ -287,12 +361,23 @@ def create_preset_api():
         new_preset = create_preset(**preset_data)
         current_app.logger.info(f"ConfigPreset '{new_preset.name}' created with ID {new_preset.id} at {preset_path}")
 
+        binary_meta_source = data.get('binary_meta_source')
+        metadata_copied = False
+        if binary_meta_source:
+            src_type, src_key = _validate_binary_meta_source(binary_meta_source)
+            same_preset_context = src_type == 'preset' and src_key == name
+            if src_type and not same_preset_context:
+                metadata_copied = _copy_binary_metadata(src_type, src_key, name) > 0
+
         # Return preset data with config content and scripts for immediate use
         response_data = new_preset.to_dict()
         response_data.update(_read_preset_configs(preset_path))
         response_data['scripts'] = _read_preset_scripts(preset_path)
         response_data['factories'] = _read_preset_factories(preset_path)
         response_data['checked_plugins'] = _read_preset_checked_plugins(preset_path)
+
+        if metadata_copied:
+            db.session.commit()
 
         return jsonify({"data": response_data, "message": "Preset created successfully."}), 201
 
@@ -343,6 +428,7 @@ def update_preset_api(preset_id):
     if not preset:
         return jsonify({"error": {"message": "Preset not found."}}), 404
 
+    original_preset_name = preset.name
     name_provided = 'name' in data
     requested_name = data.get('name')
     new_name = None
@@ -358,7 +444,7 @@ def update_preset_api(preset_id):
         return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
 
     # Check for name change
-    if name_provided and new_name != preset.name:
+    if name_provided and new_name != original_preset_name:
         is_valid, error, reason = validate_user_preset_name(
             new_name, current_preset_id=preset.id
         )
@@ -404,7 +490,8 @@ def update_preset_api(preset_id):
             _write_preset_checked_plugins(preset.path, data['checked_plugins'])
 
         # Handle name change (rename folder)
-        if name_provided and new_name != preset.name:
+        renamed_preset = name_provided and new_name != original_preset_name
+        if renamed_preset:
             old_path = preset.path
             new_path = os.path.join(PRESETS_DIR, new_name)
             shutil.move(old_path, new_path)
@@ -427,11 +514,31 @@ def update_preset_api(preset_id):
 
         if updated_preset:
             current_app.logger.info(f"ConfigPreset '{updated_preset.name}' (ID: {preset_id}) updated.")
+
+            metadata_renamed = False
+            if renamed_preset:
+                metadata_renamed = (
+                    _rename_binary_metadata(original_preset_name, updated_preset.name) > 0
+                )
+
+            binary_meta_source = data.get('binary_meta_source')
+            metadata_copied = False
+            if binary_meta_source:
+                src_type, src_key = _validate_binary_meta_source(binary_meta_source)
+                if src_type:
+                    metadata_copied = (
+                        _copy_binary_metadata(src_type, src_key, updated_preset.name) > 0
+                    )
+
             response_data = updated_preset.to_dict()
             response_data.update(_read_preset_configs(updated_preset.path))
             response_data['scripts'] = _read_preset_scripts(updated_preset.path)
             response_data['factories'] = _read_preset_factories(updated_preset.path)
             response_data['checked_plugins'] = _read_preset_checked_plugins(updated_preset.path)
+
+            if metadata_copied or metadata_renamed:
+                db.session.commit()
+
             return jsonify({"data": response_data, "message": "Preset updated successfully."})
         else:
             return jsonify({"error": {"message": "Preset update failed."}}), 500

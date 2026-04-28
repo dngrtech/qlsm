@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { LoaderCircle, Save, FolderOpen, RefreshCw, Settings, Code2, LayoutGrid, CheckCircle } from 'lucide-react';
 import { getAvailablePortsForHost, getPresetById, savePreset, updatePreset } from '../../services/api';
+import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import { useDraftWorkspace } from '../../hooks/useDraftWorkspace';
 import InstanceBasicInfoForm from './InstanceBasicInfoForm';
 import InstanceConfigTabs from './InstanceConfigTabs';
@@ -374,6 +375,13 @@ function AddInstanceForm({
         presetData.draft_id = draft.draftId;
       }
 
+      if (name !== draftPreset) {
+        presetData.binary_meta_source = {
+          context_type: 'preset',
+          context_key: draftPreset,
+        };
+      }
+
       // Include factories (only checked files in AddInstance mode)
       if (Object.keys(factories).length > 0) {
         presetData.factories = factories;
@@ -392,7 +400,7 @@ function AddInstanceForm({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [configContents, draft.draftId, factories, checkedPlugins]);
+  }, [configContents, draft.draftId, draftPreset, factories, checkedPlugins]);
 
   // Show confirmation dialog before updating preset
   const handleUpdatePresetClick = useCallback(() => {
@@ -594,6 +602,18 @@ function AddInstanceForm({
     });
   }, []);
 
+  const handleGetBinaryMeta = useCallback(
+    (path) => getBinaryMeta(draft.draftId, path, 'preset', draftPreset),
+    [draft.draftId, draftPreset],
+  );
+
+  const handleSaveBinaryMeta = useCallback(
+    (path, description) => (
+      saveBinaryMeta(draft.draftId, path, description, 'preset', draftPreset)
+    ),
+    [draft.draftId, draftPreset],
+  );
+
   return (
     <form onSubmit={localHandleSubmit} className="flex flex-col flex-grow min-h-0 pt-4">
       <div className="flex-shrink-0 mb-6">
@@ -656,6 +676,8 @@ function AddInstanceForm({
                 onCheck={togglePluginSelection}
                 loading={draft.loading}
                 error={draft.error}
+                getBinaryMeta={handleGetBinaryMeta}
+                saveBinaryMeta={handleSaveBinaryMeta}
               />
             ) : (
               <FactoryManager

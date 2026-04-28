@@ -3,6 +3,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen } from 'lucide-react';
 import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updateInstance } from '../../services/api';
+import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import { useDraftWorkspace } from '../../hooks/useDraftWorkspace';
 import ConfigEditorTabs from '../config/ConfigEditorTabs';
 import ExpandedEditorModal from '../ExpandedEditorModal';
@@ -152,6 +153,18 @@ function EditInstanceConfigModal({
     });
     setIsDirty(true);
   }, []);
+
+  const handleGetBinaryMeta = useCallback(
+    (path) => getBinaryMeta(draft.draftId, path, 'instance', String(instanceId)),
+    [draft.draftId, instanceId],
+  );
+
+  const handleSaveBinaryMeta = useCallback(
+    (path, description) => (
+      saveBinaryMeta(draft.draftId, path, description, 'instance', String(instanceId))
+    ),
+    [draft.draftId, instanceId],
+  );
 
 
   useEffect(() => {
@@ -343,6 +356,11 @@ function EditInstanceConfigModal({
         presetData.checked_plugins = Array.from(checkedPlugins);
       }
 
+      presetData.binary_meta_source = {
+        context_type: 'instance',
+        context_key: String(instanceId),
+      };
+
       const response = await createPreset(presetData);
 
       // Update presets list
@@ -357,7 +375,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [configs, factories, checkedPlugins, draft.draftId, showSuccess, showError]);
+  }, [configs, factories, checkedPlugins, draft.draftId, instanceId, showSuccess, showError]);
 
   const handlePresetDeleted = useCallback((deletedPresetId) => {
     setPresets(prevPresets => prevPresets.filter(p => p.id !== deletedPresetId));
@@ -730,6 +748,8 @@ function EditInstanceConfigModal({
                               loading={draft.loading}
                               error={draft.error}
                               onExpandEditor={handleExpandPluginEditor}
+                              getBinaryMeta={handleGetBinaryMeta}
+                              saveBinaryMeta={handleSaveBinaryMeta}
                             />
                           ) : (
                             <FactoryManager

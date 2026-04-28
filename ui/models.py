@@ -258,3 +258,29 @@ class AppSetting(db.Model):
 
     def to_dict(self):
         return {'key': self.key, 'value': self.value}
+
+
+class BinaryMetadata(db.Model):
+    """Stores user-provided description labels for .so binary plugin files."""
+    __tablename__ = 'binary_metadata'
+
+    id = db.Column(db.Integer, primary_key=True)
+    context_type = db.Column(db.String(20), nullable=False)
+    context_key = db.Column(db.String(150), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.String(100), nullable=False, default='')
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'context_type',
+            'context_key',
+            'file_path',
+            name='uq_bm_context_path',
+        ),
+    )
