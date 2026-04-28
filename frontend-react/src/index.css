@@ -1103,6 +1103,98 @@ body {
   }
 }
 
+@media (min-width: 740px) and (max-width: 900px) {
+  .server-grid,
+  .server-grid.host-row,
+  .instance-row-overlay {
+    grid-template-columns: 28px minmax(160px, 1.6fr) minmax(124px, 1.05fr) minmax(88px, 0.75fr) 112px 28px 28px;
+    gap: 6px 10px;
+  }
+
+  .server-card .host-row,
+  .server-card .instance-row {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .host-row-first-col,
+  .drag-handle {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .host-name-cell {
+    grid-column: 2 / 4;
+    grid-row: 1;
+  }
+
+  .host-provider-cell {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .host-region-cell {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .host-ip-cell {
+    grid-column: 4 / 6 !important;
+    grid-row: 2;
+  }
+
+  .host-status-cell {
+    grid-column: 5;
+    grid-row: 1;
+  }
+
+  .host-qlfilter-cell {
+    grid-column: 6;
+    grid-row: 1;
+  }
+
+  .host-actions-cell {
+    grid-column: 7;
+    grid-row: 1;
+  }
+
+  .instance-name-cell {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .instance-hostname-cell {
+    grid-column: 3 !important;
+    grid-row: 1;
+  }
+
+  .instance-port-cell {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  .instance-rate-cell {
+    grid-column: 4;
+    grid-row: 2;
+  }
+
+  .instance-players-cell {
+    grid-column: 5;
+    grid-row: 2;
+  }
+
+  .instance-status-cell {
+    grid-column: 5;
+    grid-row: 1;
+  }
+
+  .instance-actions-cell {
+    grid-column: 7;
+    grid-row: 1;
+    align-self: center;
+  }
+}
+
 @media (min-width: 901px) and (max-width: 1180px) {
   .servers-page-shell {
     padding-left: 20px;
