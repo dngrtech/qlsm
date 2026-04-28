@@ -37,6 +37,8 @@ const ScriptManager = forwardRef(function ScriptManager({
   loading,
   error,
   onExpandEditor,
+  getBinaryMeta,
+  saveBinaryMeta,
 }, ref) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [currentContent, setCurrentContent] = useState('');
@@ -44,6 +46,7 @@ const ScriptManager = forwardRef(function ScriptManager({
   const [contentLoading, setContentLoading] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [binaryDescription, setBinaryDescription] = useState('');
 
   // Flush all pending text edits to the draft server-side
   const flushEdits = useCallback(async () => {
@@ -68,7 +71,17 @@ const ScriptManager = forwardRef(function ScriptManager({
     setSelectedFile(item);
     const fileType = item.file_type || getFileType(item.name);
 
-    if (fileType !== 'binary') {
+    if (fileType === 'binary') {
+      setBinaryDescription('');
+      if (getBinaryMeta) {
+        try {
+          const result = await getBinaryMeta(item.path);
+          setBinaryDescription(result?.description ?? '');
+        } catch {
+          setBinaryDescription('');
+        }
+      }
+    } else {
       if (editedContent[item.path] !== undefined) {
         setCurrentContent(editedContent[item.path]);
       } else {
@@ -83,7 +96,7 @@ const ScriptManager = forwardRef(function ScriptManager({
         }
       }
     }
-  }, [readContent, editedContent]);
+  }, [readContent, editedContent, getBinaryMeta]);
 
   const handleContentChange = useCallback((value) => {
     setCurrentContent(value);
@@ -118,6 +131,7 @@ const ScriptManager = forwardRef(function ScriptManager({
         }
       } else {
         setSelectedFile(item);
+        setBinaryDescription('');
       }
     } catch (err) {
       alert(err.response?.data?.error?.message || err.message || 'Upload failed');
@@ -136,12 +150,23 @@ const ScriptManager = forwardRef(function ScriptManager({
       }
       setSelectedFile(null);
       setCurrentContent('');
+      setBinaryDescription('');
     } catch (err) {
       alert(err.message || 'Delete failed');
     } finally {
       setIsDeleting(false);
     }
   }, [selectedFile, deleteFile, checkable, checkedFiles, onCheck]);
+
+  const handleSaveDescription = useCallback(async (description) => {
+    if (!selectedFile || !saveBinaryMeta) return;
+    try {
+      const result = await saveBinaryMeta(selectedFile.path, description);
+      setBinaryDescription(result?.description ?? description);
+    } catch {
+      // Keep the last known saved value if the request fails.
+    }
+  }, [selectedFile, saveBinaryMeta]);
 
   const handleReplace = useCallback(async (file) => {
     if (!selectedFile) return;
@@ -227,6 +252,8 @@ const ScriptManager = forwardRef(function ScriptManager({
             onReplace={handleReplace}
             onDelete={handleDelete}
             isDeleting={isDeleting}
+            description={binaryDescription}
+            onDescriptionSave={saveBinaryMeta ? handleSaveDescription : null}
           />
         ) : (
           <TextFileEditor
