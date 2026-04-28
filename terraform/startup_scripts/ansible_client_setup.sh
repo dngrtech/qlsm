@@ -34,6 +34,6 @@ sudo chmod 0440 /etc/sudoers.d/$ANSIBLE_USER
 
 # Fix DNS resolution
 echo "Fixing DNS resolution..."
-echo "nameserver 1.1.1.1" > /etc/resolv.conf
+printf "nameserver 8.8.8.8\nnameserver 9.9.9.9\noptions timeout:2 attempts:2 rotate\n" > /etc/resolv.conf
 
 echo "Setup complete."
