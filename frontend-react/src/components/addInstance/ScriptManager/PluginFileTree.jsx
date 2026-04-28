@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   FileText,
   Code,
@@ -85,16 +85,29 @@ export default function PluginFileTree({
 }) {
   const [search, setSearch] = useState('');
 
+  // Snapshot which files were checked when the tree first loaded (or when the
+  // tree reference changes — e.g. preset reload). Newly-ticked files do NOT
+  // join the snapshot, so they keep their alphabetical position instead of
+  // jumping to the top of the list.
+  const sortPriorityRef = useRef(null);
+  useEffect(() => {
+    sortPriorityRef.current = new Set(checkedFiles || []);
+  }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (sortPriorityRef.current === null) {
+    sortPriorityRef.current = new Set(checkedFiles || []);
+  }
+
   const filteredFiles = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const sortPriority = sortPriorityRef.current;
 
     function sortItems(items) {
       return [...items].sort((a, b) => {
         if (a.type === 'folder' && b.type !== 'folder') return -1;
         if (a.type !== 'folder' && b.type === 'folder') return 1;
         if (checkable) {
-          const aChecked = checkedFiles?.has(a.path);
-          const bChecked = checkedFiles?.has(b.path);
+          const aChecked = sortPriority?.has(a.path);
+          const bChecked = sortPriority?.has(b.path);
           if (aChecked && !bChecked) return -1;
           if (!aChecked && bChecked) return 1;
         }
@@ -119,7 +132,7 @@ export default function PluginFileTree({
 
     const sorted = sortItems(files);
     return term ? filterTree(sorted) : sorted;
-  }, [files, search, checkable, checkedFiles]);
+  }, [files, search, checkable]);
 
   return (
     <div className="flex flex-col h-full">
