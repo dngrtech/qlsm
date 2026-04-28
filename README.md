@@ -28,7 +28,7 @@ Features:
 Everything runs over SSH via Ansible.
 
 
-<img width="1428" height="993" alt="servers_page" src="https://github.com/user-attachments/assets/11894a0e-19df-492e-8da7-d69b5ff01d8a" />
+<img width="1312" height="936" alt="qlsm-main" src="https://github.com/user-attachments/assets/b85e895a-f28a-436b-bc10-4e7ea0684b02" />
 
 
 <img width="1258" height="1218" alt="edit_config" src="https://github.com/user-attachments/assets/23cbf0dd-b291-46af-941b-74ad802c746b" />
