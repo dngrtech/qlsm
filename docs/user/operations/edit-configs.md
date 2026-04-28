@@ -92,9 +92,25 @@ The **Plugins** tab manages Python plugins for this instance:
 
 - file tree plus editor
 - checkbox selection for which plugins are included
-- **Validate** button runs Python validation and reports line-level errors
+- **Validate** button for checking Python plugin files
 
 ![](../images/plugins.png)
+
+### Validate Plugin Changes
+
+The **Validate** button appears when a Python plugin file is open.
+
+<img src="../images/validate-plugin.png" alt="Validate plugin button" width="92" />
+
+Use **Validate** to check the current editor contents before saving or applying plugin changes. Validation runs against the draft in the editor; it does not save the file, deploy the instance, or restart QLDS.
+
+When validation succeeds, QLSM confirms that the current plugin file passed its Python checks.
+
+![Successful plugin validation](../images/validate-success.png)
+
+When validation fails, QLSM shows line-level errors above the editor. Fix the reported lines, then run **Validate** again.
+
+![Failed plugin validation](../images/validate-failure.png)
 
 
 ## Factories
