@@ -1,4 +1,7 @@
 {
   "description": "Default QLSM preset",
-  "builtin": true
+  "builtin": true,
+  "binary_descriptions": {
+    "scripts/highfps_hook.so": "Server-side hook enabling high-tickrate (125 Hz) QLDS operation"
+  }
 }
