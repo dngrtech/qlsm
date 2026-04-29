@@ -16,7 +16,7 @@ from ui.preset_support import (
 
 
 _DESCRIPTION_MAX_LEN = 100
-_DESCRIPTION_RE = re.compile(r'^[^<>{}"]*$')
+_DESCRIPTION_RE = re.compile(r'^[\w .,;:()\'\-]*$')
 
 
 class BuiltinPresetError(ValueError):
