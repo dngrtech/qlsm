@@ -495,9 +495,9 @@ def view_instance_logs_api(instance_id): # Renamed function
 @jwt_required()
 def fetch_remote_logs_api(instance_id):
     """Fetches logs from the remote QLDS instance via Ansible journalctl.
-    
+
     Query parameters:
-        filter_mode: 'time' or 'lines' (default: 'lines')
+        filter_mode: 'time', 'lines', or 'all' (default: 'lines')
         since: Time period for time-based filtering (default: '1 hour ago')
         lines: Number of lines for line-based filtering (default: 500)
     """
@@ -517,11 +517,11 @@ def fetch_remote_logs_api(instance_id):
     lines = request.args.get('lines', 500, type=int)
     
     # Validate filter_mode
-    if filter_mode not in ('time', 'lines'):
-        return jsonify({"error": {"message": "filter_mode must be 'time' or 'lines'"}}), 400
-    
-    # Validate lines (sensible range)
-    if lines < 10 or lines > 10000:
+    if filter_mode not in ('time', 'lines', 'all'):
+        return jsonify({"error": {"message": "filter_mode must be 'time', 'lines', or 'all'"}}), 400
+
+    # Validate lines (sensible range) — not applicable for 'all' mode
+    if filter_mode != 'all' and (lines < 10 or lines > 10000):
         return jsonify({"error": {"message": "lines must be between 10 and 10000"}}), 400
 
     current_app.logger.info(f"Fetching remote logs for instance {instance_id} ({instance.name}) - mode: {filter_mode}, since: {since}, lines: {lines}")

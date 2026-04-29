@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { Dialog, Transition, RadioGroup } from '@headlessui/react';
-import { X, RefreshCw, Terminal, AlertCircle, Clock, List, Maximize } from 'lucide-react';
+import { X, RefreshCw, Terminal, AlertCircle, Clock, List, Maximize, DatabaseZap } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import { logLanguage } from '../../utils/logLanguage';
@@ -16,6 +16,7 @@ import { fetchInstanceRemoteLogs } from '../../services/api';
 const FILTER_MODES = [
     { value: 'lines', label: 'Last N Lines', icon: List },
     { value: 'time', label: 'Time Range', icon: Clock },
+    { value: 'all', label: 'All', icon: DatabaseZap },
 ];
 
 // Line count options
@@ -96,12 +97,10 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
 
     // Get current filter description
     const getFilterDescription = () => {
-        if (filterMode === 'lines') {
-            return `Last ${lineCount} lines`;
-        } else {
-            const option = TIME_OPTIONS.find(o => o.value === timeRange);
-            return option ? `Last ${option.label}` : timeRange;
-        }
+        if (filterMode === 'lines') return `Last ${lineCount} lines`;
+        if (filterMode === 'all') return 'All entries';
+        const option = TIME_OPTIONS.find(o => o.value === timeRange);
+        return option ? `Last ${option.label}` : timeRange;
     };
 
     return (
