@@ -1,11 +1,12 @@
 import json
 import os
+import re
 
 import click
 from flask.cli import with_appcontext
 
 from ui import db
-from ui.models import ConfigPreset
+from ui.models import BinaryMetadata, ConfigPreset
 from ui.preset_support import (
     BUILTIN_PRESETS_DIR,
     builtin_preset_path,
@@ -14,8 +15,47 @@ from ui.preset_support import (
 )
 
 
+_DESCRIPTION_MAX_LEN = 100
+_DESCRIPTION_RE = re.compile(r'^[^<>{}"]*$')
+
+
 class BuiltinPresetError(ValueError):
     pass
+
+
+def _validate_binary_descriptions(binary_descriptions, preset_dir, manifest_path):
+    """Validate binary_descriptions dict from preset.json. Returns the dict on success."""
+    if not isinstance(binary_descriptions, dict):
+        raise BuiltinPresetError(
+            f"{manifest_path}: binary_descriptions must be an object."
+        )
+    for key, value in binary_descriptions.items():
+        if not isinstance(key, str) or not key.endswith('.so'):
+            raise BuiltinPresetError(
+                f"{manifest_path}: binary_descriptions key {key!r} must be a string ending in .so"
+            )
+        if key.startswith('/') or '..' in key:
+            raise BuiltinPresetError(
+                f"{manifest_path}: binary_descriptions key {key!r} must be a relative path with no '..'."
+            )
+        if not isinstance(value, str):
+            raise BuiltinPresetError(
+                f"{manifest_path}: binary_descriptions[{key!r}] must be a string."
+            )
+        if len(value) > _DESCRIPTION_MAX_LEN:
+            raise BuiltinPresetError(
+                f"{manifest_path}: binary_descriptions[{key!r}] exceeds {_DESCRIPTION_MAX_LEN} characters."
+            )
+        if not _DESCRIPTION_RE.match(value):
+            raise BuiltinPresetError(
+                f"{manifest_path}: binary_descriptions[{key!r}] contains invalid characters."
+            )
+        full_path = os.path.join(preset_dir, key)
+        if not os.path.isfile(full_path):
+            raise BuiltinPresetError(
+                f"{manifest_path}: binary_descriptions key {key!r} does not exist at {full_path}."
+            )
+    return binary_descriptions
 
 
 def _load_manifest(preset_dir):
@@ -29,7 +69,10 @@ def _load_manifest(preset_dir):
     if manifest.get('builtin') is not True:
         raise BuiltinPresetError(f"{manifest_path}: builtin must be true.")
 
-    return {'description': description.strip()}
+    binary_descriptions = manifest.get('binary_descriptions', {})
+    validated = _validate_binary_descriptions(binary_descriptions, preset_dir, manifest_path)
+
+    return {'description': description.strip(), 'binary_descriptions': validated}
 
 
 def _iter_builtin_dirs():
