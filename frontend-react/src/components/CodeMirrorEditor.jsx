@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { EditorState, StateEffect, Prec } from '@codemirror/state';
 import { search, searchKeymap } from '@codemirror/search';
 import {
@@ -26,10 +26,6 @@ import {
   banTag
 } from '../codemirror-lang-qlaccess';
 
-// Import qlcfg language (assuming it exists or will be created)
-import { qlcfgLanguage } from '../codemirror-lang-qlcfg';
-// Import custom log language for viewing logs
-import { logLanguage } from '../utils/logLanguage';
 // Import new custom chat log language
 import { chatLogLanguage, chatDarkHighlighting, chatLightHighlighting } from '../utils/chatLogLanguage';
 
@@ -74,8 +70,9 @@ const darkEditorTheme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'transparent !important' },
   '& .cm-scroller': { backgroundColor: 'transparent !important', scrollbarColor: '#555 transparent' },
   '& .cm-content': { backgroundColor: 'transparent !important' },
-  '& .cm-gutters': { backgroundColor: 'transparent !important', borderRight: '1px solid var(--surface-border)' },
-  '& .cm-gutter': { backgroundColor: 'transparent !important' },
+  '& .cm-gutters': { backgroundColor: 'var(--surface-base) !important', borderRight: '1px solid var(--surface-border)', color: 'var(--text-muted) !important' },
+  '& .cm-gutter': { backgroundColor: 'var(--surface-base) !important' },
+  '& .cm-lineNumbers .cm-gutterElement': { color: 'var(--text-muted) !important', opacity: '1 !important' },
   '& .cm-activeLineGutter': { backgroundColor: 'rgba(255, 255, 255, 0.05) !important' },
   '& .cm-activeLine': { backgroundColor: 'rgba(255, 255, 255, 0.03) !important' },
   '& .cm-scroller::-webkit-scrollbar': { width: '14px', height: '14px' },
@@ -97,7 +94,8 @@ const lightEditorTheme = EditorView.theme({
   '& .cm-scroller': { backgroundColor: '#f6f8fa !important', scrollbarColor: '#c1c8d1 transparent' },
   '& .cm-content': { backgroundColor: 'transparent !important', color: '#24292f' },
   '& .cm-gutters': { backgroundColor: '#eef1f5 !important', borderRight: '1px solid #d0d7de !important', color: '#636c76 !important' },
-  '& .cm-gutter': { backgroundColor: 'transparent !important' },
+  '& .cm-gutter': { backgroundColor: '#eef1f5 !important' },
+  '& .cm-lineNumbers .cm-gutterElement': { color: '#636c76 !important', opacity: '1 !important' },
   '& .cm-activeLineGutter': { backgroundColor: 'rgba(0, 0, 0, 0.06) !important', color: '#24292f !important' },
   '& .cm-activeLine': { backgroundColor: 'rgba(0, 0, 0, 0.04) !important' },
   '& .cm-cursor': { borderLeftColor: '#24292f !important' },
@@ -269,7 +267,7 @@ const CodeMirrorEditor = ({ value, onChange, language, isActiveTab, linterSource
         effects: StateEffect.reconfigure.of(newExtensions)
       });
     }
-  }, [language, linterSource, isDark]);
+  }, [language, linterSource, readOnly, isDark]);
 
 
   // Effect to refresh editor when tab becomes active (remains the same)

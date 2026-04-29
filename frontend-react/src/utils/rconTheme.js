@@ -22,12 +22,16 @@ export const rconTheme = EditorView.theme({
         padding: '8px 0',
     },
     '& .cm-gutters': {
-        backgroundColor: 'transparent !important',
+        backgroundColor: '#0a0e14 !important',
         borderRight: '1px solid rgba(255,255,255,0.08)',
-        color: 'rgba(255,255,255,0.2)',
+        color: '#64748b !important',
     },
     '& .cm-gutter': {
-        backgroundColor: 'transparent !important',
+        backgroundColor: '#0a0e14 !important',
+    },
+    '& .cm-lineNumbers .cm-gutterElement': {
+        color: '#64748b !important',
+        opacity: '1 !important',
     },
     '& .cm-activeLineGutter': {
         backgroundColor: 'rgba(255, 255, 255, 0.05) !important',
