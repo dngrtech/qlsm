@@ -26,7 +26,6 @@ import {
   banTag
 } from '../codemirror-lang-qlaccess';
 
-// Import new custom chat log language
 import { chatLogLanguage, chatDarkHighlighting, chatLightHighlighting } from '../utils/chatLogLanguage';
 
 // Dark highlight style
