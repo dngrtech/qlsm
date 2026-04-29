@@ -2,7 +2,7 @@ import json
 import os
 
 from ui import db
-from ui.models import ConfigPreset
+from ui.models import BinaryMetadata, ConfigPreset
 from ui.preset_support import builtin_preset_path
 
 
@@ -247,3 +247,74 @@ def test_sync_rejects_binary_descriptions_not_dict(runner, tmp_path, monkeypatch
 
     assert result.exit_code != 0
     assert 'binary_descriptions' in result.output
+
+
+def test_sync_seeds_binary_metadata_row(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'My hook'})
+    write_so_file('duel', 'scripts/hook.so')
+
+    result = runner.invoke(args=['sync-builtin-presets'])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        row = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key='duel',
+            file_path='scripts/hook.so',
+        ).first()
+        assert row is not None
+        assert row.description == 'My hook'
+
+
+def test_sync_overwrites_binary_metadata_on_resync(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'Old desc'})
+    write_so_file('duel', 'scripts/hook.so')
+    assert runner.invoke(args=['sync-builtin-presets']).exit_code == 0
+
+    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'New desc'})
+    result = runner.invoke(args=['sync-builtin-presets'])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        row = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key='duel',
+            file_path='scripts/hook.so',
+        ).first()
+        assert row.description == 'New desc'
+
+
+def test_sync_deletes_stale_binary_metadata_row(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'My hook'})
+    write_so_file('duel', 'scripts/hook.so')
+    assert runner.invoke(args=['sync-builtin-presets']).exit_code == 0
+
+    write_manifest('duel', 'Duel')
+    result = runner.invoke(args=['sync-builtin-presets'])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        row = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key='duel',
+            file_path='scripts/hook.so',
+        ).first()
+        assert row is None
+
+
+def test_sync_no_binary_metadata_when_field_absent(runner, app, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_manifest('duel', 'Duel')
+
+    result = runner.invoke(args=['sync-builtin-presets'])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        rows = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key='duel',
+        ).all()
+        assert rows == []
