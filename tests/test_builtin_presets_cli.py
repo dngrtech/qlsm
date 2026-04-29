@@ -282,7 +282,7 @@ def test_sync_overwrites_binary_metadata_on_resync(runner, app, tmp_path, monkey
             context_type='preset',
             context_key='duel',
             file_path='scripts/hook.so',
-        ).first()
+        ).one()
         assert row.description == 'New desc'
 
 
