@@ -6,7 +6,7 @@
 
   vars:
     game_port: "{{ port }}"
-    # Log filter mode: 'time' or 'lines'
+    # Log filter mode: 'time', 'lines', or 'all'
     log_mode: "{{ filter_mode | default('lines') }}"
     # Time period for time-based filtering (e.g., '1 hour ago', '15 minutes ago')
     log_since: "{{ since | default('1 hour ago') }}"
@@ -30,9 +30,20 @@
       failed_when: false
       when: log_mode == 'lines'
 
+    - name: Query journalctl for all entries (when log_mode is 'all')
+      ansible.builtin.command:
+        cmd: journalctl -u qlds@{{ game_port }}.service --no-pager
+      register: journal_output_all
+      changed_when: false
+      failed_when: false
+      when: log_mode == 'all'
+
     - name: Set combined output
       ansible.builtin.set_fact:
-        combined_output: "{{ (journal_output_time.stdout | default('')) if log_mode == 'time' else (journal_output_lines.stdout | default('')) }}"
+        combined_output: >-
+          {{ (journal_output_time.stdout | default('')) if log_mode == 'time'
+             else (journal_output_all.stdout | default('')) if log_mode == 'all'
+             else (journal_output_lines.stdout | default('')) }}
 
     - name: Output logs to stdout for capture
       ansible.builtin.debug:

@@ -771,7 +771,7 @@ def fetch_instance_remote_logs(instance_id, filter_mode='lines', since='1 hour a
     
     Args:
         instance_id: ID of the instance
-        filter_mode: 'time' for time-based filtering, 'lines' for line count
+        filter_mode: 'time' for time-based filtering, 'lines' for line count, 'all' for full journal
         since: Time period for time-based filtering (e.g., '1 hour ago', '15 minutes ago')
         lines: Number of lines for line-based filtering
     
