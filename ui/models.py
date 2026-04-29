@@ -268,7 +268,7 @@ class BinaryMetadata(db.Model):
     context_type = db.Column(db.String(20), nullable=False)
     context_key = db.Column(db.String(150), nullable=False)
     file_path = db.Column(db.String(500), nullable=False)
-    description = db.Column(db.String(100), nullable=False, default='')
+    description = db.Column(db.String(1000), nullable=False, default='')
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
