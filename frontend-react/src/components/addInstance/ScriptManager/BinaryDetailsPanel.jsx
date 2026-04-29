@@ -49,6 +49,7 @@ export default function BinaryDetailsPanel({
     el.style.height = `${el.scrollHeight}px`;
   }, [localDesc]);
 
+
   const handleChange = (e) => {
     const value = e.target.value;
     setLocalDesc(value);
@@ -79,7 +80,7 @@ export default function BinaryDetailsPanel({
   };
 
   return (
-    <div className="flex flex-col h-full p-6">
+    <div className="flex flex-col h-full p-6 overflow-hidden">
       <div className="flex items-center gap-3 mb-6">
         <Box className="w-8 h-8 text-purple-400 flex-shrink-0" />
         <div className="min-w-0">
@@ -104,11 +105,10 @@ export default function BinaryDetailsPanel({
       </div>
 
       {onDescriptionSave && (
-        <div className="mb-6">
+        <div className="flex flex-col flex-1 min-h-0 mb-2">
           <label className="block text-sm text-gray-400 mb-1">Description</label>
           <textarea
             ref={textareaRef}
-            rows={1}
             value={localDesc}
             onChange={handleChange}
             onBlur={() => {
@@ -118,7 +118,10 @@ export default function BinaryDetailsPanel({
             onFocus={() => setFocused(true)}
             onKeyDown={handleKeyDown}
             placeholder="Short label for this file..."
-            style={{ resize: 'vertical', minHeight: '2rem', maxHeight: '15rem', overflowY: 'hidden' }}
+            style={{ resize: 'vertical', minHeight: '2rem', overflowY: 'auto' }}
+            className={`flex-1 min-h-0 w-full px-3 py-1.5 bg-gray-800 border rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none ${
+              validationError ? 'border-red-500' : 'border-gray-600 focus:border-gray-400'
+            }`}
             className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none ${
               validationError ? 'border-red-500' : 'border-gray-600 focus:border-gray-400'
             }`}
