@@ -84,6 +84,31 @@ def _iter_builtin_dirs():
             yield name, preset_dir
 
 
+def _sync_binary_metadata(preset_name, desired):
+    """Upsert BinaryMetadata rows for a builtin preset and delete stale ones."""
+    existing_rows = BinaryMetadata.query.filter_by(
+        context_type='preset',
+        context_key=preset_name,
+    ).all()
+
+    existing_by_path = {row.file_path: row for row in existing_rows}
+
+    for file_path, description in desired.items():
+        if file_path in existing_by_path:
+            existing_by_path[file_path].description = description
+        else:
+            db.session.add(BinaryMetadata(
+                context_type='preset',
+                context_key=preset_name,
+                file_path=file_path,
+                description=description,
+            ))
+
+    for file_path, row in existing_by_path.items():
+        if file_path not in desired:
+            db.session.delete(row)
+
+
 def sync_builtin_presets(remove_orphaned=False):
     seen_names = set()
 
@@ -123,6 +148,8 @@ def sync_builtin_presets(remove_orphaned=False):
                 "a user preset with that name already exists. "
                 "Rename or delete it via the UI, then re-run 'flask sync-builtin-presets'."
             )
+
+        _sync_binary_metadata(name, manifest['binary_descriptions'])
 
     for row in ConfigPreset.query.filter_by(is_builtin=True).all():
         if row.name in seen_names:
