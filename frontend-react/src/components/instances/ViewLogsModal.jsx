@@ -229,6 +229,12 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                                             </div>
                                         )}
 
+                                        {filterMode === 'all' && (
+                                            <span className="font-mono text-xs" style={{ color: 'var(--accent-warning, #f59e0b)' }}>
+                                                ⚠ May fetch a very large log — slow on long-running servers
+                                            </span>
+                                        )}
+
                                         {/* Apply Button */}
                                         <button
                                             onClick={fetchLogs}
