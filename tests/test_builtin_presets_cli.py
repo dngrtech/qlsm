@@ -318,3 +318,23 @@ def test_sync_no_binary_metadata_when_field_absent(runner, app, tmp_path, monkey
             context_key='duel',
         ).all()
         assert rows == []
+
+
+def test_remove_orphaned_deletes_binary_metadata(runner, app, tmp_path, monkeypatch):
+    import shutil
+    monkeypatch.chdir(tmp_path)
+    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'My hook'})
+    write_so_file('duel', 'scripts/hook.so')
+    assert runner.invoke(args=['sync-builtin-presets']).exit_code == 0
+
+    shutil.rmtree(builtin_preset_path('duel'))
+
+    result = runner.invoke(args=['sync-builtin-presets', '--remove-orphaned'])
+
+    assert result.exit_code == 0
+    with app.app_context():
+        rows = BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key='duel',
+        ).all()
+        assert rows == []

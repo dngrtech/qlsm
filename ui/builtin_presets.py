@@ -157,6 +157,10 @@ def sync_builtin_presets(remove_orphaned=False):
         if os.path.isdir(row.path):
             continue
         if remove_orphaned:
+            BinaryMetadata.query.filter_by(
+                context_type='preset',
+                context_key=row.name,
+            ).delete()
             db.session.delete(row)
             click.echo(f"Removed orphaned built-in preset row: {row.name}")
         else:
