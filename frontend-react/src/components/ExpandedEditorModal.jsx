@@ -8,9 +8,11 @@ function ExpandedEditorModal({
   onClose,
   fileName,
   fileContent,
-  onContentChange,
+  onContentChange = () => {},
   language,
   linterSource,
+  readOnly = false,
+  titlePrefix = 'Editing:',
 }) {
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -46,7 +48,7 @@ function ExpandedEditorModal({
                     as="h3"
                     className="font-display text-lg font-semibold tracking-wider uppercase text-theme-primary"
                   >
-                    Editing: {fileName}
+                    {titlePrefix} {fileName}
                   </Dialog.Title>
                   <button
                     type="button"
@@ -66,6 +68,7 @@ function ExpandedEditorModal({
                     linterSource={linterSource}
                     isActiveTab={true}
                     height="100%"
+                    readOnly={readOnly}
                   />
                 </div>
 

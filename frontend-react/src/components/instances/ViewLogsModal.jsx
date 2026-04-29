@@ -1,7 +1,8 @@
 import React, { useState, useEffect, Fragment } from 'react';
 import { Dialog, Transition, RadioGroup } from '@headlessui/react';
-import { X, RefreshCw, Terminal, AlertCircle, Clock, List } from 'lucide-react';
+import { X, RefreshCw, Terminal, AlertCircle, Clock, List, Maximize } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
+import ExpandedEditorModal from '../ExpandedEditorModal';
 import { logLanguage } from '../../utils/logLanguage';
 import { fetchInstanceRemoteLogs } from '../../services/api';
 
@@ -34,13 +35,14 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
     const [logs, setLogs] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isExpandedEditorOpen, setIsExpandedEditorOpen] = useState(false);
 
     // Filter state
     const [filterMode, setFilterMode] = useState('lines');
     const [lineCount, setLineCount] = useState(500);
     const [timeRange, setTimeRange] = useState('1 hour ago');
 
-    // Fetch logs when modal opens or filter changes
+    // Fetch logs when modal opens. Filter changes apply through the Apply button.
     const fetchLogs = async () => {
         if (!instance?.id) return;
 
@@ -71,7 +73,11 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
         if (!isOpen) {
             setLogs('');
             setError(null);
+            setIsExpandedEditorOpen(false);
         }
+        // Intentionally omit fetchLogs from deps — filters are applied via the
+        // Apply button, not reactively. Effect should only run on open/instance change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, instance?.id]);
 
     // Scroll to bottom of logs after load
@@ -99,8 +105,9 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
     };
 
     return (
-        <Transition appear show={isOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-50" onClose={onClose}>
+        <>
+            <Transition appear show={isOpen} as={Fragment}>
+                <Dialog as="div" className="relative z-50" onClose={onClose}>
                 <Transition.Child
                     as={Fragment}
                     enter="ease-out duration-300"
@@ -257,13 +264,24 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                                         </div>
                                     ) : (
                                         <div className="h-full flex flex-col">
-                                            <div className="flex items-center gap-2 mb-3 px-2">
-                                                <div className="logs-modal-tip-icon">
-                                                    <Terminal className="h-3 w-3" strokeWidth={2.5} />
+                                            <div className="flex items-center justify-between gap-2 mb-3 px-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="logs-modal-tip-icon">
+                                                        <Terminal className="h-3 w-3" strokeWidth={2.5} />
+                                                    </div>
+                                                    <p className="font-mono text-xs text-theme-secondary">
+                                                        Press <kbd className="logs-modal-kbd">Ctrl+F</kbd> to search
+                                                    </p>
                                                 </div>
-                                                <p className="font-mono text-xs text-theme-secondary">
-                                                    Press <kbd className="logs-modal-kbd">Ctrl+F</kbd> to search
-                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsExpandedEditorOpen(true)}
+                                                    className="p-1 hover:bg-[var(--surface-elevated)] rounded transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                                    title="Expand logs editor"
+                                                    aria-label="Expand logs editor"
+                                                >
+                                                    <Maximize size={14} />
+                                                </button>
                                             </div>
                                             <div className="flex-1 border-2 border-theme-strong rounded-lg overflow-hidden logs-modal-editor-container">
                                                 <CodeMirrorEditor
@@ -281,8 +299,21 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                         </Transition.Child>
                     </div>
                 </div>
-            </Dialog>
-        </Transition>
+                </Dialog>
+            </Transition>
+
+            {isExpandedEditorOpen && (
+                <ExpandedEditorModal
+                    isOpen={isExpandedEditorOpen}
+                    onClose={() => setIsExpandedEditorOpen(false)}
+                    fileName={`${instance?.name || 'Instance'} Logs`}
+                    fileContent={logs}
+                    language={logLanguage}
+                    readOnly={true}
+                    titlePrefix="Viewing:"
+                />
+            )}
+        </>
     );
 }
 
