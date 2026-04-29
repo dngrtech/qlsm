@@ -213,7 +213,7 @@ class TestSaveBinaryMeta:
         assert resp.status_code == 200
         assert resp.get_json()['data']['description'] == ''
 
-    def test_rejects_description_over_100_chars(
+    def test_rejects_description_over_1000_chars(
         self, client, auth_headers, monkeypatch, preset_with_scripts, drafts_base,
     ):
         draft_id = _create_draft(
@@ -223,14 +223,14 @@ class TestSaveBinaryMeta:
             f'/api/drafts/{draft_id}/binary-meta',
             json={
                 'path': 'hook.so',
-                'description': 'x' * 101,
+                'description': 'x' * 1001,
                 'context_type': 'instance',
                 'context_key': '1',
             },
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert '100' in resp.get_json()['error']['message']
+        assert '1000' in resp.get_json()['error']['message']
 
     @pytest.mark.parametrize('bad_char', ['<', '>', '{', '}', '"'])
     def test_rejects_forbidden_characters(

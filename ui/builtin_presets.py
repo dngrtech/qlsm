@@ -15,7 +15,7 @@ from ui.preset_support import (
 )
 
 
-_DESCRIPTION_MAX_LEN = 100
+_DESCRIPTION_MAX_LEN = 1000
 _DESCRIPTION_RE = re.compile(r'^[\w .,;:()\'\-]*$')
 
 

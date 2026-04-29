@@ -11,7 +11,7 @@ from ui.routes.draft_routes import _draft_exists, _validate_draft_id
 
 binary_meta_bp = Blueprint('binary_meta', __name__)
 
-DESCRIPTION_MAX_LEN = 100
+DESCRIPTION_MAX_LEN = 1000
 _DESCRIPTION_RE = re.compile(r'^[^<>{}"]*$')
 _VALID_CONTEXT_TYPES = frozenset({'preset', 'instance'})
 

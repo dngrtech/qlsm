@@ -188,7 +188,7 @@ def test_delete_preset_rejects_internal_namespace(runner, app, tmp_path, monkeyp
 
 def test_sync_rejects_binary_description_too_long(runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'x' * 101})
+    write_manifest('duel', 'Duel', binary_descriptions={'scripts/hook.so': 'x' * 1001})
     write_so_file('duel', 'scripts/hook.so')
 
     result = runner.invoke(args=['sync-builtin-presets'])

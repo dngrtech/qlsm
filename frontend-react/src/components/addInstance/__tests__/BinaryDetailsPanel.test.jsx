@@ -78,14 +78,14 @@ describe('BinaryDetailsPanel', () => {
     expect(onDescriptionSave).toHaveBeenCalledWith('my label');
   });
 
-  it('shows validation error and does not save when description exceeds 100 chars', () => {
+  it('shows validation error and does not save when description exceeds 1000 chars', () => {
     const onDescriptionSave = vi.fn();
     render(<BinaryDetailsPanel {...BASE_PROPS} onDescriptionSave={onDescriptionSave} />);
     const input = screen.getByPlaceholderText(/short label/i);
-    fireEvent.change(input, { target: { value: 'x'.repeat(101) } });
+    fireEvent.change(input, { target: { value: 'x'.repeat(1001) } });
     fireEvent.blur(input);
     expect(onDescriptionSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/max 100/i)).toBeInTheDocument();
+    expect(screen.getByText(/max 1000/i)).toBeInTheDocument();
   });
 
   it.each(['<', '>', '{', '}', '"'])(
@@ -111,7 +111,7 @@ describe('BinaryDetailsPanel', () => {
     );
     const input = screen.getByPlaceholderText(/short label/i);
     fireEvent.focus(input);
-    expect(screen.getByText('2/100')).toBeInTheDocument();
+    expect(screen.getByText('2/1000')).toBeInTheDocument();
   });
 
   it('reverts to original description on Escape', () => {
