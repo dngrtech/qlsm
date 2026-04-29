@@ -8,7 +8,7 @@ function ExpandedEditorModal({
   onClose,
   fileName,
   fileContent,
-  onContentChange,
+  onContentChange = () => {},
   language,
   linterSource,
   readOnly = false,

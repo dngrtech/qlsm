@@ -75,6 +75,8 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
             setError(null);
             setIsExpandedEditorOpen(false);
         }
+        // Intentionally omit fetchLogs from deps — filters are applied via the
+        // Apply button, not reactively. Effect should only run on open/instance change.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, instance?.id]);
 
@@ -306,7 +308,6 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                     onClose={() => setIsExpandedEditorOpen(false)}
                     fileName={`${instance?.name || 'Instance'} Logs`}
                     fileContent={logs}
-                    onContentChange={() => { }}
                     language={logLanguage}
                     readOnly={true}
                     titlePrefix="Viewing:"
