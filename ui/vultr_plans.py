@@ -39,13 +39,25 @@ def _family(plan_id):
     return prefix
 
 
+_FAMILY_LABELS = {
+    "vc2":       "Cloud Compute (Shared)",
+    "vhf":       "High Frequency",
+    "vhp-amd":   "High Performance (AMD)",
+    "vhp-intel": "High Performance (Intel)",
+}
+
+
+def _plan_name(plan_id, vcpu, ram_mb, price_usd):
+    label = _FAMILY_LABELS.get(_family(plan_id), _family(plan_id))
+    ram_gb = ram_mb // 1024
+    price = int(price_usd) if price_usd % 1 == 0 else f"{price_usd:.2f}"
+    return f"{label} — {vcpu} vCPU / {ram_gb} GB RAM / ${price}/mo"
+
+
 def _plan(plan_id, vcpu, ram_mb, disk_gb, bandwidth_gb, price_usd):
     return {
         "id": plan_id,
-        "name": (
-            f"{plan_id} ({vcpu} VCPU, {ram_mb} RAM, {disk_gb} DISK, "
-            f"{bandwidth_gb}GB BW, ${price_usd:.2f}/mo)"
-        ),
+        "name": _plan_name(plan_id, vcpu, ram_mb, price_usd),
         "family": _family(plan_id),
         "vcpu": vcpu,
         "ram_mb": ram_mb,
