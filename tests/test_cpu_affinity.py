@@ -1,9 +1,11 @@
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from ui import db
 from ui.database import create_host, create_instance
 from ui.models import HostStatus
 from ui.task_logic.cpu_affinity import (
+    _detect_cpu_count_with_ansible,
     ensure_instance_cpu_affinity,
     resolve_host_cpu_count,
 )
@@ -20,6 +22,42 @@ def test_resolve_vultr_cpu_count_from_plan(app_context):
 
     assert resolve_host_cpu_count(host) == 2
     assert host.cpu_count == 2
+
+
+def test_resolve_vultr_cpu_count_refreshes_stale_saved_value(app_context):
+    host = create_host(
+        name='stale-vultr-cpu-host',
+        provider='vultr',
+        region='ewr',
+        machine_size='vhf-2c-2gb',
+        status=HostStatus.ACTIVE,
+        cpu_count=1,
+    )
+
+    assert resolve_host_cpu_count(host) == 2
+    assert host.cpu_count == 2
+
+
+def test_detect_cpu_count_with_ansible_parses_nproc_output(app_context):
+    host = create_host(
+        name='standalone-cpu-host',
+        provider='standalone',
+        region=None,
+        machine_size=None,
+        status=HostStatus.ACTIVE,
+    )
+
+    with patch('ui.task_logic.cpu_affinity.subprocess.run') as mock_run:
+        mock_run.return_value = SimpleNamespace(
+            returncode=0,
+            stdout='standalone-cpu-host | CHANGED | rc=0 >>\n4\n',
+            stderr='',
+        )
+
+        assert _detect_cpu_count_with_ansible(host) == 4
+
+    cmd = mock_run.call_args.args[0]
+    assert cmd[-3:] == ['command', '-a', 'nproc']
 
 
 def test_unknown_cpu_count_leaves_affinity_unset(app_context):

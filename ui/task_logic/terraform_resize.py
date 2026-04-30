@@ -7,6 +7,7 @@ from rq import get_current_job
 
 from ui import db
 from ui.models import Host, HostStatus
+from ui.vultr_plans import get_plan
 from .common import append_log
 from .terraform_runner import _run_terraform_command, run_terraform_with_retry
 
@@ -73,6 +74,8 @@ def resize_host_logic(host_id, new_plan):
 
     old_plan = host.machine_size
     host.machine_size = new_plan
+    new_plan_info = get_plan(new_plan)
+    host.cpu_count = new_plan_info.get("vcpu") if new_plan_info else None
     host.status = HostStatus.ACTIVE
     append_log(host, f"Resize complete: {old_plan} -> {new_plan}. Status: {host.status.value}")
     db.session.commit()

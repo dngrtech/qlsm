@@ -63,6 +63,7 @@ def test_resize_host_success(
 
     _mock_job(mock_get_job)
     host = Host(**MOCK_HOST_DATA)
+    host.cpu_count = 1
     mock_session.get.return_value = host
     mock_run_tf.side_effect = [("Init success", None), ("Selected", None)]
     mock_run_tf_retry.return_value = ("Apply complete!", None)
@@ -70,6 +71,7 @@ def test_resize_host_success(
     result = resize_host_logic(100, "vc2-2c-4gb")
 
     assert host.machine_size == "vc2-2c-4gb"
+    assert host.cpu_count == 2
     assert host.status == HostStatus.ACTIVE
     assert "resize complete" in result.lower()
 

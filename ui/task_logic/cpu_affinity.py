@@ -75,13 +75,17 @@ def _detect_cpu_count_with_ansible(host):
 
 
 def resolve_host_cpu_count(host):
+    inferred = _infer_vultr_cpu_count(host)
+    if inferred:
+        if getattr(host, 'cpu_count', None) != inferred:
+            host.cpu_count = inferred
+        return inferred
+
     saved = _positive_int(getattr(host, 'cpu_count', None))
     if saved:
         return saved
 
-    detected = _infer_vultr_cpu_count(host)
-    if detected is None:
-        detected = _detect_cpu_count_with_ansible(host)
+    detected = _detect_cpu_count_with_ansible(host)
 
     if detected:
         host.cpu_count = detected
