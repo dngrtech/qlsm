@@ -5,7 +5,7 @@ from ui.routes.settings_routes import require_api_key
 
 external_api_bp = Blueprint('external_api', __name__)
 
-_EXCLUDED_FIELDS = {'zmq_rcon_port', 'zmq_rcon_password', 'zmq_stats_port', 'zmq_stats_password', 'logs', 'config'}
+_EXCLUDED_FIELDS = {'zmq_rcon_port', 'zmq_rcon_password', 'logs', 'config'}
 
 
 @external_api_bp.route('/instances', methods=['GET'])
