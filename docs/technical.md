@@ -140,6 +140,7 @@ class Host(db.Model):
     os_type = db.Column(db.String(50), nullable=True)  # normalized detected host OS family, e.g. 'debian', 'ubuntu'
     is_standalone = db.Column(db.Boolean, default=False)  # user-provided host (not Terraform)
     timezone = db.Column(db.String(100), nullable=True)  # IANA timezone name
+    cpu_count = db.Column(db.Integer, nullable=True)
     auto_restart_schedule = db.Column(db.String(100), nullable=True)  # cron expression
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True)
@@ -172,6 +173,7 @@ class QLInstance(db.Model):
     hostname = db.Column(db.String(255), nullable=False)  # sv_hostname
     lan_rate_enabled = db.Column(db.Boolean, default=False, nullable=False)
     qlx_plugins = db.Column(db.Text, nullable=True)  # comma-separated plugin list
+    cpu_affinity = db.Column(db.Integer, nullable=True)
     zmq_rcon_port = db.Column(db.Integer, nullable=True)
     zmq_rcon_password = db.Column(db.String(255), nullable=True)
     zmq_stats_port = db.Column(db.Integer, nullable=True)
@@ -252,6 +254,12 @@ The project uses pytest for testing, with fixtures defined in `tests/conftest.py
     *   Detailed stdout and stderr from Terraform CLI executions (triggered by tasks in `ui/task_logic/terraform_provision.py` and `ui/task_logic/terraform_destroy.py`) are no longer stored directly in the `Host.logs` database field.
     *   Instead, these verbose logs are saved to individual files within the `logs/terraform_runs/` directory (e.g., `logs/terraform_runs/host_<host_id>_<task_name>_<command>_<job_id>_<timestamp>.log`). This is managed by the `save_terraform_run_log` function in `ui/task_logic/file_logger.py`.
     *   The `Host.logs` database field now stores concise, timestamped status messages, including a reference to the path of the detailed log file for each Terraform command executed.
+
+### QLDS CPU Affinity
+
+When a host has more than one CPU, QLSM assigns each QLDS instance a persisted Linux CPU index using a least-used strategy. The assignment is stored on `QLInstance.cpu_affinity`; the detected or inferred host CPU count is stored on `Host.cpu_count`.
+
+Service files render systemd `CPUAffinity=<cpu>` only when an assignment exists. One CPU hosts and hosts with unknown CPU counts omit affinity and use normal Linux scheduling. Existing instances are not restarted or rewritten during upgrade; they get affinity on the next QLSM-managed service render, or after manual DB assignment plus an instance restart.
 
 ### Terraform (Host Provisioning)
 
