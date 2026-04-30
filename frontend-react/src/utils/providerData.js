@@ -60,16 +60,16 @@ export const providerOptions = {
       ],
       // NOTE: Mirrors ui/vultr_plans.py. Tests assert parity.
       sizes: [
-        { id: 'vc2-1c-1gb', name: planName('vc2', 1, 1024, 5), family: 'vc2', vcpu: 1, ram_mb: 1024, disk_gb: 25, bandwidth_gb: 1024, price_usd: 5.00, locations: LOC_VC2_VHF },
-        { id: 'vc2-1c-2gb', name: planName('vc2', 1, 2048, 10), family: 'vc2', vcpu: 1, ram_mb: 2048, disk_gb: 55, bandwidth_gb: 2048, price_usd: 10.00, locations: LOC_VC2_VHF },
-        { id: 'vc2-2c-2gb', name: planName('vc2', 2, 2048, 15), family: 'vc2', vcpu: 2, ram_mb: 2048, disk_gb: 65, bandwidth_gb: 3072, price_usd: 15.00, locations: LOC_VC2_VHF },
-        { id: 'vc2-2c-4gb', name: planName('vc2', 2, 4096, 20), family: 'vc2', vcpu: 2, ram_mb: 4096, disk_gb: 80, bandwidth_gb: 3072, price_usd: 20.00, locations: LOC_VC2_VHF },
-        { id: 'vc2-4c-8gb', name: planName('vc2', 4, 8192, 40), family: 'vc2', vcpu: 4, ram_mb: 8192, disk_gb: 160, bandwidth_gb: 4096, price_usd: 40.00, locations: LOC_VC2_VHF },
         { id: 'vhf-1c-1gb', name: planName('vhf', 1, 1024, 6), family: 'vhf', vcpu: 1, ram_mb: 1024, disk_gb: 32, bandwidth_gb: 1024, price_usd: 6.00, locations: LOC_VC2_VHF },
         { id: 'vhf-1c-2gb', name: planName('vhf', 1, 2048, 12), family: 'vhf', vcpu: 1, ram_mb: 2048, disk_gb: 64, bandwidth_gb: 2048, price_usd: 12.00, locations: LOC_VC2_VHF },
         { id: 'vhf-2c-2gb', name: planName('vhf', 2, 2048, 18), family: 'vhf', vcpu: 2, ram_mb: 2048, disk_gb: 80, bandwidth_gb: 3072, price_usd: 18.00, locations: LOC_VC2_VHF },
         { id: 'vhf-2c-4gb', name: planName('vhf', 2, 4096, 24), family: 'vhf', vcpu: 2, ram_mb: 4096, disk_gb: 128, bandwidth_gb: 3072, price_usd: 24.00, locations: LOC_VC2_VHF },
         { id: 'vhf-3c-8gb', name: planName('vhf', 3, 8192, 48), family: 'vhf', vcpu: 3, ram_mb: 8192, disk_gb: 256, bandwidth_gb: 4096, price_usd: 48.00, locations: LOC_VC2_VHF },
+        { id: 'vc2-1c-1gb', name: planName('vc2', 1, 1024, 5), family: 'vc2', vcpu: 1, ram_mb: 1024, disk_gb: 25, bandwidth_gb: 1024, price_usd: 5.00, locations: LOC_VC2_VHF },
+        { id: 'vc2-1c-2gb', name: planName('vc2', 1, 2048, 10), family: 'vc2', vcpu: 1, ram_mb: 2048, disk_gb: 55, bandwidth_gb: 2048, price_usd: 10.00, locations: LOC_VC2_VHF },
+        { id: 'vc2-2c-2gb', name: planName('vc2', 2, 2048, 15), family: 'vc2', vcpu: 2, ram_mb: 2048, disk_gb: 65, bandwidth_gb: 3072, price_usd: 15.00, locations: LOC_VC2_VHF },
+        { id: 'vc2-2c-4gb', name: planName('vc2', 2, 4096, 20), family: 'vc2', vcpu: 2, ram_mb: 4096, disk_gb: 80, bandwidth_gb: 3072, price_usd: 20.00, locations: LOC_VC2_VHF },
+        { id: 'vc2-4c-8gb', name: planName('vc2', 4, 8192, 40), family: 'vc2', vcpu: 4, ram_mb: 8192, disk_gb: 160, bandwidth_gb: 4096, price_usd: 40.00, locations: LOC_VC2_VHF },
         // Overkill for QL workloads (max realistic load: 4 instances x 24 players). Re-enable if needed.
         // { id: 'vhf-4c-16gb', name: 'vhf-4c-16gb (4 VCPU, 16384 RAM, 384 DISK, 5120GB BW, $96.00/mo)', family: 'vhf', vcpu: 4, ram_mb: 16384, disk_gb: 384, bandwidth_gb: 5120, price_usd: 96.00 },
         { id: 'vhp-1c-1gb-amd', name: planName('vhp-amd', 1, 1024, 6), family: 'vhp-amd', vcpu: 1, ram_mb: 1024, disk_gb: 25, bandwidth_gb: 2048, price_usd: 6.00, locations: LOC_VHP_AMD },
