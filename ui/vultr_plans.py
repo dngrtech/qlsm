@@ -51,7 +51,8 @@ VULTR_PLANS = [
     _plan("vhf-2c-2gb", 2, 2048, 80, 3072, 18.00),
     _plan("vhf-2c-4gb", 2, 4096, 128, 3072, 24.00),
     _plan("vhf-3c-8gb", 3, 8192, 256, 4096, 48.00),
-    _plan("vhf-4c-16gb", 4, 16384, 384, 5120, 96.00),
+    # Overkill for QL workloads (max realistic load: 4 instances x 24 players). Re-enable if needed.
+    # _plan("vhf-4c-16gb", 4, 16384, 384, 5120, 96.00),
 
     # vhp: High Performance (AMD)
     _plan("vhp-1c-1gb-amd", 1, 1024, 25, 2048, 6.00),
@@ -59,7 +60,7 @@ VULTR_PLANS = [
     _plan("vhp-2c-2gb-amd", 2, 2048, 60, 4096, 18.00),
     _plan("vhp-2c-4gb-amd", 2, 4096, 100, 5120, 24.00),
     _plan("vhp-4c-8gb-amd", 4, 8192, 180, 6144, 48.00),
-    _plan("vhp-4c-12gb-amd", 4, 12288, 260, 7168, 72.00),
+    # _plan("vhp-4c-12gb-amd", 4, 12288, 260, 7168, 72.00),
 
     # vhp: High Performance (Intel)
     _plan("vhp-1c-1gb-intel", 1, 1024, 25, 2048, 6.00),
@@ -67,21 +68,21 @@ VULTR_PLANS = [
     _plan("vhp-2c-2gb-intel", 2, 2048, 60, 4096, 18.00),
     _plan("vhp-2c-4gb-intel", 2, 4096, 100, 5120, 24.00),
     _plan("vhp-4c-8gb-intel", 4, 8192, 180, 6144, 48.00),
-    _plan("vhp-4c-12gb-intel", 4, 12288, 260, 7168, 72.00),
+    # _plan("vhp-4c-12gb-intel", 4, 12288, 260, 7168, 72.00),
 
-    # voc: Optimized Cloud
-    _plan("voc-c-1c-2gb-25s-amd", 1, 2048, 25, 4096, 28.00),
-    _plan("voc-g-1c-4gb-30s-amd", 1, 4096, 30, 4096, 30.00),
-    _plan("voc-m-1c-8gb-50s-amd", 1, 8192, 50, 5120, 40.00),
-    _plan("voc-c-2c-4gb-50s-amd", 2, 4096, 50, 5120, 40.00),
-    _plan("voc-g-2c-8gb-50s-amd", 2, 8192, 50, 5120, 60.00),
-    _plan("voc-c-2c-4gb-75s-amd", 2, 4096, 75, 5120, 45.00),
-    _plan("voc-c-4c-8gb-75s-amd", 4, 8192, 75, 6144, 80.00),
-    _plan("voc-g-4c-16gb-80s-amd", 4, 16384, 80, 6144, 120.00),
-    _plan("voc-m-2c-16gb-100s-amd", 2, 16384, 100, 6144, 80.00),
-    _plan("voc-s-1c-8gb-150s-amd", 1, 8192, 150, 4096, 75.00),
-    _plan("voc-c-4c-8gb-150s-amd", 4, 8192, 150, 6144, 90.00),
-    _plan("voc-m-2c-16gb-200s-amd", 2, 16384, 200, 6144, 100.00),
+    # voc: Optimized Cloud (omitted - designed for storage/DB workloads, overkill for QL)
+    # _plan("voc-c-1c-2gb-25s-amd", 1, 2048, 25, 4096, 28.00),
+    # _plan("voc-g-1c-4gb-30s-amd", 1, 4096, 30, 4096, 30.00),
+    # _plan("voc-m-1c-8gb-50s-amd", 1, 8192, 50, 5120, 40.00),
+    # _plan("voc-c-2c-4gb-50s-amd", 2, 4096, 50, 5120, 40.00),
+    # _plan("voc-g-2c-8gb-50s-amd", 2, 8192, 50, 5120, 60.00),
+    # _plan("voc-c-2c-4gb-75s-amd", 2, 4096, 75, 5120, 45.00),
+    # _plan("voc-c-4c-8gb-75s-amd", 4, 8192, 75, 6144, 80.00),
+    # _plan("voc-g-4c-16gb-80s-amd", 4, 16384, 80, 6144, 120.00),
+    # _plan("voc-m-2c-16gb-100s-amd", 2, 16384, 100, 6144, 80.00),
+    # _plan("voc-s-1c-8gb-150s-amd", 1, 8192, 150, 4096, 75.00),
+    # _plan("voc-c-4c-8gb-150s-amd", 4, 8192, 150, 6144, 90.00),
+    # _plan("voc-m-2c-16gb-200s-amd", 2, 16384, 200, 6144, 100.00),
 ]
 
 PLANS_BY_ID = {plan["id"]: plan for plan in VULTR_PLANS}

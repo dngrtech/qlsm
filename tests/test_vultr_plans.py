@@ -68,15 +68,13 @@ def test_vhp_amd_and_intel_are_separate_families():
     assert is_valid_upgrade("vhp-1c-1gb-amd", "vhp-2c-4gb-amd") is True
 
 
-def test_voc_subtypes_are_separate_families():
-    assert is_valid_upgrade("voc-c-1c-2gb-25s-amd", "voc-g-1c-4gb-30s-amd") is False
-    assert is_valid_upgrade("voc-c-1c-2gb-25s-amd", "voc-c-2c-4gb-50s-amd") is True
-
-
 def test_js_and_python_catalogs_have_identical_families():
     """Family must match between backend and frontend or upgrade options diverge."""
     js_path = Path(__file__).parent.parent / "frontend-react" / "src" / "utils" / "providerData.js"
-    js_text = js_path.read_text()
+    js_text = "\n".join(
+        line for line in js_path.read_text().splitlines()
+        if not line.lstrip().startswith("//")
+    )
     js_entries = dict(re.findall(r"id:\s*'([a-z0-9-]+)'.*?family:\s*'([a-z0-9-]+)'", js_text))
     for plan in VULTR_PLANS:
         assert js_entries.get(plan["id"]) == plan["family"], (
@@ -87,7 +85,10 @@ def test_js_and_python_catalogs_have_identical_families():
 def test_js_and_python_catalogs_have_identical_ids():
     """Guard against backend/frontend plan catalog drift."""
     js_path = Path(__file__).parent.parent / "frontend-react" / "src" / "utils" / "providerData.js"
-    js_text = js_path.read_text()
+    js_text = "\n".join(
+        line for line in js_path.read_text().splitlines()
+        if not line.lstrip().startswith("//")
+    )
     js_ids = set(re.findall(r"id:\s*'([a-z0-9-]+)'", js_text))
     py_ids = {plan["id"] for plan in VULTR_PLANS}
 
