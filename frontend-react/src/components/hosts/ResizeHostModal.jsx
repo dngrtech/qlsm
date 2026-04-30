@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { AlertTriangle, ArrowUpCircle, X } from 'lucide-react';
 import { getPlan, getUpgradeOptions } from '../../utils/providerData';
+import FloatingListbox from '../common/FloatingListbox';
 
 function ResizeHostModal({ isOpen, onClose, onSubmit, host, error, isSubmitting = false }) {
     const [selectedPlan, setSelectedPlan] = useState('');
@@ -95,19 +96,20 @@ function ResizeHostModal({ isOpen, onClose, onSubmit, host, error, isSubmitting 
                                                 No upgrades available for this plan family.
                                             </p>
                                         ) : (
-                                            <select
-                                                id="resize-new-plan"
+                                            <FloatingListbox
                                                 value={selectedPlan}
-                                                onChange={(e) => setSelectedPlan(e.target.value)}
-                                                className="select-base"
+                                                onChange={setSelectedPlan}
+                                                options={upgradeOptions}
                                                 disabled={isSubmitting}
-                                                required
-                                            >
-                                                <option value="">Select a plan...</option>
-                                                {upgradeOptions.map(plan => (
-                                                    <option key={plan.id} value={plan.id}>{plan.name}</option>
-                                                ))}
-                                            </select>
+                                                getOptionKey={(opt) => opt.id}
+                                                getOptionDisplay={(opt) => opt.name}
+                                                getSelectedDisplay={(val, opts) => {
+                                                    const found = opts.find(o => o.id === val);
+                                                    return found ? found.name : 'Select a plan...';
+                                                }}
+                                                placeholder="Select a plan..."
+                                                noOptionsMessage="No upgrade plans available."
+                                            />
                                         )}
                                     </div>
 
