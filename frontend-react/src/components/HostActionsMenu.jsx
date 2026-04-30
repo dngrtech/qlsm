@@ -1,7 +1,7 @@
 import React, { Fragment, useState } from 'react';
 import { Menu, Transition, Portal } from '@headlessui/react';
 import { useFloating, shift, offset, autoUpdate, flip } from '@floating-ui/react-dom';
-import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon } from 'lucide-react';
+import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon, ArrowUpCircle } from 'lucide-react';
 import { HostStatus, QLFILTER_STATUS } from '../utils/statusEnums';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -13,7 +13,8 @@ function HostActionsMenu({
   onUninstallQlfilter,
   onRequestRestart,
   onOpenUpdateWorkshop,
-  onOpenAutoRestart
+  onOpenAutoRestart,
+  onOpenResize
 }) {
   const [isInstallQlFilterModalOpen, setIsInstallQlFilterModalOpen] = useState(false);
   const [isUninstallQlFilterModalOpen, setIsUninstallQlFilterModalOpen] = useState(false);
@@ -32,6 +33,7 @@ function HostActionsMenu({
   const qlStatus = host.qlfilter_status || QLFILTER_STATUS.UNKNOWN;
   const isQlFilterBusy = qlStatus === QLFILTER_STATUS.INSTALLING || qlStatus === QLFILTER_STATUS.UNINSTALLING;
   const isHostBusy = [HostStatus.PROVISIONING, HostStatus.DELETING, HostStatus.REBOOTING, HostStatus.CONFIGURING].map(s => s.toLowerCase()).includes(hostStatus);
+  const isHostActive = hostStatus === HostStatus.ACTIVE.toLowerCase();
   const isHostReady = hostStatus === HostStatus.ACTIVE.toLowerCase() || hostStatus === HostStatus.ERROR.toLowerCase();
 
   return (
@@ -159,6 +161,25 @@ function HostActionsMenu({
                       </button>
                     )}
                   </Menu.Item>
+
+                  {host.provider === 'vultr' && (
+                    <Menu.Item>
+                      {({ active }) => (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof onOpenResize === 'function') onOpenResize(host);
+                            closeMenu();
+                          }}
+                          disabled={!isHostActive || isQlFilterBusy || isHostBusy}
+                          className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}
+                        >
+                          <ArrowUpCircle size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
+                          Resize
+                        </button>
+                      )}
+                    </Menu.Item>
+                  )}
 
                   {/* QLFilter Install/Uninstall */}
                   <Menu.Item>
