@@ -1043,7 +1043,10 @@ def resize_host_api(host_id):
     if current_plan_obj and new_plan_obj and current_plan_obj['family'] != new_plan_obj['family']:
         return jsonify({"error": {"message": "Cross-family resize is not supported. Pick a plan in the same family as the current plan."}}), 400
 
-    if not is_valid_upgrade(current_plan, new_plan):
+    if new_plan_obj and host.region and host.region not in new_plan_obj.get('locations', ()):
+        return jsonify({"error": {"message": f"Plan {new_plan} is not available in region {host.region}."}}), 400
+
+    if not is_valid_upgrade(current_plan, new_plan, region_id=host.region):
         return jsonify({"error": {"message": "new_plan must be an upgrade (same family, higher price) of the current plan."}}), 400
 
     lock_token = str(uuid.uuid4())

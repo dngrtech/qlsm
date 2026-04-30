@@ -306,7 +306,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const vultrFilteredRegions = selectedContinent && provider === 'vultr'
     ? vultrAllRegions.filter(r => r.continent === selectedContinent)
     : [];
-  const currentSizes = providerOptions[provider]?.sizes || [];
+  const allSizes = providerOptions[provider]?.sizes || [];
+  const currentSizes = (provider === 'vultr' && region)
+    ? allSizes.filter(s => !s.locations || s.locations.includes(region))
+    : allSizes;
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -385,7 +388,14 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onContinentChange={setSelectedContinent}
                         vultrContinentOptions={vultrContinentOptions}
                         region={region}
-                        onRegionChange={setRegion}
+                        onRegionChange={(newRegion) => {
+                          setRegion(newRegion);
+                          // Clear size if it's not available in the newly selected region.
+                          const stillAvailable = allSizes.find(s =>
+                            s.id === machineSize && (!s.locations || s.locations.includes(newRegion))
+                          );
+                          if (!stillAvailable) setMachineSize('');
+                        }}
                         vultrFilteredRegions={vultrFilteredRegions}
                         machineSize={machineSize}
                         onMachineSizeChange={setMachineSize}

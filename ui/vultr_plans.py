@@ -6,6 +6,24 @@ that both catalogs list the same plan IDs.
 """
 
 
+# Per-plan region availability buckets, sourced from Vultr /v2/plans.
+# vc2 / vhf share the same regional footprint (no hnl, no mxp).
+# vhp-amd is offered in mxp but not hnl. vhp-intel is offered in hnl but not mxp.
+_LOC_VC2_VHF = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+_LOC_VHP_AMD = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','mxp','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+_LOC_VHP_INTEL = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','hnl','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+
+
+def _locations(plan_id):
+    if plan_id.startswith(("vc2-", "vhf-")):
+        return _LOC_VC2_VHF
+    if plan_id.startswith("vhp-") and plan_id.endswith("-amd"):
+        return _LOC_VHP_AMD
+    if plan_id.startswith("vhp-") and plan_id.endswith("-intel"):
+        return _LOC_VHP_INTEL
+    return ()
+
+
 def _family(plan_id):
     """Compatibility group for in-place upgrades.
 
@@ -34,6 +52,7 @@ def _plan(plan_id, vcpu, ram_mb, disk_gb, bandwidth_gb, price_usd):
         "disk_gb": disk_gb,
         "bandwidth_gb": bandwidth_gb,
         "price_usd": price_usd,
+        "locations": _locations(plan_id),
     }
 
 
@@ -93,12 +112,18 @@ def get_plan(plan_id):
     return PLANS_BY_ID.get(plan_id)
 
 
-def is_valid_upgrade(current_plan_id, new_plan_id):
-    """Return True when new_plan_id is a same-family, higher-price upgrade."""
+def is_valid_upgrade(current_plan_id, new_plan_id, region_id=None):
+    """Return True when new_plan_id is a same-family, higher-price upgrade.
+
+    When region_id is supplied, the new plan must also be available in that
+    region, otherwise Vultr will reject the resize.
+    """
     current = get_plan(current_plan_id)
     new = get_plan(new_plan_id)
     if current is None or new is None:
         return False
     if current["family"] != new["family"]:
+        return False
+    if region_id and region_id not in new.get("locations", ()):
         return False
     return new["price_usd"] > current["price_usd"]

@@ -15,7 +15,7 @@ function ResizeHostModal({ isOpen, onClose, onSubmit, host, error, isSubmitting 
 
     const currentPlanId = host.machine_size;
     const currentPlan = getPlan('vultr', currentPlanId);
-    const upgradeOptions = getUpgradeOptions('vultr', currentPlanId);
+    const upgradeOptions = getUpgradeOptions('vultr', currentPlanId, host.region);
     const noUpgrades = upgradeOptions.length === 0;
 
     const handleClose = () => {
