@@ -6,6 +6,21 @@ that both catalogs list the same plan IDs.
 """
 
 
+def _family(plan_id):
+    """Compatibility group for in-place upgrades.
+
+    Plans only resize cleanly within the same hardware track, so the family
+    must distinguish CPU vendor (amd/intel) and voc subtype (c/g/m/s).
+    """
+    parts = plan_id.split("-")
+    prefix = parts[0]
+    if prefix == "vhp":
+        return f"vhp-{parts[-1]}"
+    if prefix == "voc":
+        return f"voc-{parts[1]}-{parts[-1]}"
+    return prefix
+
+
 def _plan(plan_id, vcpu, ram_mb, disk_gb, bandwidth_gb, price_usd):
     return {
         "id": plan_id,
@@ -13,7 +28,7 @@ def _plan(plan_id, vcpu, ram_mb, disk_gb, bandwidth_gb, price_usd):
             f"{plan_id} ({vcpu} VCPU, {ram_mb} RAM, {disk_gb} DISK, "
             f"{bandwidth_gb}GB BW, ${price_usd:.2f}/mo)"
         ),
-        "family": plan_id.split("-", 1)[0],
+        "family": _family(plan_id),
         "vcpu": vcpu,
         "ram_mb": ram_mb,
         "disk_gb": disk_gb,

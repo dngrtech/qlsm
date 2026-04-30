@@ -1023,8 +1023,8 @@ def resize_host_api(host_id):
         return jsonify({"error": {"message": f"Host must be in ACTIVE state to resize. Current state: {host.status.value}"}}), 409
 
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": {"message": "Request body must be JSON."}}), 400
+    if not isinstance(data, dict):
+        return jsonify({"error": {"message": "Request body must be a JSON object."}}), 400
 
     new_plan = data.get('new_plan')
     if not isinstance(new_plan, str) or not new_plan.strip():
@@ -1055,6 +1055,10 @@ def resize_host_api(host_id):
         enqueue_task(resize_host_task, host.id, new_plan,
                      lock_token=lock_token, on_failure=host_job_failure_handler)
     except Exception as e:
+        try:
+            update_host(host.id, status=HostStatus.ACTIVE)
+        except Exception:
+            current_app.logger.error(f"Failed to revert host {host.id} status after enqueue failure", exc_info=True)
         release_lock('host', host.id, lock_token)
         current_app.logger.error(f"Error queuing resize for host {host.id}: {e}", exc_info=True)
         return jsonify({"error": {"message": f"Failed to queue resize: {str(e)}"}}), 500

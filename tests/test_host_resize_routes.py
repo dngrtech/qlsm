@@ -159,3 +159,36 @@ def test_resize_host_lock_conflict(mock_lock, client, app):
 
     assert response.status_code == 409
     assert "another operation" in response.get_json()["error"]["message"].lower()
+
+
+@patch("ui.routes.host_routes.release_lock")
+@patch("ui.routes.host_routes.enqueue_task", side_effect=Exception("Redis down"))
+@patch("ui.routes.host_routes.acquire_lock", return_value=True)
+def test_resize_host_enqueue_failure_reverts_status(mock_lock, mock_enqueue, mock_release, client, app):
+    """If enqueue fails after status flipped to CONFIGURING, revert to ACTIVE."""
+    host_id = _make_vultr_active_host(app, name="enqueue-fail-host")
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post(
+        f"/api/hosts/{host_id}/resize",
+        headers=headers,
+        json={"new_plan": "vc2-2c-4gb"},
+    )
+
+    assert response.status_code == 500
+    mock_release.assert_called_once()
+    with app.app_context():
+        host = get_host(host_id)
+        assert host.status == HostStatus.ACTIVE
+
+
+def test_resize_host_non_dict_body_rejected(client, app):
+    """Non-object JSON (list, string) must return 400 not 500."""
+    host_id = _make_vultr_active_host(app, name="badjson-host")
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post(
+        f"/api/hosts/{host_id}/resize",
+        headers=headers,
+        json=["not", "an", "object"],
+    )
+    assert response.status_code == 400
