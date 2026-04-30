@@ -136,4 +136,68 @@ describe('InstanceDetailsModal lan rate guard', () => {
 
     await waitFor(() => expect(mocks.updateInstanceLanRate).toHaveBeenCalledWith(5, false));
   });
+
+  it('shows assigned CPU affinity in details', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      id: 6,
+      name: 'inst-6',
+      host_id: 10,
+      host_name: 'cpu-host',
+      host_os_type: 'debian',
+      host_ip_address: '203.0.113.12',
+      port: 27960,
+      hostname: 'CPU Server',
+      lan_rate_enabled: false,
+      status: 'RUNNING',
+      cpu_affinity: 1,
+    });
+
+    render(
+      <InstanceDetailsModal
+        isOpen={true}
+        instanceId={6}
+        onClose={vi.fn()}
+        onInstanceDeleted={vi.fn()}
+        onInstanceUpdated={vi.fn()}
+        onOpenEditConfig={vi.fn()}
+        onOpenHostDrawer={vi.fn()}
+        serverStatus={null}
+      />
+    );
+
+    expect(await screen.findByText('CPU Affinity')).toBeInTheDocument();
+    expect(screen.getByText('CPU 1')).toBeInTheDocument();
+  });
+
+  it('shows automatic CPU affinity when unset', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      id: 7,
+      name: 'inst-7',
+      host_id: 10,
+      host_name: 'one-cpu-host',
+      host_os_type: 'debian',
+      host_ip_address: '203.0.113.13',
+      port: 27961,
+      hostname: 'Automatic Server',
+      lan_rate_enabled: false,
+      status: 'RUNNING',
+      cpu_affinity: null,
+    });
+
+    render(
+      <InstanceDetailsModal
+        isOpen={true}
+        instanceId={7}
+        onClose={vi.fn()}
+        onInstanceDeleted={vi.fn()}
+        onInstanceUpdated={vi.fn()}
+        onOpenEditConfig={vi.fn()}
+        onOpenHostDrawer={vi.fn()}
+        serverStatus={null}
+      />
+    );
+
+    expect(await screen.findByText('CPU Affinity')).toBeInTheDocument();
+    expect(screen.getByText('Automatic')).toBeInTheDocument();
+  });
 });
