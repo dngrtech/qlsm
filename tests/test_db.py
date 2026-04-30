@@ -31,6 +31,38 @@ def test_create_instance(app_context):
     assert instance.config == '{"test": "config"}'
     assert instance.status == InstanceStatus.IDLE # Compare with Enum member
 
+
+def test_host_to_dict_includes_cpu_count(app_context):
+    host = create_host(
+        name='cpu-host',
+        provider='vultr',
+        region='ewr',
+        machine_size='vhf-2c-2gb',
+        status=HostStatus.ACTIVE,
+        cpu_count=2,
+    )
+
+    assert host.to_dict()['cpu_count'] == 2
+
+
+def test_instance_to_dict_includes_cpu_affinity(app_context):
+    host = create_host(
+        name='cpu-instance-host',
+        provider='vultr',
+        region='ewr',
+        machine_size='vhf-2c-2gb',
+        status=HostStatus.ACTIVE,
+    )
+    instance = create_instance(
+        name='CPU Affinity Instance',
+        host_id=host.id,
+        port=27960,
+        hostname='CPU Affinity Server',
+    )
+    update_instance(instance.id, cpu_affinity=1)
+
+    assert get_instance(instance.id).to_dict()['cpu_affinity'] == 1
+
 def test_get_instance(app_context):
     """Test retrieving a QL instance by ID."""
     # Create a dummy host first
