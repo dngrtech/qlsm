@@ -22,6 +22,7 @@ from ui.task_logic.ansible_host_auto_restart import configure_host_auto_restart_
 # Import Terraform task logic from new files
 from ui.task_logic.terraform_provision import provision_host_logic
 from ui.task_logic.terraform_destroy import destroy_host_logic
+from ui.task_logic.terraform_resize import resize_host_logic
 
 # Import standalone host task logic
 from ui.task_logic.standalone_host_setup import setup_standalone_host_logic
@@ -116,6 +117,17 @@ def destroy_host(host_id, lock_token=None):
     """RQ task entry point for destroying a host."""
     try:
         return destroy_host_logic(host_id)
+    finally:
+        if lock_token:
+            from ui.task_lock import release_lock
+            release_lock('host', host_id, lock_token)
+
+@rq.job(timeout=1200)
+@with_app_context
+def resize_host_task(host_id, new_plan, lock_token=None):
+    """RQ task entry point for resizing a Vultr host plan."""
+    try:
+        return resize_host_logic(host_id, new_plan)
     finally:
         if lock_token:
             from ui.task_lock import release_lock
