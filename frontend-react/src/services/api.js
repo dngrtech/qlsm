@@ -137,6 +137,16 @@ export const restartHost = async (hostId) => {
   }
 };
 
+export const resizeHost = async (hostId, newPlan) => {
+  try {
+    const response = await apiClient.post(`/hosts/${hostId}/resize`, { new_plan: newPlan });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to resize host ${hostId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to resize host ${hostId}`);
+  }
+};
+
 export const updateWorkshopItem = async (hostId, data) => {
   try {
     const response = await apiClient.post(`/hosts/${hostId}/update-workshop`, data);

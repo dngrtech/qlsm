@@ -122,9 +122,6 @@ export default function BinaryDetailsPanel({
             className={`flex-1 min-h-0 w-full px-3 py-1.5 bg-gray-800 border rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none ${
               validationError ? 'border-red-500' : 'border-gray-600 focus:border-gray-400'
             }`}
-            className={`w-full px-3 py-1.5 bg-gray-800 border rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none ${
-              validationError ? 'border-red-500' : 'border-gray-600 focus:border-gray-400'
-            }`}
           />
           <div className="flex justify-between mt-1">
             {validationError

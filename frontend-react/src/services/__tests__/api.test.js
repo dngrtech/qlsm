@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   put: vi.fn(),
   requestUse: vi.fn(),
   responseUse: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock('axios', () => ({
   default: {
     create: mocks.create.mockReturnValue({
       get: mocks.get,
+      post: mocks.post,
       put: mocks.put,
       interceptors: {
         request: { use: mocks.requestUse },
@@ -21,7 +23,7 @@ vi.mock('axios', () => ({
   },
 }));
 
-import { getSelfHostDefaults, updateInstanceConfig } from '../api';
+import { getSelfHostDefaults, resizeHost, updateInstanceConfig } from '../api';
 
 describe('getSelfHostDefaults', () => {
   beforeEach(() => {
@@ -76,5 +78,18 @@ describe('updateInstanceConfig', () => {
       lan_rate_enabled: false,
       factories: { 'base.factories': 'factory contents' },
     });
+  });
+});
+
+describe('resizeHost', () => {
+  beforeEach(() => {
+    mocks.post.mockReset();
+  });
+
+  it('posts the target plan to the resize endpoint', async () => {
+    mocks.post.mockResolvedValue({ data: { message: 'queued' } });
+
+    await expect(resizeHost(4, 'vc2-2c-4gb')).resolves.toEqual({ message: 'queued' });
+    expect(mocks.post).toHaveBeenCalledWith('/hosts/4/resize', { new_plan: 'vc2-2c-4gb' });
   });
 });

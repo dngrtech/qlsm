@@ -27,6 +27,7 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 | `/hosts/<id>` | PUT | Update host (e.g., rename - triggers rename task) |
 | `/hosts/<id>` | DELETE | Delete host (triggers Terraform destroy) |
 | `/hosts/<id>/restart` | POST | Restart/reboot host |
+| `/hosts/<id>/resize` | POST | Resize a Vultr host to a larger same-family plan |
 | `/hosts/<id>/qlfilter/install` | POST | Install QLFilter on host |
 | `/hosts/<id>/qlfilter/uninstall` | POST | Uninstall QLFilter from host |
 | `/hosts/<id>/qlfilter/status` | GET | Check QLFilter status |
@@ -35,6 +36,53 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 | `/hosts/<id>/available-ports` | GET | Get available ports on the host |
 | `/hosts/<id>/update-workshop` | POST | Force workshop items update on host |
 | `/hosts/<id>/auto-restart` | POST | Configure host auto-restart schedule |
+
+### Resize Host
+
+```
+POST /api/hosts/<id>/resize
+```
+
+Initiates a Vultr plan upgrade for an active host by re-running Terraform in the
+host's existing workspace.
+
+Constraints:
+
+- Host provider must be `vultr`.
+- Host status must be `active`.
+- `new_plan` must be a known Vultr plan ID.
+- `new_plan` must be a same-family upgrade with a strictly higher monthly price.
+- Downgrades, identical plans, and cross-family resizes are rejected.
+
+Request:
+
+```json
+{
+  "new_plan": "vc2-2c-4gb"
+}
+```
+
+Success response (`202 Accepted`):
+
+```json
+{
+  "message": "Host resize task queued: vc2-1c-2gb -> vc2-2c-4gb.",
+  "data": {
+    "new_plan": "vc2-2c-4gb",
+    "current_plan": "vc2-1c-2gb"
+  }
+}
+```
+
+Error responses:
+
+- `400` for missing/invalid JSON, unknown plan, identical plan, downgrade, or cross-family resize.
+- `404` when the host does not exist.
+- `409` when the host is non-Vultr, not active, or another operation holds the host lock.
+
+The resize task sets the host to `configuring`, runs `terraform apply` with
+`vultr_plan=<new_plan>`, then returns the host to `active` on success. Vultr may
+reboot the VM during the resize; QLDS services are expected to auto-restart.
 
 ### Create Host Request
 Cloud provider:

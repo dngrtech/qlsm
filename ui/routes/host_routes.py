@@ -96,6 +96,7 @@ from ui.tasks import provision_host, destroy_host, \
     restart_host_task, rename_host_task, \
     setup_standalone_host_ansible, remove_standalone_host, \
     force_update_workshop_task, configure_host_auto_restart_task, \
+    resize_host_task, \
     enqueue_task
 from ui.task_logic.job_failure_handlers import host_job_failure_handler
 from ui.routes.self_host_helpers import (
@@ -1004,6 +1005,69 @@ def restart_host_api(host_id):
     except Exception as e:
         current_app.logger.error(f"Error enqueuing restart task for host {host_id} via API: {e}", exc_info=True)
         return jsonify({"error": {"message": "Failed to initiate host restart process"}}), 500
+
+@host_api_bp.route('/<int:host_id>/resize', methods=['POST'], endpoint='resize_host_api')
+@jwt_required()
+def resize_host_api(host_id):
+    """Initiate a Vultr plan upgrade for an active host."""
+    from ui.vultr_plans import get_plan, is_valid_upgrade
+
+    current_app.logger.info(f"Received API request to resize host ID: {host_id}")
+    host = get_host(host_id)
+    if not host:
+        return jsonify({"error": {"message": "Host not found."}}), 404
+
+    if host.provider != 'vultr':
+        return jsonify({"error": {"message": "Resize is only supported for Vultr hosts."}}), 409
+    if host.status != HostStatus.ACTIVE:
+        return jsonify({"error": {"message": f"Host must be in ACTIVE state to resize. Current state: {host.status.value}"}}), 409
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": {"message": "Request body must be a JSON object."}}), 400
+
+    new_plan = data.get('new_plan')
+    if not isinstance(new_plan, str) or not new_plan.strip():
+        return jsonify({"error": {"message": "new_plan is required and must be a non-empty string."}}), 400
+    new_plan = new_plan.strip()
+
+    if get_plan(new_plan) is None:
+        return jsonify({"error": {"message": f"Unknown plan: {new_plan}"}}), 400
+
+    current_plan = host.machine_size
+    if new_plan == current_plan:
+        return jsonify({"error": {"message": "Target plan is the same plan. Pick a different plan."}}), 400
+
+    current_plan_obj = get_plan(current_plan)
+    new_plan_obj = get_plan(new_plan)
+    if current_plan_obj and new_plan_obj and current_plan_obj['family'] != new_plan_obj['family']:
+        return jsonify({"error": {"message": "Cross-family resize is not supported. Pick a plan in the same family as the current plan."}}), 400
+
+    if not is_valid_upgrade(current_plan, new_plan):
+        return jsonify({"error": {"message": "new_plan must be an upgrade (same family, higher price) of the current plan."}}), 400
+
+    lock_token = str(uuid.uuid4())
+    if not acquire_lock('host', host.id, lock_token, ttl=900):
+        return jsonify({"error": {"message": f'Another operation is running on host "{host.name}". Please wait for it to complete.'}}), 409
+
+    try:
+        update_host(host.id, status=HostStatus.CONFIGURING)
+        enqueue_task(resize_host_task, host.id, new_plan,
+                     lock_token=lock_token, on_failure=host_job_failure_handler)
+    except Exception as e:
+        try:
+            update_host(host.id, status=HostStatus.ACTIVE)
+        except Exception:
+            current_app.logger.error(f"Failed to revert host {host.id} status after enqueue failure", exc_info=True)
+        release_lock('host', host.id, lock_token)
+        current_app.logger.error(f"Error queuing resize for host {host.id}: {e}", exc_info=True)
+        return jsonify({"error": {"message": f"Failed to queue resize: {str(e)}"}}), 500
+
+    current_app.logger.info(f"Resize task enqueued for host {host.id}: {current_plan} -> {new_plan}")
+    return jsonify({
+        "message": f"Host resize task queued: {current_plan} -> {new_plan}.",
+        "data": {"new_plan": new_plan, "current_plan": current_plan},
+    }), 202
 
 @host_api_bp.route('/<int:host_id>/update-workshop', methods=['POST'], endpoint='force_update_workshop_api')
 @jwt_required()
