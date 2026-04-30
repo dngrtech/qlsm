@@ -157,6 +157,7 @@ function AddHostFormFields({
             disabled={isVultrUnavailable || !provider || currentSizes.length === 0}
             getOptionKey={(opt) => opt.id}
             getOptionDisplay={(opt) => opt.name}
+            getOptionBadge={(opt) => opt.badgeLabel}
             getSelectedDisplay={(val, opts) => {
               if (!val) return 'Select Size';
               const selectedOpt = opts.find(o => o.id === val);

@@ -60,7 +60,7 @@ export const providerOptions = {
       ],
       // NOTE: Mirrors ui/vultr_plans.py. Tests assert parity.
       sizes: [
-        { id: 'vhf-1c-1gb', name: planName('vhf', 1, 1024, 6), family: 'vhf', vcpu: 1, ram_mb: 1024, disk_gb: 32, bandwidth_gb: 1024, price_usd: 6.00, locations: LOC_VC2_VHF },
+        { id: 'vhf-1c-1gb', name: planName('vhf', 1, 1024, 6), badgeLabel: 'Recommended', family: 'vhf', vcpu: 1, ram_mb: 1024, disk_gb: 32, bandwidth_gb: 1024, price_usd: 6.00, locations: LOC_VC2_VHF },
         { id: 'vhf-1c-2gb', name: planName('vhf', 1, 2048, 12), family: 'vhf', vcpu: 1, ram_mb: 2048, disk_gb: 64, bandwidth_gb: 2048, price_usd: 12.00, locations: LOC_VC2_VHF },
         { id: 'vhf-2c-2gb', name: planName('vhf', 2, 2048, 18), family: 'vhf', vcpu: 2, ram_mb: 2048, disk_gb: 80, bandwidth_gb: 3072, price_usd: 18.00, locations: LOC_VC2_VHF },
         { id: 'vhf-2c-4gb', name: planName('vhf', 2, 4096, 24), family: 'vhf', vcpu: 2, ram_mb: 4096, disk_gb: 128, bandwidth_gb: 3072, price_usd: 24.00, locations: LOC_VC2_VHF },
