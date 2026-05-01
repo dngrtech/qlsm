@@ -6,6 +6,9 @@ After=network.target
 User=ql
 Group=ql
 WorkingDirectory=/home/ql/qlds-%i
+{% if cpu_affinity is defined and cpu_affinity is not none %}
+CPUAffinity={{ cpu_affinity }}
+{% endif %}
 # The ExecStart line will include the script and the dynamic arguments passed from Ansible
 # Wrap the entire command in quotes to handle spaces/quotes in qlds_args
 ExecStart=/home/ql/qlds-%i/run_server_x64_minqlx.sh {{ qlds_args | default('') }} 

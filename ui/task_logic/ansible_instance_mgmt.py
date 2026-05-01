@@ -13,6 +13,7 @@ from ui import db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from .common import append_log # Import from the common module
 from .ansible_runner import _run_ansible_playbook
+from .cpu_affinity import ensure_instance_cpu_affinity
 from .self_host_network import is_self_host, with_self_host_network_extravars
 
 from .zmq_utils import ensure_zmq_rcon_setup
@@ -156,6 +157,7 @@ def deploy_instance_logic(instance_id):
 
         # Ensure ZMQ setup is ready before building args
         _prepare_instance_zmq(instance)
+        cpu_affinity = ensure_instance_cpu_affinity(instance)
         
         # Prepare extravars specific to deployment (now safe to access instance.host.name)
         qlds_args_string = _build_qlds_args_string(instance)
@@ -164,6 +166,7 @@ def deploy_instance_logic(instance_id):
             'port': instance.port,
             'host_name': instance.host.name, # Pass the host name (used for config path)
             'qlds_args': qlds_args_string, # Pass the constructed args for the service
+            'cpu_affinity': cpu_affinity,
             'lan_rate_enabled': instance.lan_rate_enabled # Pass for conditional iptables/sysctl
         }
         deploy_extravars = with_self_host_network_extravars(instance, deploy_extravars)
@@ -260,6 +263,7 @@ def restart_instance_logic(instance_id):
 
         # Ensure ZMQ setup is ready before building args
         _prepare_instance_zmq(instance)
+        cpu_affinity = ensure_instance_cpu_affinity(instance)
         
         # Construct qlds_args
         qlds_args_string = _build_qlds_args_string(instance)
@@ -270,7 +274,8 @@ def restart_instance_logic(instance_id):
             'host_name': instance.host.name,
             'port': instance.port,
             'id': instance.id,
-            'qlds_args': qlds_args_string
+            'qlds_args': qlds_args_string,
+            'cpu_affinity': cpu_affinity
         }
         restart_extravars = with_self_host_network_extravars(instance, restart_extravars)
 
@@ -476,6 +481,7 @@ def apply_instance_config_logic(instance_id, restart=True):
 
         # Ensure ZMQ setup is ready before building args
         _prepare_instance_zmq(instance)
+        cpu_affinity = ensure_instance_cpu_affinity(instance)
         
         qlds_args_string = _build_qlds_args_string(instance)
 
@@ -485,6 +491,7 @@ def apply_instance_config_logic(instance_id, restart=True):
             'port': instance.port,         # Add port to target correct service name for restart
             'id': instance.id,             # Keep id
             'qlds_args': qlds_args_string, # Pass constructed args for service re-templating
+            'cpu_affinity': cpu_affinity,
             'restart_service': restart     # Pass restart flag
         }
         apply_config_extravars = with_self_host_network_extravars(instance, apply_config_extravars)
@@ -709,6 +716,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
 
         # Ensure ZMQ setup is ready before building args
         _prepare_instance_zmq(instance)
+        cpu_affinity = ensure_instance_cpu_affinity(instance)
         
         qlds_args_string = _build_qlds_args_string(instance)
 
@@ -716,6 +724,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             'port': instance.port,
             'host_name': instance.host.name,
             'qlds_args': qlds_args_string,
+            'cpu_affinity': cpu_affinity,
             'lan_rate_enabled': instance.lan_rate_enabled
         }
         reconfigure_extravars = with_self_host_network_extravars(instance, reconfigure_extravars)

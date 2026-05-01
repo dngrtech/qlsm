@@ -233,6 +233,9 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
   const lanRateUnsupportedReason = !canToggleLanRate && !instance?.lan_rate_enabled
     ? getLanRateUnsupportedReason(hostOsType)
     : null;
+  const cpuAffinityLabel = Number.isInteger(instance?.cpu_affinity)
+    ? `CPU ${instance.cpu_affinity}`
+    : 'Automatic';
 
   const Field = ({ label, children }) => (
     <dl className="drawer-field">
@@ -319,6 +322,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                           </span>
                         </Field>
                         <Field label="Port"><span className="font-mono">{instance.port}</span></Field>
+                        <Field label="CPU Affinity"><span className="font-mono">{cpuAffinityLabel}</span></Field>
                         <Field label="Hostname">{instance.hostname || 'N/A'}</Field>
                         <Field label="Status"><StatusIndicator status={instance.status} /></Field>
                         <Field

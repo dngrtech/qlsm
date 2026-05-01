@@ -146,6 +146,30 @@ def test_reconfigure_self_host_passes_helper_network_state(
     _assert_self_host_redis_qlds_args(mock_run)
 
 
+@patch(f'{TASK_LOGIC_MODULE}.ensure_instance_cpu_affinity', return_value=1)
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_reconfigure_instance_lan_rate_passes_cpu_affinity(
+    mock_job, mock_session, mock_log, mock_zmq, mock_run, mock_ensure_affinity,
+    test_app, monkeypatch
+):
+    monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")
+    inst = _instance()
+    _wire_host([inst])
+    mock_job.return_value.id = 'job'
+    mock_session.get.return_value = inst
+    mock_run.return_value = (SimpleAnsibleResult(0, 'ok', ''), None)
+
+    reconfigure_instance_lan_rate(inst.id)
+
+    mock_ensure_affinity.assert_called_once_with(inst)
+    extravars = mock_run.call_args.kwargs['extravars']
+    assert extravars['cpu_affinity'] == 1
+
+
 @patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
 @patch(f'{TASK_LOGIC_MODULE}.append_log')
 @patch(f'{TASK_LOGIC_MODULE}.db.session')

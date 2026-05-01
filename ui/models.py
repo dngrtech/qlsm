@@ -56,6 +56,7 @@ class Host(db.Model):
     os_type = db.Column(db.String(50), nullable=True) # Detected OS type when known (e.g. 'debian', 'ubuntu')
     is_standalone = db.Column(db.Boolean, default=False, nullable=False) # True for user-provided servers
     timezone = db.Column(db.String(50), nullable=True) # IANA timezone name (e.g., 'America/New_York')
+    cpu_count = db.Column(db.Integer, nullable=True) # Detected/inferred Linux CPU count for affinity assignment
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True) # New field for QLFilter
     auto_restart_schedule = db.Column(db.String(100), nullable=True) # Cron expression for auto-restart
@@ -89,6 +90,7 @@ class Host(db.Model):
             'os_type': self.os_type,
             'is_standalone': self.is_standalone,
             'timezone': self.timezone,
+            'cpu_count': self.cpu_count,
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,
@@ -110,6 +112,7 @@ class QLInstance(db.Model):
     lan_rate_enabled = db.Column(db.Boolean, default=False, nullable=False) # 99k LAN rate mode
     config = db.Column(db.Text, nullable=True)  # JSON stored as text
     qlx_plugins = db.Column(db.String(1000), nullable=True) # Selected plugins as comma-separated string
+    cpu_affinity = db.Column(db.Integer, nullable=True) # Optional Linux CPU index assigned to this service
     status = db.Column(db.Enum(InstanceStatus), default=InstanceStatus.IDLE, nullable=False) # Status of the QL instance itself
     logs = db.Column(db.Text, nullable=True) # Stores logs from background tasks (e.g., Ansible)
     
@@ -144,6 +147,7 @@ class QLInstance(db.Model):
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode
             'config': self.config,
             'qlx_plugins': self.qlx_plugins,
+            'cpu_affinity': self.cpu_affinity,
             'status': self.status.value if self.status else None,
             'logs': self.logs, # Include logs
             'zmq_rcon_port': self.zmq_rcon_port,
