@@ -111,7 +111,9 @@ def ensure_instance_cpu_affinity(instance):
         return None
 
     cpu_count = resolve_host_cpu_count(host)
-    if not cpu_count or cpu_count <= 1:
+    if cpu_count is None:
+        return getattr(instance, 'cpu_affinity', None)
+    if cpu_count <= 1:
         instance.cpu_affinity = None
         return None
 
