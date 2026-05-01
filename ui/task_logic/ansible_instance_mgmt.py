@@ -900,6 +900,8 @@ def fetch_instance_remote_logs(instance_id, filter_mode='lines', since='1 hour a
         return True, logs, None
 
     except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
         log.error(f"Timeout fetching logs for instance {instance_id}")
         return False, "", "Timeout while fetching logs from remote host."
     except Exception as e:
@@ -963,7 +965,7 @@ def fetch_instance_chat_logs(instance_id, lines=500, filename='chat.log'):
 
         # Run synchronously and capture output
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-        stdout, stderr = process.communicate(timeout=15)  # 15 second timeout (text files should be fast)
+        stdout, stderr = process.communicate(timeout=60)  # 60 second timeout
         rc = process.returncode
 
         if rc != 0:
@@ -1006,6 +1008,8 @@ def fetch_instance_chat_logs(instance_id, lines=500, filename='chat.log'):
         return True, logs, None
 
     except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
         log.error(f"Timeout fetching chat logs for instance {instance_id}")
         return False, "", "Timeout while fetching chat logs from remote host."
     except Exception as e:
@@ -1059,7 +1063,7 @@ def list_instance_chat_logs(instance_id):
         log.info(f"Listing chat logs for instance {instance_id} on host {host.name}...")
 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-        stdout, stderr = process.communicate(timeout=10)
+        stdout, stderr = process.communicate(timeout=30)
         rc = process.returncode
 
         if rc != 0:
@@ -1116,6 +1120,8 @@ def list_instance_chat_logs(instance_id):
             return False, [], "Failed to parse log file list."
 
     except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
         log.error(f"Timeout listing chat logs for instance {instance_id}")
         return False, [], "Timeout while listing chat logs."
     except Exception as e:
