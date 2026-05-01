@@ -215,17 +215,6 @@ kill_all_orphans() {
   fi
 }
 
-if [[ -n "$KILL_MODE" ]]; then
-  if [[ "$KILL_MODE" == "all" ]]; then
-    echo "Killing all dev processes..."
-    kill_all_orphans
-  else
-    echo "Killing dev processes for ID $DEV_ID (port $FLASK_PORT)..."
-    kill_orphans
-  fi
-  exit 0
-fi
-
 # Activate virtual environment
 source .venv/bin/activate
 export PYTHONUNBUFFERED=1
@@ -249,7 +238,11 @@ echo "Syncing built-in presets..."
 flask sync-builtin-presets
 
 echo "Checking for orphaned dev processes..."
-kill_orphans
+if [[ "$KILL_MODE" == "all" ]]; then
+  kill_all_orphans
+else
+  kill_orphans
+fi
 
 # Create log directory for dev (Promtail tails these files)
 mkdir -p logs/dev
