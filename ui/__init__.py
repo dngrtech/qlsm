@@ -24,9 +24,11 @@ db = SQLAlchemy()
 def _set_sqlite_pragmas(dbapi_connection, connection_record):
     if isinstance(dbapi_connection, _sqlite3.Connection):
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA busy_timeout=30000")
-        cursor.close()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+        finally:
+            cursor.close()
 
 rq = RQ()
 jwt = JWTManager()
