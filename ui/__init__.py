@@ -11,9 +11,25 @@ from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+import sqlite3 as _sqlite3
 
 # Initialize extensions
 db = SQLAlchemy()
+
+# Class-level listener fires for every SQLite connection from every engine,
+# regardless of when the engine was created or how many workers are running.
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragmas(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, _sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+        finally:
+            cursor.close()
+
 rq = RQ()
 jwt = JWTManager()
 limiter = Limiter(
@@ -88,19 +104,6 @@ def create_app(test_config=None):
     
     # Initialize extensions with app
     db.init_app(app)
-
-    # Enable WAL mode for SQLite to support concurrent writes from multiple workers.
-    # Also set busy_timeout so brief write contention retries instead of failing.
-    from sqlalchemy import event
-
-    with app.app_context():
-        @event.listens_for(db.engine, "connect")
-        def _set_sqlite_pragmas(dbapi_connection, connection_record):
-            if 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
-                cursor = dbapi_connection.cursor()
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA busy_timeout=5000")
-                cursor.close()
 
     migrate.init_app(app, db)
     rq.init_app(app)
