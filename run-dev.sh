@@ -3,6 +3,7 @@
 # Parse arguments
 BUILD_NPM=""
 DEV_ID=1
+KILL_MODE=""
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --build-npm)
@@ -13,9 +14,17 @@ while [[ "$#" -gt 0 ]]; do
             DEV_ID="$2"
             shift
             ;;
+        --kill)
+            KILL_MODE="${2:-same}"
+            if [[ "$KILL_MODE" == "all" || "$KILL_MODE" == "same" ]]; then
+                shift
+            else
+                KILL_MODE="same"
+            fi
+            ;;
         *)
             echo "Unknown parameter passed: $1"
-            echo "Usage: $0 [--build-npm yes|no] [--id <number>]"
+            echo "Usage: $0 [--build-npm yes|no] [--id <number>] [--kill all|same]"
             exit 1
             ;;
     esac
@@ -104,28 +113,6 @@ cleanup() {
 # Trap SIGINT and SIGTERM
 trap cleanup SIGINT SIGTERM
 
-# Activate virtual environment
-source .venv/bin/activate
-export PYTHONUNBUFFERED=1
-
-# Install missing dependencies only when requirements.txt has changed since last run
-STAMP_FILE=".venv/.requirements_stamp"
-if [[ ! -f "$STAMP_FILE" ]]; then
-  echo "Installing dependencies..."
-  pip install -q -r requirements.txt && touch "$STAMP_FILE"
-elif [[ requirements.txt -nt "$STAMP_FILE" ]]; then
-  echo "requirements.txt changed — syncing dependencies..."
-  pip install -q -r requirements.txt && touch "$STAMP_FILE"
-fi
-
-# Apply any pending database migrations
-echo "Applying database migrations..."
-flask db upgrade
-
-# Sync built-in presets (idempotent)
-echo "Syncing built-in presets..."
-flask sync-builtin-presets
-
 # Kill orphaned processes from previous dev sessions (crashed, SSH disconnect, etc.)
 # Only kills processes owned by current user that match this dev environment's config.
 kill_orphans() {
@@ -182,6 +169,84 @@ kill_orphans() {
     sleep 1
   fi
 }
+
+kill_all_orphans() {
+  local killed=0
+
+  while IFS= read -r pid; do
+    echo "  Killing rcon_service (PID $pid)"
+    kill "$pid" 2>/dev/null
+    killed=1
+  done < <(pgrep -u "$(id -u)" -f 'python -m rcon_service' 2>/dev/null)
+
+  while IFS= read -r pid; do
+    echo "  Killing Flask dev server (PID $pid)"
+    kill "$pid" 2>/dev/null
+    killed=1
+  done < <(pgrep -u "$(id -u)" -f 'run_dev.py --port=' 2>/dev/null)
+
+  while IFS= read -r pid; do
+    echo "  Killing RQ worker (PID $pid)"
+    kill "$pid" 2>/dev/null
+    killed=1
+  done < <(pgrep -u "$(id -u)" -f 'flask rq worker' 2>/dev/null)
+
+  while IFS= read -r pid; do
+    echo "  Killing status poller (PID $pid)"
+    kill "$pid" 2>/dev/null
+    killed=1
+  done < <(pgrep -u "$(id -u)" -f 'run-status-poller' 2>/dev/null)
+
+  while IFS= read -r pid; do
+    local pwdx_out
+    pwdx_out=$(pwdx "$pid" 2>/dev/null)
+    if [[ "$pwdx_out" == *"$PWD"* ]]; then
+      echo "  Killing frontend process (PID $pid)"
+      kill -9 "$pid" 2>/dev/null
+      killed=1
+    fi
+  done < <(pgrep -u "$(id -u)" -f 'vite|pnpm|esbuild' 2>/dev/null)
+
+  if [[ $killed -eq 1 ]]; then
+    echo "  Waiting for processes to exit..."
+    sleep 1
+  else
+    echo "  No dev processes found."
+  fi
+}
+
+if [[ -n "$KILL_MODE" ]]; then
+  if [[ "$KILL_MODE" == "all" ]]; then
+    echo "Killing all dev processes..."
+    kill_all_orphans
+  else
+    echo "Killing dev processes for ID $DEV_ID (port $FLASK_PORT)..."
+    kill_orphans
+  fi
+  exit 0
+fi
+
+# Activate virtual environment
+source .venv/bin/activate
+export PYTHONUNBUFFERED=1
+
+# Install missing dependencies only when requirements.txt has changed since last run
+STAMP_FILE=".venv/.requirements_stamp"
+if [[ ! -f "$STAMP_FILE" ]]; then
+  echo "Installing dependencies..."
+  pip install -q -r requirements.txt && touch "$STAMP_FILE"
+elif [[ requirements.txt -nt "$STAMP_FILE" ]]; then
+  echo "requirements.txt changed — syncing dependencies..."
+  pip install -q -r requirements.txt && touch "$STAMP_FILE"
+fi
+
+# Apply any pending database migrations
+echo "Applying database migrations..."
+flask db upgrade
+
+# Sync built-in presets (idempotent)
+echo "Syncing built-in presets..."
+flask sync-builtin-presets
 
 echo "Checking for orphaned dev processes..."
 kill_orphans
