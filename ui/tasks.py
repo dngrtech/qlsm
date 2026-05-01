@@ -221,7 +221,7 @@ def setup_host_ansible(host_id, lock_token=None):
             from ui.task_lock import release_lock
             release_lock('host', host_id, lock_token)
 
-@rq.job(timeout=120)
+@rq.job(timeout=1200)
 @with_app_context
 def restart_host_task(host_id, lock_token=None):
     """RQ task entry point for restarting a host using Ansible."""
