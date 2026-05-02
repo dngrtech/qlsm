@@ -141,6 +141,7 @@ function InstanceBasicInfoForm({
               value={hostname}
               onChange={onHostnameChange}
               required
+              maxLength={64}
               className="input-base pr-16"
               placeholder="A New Quake Live Dedicated Server"
             />
@@ -150,6 +151,9 @@ function InstanceBasicInfoForm({
               </span>
             </span>
           </div>
+          <p className={`text-xs mt-1 text-right ${hostname.length >= 64 ? 'text-red-500' : hostname.length >= 50 ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>
+            {hostname.length} / 64
+          </p>
         </div>
       </div>
 
