@@ -182,3 +182,28 @@ def test_add_instance_rejects_invalid_checked_plugins_before_creating_side_effec
         assert QLInstance.query.count() == 0
 
     assert not (tmp_path / 'configs' / 'api-create-host').exists()
+
+
+def test_create_instance_hostname_too_long(client, app):
+    """
+    GIVEN a POST request to create an instance
+    WHEN hostname exceeds 64 characters
+    THEN a 400 error is returned
+    """
+    with app.app_context():
+        host = create_host(name='host-len-test', provider='vultr', status=HostStatus.ACTIVE)
+        db.session.commit()
+        host_id = host.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {
+        'name': 'len-test-inst',
+        'host_id': host_id,
+        'port': 27970,
+        'hostname': 'A' * 65,
+    }
+    response = client.post('/api/instances/', json=data, headers=headers)
+
+    assert response.status_code == 400
+    assert 'Server Hostname must be 64 characters or fewer' in response.json['error']['message']

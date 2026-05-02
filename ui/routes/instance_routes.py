@@ -85,6 +85,9 @@ def add_instance_api():
     if not name or not host_id or not port or not hostname:
         return jsonify({"error": {"message": "Name, Host ID, Port, and Server Hostname are required."}}), 400
 
+    if len(hostname) > 64:
+        return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
+
     try:
         port_int = int(port)
         host_id_int = int(host_id)
