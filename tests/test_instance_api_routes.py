@@ -207,3 +207,23 @@ def test_create_instance_hostname_too_long(client, app):
 
     assert response.status_code == 400
     assert 'Server Hostname must be 64 characters or fewer' in response.json['error']['message']
+
+def test_update_instance_hostname_too_long(client, app):
+    """
+    GIVEN an existing instance
+    WHEN PUT /api/instances/<id> is called with a hostname exceeding 64 characters
+    THEN a 400 error is returned
+    """
+    with app.app_context():
+        host = create_host(name='host-len-update', provider='vultr', status=HostStatus.ACTIVE)
+        instance = create_instance(name='len-update-inst', host_id=host.id, port=27971, hostname='short.host')
+        db.session.commit()
+        instance_id = instance.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {'hostname': 'B' * 65}
+    response = client.put(f'/api/instances/{instance_id}', json=data, headers=headers)
+
+    assert response.status_code == 400
+    assert 'Server Hostname must be 64 characters or fewer' in response.json['error']['message']

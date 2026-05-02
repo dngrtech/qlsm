@@ -284,6 +284,8 @@ def view_instance_api(instance_id): # Renamed function
 
                 # Handle Hostname Update
                 if new_hostname:
+                    if len(new_hostname) > 64:
+                        return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
                     update_kwargs['hostname'] = new_hostname
 
                 if update_kwargs:
