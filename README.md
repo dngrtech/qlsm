@@ -7,6 +7,8 @@ Features:
   * QLSM self-deployment: run QLDS instances on the same machine as QLSM
   * Standalone remote server
   * VULTR cloud provisioning via Terraform
+- Resize existing Vultr-backed hosts to compatible plans without recreating them
+- Automatic CPU affinity assignment for QLDS instances on multi-vCPU hosts
 - Optional [99k LAN rate mode](https://dngrtech.github.io/qlsm/features/99k-lan-rate/). Only Debian 12 supports this feature
 - Optional [`QLFilter` deployment](https://dngrtech.github.io/qlsm/features/qlfilter/) for supported hosts (anti-DDOS protection)
 - Per-instance [RCON console](https://dngrtech.github.io/qlsm/operations/rcon-console/) with command line and live feed of all server events
@@ -23,6 +25,7 @@ Features:
 - [User management](https://dngrtech.github.io/qlsm/administration/user-management/): create users, delete users, and reset passwords
 - [External API key management](https://dngrtech.github.io/qlsm/administration/user-management/) for service-to-service access
 - External REST API for authenticated instance inventory lookups
+- Responsive server management UI optimized for desktop, tablet, and mobile layouts
 - Per-user host/instance ordering and expanded-state preferences stored in browser local storage
 
 Everything runs over SSH via Ansible.
