@@ -15,6 +15,16 @@ depends_on = None
 
 
 def upgrade():
+    from sqlalchemy import text
+    conn = op.get_bind()
+    long_rows = conn.execute(
+        text("SELECT id, hostname FROM ql_instance WHERE length(hostname) > 64")
+    ).fetchall()
+    if long_rows:
+        raise RuntimeError(
+            f"Cannot migrate: {len(long_rows)} row(s) have hostname > 64 chars. "
+            "Truncate or update them before running this migration."
+        )
     with op.batch_alter_table('ql_instance', schema=None) as batch_op:
         batch_op.alter_column('hostname',
                existing_type=sa.VARCHAR(length=255),

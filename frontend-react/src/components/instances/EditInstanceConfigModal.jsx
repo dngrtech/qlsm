@@ -629,7 +629,7 @@ function EditInstanceConfigModal({
                             <p className="text-sm text-[var(--text-muted)] hidden lg:block">
                               Synced with <code className="text-xs bg-[var(--surface-elevated)] px-1 py-0.5 rounded font-mono text-[var(--text-secondary)]">sv_hostname</code> in server.cfg.
                             </p>
-                            <p className={`text-xs ml-auto ${serverHostname.length >= 64 ? 'text-red-500' : serverHostname.length >= 50 ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>
+                            <p className={`text-xs ml-auto ${serverHostname.length > 64 ? 'text-red-500' : serverHostname.length >= 50 ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>
                               {serverHostname.length} / 64
                             </p>
                           </div>
