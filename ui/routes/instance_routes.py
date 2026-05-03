@@ -68,7 +68,7 @@ def add_instance_api():
     name = data.get('name')
     host_id = data.get('host_id')
     port = data.get('port')
-    hostname = data.get('hostname')
+    hostname = (data.get('hostname') or '').strip()
     lan_rate_enabled = data.get('lan_rate_enabled', False) # Default to False
     configs_data = data.get('configs', {}) # Expect a 'configs' object in JSON
     qlx_plugins, qlx_err = _validate_qlx_plugins(data.get('qlx_plugins'))
@@ -265,7 +265,7 @@ def view_instance_api(instance_id): # Renamed function
         
         # Currently only supporting name updates
         new_name = data.get('name')
-        new_hostname = data.get('hostname')
+        new_hostname = (data.get('hostname') or '').strip() or None
 
         if new_name or new_hostname:
             try:

@@ -227,3 +227,53 @@ def test_update_instance_hostname_too_long(client, app):
 
     assert response.status_code == 400
     assert 'Server Hostname must be 64 characters or fewer' in response.json['error']['message']
+
+
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+@patch('ui.routes.instance_routes.enqueue_task')
+def test_create_instance_hostname_exactly_64_chars(mock_enqueue, mock_lock, client, app, tmp_path, monkeypatch):
+    """
+    GIVEN a POST request to create an instance
+    WHEN hostname is exactly 64 characters
+    THEN the instance is created successfully
+    """
+    monkeypatch.chdir(tmp_path)
+
+    with app.app_context():
+        host = create_host(name='host-boundary-test', provider='vultr', status=HostStatus.ACTIVE)
+        db.session.commit()
+        host_id = host.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {
+        'name': 'boundary-inst',
+        'host_id': host_id,
+        'port': 27972,
+        'hostname': 'A' * 64,
+    }
+    mock_enqueue.return_value = type('Job', (), {'id': 'fake-job-id'})()
+    response = client.post('/api/instances/', json=data, headers=headers)
+
+    assert response.status_code == 201
+
+
+def test_update_instance_hostname_exactly_64_chars(client, app):
+    """
+    GIVEN an existing instance
+    WHEN PUT /api/instances/<id> is called with a hostname of exactly 64 characters
+    THEN the update is accepted
+    """
+    with app.app_context():
+        host = create_host(name='host-boundary-update', provider='vultr', status=HostStatus.ACTIVE)
+        instance = create_instance(name='boundary-update-inst', host_id=host.id, port=27973, hostname='short.host')
+        db.session.commit()
+        instance_id = instance.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {'hostname': 'B' * 64}
+    response = client.put(f'/api/instances/{instance_id}', json=data, headers=headers)
+
+    assert response.status_code == 200
+    assert response.json['data']['hostname'] == 'B' * 64
