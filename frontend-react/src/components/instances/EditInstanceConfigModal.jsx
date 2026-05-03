@@ -615,6 +615,7 @@ function EditInstanceConfigModal({
                               id="serverHostname"
                               value={serverHostname}
                               onChange={handleHostnameChange}
+                              maxLength={64}
                               className="input-base pr-16"
                               placeholder="Enter server hostname"
                             />
@@ -624,9 +625,14 @@ function EditInstanceConfigModal({
                               </span>
                             </span>
                           </div>
-                          <p className="mt-1 text-sm text-[var(--text-muted)] hidden lg:block">
-                            Synced with <code className="text-xs bg-[var(--surface-elevated)] px-1 py-0.5 rounded font-mono text-[var(--text-secondary)]">sv_hostname</code> in server.cfg.
-                          </p>
+                          <div className="mt-1 flex items-center justify-between">
+                            <p className="text-sm text-[var(--text-muted)] hidden lg:block">
+                              Synced with <code className="text-xs bg-[var(--surface-elevated)] px-1 py-0.5 rounded font-mono text-[var(--text-secondary)]">sv_hostname</code> in server.cfg.
+                            </p>
+                            <p className={`text-xs ml-auto ${serverHostname.length > 64 ? 'text-red-500' : serverHostname.length >= 50 ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>
+                              {serverHostname.length} / 64
+                            </p>
+                          </div>
                         </div>
 
                         <div className="mb-2 lg:mb-4 flex-shrink-0 flex flex-wrap items-end gap-4">

@@ -68,7 +68,7 @@ def add_instance_api():
     name = data.get('name')
     host_id = data.get('host_id')
     port = data.get('port')
-    hostname = data.get('hostname')
+    hostname = (data.get('hostname') or '').strip()
     lan_rate_enabled = data.get('lan_rate_enabled', False) # Default to False
     configs_data = data.get('configs', {}) # Expect a 'configs' object in JSON
     qlx_plugins, qlx_err = _validate_qlx_plugins(data.get('qlx_plugins'))
@@ -84,6 +84,9 @@ def add_instance_api():
     # Basic validation
     if not name or not host_id or not port or not hostname:
         return jsonify({"error": {"message": "Name, Host ID, Port, and Server Hostname are required."}}), 400
+
+    if len(hostname) > 64:
+        return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
 
     try:
         port_int = int(port)
@@ -262,7 +265,7 @@ def view_instance_api(instance_id): # Renamed function
         
         # Currently only supporting name updates
         new_name = data.get('name')
-        new_hostname = data.get('hostname')
+        new_hostname = (data.get('hostname') or '').strip() or None
 
         if new_name or new_hostname:
             try:
@@ -281,6 +284,8 @@ def view_instance_api(instance_id): # Renamed function
 
                 # Handle Hostname Update
                 if new_hostname:
+                    if len(new_hostname) > 64:
+                        return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
                     update_kwargs['hostname'] = new_hostname
 
                 if update_kwargs:

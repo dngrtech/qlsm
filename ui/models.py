@@ -108,7 +108,7 @@ class QLInstance(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     # host = db.Column(db.String(100), nullable=False) # Removed - Replaced by host_id FK
     port = db.Column(db.Integer, nullable=False)
-    hostname = db.Column(db.String(255), nullable=False) # Added: Hostname for the QL server (sv_hostname)
+    hostname = db.Column(db.String(64), nullable=False) # Added: Hostname for the QL server (sv_hostname)
     lan_rate_enabled = db.Column(db.Boolean, default=False, nullable=False) # 99k LAN rate mode
     config = db.Column(db.Text, nullable=True)  # JSON stored as text
     qlx_plugins = db.Column(db.String(1000), nullable=True) # Selected plugins as comma-separated string
