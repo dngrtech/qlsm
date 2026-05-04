@@ -24,6 +24,108 @@ from flask_jwt_extended import jwt_required # Import the decorator from Flask-JW
 instance_api_bp = Blueprint('instance_api_routes', __name__) # url_prefix will be set when registering
 
 _QLX_PLUGINS_RE = re.compile(r'^[a-zA-Z0-9_, ]*$')
+PROTECTED_CONFIG_FILES = {'server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'}
+ALLOWED_CONFIG_EXTENSIONS = {'.cfg', '.txt'}
+ALLOWED_FACTORY_EXTENSIONS = {'.factories'}
+
+
+def _validate_filename(name, allowed_extensions):
+    """Return an error string when a managed file name is unsafe."""
+    if not isinstance(name, str) or not name:
+        return "Invalid filename"
+    if '/' in name or '\\' in name or '..' in name or name.startswith('.'):
+        return f"Invalid filename: {name}"
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in allowed_extensions:
+        return f"Disallowed extension {ext} for {name}"
+    return None
+
+
+def _validate_configs_map(configs_data, require_protected=True):
+    """Validate configs map. Returns (error_message, status_code) or (None, None)."""
+    if not isinstance(configs_data, dict):
+        return "configs must be a dict", 400
+    for filename, content in configs_data.items():
+        err = _validate_filename(filename, ALLOWED_CONFIG_EXTENSIONS)
+        if err:
+            return err, 400
+        if content is not None and not isinstance(content, str):
+            return f"Config content for {filename} must be a string", 400
+    missing = PROTECTED_CONFIG_FILES - set(configs_data.keys())
+    if require_protected and missing:
+        return f"Built-in files cannot be removed: {', '.join(sorted(missing))}", 400
+    return None, None
+
+
+def _validate_factories_map(factories_data):
+    """Validate factories map. Returns (error_message, status_code) or (None, None)."""
+    if not isinstance(factories_data, dict):
+        return "factories must be a dict", 400
+    for filename, content in factories_data.items():
+        err = _validate_filename(filename, ALLOWED_FACTORY_EXTENSIONS)
+        if err:
+            return err, 400
+        if content is not None and not isinstance(content, str):
+            return f"Factory content for {filename} must be a string", 400
+    return None, None
+
+
+def _should_sync_configs(configs_data):
+    """Return True when the payload represents the full file-manager config set."""
+    if not isinstance(configs_data, dict):
+        return False
+    received = set(configs_data.keys())
+    has_custom_file = any(filename not in PROTECTED_CONFIG_FILES for filename in received)
+    return has_custom_file or PROTECTED_CONFIG_FILES.issubset(received)
+
+
+def _write_configs_to_disk(instance_dir, configs_data):
+    """Write only the config files present in the map."""
+    os.makedirs(instance_dir, exist_ok=True)
+    for filename, content in configs_data.items():
+        with open(os.path.join(instance_dir, filename), 'w') as f:
+            f.write(content if content is not None else '')
+
+
+def _sync_configs_to_disk(instance_dir, configs_data):
+    """Write configs and remove unprotected managed config files absent from the map."""
+    os.makedirs(instance_dir, exist_ok=True)
+    existing = {
+        filename for filename in os.listdir(instance_dir)
+        if os.path.isfile(os.path.join(instance_dir, filename))
+        and os.path.splitext(filename)[1].lower() in ALLOWED_CONFIG_EXTENSIONS
+    }
+    received = set(configs_data.keys())
+
+    _write_configs_to_disk(instance_dir, configs_data)
+
+    for filename in existing - received:
+        if filename not in PROTECTED_CONFIG_FILES:
+            try:
+                os.remove(os.path.join(instance_dir, filename))
+            except OSError as e:
+                current_app.logger.error(f"Error removing config file {filename}: {e}")
+
+
+def _sync_factories_to_disk(factories_dir, factories_data):
+    """Write factories and remove managed factory files absent from the map."""
+    os.makedirs(factories_dir, exist_ok=True)
+    existing = {
+        filename for filename in os.listdir(factories_dir)
+        if os.path.isfile(os.path.join(factories_dir, filename))
+        and os.path.splitext(filename)[1].lower() in ALLOWED_FACTORY_EXTENSIONS
+    }
+    received = set(factories_data.keys())
+
+    for filename, content in factories_data.items():
+        with open(os.path.join(factories_dir, filename), 'w') as f:
+            f.write(content if content is not None else '')
+
+    for filename in existing - received:
+        try:
+            os.remove(os.path.join(factories_dir, filename))
+        except OSError as e:
+            current_app.logger.error(f"Error removing factory {filename}: {e}")
 
 def _validate_qlx_plugins(value):
     """Validate and sanitize qlx_plugins string. Returns (cleaned, error)."""
@@ -117,6 +219,21 @@ def add_instance_api():
             if not _draft_exists(draft_id):
                 return jsonify({"error": {"message": "Draft not found. It may have expired. Please try again."}}), 400
 
+        configs_to_save = dict(configs_data) if isinstance(configs_data, dict) else configs_data
+        if isinstance(configs_to_save, dict):
+            for filename in PROTECTED_CONFIG_FILES:
+                if filename not in configs_to_save:
+                    configs_to_save[filename] = _read_default_config(filename)
+        err, code = _validate_configs_map(configs_to_save)
+        if err:
+            return jsonify({"error": {"message": err}}), code
+
+        if 'factories' in data:
+            factories_data = data.get('factories', {})
+            err, code = _validate_factories_map(factories_data)
+            if err:
+                return jsonify({"error": {"message": err}}), code
+
         # --- Try creating the instance ---
         instance = create_instance(
             name=name, host_id=host_id_int, port=port_int, hostname=hostname, 
@@ -128,20 +245,8 @@ def add_instance_api():
         os.makedirs(instance_config_dir, exist_ok=True)
         current_app.logger.info(f"Created instance config directory: {instance_config_dir}")
 
-        # Config files to look for in JSON, or use default if not provided
-        config_files_to_process = {
-            'server.cfg': configs_data.get('server.cfg', _read_default_config('server.cfg')),
-            'mappool.txt': configs_data.get('mappool.txt', _read_default_config('mappool.txt')),
-            'access.txt': configs_data.get('access.txt', _read_default_config('access.txt')),
-            'workshop.txt': configs_data.get('workshop.txt', _read_default_config('workshop.txt'))
-        }
-
-        for filename, content in config_files_to_process.items():
-            if content is not None: # Only save if content exists (either from JSON or default)
-                filepath = os.path.join(instance_config_dir, filename)
-                with open(filepath, 'w') as f:
-                    f.write(content)
-                current_app.logger.info(f"Saved {filename} to {filepath} for instance {instance.id}")
+        _sync_configs_to_disk(instance_config_dir, configs_to_save)
+        current_app.logger.info(f"Synced {len(configs_to_save)} config files for instance {instance.id}")
 
         # --- Handle scripts via draft ---
         instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
@@ -172,18 +277,8 @@ def add_instance_api():
         
         if 'factories' in data:
             # User explicitly provided factory selection - only deploy what they selected
-            # First, clear the directory to remove any previous files
-            if os.path.exists(instance_factories_dir):
-                shutil.rmtree(instance_factories_dir)
-            os.makedirs(instance_factories_dir, exist_ok=True)
-            
             factories_data = data.get('factories', {})
-            for filename, content in factories_data.items():
-                if content is not None:
-                    factory_path = os.path.join(instance_factories_dir, filename)
-                    with open(factory_path, 'w') as f:
-                        f.write(content)
-                    current_app.logger.info(f"Saved user-selected factory {filename} for instance {instance.id}")
+            _sync_factories_to_disk(instance_factories_dir, factories_data)
             current_app.logger.info(f"User selected {len(factories_data)} factories for instance {instance.id}")
         else:
             # No factories key in request - copy all defaults (legacy/fallback behavior)
@@ -635,6 +730,32 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
         if not data:
             return jsonify({"error": {"message": "Request body must be JSON"}}), 400
 
+        metadata_update_kwargs = {}
+        new_name = data.get('name')
+        if new_name is not None:
+            if not isinstance(new_name, str):
+                return jsonify({"error": {"message": "Name must be a string"}}), 400
+            stripped_name = new_name.strip()
+            if not stripped_name:
+                return jsonify({"error": {"message": "Name cannot be empty"}}), 400
+            existing_instance = QLInstance.query.filter(
+                QLInstance.host_id == instance.host_id,
+                db.func.lower(QLInstance.name) == stripped_name.lower()
+            ).first()
+            if existing_instance and existing_instance.id != instance.id:
+                return jsonify({"error": {"message": f"An instance with the name '{stripped_name}' already exists on this host."}}), 409
+            metadata_update_kwargs['name'] = stripped_name
+
+        new_hostname = data.get('hostname')
+        if new_hostname is not None:
+            if not isinstance(new_hostname, str):
+                return jsonify({"error": {"message": "Server Hostname must be a string"}}), 400
+            stripped_hostname = new_hostname.strip()
+            if stripped_hostname:
+                if len(stripped_hostname) > 64:
+                    return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
+                metadata_update_kwargs['hostname'] = stripped_hostname
+
         if (
             'lan_rate_enabled' in data and
             would_enable_unsupported_lan_rate(
@@ -645,42 +766,73 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
         ):
             return jsonify({"error": {"message": lan_rate_unsupported_message(instance.host)}}), 400
 
+        configs_present = 'configs' in data
+        configs_to_save = data.get('configs', {}) if configs_present else None
+        if configs_present:
+            err, code = _validate_configs_map(configs_to_save, require_protected=True)
+            if err:
+                return jsonify({"error": {"message": err}}), code
+
+        factories_present = 'factories' in data
+        factories_to_save = data.get('factories', {}) if factories_present else None
+        if factories_present:
+            err, code = _validate_factories_map(factories_to_save)
+            if err:
+                return jsonify({"error": {"message": err}}), code
+
+        draft_id = data.get('draft_id')
+        scripts_to_save = data.get('scripts', {})
+        if draft_id:
+            from ui.routes.draft_routes import _validate_draft_id, _draft_exists
+            if not _validate_draft_id(draft_id):
+                return jsonify({"error": {"message": "Invalid draft_id"}}), 400
+            if not _draft_exists(draft_id):
+                return jsonify({"error": {"message": "Draft not found. It may have expired."}}), 400
+
+        update_kwargs = dict(status=InstanceStatus.CONFIGURING)
+        update_kwargs.update(metadata_update_kwargs)
+        if 'lan_rate_enabled' in data:
+            update_kwargs['lan_rate_enabled'] = bool(data.get('lan_rate_enabled'))
+
         lock_token = str(uuid.uuid4())
         if not acquire_lock('instance', instance.id, lock_token, ttl=360):
             return jsonify({"error": {"message": f'Another operation is running on instance "{instance.name}". Please wait for it to complete.'}}), 409
         lock_transferred = False
-        
-        # Expect a 'configs' object in the JSON payload
-        configs_to_save = data.get('configs', {})
-        
-        # Define which config files are expected/allowed
-        expected_files = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt']
-        
+
         try:
-            os.makedirs(instance_config_dir, exist_ok=True)
-            for filename in expected_files:
-                content = configs_to_save.get(filename)
-                if content is not None: # Save if provided, even if empty string
-                    filepath = os.path.join(instance_config_dir, filename)
-                    with open(filepath, 'w') as f:
-                        f.write(content)
-                    current_app.logger.info(f"Saved updated {filename} to {filepath} for instance {instance.id}")
-                # If a file is not in `configs_to_save`, it's not touched.
-                # To delete a file, client could send empty content.
+            checked_plugins = data.get('checked_plugins')
+            if checked_plugins is not None:
+                if (
+                    not isinstance(checked_plugins, list) or
+                    not all(isinstance(plugin, str) for plugin in checked_plugins)
+                ):
+                    return jsonify({"error": {"message": "checked_plugins must be a list of strings"}}), 400
+                qlx_plugins_str = ', '.join(checked_plugins)
+                validated_plugins, qlx_err = _validate_qlx_plugins(qlx_plugins_str)
+                if qlx_err:
+                    return jsonify({"error": {"message": qlx_err}}), 400
+                update_kwargs['qlx_plugins'] = validated_plugins
+            elif 'qlx_plugins' in data:
+                validated_plugins, qlx_err = _validate_qlx_plugins(data['qlx_plugins'])
+                if qlx_err:
+                    return jsonify({"error": {"message": qlx_err}}), 400
+                update_kwargs['qlx_plugins'] = validated_plugins
+
+            try:
+                update_instance(instance.id, **update_kwargs)
+            except sqlalchemy.exc.IntegrityError:
+                db.session.rollback()
+                return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
+
+            if configs_present:
+                _sync_configs_to_disk(instance_config_dir, configs_to_save)
+                current_app.logger.info(f"Synced {len(configs_to_save)} config files for instance {instance.id}")
 
             # Handle scripts via draft or legacy
-            draft_id = data.get('draft_id')
-            scripts_to_save = data.get('scripts', {})
-
             if draft_id:
                 from ui.routes.draft_routes import (
-                    _validate_draft_id, _draft_exists,
                     _get_draft_scripts_path, _get_draft_base_path
                 )
-                if not _validate_draft_id(draft_id):
-                    return jsonify({"error": {"message": "Invalid draft_id"}}), 400
-                if not _draft_exists(draft_id):
-                    return jsonify({"error": {"message": "Draft not found. It may have expired."}}), 400
 
                 instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
                 draft_scripts = _get_draft_scripts_path(draft_id)
@@ -701,63 +853,12 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                         f.write(content)
                 current_app.logger.info(f"Saved updated scripts for instance {instance.id}")
 
-            # Handle factories updates
-            factories_to_save = data.get('factories', {})
-            # Note: For factories, we need to handle additions, updates, and removals (if content is None/missing?)
-            # The current frontend implementation usually sends the full state of enabled factories.
-            # If we want to support removal, we should clear the directory and rewrite, OR sync intelligently.
-            # For now, let's assume factories_to_save contains ALL active factories and their content.
-            # A cleaner approach for "management" API is to sync:
-            # 1. Ensure dir exists
-            instance_factories_dir = os.path.join(instance_config_dir, 'factories')
-            os.makedirs(instance_factories_dir, exist_ok=True)
-            
-            # 2. Get existing files to identify removals
-            existing_factories = set(f for f in os.listdir(instance_factories_dir) if f.endswith('.factories'))
-            received_factories = set(factories_to_save.keys())
-            
-            # 3. Save/Update received
-            for filename, content in factories_to_save.items():
-                if content is not None:
-                    filepath = os.path.join(instance_factories_dir, filename)
-                    with open(filepath, 'w') as f:
-                        f.write(content)
-                    current_app.logger.info(f"Saved updated factory {filename} for instance {instance.id}")
-            
-            # 4. Remove valid .factories files that are NOT in the received list
-            # This enforces that the backend state matches the frontend selection
-            for filename in existing_factories:
-                if filename not in received_factories:
-                    filepath = os.path.join(instance_factories_dir, filename)
-                    try:
-                        os.remove(filepath)
-                        current_app.logger.info(f"Removed unselected factory {filename} for instance {instance.id}")
-                    except OSError as e:
-                        current_app.logger.error(f"Error removing factory {filename}: {e}")
-
+            # Handle factories updates when the client sends the full factories map.
+            if factories_present:
+                instance_factories_dir = os.path.join(instance_config_dir, 'factories')
+                _sync_factories_to_disk(instance_factories_dir, factories_to_save)
 
             restart = data.get('restart', True)
-            
-            # Only update qlx_plugins when the key is explicitly present in the
-            # payload.  If the user never opened the Plugins tab, the frontend
-            # omits the key entirely and we must NOT overwrite the DB value.
-            update_kwargs = dict(status=InstanceStatus.CONFIGURING)
-            if 'lan_rate_enabled' in data:
-                update_kwargs['lan_rate_enabled'] = bool(data.get('lan_rate_enabled'))
-            checked_plugins = data.get('checked_plugins')
-            if checked_plugins is not None:
-                qlx_plugins_str = ', '.join(checked_plugins)
-                validated_plugins, qlx_err = _validate_qlx_plugins(qlx_plugins_str)
-                if qlx_err:
-                    return jsonify({"error": {"message": qlx_err}}), 400
-                update_kwargs['qlx_plugins'] = validated_plugins
-            elif 'qlx_plugins' in data:
-                validated_plugins, qlx_err = _validate_qlx_plugins(data['qlx_plugins'])
-                if qlx_err:
-                    return jsonify({"error": {"message": qlx_err}}), 400
-                update_kwargs['qlx_plugins'] = validated_plugins
-            
-            update_instance(instance.id, **update_kwargs)
             job = enqueue_task(apply_instance_config, instance.id, restart=restart, lock_token=lock_token, on_failure=instance_job_failure_handler)
             if job:
                 lock_transferred = True
@@ -776,12 +877,23 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 release_lock('instance', instance.id, lock_token)
 
     # GET request
-    current_configs = {
-        'server.cfg': _read_instance_config(host_name, instance.id, 'server.cfg'),
-        'mappool.txt': _read_instance_config(host_name, instance.id, 'mappool.txt'),
-        'access.txt': _read_instance_config(host_name, instance.id, 'access.txt'),
-        'workshop.txt': _read_instance_config(host_name, instance.id, 'workshop.txt')
-    }
+    current_configs = {}
+    if os.path.isdir(instance_config_dir):
+        for filename in os.listdir(instance_config_dir):
+            filepath = os.path.join(instance_config_dir, filename)
+            if not os.path.isfile(filepath):
+                continue
+            if os.path.splitext(filename)[1].lower() not in ALLOWED_CONFIG_EXTENSIONS:
+                continue
+            try:
+                with open(filepath, 'r') as f:
+                    current_configs[filename] = f.read()
+            except OSError as e:
+                current_app.logger.error(f"Error reading config file {filename}: {e}")
+
+    for filename in PROTECTED_CONFIG_FILES:
+        if filename not in current_configs:
+            current_configs[filename] = _read_default_config(filename)
     
     # Read factories
     instance_factories_dir = os.path.join('configs', host_name, str(instance.id), 'factories')

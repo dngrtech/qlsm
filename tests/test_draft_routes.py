@@ -5,9 +5,12 @@ import io
 import os
 import uuid
 import time
+import sqlalchemy
 from flask_jwt_extended import create_access_token
 from ui import db
-from ui.models import ConfigPreset
+from ui.models import BinaryMetadata, ConfigPreset
+
+ELF_CONTENT = b'\x7fELF' + b'\x00' * 100
 
 @pytest.fixture
 def drafts_base(app):
@@ -416,10 +419,9 @@ class TestDraftUpload:
         )
         assert response.status_code == 400
 
-    def test_upload_so_exceeding_10mb_rejected(self, client, auth_headers, preset_with_scripts, monkeypatch):
+    def test_upload_so_exceeding_100kb_rejected(self, client, auth_headers, preset_with_scripts, monkeypatch):
         draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
-        # 10MB + 1 byte
-        big_content = b'\x7fELF' + b'\x00' * (10 * 1024 * 1024 + 1)
+        big_content = b'\x7fELF' + b'\x00' * (100 * 1024 + 1 - 4)
         data = {
             'file': (io.BytesIO(big_content), 'huge.so')
         }
@@ -429,6 +431,7 @@ class TestDraftUpload:
             headers=auth_headers
         )
         assert response.status_code == 400
+        assert '100KB' in response.get_json()['error']['message']
 
     def test_upload_txt_exceeding_256kb_rejected(self, client, auth_headers, preset_with_scripts, monkeypatch):
         draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
@@ -495,6 +498,228 @@ class TestDraftDeleteFile:
             headers=auth_headers
         )
         assert response.status_code == 400
+
+
+class TestDraftRenameFile:
+    """Tests for PATCH /api/drafts/<draft_id>/rename endpoint."""
+
+    def _create_draft(self, client, auth_headers, monkeypatch, preset_with_scripts):
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))
+        resp = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default'
+        }, headers=auth_headers)
+        return resp.get_json()['data']['draft_id']
+
+    def _write_file(self, client, auth_headers, draft_id, path, content=''):
+        return client.put(f'/api/drafts/{draft_id}/content', json={
+            'path': path, 'content': content
+        }, headers=auth_headers)
+
+    def _upload_so(self, client, auth_headers, draft_id, name='old.so'):
+        return client.post(
+            f'/api/drafts/{draft_id}/upload',
+            data={'file': (io.BytesIO(ELF_CONTENT), name)},
+            content_type='multipart/form-data',
+            headers=auth_headers
+        )
+
+    def _rename(self, client, auth_headers, draft_id, old_path, new_path, **extra):
+        payload = {'old_path': old_path, 'new_path': new_path, **extra}
+        return client.patch(
+            f'/api/drafts/{draft_id}/rename',
+            json=payload,
+            headers=auth_headers
+        )
+
+    def test_rename_validates_draft_and_body(self, client, auth_headers, preset_with_scripts, monkeypatch):
+        payload = {'old_path': 'old.py', 'new_path': 'new.py'}
+        assert client.patch('/api/drafts/not-a-uuid/rename', json=payload, headers=auth_headers).status_code == 400
+        assert client.patch(f'/api/drafts/{uuid.uuid4()}/rename', json=payload, headers=auth_headers).status_code == 404
+
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        response = client.patch(f'/api/drafts/{draft_id}/rename', json={}, headers=auth_headers)
+        assert response.status_code == 400
+
+    def test_rename_text_file_updates_tree_and_mtime(
+        self, client, auth_headers, preset_with_scripts, monkeypatch, drafts_base,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._write_file(client, auth_headers, draft_id, 'old.py', '# hi\n')
+        draft_path = os.path.join(drafts_base, draft_id)
+        old_time = time.time() - 1800
+        os.utime(draft_path, (old_time, old_time))
+
+        response = self._rename(client, auth_headers, draft_id, 'old.py', 'new.py')
+
+        assert response.status_code == 200
+        assert response.get_json()['data']['new_path'] == 'new.py'
+        assert os.path.exists(os.path.join(draft_path, 'scripts', 'new.py'))
+        assert not os.path.exists(os.path.join(draft_path, 'scripts', 'old.py'))
+        assert os.path.getmtime(draft_path) > old_time
+        tree = client.get(f'/api/drafts/{draft_id}/tree', headers=auth_headers).get_json()['data']
+        names = [item['name'] for item in tree]
+        assert 'new.py' in names
+        assert 'old.py' not in names
+
+    def test_rename_rejects_folder(self, client, auth_headers, preset_with_scripts, monkeypatch, drafts_base):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        os.makedirs(os.path.join(drafts_base, draft_id, 'scripts', 'subdir'))
+
+        response = self._rename(client, auth_headers, draft_id, 'subdir', 'newdir')
+
+        assert response.status_code == 400
+        assert 'file' in response.get_json()['error']['message'].lower()
+
+    @pytest.mark.parametrize('old_path,new_path,expected_status', [
+        ('missing.py', 'new.py', 400),
+        ('../foo.py', 'bar.py', 400),
+        ('foo.py', '../bar.py', 400),
+        ('./foo.py', 'bar.py', 400),
+        ('foo.py', 'missing/bar.py', 400),
+        ('foo.py', 'foo.exe', 400),
+        ('foo.py', 'foo.so', 400),
+    ])
+    def test_rename_rejects_invalid_paths_and_extensions(
+        self, client, auth_headers, preset_with_scripts, monkeypatch,
+        old_path, new_path, expected_status,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._write_file(client, auth_headers, draft_id, 'foo.py', '# hi\n')
+
+        response = self._rename(client, auth_headers, draft_id, old_path, new_path)
+
+        assert response.status_code == expected_status
+
+    def test_rename_rejects_existing_target(self, client, auth_headers, preset_with_scripts, monkeypatch):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._write_file(client, auth_headers, draft_id, 'a.py')
+        self._write_file(client, auth_headers, draft_id, 'b.py')
+
+        response = self._rename(client, auth_headers, draft_id, 'a.py', 'b.py')
+
+        assert response.status_code == 409
+
+    def test_rename_so_updates_binary_metadata(
+        self, app, client, auth_headers, preset_with_scripts, monkeypatch,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._upload_so(client, auth_headers, draft_id, 'old.so')
+        with app.app_context():
+            db.session.add(BinaryMetadata(
+                context_type='preset',
+                context_key='default',
+                file_path='old.so',
+                description='An old plugin',
+            ))
+            db.session.commit()
+
+        response = self._rename(
+            client, auth_headers, draft_id, 'old.so', 'new.so',
+            context_type='preset', context_key='default',
+        )
+
+        assert response.status_code == 200
+        with app.app_context():
+            row = BinaryMetadata.query.filter_by(
+                context_type='preset',
+                context_key='default',
+            ).first()
+            assert row.file_path == 'new.so'
+            assert row.description == 'An old plugin'
+
+    def test_rename_so_requires_context_and_preserves_extension(
+        self, client, auth_headers, preset_with_scripts, monkeypatch,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._upload_so(client, auth_headers, draft_id, 'native.so')
+
+        response = self._rename(client, auth_headers, draft_id, 'native.so', 'renamed.so')
+        assert response.status_code == 400
+        assert 'context' in response.get_json()['error']['message'].lower()
+
+        response = self._rename(
+            client, auth_headers, draft_id, 'native.so', 'native.txt',
+            context_type='preset', context_key='default',
+        )
+        assert response.status_code == 400
+
+    def test_rename_so_rejects_stale_target_metadata(
+        self, app, client, auth_headers, preset_with_scripts, monkeypatch,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._upload_so(client, auth_headers, draft_id, 'old.so')
+        with app.app_context():
+            db.session.add(BinaryMetadata(
+                context_type='preset', context_key='default',
+                file_path='old.so', description='old',
+            ))
+            db.session.add(BinaryMetadata(
+                context_type='preset', context_key='default',
+                file_path='new.so', description='stale',
+            ))
+            db.session.commit()
+
+        response = self._rename(
+            client, auth_headers, draft_id, 'old.so', 'new.so',
+            context_type='preset', context_key='default',
+        )
+
+        assert response.status_code == 409
+
+    def test_rename_so_rolls_back_metadata_when_file_rename_fails(
+        self, app, client, auth_headers, preset_with_scripts, monkeypatch,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._upload_so(client, auth_headers, draft_id, 'old.so')
+        with app.app_context():
+            db.session.add(BinaryMetadata(
+                context_type='preset', context_key='default',
+                file_path='old.so', description='old',
+            ))
+            db.session.commit()
+
+        def fail_rename(_old_path, _new_path):
+            raise OSError('rename failed')
+
+        monkeypatch.setattr('ui.routes.draft_routes.os.rename', fail_rename)
+        response = self._rename(
+            client, auth_headers, draft_id, 'old.so', 'new.so',
+            context_type='preset', context_key='default',
+        )
+
+        assert response.status_code == 500
+        with app.app_context():
+            row = BinaryMetadata.query.filter_by(
+                context_type='preset',
+                context_key='default',
+            ).first()
+            assert row.file_path == 'old.so'
+
+    def test_rename_so_reverses_file_move_when_metadata_commit_fails(
+        self, app, client, auth_headers, preset_with_scripts, monkeypatch, drafts_base,
+    ):
+        draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
+        self._upload_so(client, auth_headers, draft_id, 'old.so')
+        with app.app_context():
+            db.session.add(BinaryMetadata(
+                context_type='preset', context_key='default',
+                file_path='old.so', description='old',
+            ))
+            db.session.commit()
+
+        def fail_commit():
+            raise sqlalchemy.exc.SQLAlchemyError('commit failed')
+
+        monkeypatch.setattr('ui.routes.draft_routes.db.session.commit', fail_commit)
+        response = self._rename(
+            client, auth_headers, draft_id, 'old.so', 'new.so',
+            context_type='preset', context_key='default',
+        )
+
+        scripts_dir = os.path.join(drafts_base, draft_id, 'scripts')
+        assert response.status_code == 500
+        assert os.path.exists(os.path.join(scripts_dir, 'old.so'))
+        assert not os.path.exists(os.path.join(scripts_dir, 'new.so'))
 
 
 class TestCommitDraft:

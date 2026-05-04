@@ -9,9 +9,12 @@ import os
 import shutil
 import time
 import uuid
+import sqlalchemy
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
+from ui import db
+from ui.models import BinaryMetadata
 from ui.preset_support import resolve_preset_subdir
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
@@ -125,6 +128,7 @@ def _is_safe_name(value):
 
 ALLOWED_EXTENSIONS = {'.py', '.txt', '.so'}
 FILE_TYPE_MAP = {'.py': 'python', '.txt': 'text', '.so': 'binary'}
+VALID_BINARY_CONTEXT_TYPES = frozenset({'preset', 'instance'})
 
 
 def _get_file_type(filename):
@@ -187,7 +191,7 @@ def _build_draft_tree(path, base_path=None):
 
 TEXT_EXTENSIONS = {'.py', '.txt'}
 MAX_TEXT_FILE_SIZE = 256 * 1024      # 256KB for .py, .txt
-MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024  # 10MB for .so
+MAX_BINARY_FILE_SIZE = 100 * 1024    # 100KB for .so
 ELF_MAGIC = b'\x7fELF'
 
 
@@ -196,6 +200,19 @@ def _is_safe_draft_path(draft_scripts_path, relative_path):
     full_path = os.path.normpath(os.path.join(draft_scripts_path, relative_path))
     safe_prefix = os.path.normpath(draft_scripts_path) + os.sep
     return full_path.startswith(safe_prefix) or full_path == os.path.normpath(draft_scripts_path)
+
+
+def _normalize_draft_file_path(relative_path):
+    """Return a canonical slash-separated draft path, or None if unsafe/ambiguous."""
+    if not isinstance(relative_path, str):
+        return None
+    stripped = relative_path.strip().replace('\\', '/')
+    if not stripped or os.path.isabs(stripped):
+        return None
+    parts = stripped.split('/')
+    if any(part in ('', '.', '..') for part in parts):
+        return None
+    return '/'.join(parts)
 
 
 def _get_source_path(data):
@@ -463,6 +480,118 @@ def delete_draft_file(draft_id):
     os.utime(_get_draft_base_path(draft_id), None)
 
     return jsonify({"data": {"message": f"Deleted {path}"}}), 200
+
+
+@draft_api_bp.route('/<draft_id>/rename', methods=['PATCH'])
+@jwt_required()
+def rename_draft_file(draft_id):
+    """Rename a file within the draft workspace."""
+    if not _validate_draft_id(draft_id):
+        return jsonify({"error": {"message": "Invalid draft ID"}}), 400
+    if not _draft_exists(draft_id):
+        return jsonify({"error": {"message": "Draft not found"}}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": {"message": "Request body must be JSON"}}), 400
+
+    old_path = _normalize_draft_file_path(data.get('old_path'))
+    new_path = _normalize_draft_file_path(data.get('new_path'))
+    if old_path is None or new_path is None:
+        return jsonify({"error": {"message": "old_path and new_path must be strings"}}), 400
+
+    scripts_path = _get_draft_scripts_path(draft_id)
+    if not (
+        _is_safe_draft_path(scripts_path, old_path)
+        and _is_safe_draft_path(scripts_path, new_path)
+    ):
+        return jsonify({"error": {"message": "Invalid file path"}}), 400
+
+    root_path = os.path.normpath(scripts_path)
+    old_full = os.path.normpath(os.path.join(scripts_path, old_path))
+    new_full = os.path.normpath(os.path.join(scripts_path, new_path))
+    if old_full == root_path or new_full == root_path:
+        return jsonify({"error": {"message": "Path must reference a file"}}), 400
+    if not os.path.isfile(old_full):
+        return jsonify({"error": {"message": "old_path must reference an existing file"}}), 400
+
+    old_ext = os.path.splitext(old_path)[1].lower()
+    new_ext = os.path.splitext(new_path)[1].lower()
+    if old_ext not in ALLOWED_EXTENSIONS or new_ext not in ALLOWED_EXTENSIONS:
+        return jsonify({"error": {"message": "Unsupported file extension"}}), 400
+    if old_ext != new_ext:
+        return jsonify({"error": {"message": "Rename cannot change file extension"}}), 400
+    if os.path.exists(new_full):
+        return jsonify({"error": {"message": "File already exists at new_path"}}), 409
+    new_parent = os.path.dirname(new_full)
+    if not os.path.isdir(new_parent):
+        return jsonify({"error": {"message": "new_path parent directory does not exist"}}), 400
+
+    is_binary = old_ext == '.so'
+    if is_binary:
+        context_type = data.get('context_type')
+        context_key = data.get('context_key')
+        if not isinstance(context_type, str) or not isinstance(context_key, str):
+            return jsonify({"error": {"message": "context_type and context_key must be strings"}}), 400
+        context_type = context_type.strip()
+        context_key = context_key.strip()
+        error = _validate_binary_rename_context(context_type, context_key)
+        if error:
+            return jsonify({"error": {"message": error}}), 400
+        if _binary_metadata_exists(context_type, context_key, new_path):
+            return jsonify({"error": {"message": "Binary metadata already exists for new_path"}}), 409
+
+    try:
+        if is_binary:
+            row = _get_binary_metadata(context_type, context_key, old_path)
+            if row:
+                row.file_path = new_path
+                db.session.flush()
+        os.rename(old_full, new_full)
+        if is_binary:
+            try:
+                db.session.commit()
+            except sqlalchemy.exc.SQLAlchemyError as e:
+                db.session.rollback()
+                try:
+                    if os.path.exists(new_full) and not os.path.exists(old_full):
+                        os.rename(new_full, old_full)
+                except OSError as reverse_err:
+                    current_app.logger.error(
+                        f"Failed to reverse rename {new_path} to {old_path}: {reverse_err}"
+                    )
+                current_app.logger.error(f"Failed to commit binary metadata rename: {e}")
+                return jsonify({"error": {"message": "Rename failed"}}), 500
+    except (OSError, sqlalchemy.exc.SQLAlchemyError) as e:
+        if is_binary:
+            db.session.rollback()
+        current_app.logger.error(f"Failed to rename {old_path} to {new_path}: {e}")
+        return jsonify({"error": {"message": "Rename failed"}}), 500
+
+    os.utime(_get_draft_base_path(draft_id), None)
+    return jsonify({"data": {"old_path": old_path, "new_path": new_path}}), 200
+
+
+def _validate_binary_rename_context(context_type, context_key):
+    if not context_type or not context_key:
+        return "context_type and context_key are required for .so rename"
+    if context_type not in VALID_BINARY_CONTEXT_TYPES:
+        return "context_type must be 'preset' or 'instance'"
+    if '/' in context_key or '\\' in context_key or '..' in context_key:
+        return "Invalid context_key"
+    return None
+
+
+def _get_binary_metadata(context_type, context_key, file_path):
+    return BinaryMetadata.query.filter_by(
+        context_type=context_type,
+        context_key=context_key,
+        file_path=file_path,
+    ).first()
+
+
+def _binary_metadata_exists(context_type, context_key, file_path):
+    return _get_binary_metadata(context_type, context_key, file_path) is not None
 
 
 def _get_commit_target_path(data):

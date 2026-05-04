@@ -296,20 +296,29 @@ export const updateInstanceConfig = async (instanceId, configData, restart = tru
   try {
     // Extract non-config metadata so the backend receives it at the top level.
     const {
+      configs: explicitConfigs,
       scripts,
       factories,
       qlx_plugins,
       draft_id,
       checked_plugins,
       lan_rate_enabled,
+      name,
+      hostname,
       ...configs
     } = configData;
-    const payload = { configs, restart };
+    const payload = { configs: explicitConfigs ?? configs, restart };
     if (scripts && Object.keys(scripts).length > 0) {
       payload.scripts = scripts;
     }
-    if (factories) {
+    if (factories !== undefined) {
       payload.factories = factories;
+    }
+    if (name !== undefined) {
+      payload.name = name;
+    }
+    if (hostname !== undefined) {
+      payload.hostname = hostname;
     }
     if (qlx_plugins !== undefined) {
       payload.qlx_plugins = qlx_plugins;

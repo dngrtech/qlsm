@@ -8,6 +8,29 @@ from ui.database import create_preset
 
 DEFAULT_USER = 'presetadmin'
 DEFAULT_PASS = 'presetpass1'
+BASE_CONFIG_MAP = {
+    'server.cfg': '',
+    'mappool.txt': '',
+    'access.txt': '',
+    'workshop.txt': '',
+}
+
+
+def _create_preset_folder(app, name, files=None, factories=None):
+    preset_path = os.path.join('configs', 'presets', name)
+    with app.app_context():
+        os.makedirs(preset_path, exist_ok=True)
+        for filename, content in (files or {}).items():
+            with open(os.path.join(preset_path, filename), 'w') as f:
+                f.write(content)
+        if factories is not None:
+            factories_dir = os.path.join(preset_path, 'factories')
+            os.makedirs(factories_dir, exist_ok=True)
+            for filename, content in factories.items():
+                with open(os.path.join(factories_dir, filename), 'w') as f:
+                    f.write(content)
+        preset = create_preset(name=name, description='', path=preset_path)
+        return preset.id, preset_path
 
 
 @pytest.fixture(autouse=True)
@@ -154,6 +177,43 @@ def test_create_preset_success(client, app):
     with app.app_context():
         preset = ConfigPreset.query.filter_by(name='newpreset').first()
         assert preset is not None
+
+
+def test_create_preset_with_generic_configs_writes_custom_file(client, app):
+    """POST accepts the generic configs map and writes custom files."""
+    headers = auth_headers(app, DEFAULT_USER)
+    configs = {**BASE_CONFIG_MAP, 'server.cfg': 'sv_hostname test\n',
+               'custom.cfg': '// custom\n'}
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'genericpreset',
+        'description': '',
+        'configs': configs,
+    })
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['configs']['custom.cfg'] == '// custom\n'
+    with open(os.path.join('configs', 'presets', 'genericpreset', 'custom.cfg')) as f:
+        assert f.read() == '// custom\n'
+
+
+@pytest.mark.parametrize('filename', [
+    'nested/custom.cfg',
+    '../custom.cfg',
+    'custom.py',
+])
+def test_create_preset_rejects_invalid_generic_config_filename(client, app, filename):
+    """Generic config map filenames must be flat .cfg/.txt files."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'badconfig',
+        'description': '',
+        'configs': {**BASE_CONFIG_MAP, filename: 'bad'},
+    })
+
+    assert response.status_code == 400
+    assert 'Invalid config' in response.get_json()['error']['message']
+    assert not os.path.exists(os.path.join('configs', 'presets', 'badconfig'))
 
 
 def test_create_preset_unauthenticated(client, app):
@@ -402,6 +462,32 @@ def test_get_preset_success(client, app, tmp_path, monkeypatch):
     assert '[game]' in data.get('server_cfg', '')
 
 
+def test_get_preset_returns_generic_configs_map(client, app, tmp_path, monkeypatch):
+    """GET scans all top-level .cfg/.txt files and keeps legacy keys."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, _ = _create_preset_folder(app, 'genericget', {
+        'server.cfg': 'server content\n',
+        'custom.cfg': 'custom content\n',
+        'notes.txt': 'notes content\n',
+        'ignored.json': '{}',
+    })
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['server_cfg'] == 'server content\n'
+    assert data['mappool_txt'] == ''
+    assert data['configs']['server.cfg'] == 'server content\n'
+    assert data['configs']['mappool.txt'] == ''
+    assert data['configs']['access.txt'] == ''
+    assert data['configs']['workshop.txt'] == ''
+    assert data['configs']['custom.cfg'] == 'custom content\n'
+    assert data['configs']['notes.txt'] == 'notes content\n'
+    assert 'ignored.json' not in data['configs']
+
+
 def test_get_preset_not_found(client, app):
     """Non-existent preset ID returns 404."""
     headers = auth_headers(app, DEFAULT_USER)
@@ -454,6 +540,116 @@ def test_update_preset_checked_plugins(client, app, tmp_path, monkeypatch):
     # Verify it round-trips on GET too
     response = client.get(f'/api/presets/{preset_id}', headers=headers)
     assert response.get_json()['data'].get('checked_plugins') == plugins
+
+
+def test_update_preset_syncs_deleted_generic_config_file(client, app, tmp_path, monkeypatch):
+    """PUT with generic configs removes unprotected .cfg/.txt files omitted from the map."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, preset_path = _create_preset_folder(app, 'syncconfigs', {
+        **BASE_CONFIG_MAP,
+        'old_custom.cfg': 'old',
+    })
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'configs': BASE_CONFIG_MAP,
+    })
+
+    assert response.status_code == 200
+    assert not os.path.exists(os.path.join(preset_path, 'old_custom.cfg'))
+    assert os.path.exists(os.path.join(preset_path, 'server.cfg'))
+
+
+def test_update_preset_blocks_missing_protected_config(client, app, tmp_path, monkeypatch):
+    """Generic configs map cannot omit protected built-in files."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, preset_path = _create_preset_folder(app, 'missingprotected', BASE_CONFIG_MAP)
+    configs = BASE_CONFIG_MAP.copy()
+    configs.pop('server.cfg')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'configs': configs,
+    })
+
+    assert response.status_code == 400
+    assert 'server.cfg' in response.get_json()['error']['message']
+    assert os.path.exists(os.path.join(preset_path, 'server.cfg'))
+
+
+def test_update_preset_rejects_null_configs(client, app, tmp_path, monkeypatch):
+    """Present configs value must be the generic filename-to-content map."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, _ = _create_preset_folder(app, 'nullconfigs', BASE_CONFIG_MAP)
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'configs': None,
+    })
+
+    assert response.status_code == 400
+    assert "'configs' must be a dict" in response.get_json()['error']['message']
+
+
+def test_update_preset_syncs_deleted_factory_file(client, app, tmp_path, monkeypatch):
+    """PUT factories map removes .factories files omitted from the map."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, preset_path = _create_preset_folder(
+        app, 'syncfactories', BASE_CONFIG_MAP,
+        factories={'old.factories': 'old', 'keep.factories': 'keep'},
+    )
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'factories': {'keep.factories': 'new'},
+    })
+
+    factories_dir = os.path.join(preset_path, 'factories')
+    assert response.status_code == 200
+    assert not os.path.exists(os.path.join(factories_dir, 'old.factories'))
+    with open(os.path.join(factories_dir, 'keep.factories')) as f:
+        assert f.read() == 'new'
+
+
+def test_get_preset_ignores_nested_factory_files(client, app, tmp_path, monkeypatch):
+    """Factories are a flat file-manager context; nested files are not returned."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, preset_path = _create_preset_folder(
+        app, 'nestedfactory', BASE_CONFIG_MAP,
+        factories={'top.factories': 'top'},
+    )
+    nested_dir = os.path.join(preset_path, 'factories', 'nested')
+    os.makedirs(nested_dir)
+    with open(os.path.join(nested_dir, 'hidden.factories'), 'w') as f:
+        f.write('hidden')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+
+    assert response.status_code == 200
+    factories = response.get_json()['data']['factories']
+    assert factories == {'top.factories': 'top'}
+
+
+@pytest.mark.parametrize('filename', [
+    'bad.txt',
+    '../bad.factories',
+    'nested/bad.factories',
+])
+def test_update_preset_rejects_invalid_factory_filename(
+    client, app, tmp_path, monkeypatch, filename
+):
+    """Factory writes validate flat .factories filenames."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, _ = _create_preset_folder(app, 'badfactory', BASE_CONFIG_MAP)
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'factories': {filename: '{}'},
+    })
+
+    assert response.status_code == 400
+    assert 'Invalid factory' in response.get_json()['error']['message']
 
 
 def test_rename_user_preset_to_builtin_name_rejected(client, app, tmp_path, monkeypatch):
@@ -610,4 +806,3 @@ def test_delete_default_preset_prevented(client, app, tmp_path, monkeypatch):
     response = client.delete(f'/api/presets/{preset_id}', headers=headers)
     assert response.status_code == 403
     assert 'Cannot delete a built-in preset' in response.get_json()['error']['message']
-

@@ -34,6 +34,15 @@ def _get_auth_headers(app):
         return {'Authorization': f'Bearer {token}'}
 
 
+def _full_configs(server_cfg='updated-config'):
+    return {
+        'server.cfg': server_cfg,
+        'mappool.txt': '',
+        'access.txt': '',
+        'workshop.txt': '',
+    }
+
+
 @patch('ui.routes.instance_routes.enqueue_task')
 @patch('ui.routes.instance_routes.acquire_lock', return_value=False)
 def test_restart_returns_409_when_locked(mock_lock, mock_enqueue, app_with_instance):
@@ -153,7 +162,7 @@ def test_manage_instance_config_returns_409_before_writing_files(
     client = app_with_instance.test_client()
     headers = _get_auth_headers(app_with_instance)
     payload = {
-        'configs': {'server.cfg': 'updated-config'},
+        'configs': _full_configs(),
         'scripts': {'restart.sh': 'updated-script'},
         'factories': {'other.factories': 'updated-factory'},
     }
@@ -181,7 +190,7 @@ def test_manage_instance_config_releases_lock_on_invalid_qlx_plugins(
     with app_with_instance.app_context():
         resp = client.put(
             '/api/instances/1/config',
-            json={'configs': {}, 'qlx_plugins': ['bad-type']},
+            json={'configs': _full_configs(), 'qlx_plugins': ['bad-type']},
             headers=headers,
         )
 
@@ -207,7 +216,7 @@ def test_manage_instance_config_updates_lan_rate_and_queues_single_apply_task(
     client = app_with_instance.test_client()
     headers = _get_auth_headers(app_with_instance)
     payload = {
-        'configs': {'server.cfg': 'updated-config'},
+        'configs': _full_configs(),
         'lan_rate_enabled': True,
         'restart': True,
     }

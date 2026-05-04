@@ -25,22 +25,116 @@ CONFIG_FILE_MAP = {
 
 # Reverse mapping for writing files from API request
 API_TO_FILE_MAP = {v: k for k, v in CONFIG_FILE_MAP.items()}
+ALLOWED_PRESET_CONFIG_EXTENSIONS = {'.cfg', '.txt'}
+ALLOWED_PRESET_FACTORY_EXTENSIONS = {'.factories'}
+PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
+
+
+def _validate_flat_filename(filename, allowed_extensions, label):
+    if not isinstance(filename, str) or not filename:
+        raise ValueError(f"Invalid {label} filename: {filename}")
+    if (
+        os.path.isabs(filename) or '/' in filename or '\\' in filename or
+        '..' in filename or filename.startswith('.')
+    ):
+        raise ValueError(f"Invalid {label} filename: {filename}")
+    if os.path.splitext(filename)[1].lower() not in allowed_extensions:
+        allowed = ', '.join(sorted(allowed_extensions))
+        raise ValueError(f"Invalid {label} extension for {filename}. Allowed: {allowed}")
+
+
+def _normalize_text_content(content, label, filename):
+    if content is None:
+        return ''
+    if not isinstance(content, str):
+        raise ValueError(f"{label} content for {filename} must be a string")
+    return content
+
+
+def _normalize_preset_config_files(config_data):
+    has_generic = 'configs' in config_data
+    generic = config_data.get('configs')
+    if has_generic:
+        if not isinstance(generic, dict):
+            raise ValueError("'configs' must be a dict")
+
+        config_files = {}
+        for filename, content in generic.items():
+            _validate_flat_filename(
+                filename, ALLOWED_PRESET_CONFIG_EXTENSIONS, 'config'
+            )
+            config_files[filename] = _normalize_text_content(
+                content, 'Config', filename
+            )
+
+        missing = PROTECTED_CONFIG_FILES - set(config_files.keys())
+        if missing:
+            files = ', '.join(sorted(missing))
+            raise ValueError(f"Built-in files cannot be removed: {files}")
+        return config_files, True
+
+    config_files = {}
+    for api_key, filename in API_TO_FILE_MAP.items():
+        content = config_data.get(api_key)
+        if content is not None:
+            config_files[filename] = _normalize_text_content(
+                content, 'Config', filename
+            )
+    return config_files, False
+
+
+def _normalize_preset_factory_files(factories_data):
+    if not isinstance(factories_data, dict):
+        raise ValueError("'factories' must be a dict")
+
+    factories = {}
+    for filename, content in factories_data.items():
+        _validate_flat_filename(
+            filename, ALLOWED_PRESET_FACTORY_EXTENSIONS, 'factory'
+        )
+        factories[filename] = _normalize_text_content(
+            content, 'Factory', filename
+        )
+    return factories
+
+
+def _validate_preset_write_payload(data, has_config_updates=True):
+    if has_config_updates:
+        _normalize_preset_config_files(data)
+    if 'factories' in data:
+        _normalize_preset_factory_files(data['factories'])
+
+
+def _validation_error_response(error):
+    return jsonify({"error": {"message": str(error)}}), 400
+
 
 def _read_preset_configs(preset_path):
-    """Read all config files from a preset folder."""
-    configs = {}
+    """Read all .cfg/.txt files from a preset folder."""
+    configs_map = {}
+    legacy = {}
+
+    if os.path.isdir(preset_path):
+        for filename in sorted(os.listdir(preset_path)):
+            filepath = os.path.join(preset_path, filename)
+            if not os.path.isfile(filepath):
+                continue
+            if os.path.splitext(filename)[1].lower() not in ALLOWED_PRESET_CONFIG_EXTENSIONS:
+                continue
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                configs_map[filename] = content
+                if filename in CONFIG_FILE_MAP:
+                    legacy[CONFIG_FILE_MAP[filename]] = content
+            except Exception as e:
+                current_app.logger.error(f"Error reading preset config file {filepath}: {e}")
+
     for filename, api_key in CONFIG_FILE_MAP.items():
-        filepath = os.path.join(preset_path, filename)
-        try:
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    configs[api_key] = f.read()
-            else:
-                configs[api_key] = ''
-        except Exception as e:
-            current_app.logger.error(f"Error reading preset config file {filepath}: {e}")
-            configs[api_key] = ''
-    return configs
+        legacy.setdefault(api_key, '')
+        configs_map.setdefault(filename, legacy[api_key])
+
+    return {**legacy, 'configs': configs_map}
 
 
 def _read_preset_scripts(preset_path):
@@ -109,48 +203,49 @@ def _write_preset_scripts(preset_path, scripts_data):
 
 
 def _read_preset_factories(preset_path):
-    """Read all .factories files from a preset's factories/ folder."""
+    """Read top-level .factories files from a preset's factories/ folder."""
     factories = {}
     factories_dir = os.path.join(preset_path, 'factories')
     if not os.path.exists(factories_dir):
         return factories
 
-    for root, _, files in os.walk(factories_dir):
-        for filename in files:
-            if filename.endswith('.factories'):
-                filepath = os.path.join(root, filename)
-                # Get relative path from factories_dir (usually just filename)
-                rel_path = os.path.relpath(filepath, factories_dir)
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        factories[rel_path] = f.read()
-                except Exception as e:
-                    current_app.logger.error(f"Error reading factory {filepath}: {e}")
+    for filename in sorted(os.listdir(factories_dir)):
+        filepath = os.path.join(factories_dir, filename)
+        if not os.path.isfile(filepath) or not filename.lower().endswith('.factories'):
+            continue
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                factories[filename] = f.read()
+        except Exception as e:
+            current_app.logger.error(f"Error reading factory {filepath}: {e}")
     return factories
 
 
 def _write_preset_factories(preset_path, factories_data):
-    """Write factories to a preset's factories/ folder."""
-    if not factories_data:
-        return
-
+    """Write preset factory files with sync semantics."""
+    factories = _normalize_preset_factory_files(factories_data)
     factories_dir = os.path.join(preset_path, 'factories')
     os.makedirs(factories_dir, exist_ok=True)
 
-    for rel_path, content in factories_data.items():
-        if content is None: continue # Skip if no content
+    existing = {
+        filename for filename in os.listdir(factories_dir)
+        if filename.lower().endswith('.factories') and
+        os.path.isfile(os.path.join(factories_dir, filename))
+    }
 
-        # Security: ensure path doesn't escape factories directory
-        full_path = os.path.normpath(os.path.join(factories_dir, rel_path))
-        if not full_path.startswith(os.path.normpath(factories_dir)):
-            current_app.logger.warning(f"Skipping factory with invalid path: {rel_path}")
-            continue
-
-        # Create parent directories if needed
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, 'w', encoding='utf-8') as f:
+    for filename, content in factories.items():
+        filepath = os.path.join(factories_dir, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
-        current_app.logger.info(f"Wrote preset factory: {full_path}")
+        current_app.logger.info(f"Wrote preset factory: {filepath}")
+
+    for filename in sorted(existing - set(factories.keys())):
+        filepath = os.path.join(factories_dir, filename)
+        try:
+            os.remove(filepath)
+            current_app.logger.info(f"Removed preset factory: {filepath}")
+        except OSError as e:
+            current_app.logger.error(f"Error removing preset factory {filepath}: {e}")
 
 
 def _read_preset_checked_plugins(preset_path):
@@ -181,15 +276,37 @@ def _write_preset_checked_plugins(preset_path, checked_plugins):
 
 
 def _write_preset_configs(preset_path, config_data):
-    """Write config files to a preset folder."""
+    """Write preset config files.
+
+    Legacy API keys are partial writes. The generic configs map is a sync
+    payload and removes unprotected .cfg/.txt files absent from the map.
+    """
+    config_files, should_sync = _normalize_preset_config_files(config_data)
     os.makedirs(preset_path, exist_ok=True)
-    for api_key, filename in API_TO_FILE_MAP.items():
-        content = config_data.get(api_key)
-        if content is not None:
-            filepath = os.path.join(preset_path, filename)
-            with open(filepath, 'w') as f:
-                f.write(content)
-            current_app.logger.info(f"Wrote preset config file: {filepath}")
+
+    for filename, content in config_files.items():
+        filepath = os.path.join(preset_path, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        current_app.logger.info(f"Wrote preset config file: {filepath}")
+
+    if not should_sync:
+        return
+
+    existing = {
+        filename for filename in os.listdir(preset_path)
+        if os.path.isfile(os.path.join(preset_path, filename)) and
+        os.path.splitext(filename)[1].lower() in ALLOWED_PRESET_CONFIG_EXTENSIONS
+    }
+    for filename in sorted(existing - set(config_files.keys())):
+        if filename in PROTECTED_CONFIG_FILES:
+            continue
+        filepath = os.path.join(preset_path, filename)
+        try:
+            os.remove(filepath)
+            current_app.logger.info(f"Removed preset config file: {filepath}")
+        except OSError as e:
+            current_app.logger.error(f"Error removing preset config file {filepath}: {e}")
 
 
 def _validation_status(reason):
@@ -328,6 +445,11 @@ def create_preset_api():
             return jsonify({"error": {"message": "Draft not found"}}), 400
 
     try:
+        _validate_preset_write_payload(data)
+    except ValueError as e:
+        return _validation_error_response(e)
+
+    try:
         # Step 1: Create folder and write config files
         _write_preset_configs(preset_path, data)
 
@@ -380,6 +502,15 @@ def create_preset_api():
             db.session.commit()
 
         return jsonify({"data": response_data, "message": "Preset created successfully."}), 201
+
+    except ValueError as e:
+        if os.path.exists(preset_path):
+            try:
+                shutil.rmtree(preset_path)
+            except Exception as cleanup_err:
+                current_app.logger.error(f"Failed to cleanup preset folder {preset_path}: {cleanup_err}")
+        db.session.rollback()
+        return _validation_error_response(e)
 
     except Exception as e:
         # Cleanup folder if DB creation fails
@@ -463,9 +594,16 @@ def update_preset_api(preset_id):
         if not _draft_exists(draft_id):
             return jsonify({"error": {"message": "Draft not found"}}), 400
 
+    has_config_updates = 'configs' in data or any(
+        key in data for key in API_TO_FILE_MAP.keys()
+    )
+    try:
+        _validate_preset_write_payload(data, has_config_updates)
+    except ValueError as e:
+        return _validation_error_response(e)
+
     try:
         # Update config files if provided
-        has_config_updates = any(key in data for key in API_TO_FILE_MAP.keys())
         if has_config_updates:
             _write_preset_configs(preset.path, data)
 
@@ -542,6 +680,10 @@ def update_preset_api(preset_id):
             return jsonify({"data": response_data, "message": "Preset updated successfully."})
         else:
             return jsonify({"error": {"message": "Preset update failed."}}), 500
+
+    except ValueError as e:
+        db.session.rollback()
+        return _validation_error_response(e)
 
     except Exception as e:
         db.session.rollback()

@@ -8,6 +8,7 @@ import {
   saveDraftContent,
   uploadToDraft,
   deleteDraftFile,
+  renameDraftFile,
   commitDraft,
 } from '../services/draftApi';
 
@@ -18,6 +19,7 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
   const [tree, setTree] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [mutationCount, setMutationCount] = useState(0);
   const heartbeatRef = useRef(null);
   const ownedDraftIdRef = useRef(null);
 
@@ -31,6 +33,7 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
   const clearDraftState = useCallback(() => {
     setDraftId(null);
     setTree([]);
+    setMutationCount(0);
   }, []);
 
   useEffect(() => {
@@ -103,11 +106,13 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
   const writeContent = useCallback(async (path, content) => {
     if (!draftId) return;
     await saveDraftContent(draftId, path, content);
+    setMutationCount(count => count + 1);
   }, [draftId]);
 
   const upload = useCallback(async (file, targetPath = '') => {
     if (!draftId) return;
     const result = await uploadToDraft(draftId, file, targetPath);
+    setMutationCount(count => count + 1);
     await refreshTree();
     return result;
   }, [draftId, refreshTree]);
@@ -115,6 +120,14 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
   const deleteFile = useCallback(async (path) => {
     if (!draftId) return;
     await deleteDraftFile(draftId, path);
+    setMutationCount(count => count + 1);
+    await refreshTree();
+  }, [draftId, refreshTree]);
+
+  const renameFile = useCallback(async (oldPath, newPath, context = null) => {
+    if (!draftId) return;
+    await renameDraftFile(draftId, oldPath, newPath, context);
+    setMutationCount(count => count + 1);
     await refreshTree();
   }, [draftId, refreshTree]);
 
@@ -147,6 +160,8 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
 
   return {
     draftId, tree, loading, error,
-    refreshTree, readContent, writeContent, upload, deleteFile, commit, discard, consume,
+    refreshTree, readContent, writeContent, upload, deleteFile, renameFile,
+    hasChanges: mutationCount > 0,
+    commit, discard, consume,
   };
 }

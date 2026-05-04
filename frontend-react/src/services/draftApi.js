@@ -51,6 +51,16 @@ export const deleteDraftFile = async (draftId, path) => {
   return response.data.data;
 };
 
+export const renameDraftFile = async (draftId, oldPath, newPath, context = null) => {
+  const body = { old_path: oldPath, new_path: newPath };
+  if (context) {
+    body.context_type = context.contextType;
+    body.context_key = context.contextKey;
+  }
+  const response = await apiClient.patch(`/drafts/${draftId}/rename`, body);
+  return response.data.data;
+};
+
 export const commitDraft = async (draftId, target) => {
   const response = await apiClient.post(`/drafts/${draftId}/commit`, target);
   return response.data.data;
