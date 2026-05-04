@@ -79,6 +79,41 @@ describe('updateInstanceConfig', () => {
       factories: { 'base.factories': 'factory contents' },
     });
   });
+
+  it('passes explicit config maps and metadata through unchanged', async () => {
+    mocks.put.mockResolvedValue({ data: { message: 'ok' } });
+
+    await updateInstanceConfig(
+      7,
+      {
+        name: 'Arena 7',
+        hostname: 'Arena Host',
+        configs: {
+          'server.cfg': 'server',
+          'custom.cfg': 'custom',
+        },
+        factories: { 'base.factories': 'factory contents' },
+        draft_id: 'draft-456',
+        checked_plugins: ['balance.py'],
+        lan_rate_enabled: true,
+      },
+      true,
+    );
+
+    expect(mocks.put).toHaveBeenCalledWith('/instances/7/config', {
+      name: 'Arena 7',
+      hostname: 'Arena Host',
+      configs: {
+        'server.cfg': 'server',
+        'custom.cfg': 'custom',
+      },
+      restart: true,
+      draft_id: 'draft-456',
+      checked_plugins: ['balance.py'],
+      lan_rate_enabled: true,
+      factories: { 'base.factories': 'factory contents' },
+    });
+  });
 });
 
 describe('resizeHost', () => {

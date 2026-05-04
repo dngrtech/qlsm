@@ -1,16 +1,20 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LoaderCircle, Save, FolderOpen, RefreshCw, Settings, Code2, LayoutGrid, CheckCircle } from 'lucide-react';
-import { getAvailablePortsForHost, getPresetById, savePreset, updatePreset } from '../../services/api';
+import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, savePreset, updatePreset } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
-import { useDraftWorkspace } from '../../hooks/useDraftWorkspace';
 import InstanceBasicInfoForm from './InstanceBasicInfoForm';
-import InstanceConfigTabs from './InstanceConfigTabs';
 import SavePresetModal from './SavePresetModal';
 import LoadPresetModal from './LoadPresetModal';
 import UpdatePresetModal from './UpdatePresetModal';
 import FullScreenConfigEditorModal from '../config/FullScreenConfigEditorModal';
-import { ScriptManager } from './ScriptManager';
-import FactoryManager from './FactoryManager/FactoryManager';
+import {
+  CONFIG_CAPS,
+  FACTORY_CAPS,
+  FileManager,
+  PLUGIN_CAPS,
+  useDraftAdapter,
+  useStateAdapter,
+} from '../fileManager';
 import {
   qlcfgLanguage,
   createQlCfgLinter,
@@ -26,6 +30,14 @@ import {
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
+const HOSTNAME_REGEX = /^(set\s+sv_hostname\s+").*(".*)/m;
+
+const CONFIG_LANGUAGE_MAP = {
+  'server.cfg': qlcfgLanguage,
+  'mappool.txt': qlmappoolLanguage,
+  'access.txt': qlaccessLanguage,
+  'workshop.txt': qlworkshopLanguage,
+};
 
 // Mapping from internal config keys to API keys
 const CONFIG_TO_API_MAP = {
@@ -35,13 +47,56 @@ const CONFIG_TO_API_MAP = {
   'workshop.txt': 'workshop_txt'
 };
 
-// Reverse mapping from API keys to internal config keys
-const API_TO_CONFIG_MAP = {
-  'server_cfg': 'server.cfg',
-  'mappool_txt': 'mappool.txt',
-  'access_txt': 'access.txt',
-  'workshop_txt': 'workshop.txt'
-};
+function createEmptyConfigMap() {
+  return CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {});
+}
+
+function isAllowedConfigFile(fileName) {
+  return CONFIG_CAPS.allowedExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+}
+
+function normalizeConfigMap(configs = {}) {
+  const normalized = {};
+  for (const [fileName, content] of Object.entries(configs || {})) {
+    if (isAllowedConfigFile(fileName)) {
+      normalized[fileName] = content ?? '';
+    }
+  }
+  for (const fileName of CONFIG_FILES) {
+    if (normalized[fileName] === undefined) {
+      normalized[fileName] = configs?.[fileName] ?? '';
+    }
+  }
+  return normalized;
+}
+
+function extractPresetConfigs(presetData) {
+  const legacyConfigs = CONFIG_FILES.reduce((acc, fileName) => {
+    acc[fileName] = presetData[CONFIG_TO_API_MAP[fileName]] || '';
+    return acc;
+  }, {});
+  const configs = normalizeConfigMap(presetData.configs || legacyConfigs);
+  configs['server.cfg'] = stripManagedCvars(configs['server.cfg'] || '');
+  return configs;
+}
+
+function getConfigLanguage(fileName) {
+  return CONFIG_LANGUAGE_MAP[fileName] || undefined;
+}
+
+function areSetsEqual(left, right) {
+  if (left.size !== right.size) return false;
+  for (const value of left) {
+    if (!right.has(value)) return false;
+  }
+  return true;
+}
+
+function getSubmitPluginNames(plugins) {
+  return Array.from(plugins)
+    .filter(p => p.endsWith('.py') && !p.endsWith('__init__.py'))
+    .map(p => p.replace(/\.py$/, '').replace(/^.*\//, ''));
+}
 
 function AddInstanceForm({
   initialData,
@@ -58,12 +113,11 @@ function AddInstanceForm({
   const [port, setPort] = useState('');
   const [hostname, setHostname] = useState('');
   const [lanRateEnabled, setLanRateEnabled] = useState(false);
-  const [configContents, setConfigContents] = useState(initialData.defaultConfigContents || CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {}));
+  const [configContents, setConfigContents] = useState(() => normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap()));
   const [availablePorts, setAvailablePorts] = useState([]);
   const [loadingPorts, setLoadingPorts] = useState(false);
   const [internalFormError, setInternalFormError] = useState(null);
   const [serverCfgHasLintErrors, setServerCfgHasLintErrors] = useState(false);
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [isFullScreenEditorOpen, setIsFullScreenEditorOpen] = useState(false);
   const [editingFileDetails, setEditingFileDetails] = useState({ name: '', content: '', language: undefined, linterSource: null });
 
@@ -85,17 +139,9 @@ function AddInstanceForm({
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
   const [checkedPlugins, setCheckedPlugins] = useState(new Set(initialData.defaultCheckedPlugins || []));
-  const scriptManagerRef = useRef(null);
+  const pluginsManagerRef = useRef(null);
   const [draftPreset, setDraftPreset] = useState('default');
-  const draft = useDraftWorkspace({
-    source: 'preset',
-    preset: draftPreset,
-    active: true,
-  });
-
-  // Factories tab state
-  const [factories, setFactories] = useState({}); // { path: content }
-
+  const [factoryServerTree, setFactoryServerTree] = useState(initialData.defaultFactoryTree || []);
 
   const isUpdatingFromServerCfg = useRef(false);
   const prevHostnameRef = useRef(hostname);
@@ -105,14 +151,113 @@ function AddInstanceForm({
   const portRef = useRef(port);
   const availablePortsRef = useRef(availablePorts);
   const portFetchAbortRef = useRef(null);
+  const configContentsRef = useRef(normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap()));
 
   const initialNameRef = useRef('');
   const initialSelectedHostIdRef = useRef('');
   const initialPortRef = useRef('');
   const initialHostnameRef = useRef('');
   const initialLanRateEnabledRef = useRef(false);
-  const initialConfigContentsRef = useRef(initialData.defaultConfigContents || CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {}));
+  const initialConfigContentsRef = useRef(normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap()));
+  const initialCheckedPluginsRef = useRef(new Set(initialData.defaultCheckedPlugins || []));
   const loadedPresetConfigRef = useRef(null); // Stores config contents when preset is loaded, for modification detection
+  const loadedPresetCheckedPluginsRef = useRef(new Set(initialData.defaultCheckedPlugins || []));
+
+  const readFactoryServerContent = useCallback(async (path) => {
+    const data = await getFactoryContent(path, { preset: draftPreset || 'default' });
+    return data.content || '';
+  }, [draftPreset]);
+
+  const handleConfigAdapterFilesChange = useCallback((nextFiles) => {
+    const normalized = normalizeConfigMap(nextFiles);
+    if (JSON.stringify(configContentsRef.current) !== JSON.stringify(normalized)) {
+      configContentsRef.current = normalized;
+      setConfigContents(normalized);
+    }
+
+    const serverCfg = normalized['server.cfg'] || '';
+    const hostnameMatch = serverCfg.match(/^set\s+sv_hostname\s+"([^"]*)"/m);
+    if (hostnameMatch && hostnameMatch[1] !== hostnameRef.current) {
+      isUpdatingFromServerCfg.current = true;
+      setHostname(hostnameMatch[1]);
+      setTimeout(() => { isUpdatingFromServerCfg.current = false; }, 0);
+    }
+
+    const portMatch = serverCfg.match(/^set\s+net_port\s+"(\d+)"/m);
+    if (portMatch && portMatch[1] !== portRef.current) {
+      const portVal = portMatch[1];
+      if (availablePortsRef.current.includes(parseInt(portVal, 10))) {
+        isUpdatingPortFromServerCfg.current = true;
+        setPort(portVal);
+        setTimeout(() => { isUpdatingPortFromServerCfg.current = false; }, 0);
+      }
+    }
+  }, []);
+
+  const configsAdapter = useStateAdapter({
+    initialFiles: configContents,
+    allowedExtensions: CONFIG_CAPS.allowedExtensions,
+    protectedFiles: CONFIG_CAPS.protectedFiles,
+    onFilesChange: handleConfigAdapterFilesChange,
+  });
+
+  const pluginsAdapter = useDraftAdapter({
+    source: 'preset',
+    preset: draftPreset || 'default',
+    active: true,
+  });
+
+  const factoriesAdapter = useStateAdapter({
+    initialFiles: initialData.defaultFactories || {},
+    serverTree: factoryServerTree,
+    readServerContent: readFactoryServerContent,
+    allowedExtensions: FACTORY_CAPS.allowedExtensions,
+    protectedFiles: FACTORY_CAPS.protectedFiles,
+  });
+  const pluginDraftId = pluginsAdapter.draftId;
+  const pluginConsume = pluginsAdapter.consume;
+  const pluginDiscard = pluginsAdapter.discard;
+  const configsHaveChanges = configsAdapter.hasChanges;
+  const resetConfigs = configsAdapter.reset;
+  const serializeConfigs = configsAdapter.serialize;
+  const writeConfigContent = configsAdapter.writeContent;
+  const checkedFactories = factoriesAdapter.checkedFiles;
+  const factoriesHaveChanges = factoriesAdapter.hasChanges;
+  const resetFactories = factoriesAdapter.reset;
+  const serializeFactories = factoriesAdapter.serialize;
+  const setFactoryChecked = factoriesAdapter.setChecked;
+  const pluginsHaveChanges = pluginsAdapter.hasChanges;
+
+  const syncConfigState = useCallback((nextConfigs, { resetAdapter = false, markInitial = false } = {}) => {
+    const normalized = normalizeConfigMap(nextConfigs);
+    configContentsRef.current = normalized;
+    setConfigContents(normalized);
+    if (resetAdapter) {
+      resetConfigs(normalized);
+    }
+    if (markInitial) {
+      initialConfigContentsRef.current = normalized;
+    }
+    return normalized;
+  }, [resetConfigs]);
+
+  const syncConfigFile = useCallback((fileName, content, { markInitial = false } = {}) => {
+    const nextConfigs = {
+      ...configContentsRef.current,
+      [fileName]: content ?? '',
+    };
+    configContentsRef.current = nextConfigs;
+    setConfigContents(nextConfigs);
+    writeConfigContent(fileName, content ?? '').catch((err) => {
+      setInternalFormError(err.message || `Failed to update ${fileName}.`);
+    });
+    if (markInitial) {
+      initialConfigContentsRef.current = {
+        ...initialConfigContentsRef.current,
+        [fileName]: content ?? '',
+      };
+    }
+  }, [writeConfigContent]);
 
   const handleHostChange = useCallback(async (hostId, isInitialLoad = false) => {
     setSelectedHostId(hostId);
@@ -137,25 +282,20 @@ function AddInstanceForm({
           initialPortRef.current = lowestPort;
           setTimeout(() => isUpdatingPortFromServerCfg.current = false, 0);
 
-          setConfigContents(prev => {
-            const currentServerCfg = prev['server.cfg'] || '';
-            const portRegex = NET_PORT_REGEX;
-            let newCfg = currentServerCfg;
-            if (portRegex.test(currentServerCfg)) {
-              newCfg = currentServerCfg.replace(portRegex, `$1${lowestPort}$2`);
-            } else if (currentServerCfg.trim() !== '') {
-              newCfg = `${currentServerCfg}\nset net_port "${lowestPort}"`;
-            } else {
-              newCfg = `set net_port "${lowestPort}"`;
-            }
+          const currentServerCfg = configContentsRef.current['server.cfg'] || '';
+          let newCfg = currentServerCfg;
+          if (NET_PORT_REGEX.test(currentServerCfg)) {
+            newCfg = currentServerCfg.replace(NET_PORT_REGEX, `$1${lowestPort}$2`);
+          } else if (currentServerCfg.trim() !== '') {
+            newCfg = `${currentServerCfg}\nset net_port "${lowestPort}"`;
+          } else {
+            newCfg = `set net_port "${lowestPort}"`;
+          }
 
-            initialConfigContentsRef.current = {
-              ...initialConfigContentsRef.current,
-              'server.cfg': newCfg
-            };
-
-            return { ...prev, 'server.cfg': newCfg };
-          });
+          syncConfigState(
+            { ...configContentsRef.current, 'server.cfg': newCfg },
+            { resetAdapter: true, markInitial: true },
+          );
         }
       } catch (err) {
         if (err?.name === 'AbortError' || err?.name === 'CanceledError') return;
@@ -168,21 +308,18 @@ function AddInstanceForm({
       const currentPortVal = portRef.current;
       if (currentPortVal && (!hostId || (hostId && !newAvailablePorts.includes(parseInt(currentPortVal, 10))))) {
         setPort('');
-        setConfigContents(prev => {
-          const currentServerCfg = prev['server.cfg'] || '';
-          return { ...prev, 'server.cfg': currentServerCfg.replace(NET_PORT_REGEX, `// $1${currentPortVal}$2 (Port removed)`) };
-        });
+        const currentServerCfg = configContentsRef.current['server.cfg'] || '';
+        syncConfigFile('server.cfg', currentServerCfg.replace(NET_PORT_REGEX, `// $1${currentPortVal}$2 (Port removed)`));
       }
     }
-  }, []);
+  }, [syncConfigFile, syncConfigState]);
 
   useEffect(() => {
-    const currentDefaultConfigs = initialData.defaultConfigContents || CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {});
-    setConfigContents(currentDefaultConfigs);
-    initialConfigContentsRef.current = currentDefaultConfigs;
+    const currentDefaultConfigs = normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap());
+    syncConfigState(currentDefaultConfigs, { resetAdapter: true, markInitial: true });
 
     let initialHostnameFromCfg = '';
-    const defaultConfigServerCfg = initialData.defaultConfigContents?.['server.cfg'];
+    const defaultConfigServerCfg = currentDefaultConfigs['server.cfg'];
     if (defaultConfigServerCfg) {
       const hostnameRegex = /^set\s+sv_hostname\s+"([^"]*)"/m;
       const hnMatch = defaultConfigServerCfg.match(hostnameRegex);
@@ -204,6 +341,17 @@ function AddInstanceForm({
     setName('');
     setPort('');
     setLanRateEnabled(false);
+    setLoadedPreset(null);
+    loadedPresetConfigRef.current = null;
+    setIsPresetModified(false);
+
+    const defaultCheckedPlugins = new Set(initialData.defaultCheckedPlugins || []);
+    setCheckedPlugins(defaultCheckedPlugins);
+    initialCheckedPluginsRef.current = defaultCheckedPlugins;
+    loadedPresetCheckedPluginsRef.current = defaultCheckedPlugins;
+    setDraftPreset('default');
+    resetFactories(initialData.defaultFactories || {});
+    setFactoryServerTree(initialData.defaultFactoryTree || []);
 
     if (startHostId) {
       handleHostChange(startHostId, true);
@@ -212,63 +360,140 @@ function AddInstanceForm({
     }
 
     return () => { portFetchAbortRef.current?.abort(); };
-  }, [initialData.defaultConfigContents, initialHostId, handleHostChange]);
+  }, [
+    handleHostChange,
+    initialData.defaultCheckedPlugins,
+    initialData.defaultConfigContents,
+    initialData.defaultFactories,
+    initialData.defaultFactoryTree,
+    initialHostId,
+    resetFactories,
+    syncConfigState,
+  ]);
 
   // Sync presets state when initialData.presets changes
   useEffect(() => {
     setPresets(initialData.presets || []);
   }, [initialData.presets]);
 
+  useEffect(() => {
+    configContentsRef.current = configContents;
+  }, [configContents]);
+
   useEffect(() => { hostnameRef.current = hostname; }, [hostname]);
   useEffect(() => { portRef.current = port; }, [port]);
   useEffect(() => { availablePortsRef.current = availablePorts; }, [availablePorts]);
 
   useEffect(() => {
+    let cancelled = false;
+    getFactoryTree({ preset: draftPreset || 'default' })
+      .then((tree) => {
+        if (!cancelled) setFactoryServerTree(tree || []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setInternalFormError(err.error?.message || err.message || 'Failed to load factory files.');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [draftPreset]);
+
+  useEffect(() => {
+    if (initialData.defaultFactories) {
+      resetFactories(initialData.defaultFactories);
+      return;
+    }
+    if (draftPreset !== 'default' || loadedPreset) return;
+
+    const defaultPreset = (initialData.presets || []).find(p => p.is_builtin && p.name === 'default');
+    if (!defaultPreset) return;
+
+    let cancelled = false;
+    getPresetById(defaultPreset.id)
+      .then((presetData) => {
+        if (!cancelled) resetFactories(presetData.factories || {});
+      })
+      .catch(() => {
+        if (!cancelled) resetFactories({});
+      });
+    return () => { cancelled = true; };
+  }, [draftPreset, initialData.defaultFactories, initialData.presets, loadedPreset, resetFactories]);
+
+  useEffect(() => {
+    const checkedPluginsChanged = !areSetsEqual(checkedPlugins, initialCheckedPluginsRef.current);
     const isDirty =
       name !== initialNameRef.current ||
       selectedHostId !== initialSelectedHostIdRef.current ||
       port !== initialPortRef.current ||
       hostname !== initialHostnameRef.current ||
       lanRateEnabled !== initialLanRateEnabledRef.current ||
-      JSON.stringify(configContents) !== JSON.stringify(initialConfigContentsRef.current);
+      JSON.stringify(configContents) !== JSON.stringify(initialConfigContentsRef.current) ||
+      configsHaveChanges ||
+      factoriesHaveChanges ||
+      pluginsHaveChanges ||
+      checkedPluginsChanged;
     if (onDirtyStateChange) onDirtyStateChange(isDirty);
-  }, [name, selectedHostId, port, hostname, lanRateEnabled, configContents, onDirtyStateChange]);
+  }, [
+    checkedPlugins,
+    configContents,
+    configsHaveChanges,
+    factoriesHaveChanges,
+    hostname,
+    lanRateEnabled,
+    name,
+    onDirtyStateChange,
+    pluginsHaveChanges,
+    port,
+    selectedHostId,
+  ]);
 
   // Track if loaded preset has been modified
   useEffect(() => {
     if (loadedPreset && loadedPresetConfigRef.current) {
-      const modified = JSON.stringify(configContents) !== JSON.stringify(loadedPresetConfigRef.current);
+      const modified =
+        JSON.stringify(configContents) !== JSON.stringify(loadedPresetConfigRef.current) ||
+        configsHaveChanges ||
+        factoriesHaveChanges ||
+        pluginsHaveChanges ||
+        !areSetsEqual(checkedPlugins, loadedPresetCheckedPluginsRef.current);
       setIsPresetModified(modified);
     }
-  }, [configContents, loadedPreset]);
+  }, [
+    checkedPlugins,
+    configContents,
+    configsHaveChanges,
+    factoriesHaveChanges,
+    loadedPreset,
+    pluginsHaveChanges,
+  ]);
 
   useEffect(() => {
     if (hostname !== '' && hostname !== prevHostnameRef.current && !isUpdatingFromServerCfg.current) {
-      if (configContents['server.cfg']) {
-        const currentServerCfg = configContents['server.cfg'];
-        const hostnameRegex = /^(set\s+sv_hostname\s+").*(".*)/m;
-        setConfigContents(prev => ({ ...prev, 'server.cfg': hostnameRegex.test(currentServerCfg) ? currentServerCfg.replace(hostnameRegex, `$1${hostname}$2`) : `${currentServerCfg}\nset sv_hostname "${hostname}"` }));
-      } else if (!configContents['server.cfg']) {
-        setConfigContents(prev => ({ ...prev, 'server.cfg': `set sv_hostname "${hostname}"` }));
+      const currentServerCfg = configContentsRef.current['server.cfg'] || '';
+      const nextServerCfg = currentServerCfg
+        ? (HOSTNAME_REGEX.test(currentServerCfg) ? currentServerCfg.replace(HOSTNAME_REGEX, `$1${hostname}$2`) : `${currentServerCfg}\nset sv_hostname "${hostname}"`)
+        : `set sv_hostname "${hostname}"`;
+      if (nextServerCfg !== currentServerCfg) {
+        syncConfigFile('server.cfg', nextServerCfg);
       }
     }
     prevHostnameRef.current = hostname;
-  }, [hostname, configContents]);
+  }, [hostname, syncConfigFile]);
 
   useEffect(() => {
     if (port !== '' && port !== prevPortRef.current && !isUpdatingPortFromServerCfg.current) {
       // Skip if server.cfg already reflects this port (e.g. set during auto-populate or config edit)
-      const currentCfg = configContents['server.cfg'] || '';
+      const currentCfg = configContentsRef.current['server.cfg'] || '';
       const existingMatch = currentCfg.match(/^set\s+net_port\s+"(\d+)"/m);
       if (!(existingMatch && existingMatch[1] === port)) {
-        setConfigContents(prev => {
-          const currentServerCfg = prev['server.cfg'] || '';
-          return { ...prev, 'server.cfg': NET_PORT_REGEX.test(currentServerCfg) ? currentServerCfg.replace(NET_PORT_REGEX, `$1${port}$2`) : `${currentServerCfg}\nset net_port "${port}"` };
-        });
+        const nextServerCfg = NET_PORT_REGEX.test(currentCfg)
+          ? currentCfg.replace(NET_PORT_REGEX, `$1${port}$2`)
+          : `${currentCfg}\nset net_port "${port}"`;
+        syncConfigFile('server.cfg', nextServerCfg);
       }
     }
     prevPortRef.current = port;
-  }, [port, configContents]);
+  }, [port, syncConfigFile]);
 
   // Handle loading a preset
   const handleLoadPreset = useCallback(async (presetId) => {
@@ -276,14 +501,7 @@ function AddInstanceForm({
     try {
       setInternalFormError(null);
       const presetData = await getPresetById(presetId);
-
-      // Map API keys to internal config keys, stripping managed cvars from server.cfg
-      const newConfigs = CONFIG_FILES.reduce((acc, fileName) => {
-        const apiKey = CONFIG_TO_API_MAP[fileName];
-        const raw = presetData[apiKey] || '';
-        acc[fileName] = fileName === 'server.cfg' ? stripManagedCvars(raw) : raw;
-        return acc;
-      }, {});
+      const newConfigs = extractPresetConfigs(presetData);
 
       // Extract hostname and port from preset server.cfg, patching newConfigs before setting state
       let newInitialHostname = hostnameRef.current;
@@ -316,7 +534,7 @@ function AddInstanceForm({
         }
       }
 
-      setConfigContents(newConfigs);
+      syncConfigState(newConfigs, { resetAdapter: true, markInitial: true });
       initialConfigContentsRef.current = newConfigs;
 
       // Track which preset was loaded (for update feature)
@@ -324,23 +542,21 @@ function AddInstanceForm({
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
+      resetFactories(presetData.factories || {});
       setIsPresetModified(false);
 
       initialHostnameRef.current = newInitialHostname;
       initialPortRef.current = newInitialPort;
 
-      // Load factories from preset
-      if (presetData.factories && Object.keys(presetData.factories).length > 0) {
-        setFactories(presetData.factories);
-      } else {
-        setFactories({});
-      }
-
       // Restore checked plugins state saved with the preset.
       // null means the preset pre-dates this feature — keep current defaults.
+      let nextCheckedBaseline = new Set(checkedPlugins);
       if (presetData.checked_plugins != null) {
-        setCheckedPlugins(new Set(presetData.checked_plugins));
+        nextCheckedBaseline = new Set(presetData.checked_plugins);
+        setCheckedPlugins(nextCheckedBaseline);
       }
+      loadedPresetCheckedPluginsRef.current = nextCheckedBaseline;
+      initialCheckedPluginsRef.current = nextCheckedBaseline;
 
       setShowLoadPresetModal(false);
     } catch (err) {
@@ -348,7 +564,7 @@ function AddInstanceForm({
     } finally {
       setIsLoadingPreset(false);
     }
-  }, []);
+  }, [checkedPlugins, resetFactories, syncConfigState]);
 
 
   // Handle saving current config as a preset
@@ -359,20 +575,16 @@ function AddInstanceForm({
       const presetData = {
         name,
         description: description || null,
+        configs: serializeConfigs(),
+        factories: serializeFactories(),
       };
 
-      for (const [configKey, apiKey] of Object.entries(CONFIG_TO_API_MAP)) {
-        presetData[apiKey] = configContents[configKey] || '';
+      if (pluginsManagerRef.current?.flushEdits) {
+        await pluginsManagerRef.current.flushEdits();
       }
 
-      // Flush any pending script edits before saving
-      if (scriptManagerRef.current) {
-        await scriptManagerRef.current.flushEdits();
-      }
-
-      // Include draft_id so backend can pull scripts from draft workspace
-      if (draft.draftId) {
-        presetData.draft_id = draft.draftId;
+      if (pluginDraftId) {
+        presetData.draft_id = pluginDraftId;
       }
 
       if (name !== draftPreset) {
@@ -380,11 +592,6 @@ function AddInstanceForm({
           context_type: 'preset',
           context_key: draftPreset,
         };
-      }
-
-      // Include factories (only checked files in AddInstance mode)
-      if (Object.keys(factories).length > 0) {
-        presetData.factories = factories;
       }
 
       // Always persist the checked plugins state so loading the preset
@@ -400,7 +607,7 @@ function AddInstanceForm({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [configContents, draft.draftId, draftPreset, factories, checkedPlugins]);
+  }, [checkedPlugins, draftPreset, pluginDraftId, serializeConfigs, serializeFactories]);
 
   // Show confirmation dialog before updating preset
   const handleUpdatePresetClick = useCallback(() => {
@@ -416,24 +623,16 @@ function AddInstanceForm({
     try {
       const presetData = {
         description: description,
+        configs: serializeConfigs(),
+        factories: serializeFactories(),
       };
-      for (const [configKey, apiKey] of Object.entries(CONFIG_TO_API_MAP)) {
-        presetData[apiKey] = configContents[configKey] || '';
+
+      if (pluginsManagerRef.current?.flushEdits) {
+        await pluginsManagerRef.current.flushEdits();
       }
 
-      // Flush any pending script edits before updating
-      if (scriptManagerRef.current) {
-        await scriptManagerRef.current.flushEdits();
-      }
-
-      // Include draft_id so backend can pull scripts from draft workspace
-      if (draft.draftId) {
-        presetData.draft_id = draft.draftId;
-      }
-
-      // Include factories (only checked files in AddInstance mode)
-      if (Object.keys(factories).length > 0) {
-        presetData.factories = factories;
+      if (pluginDraftId) {
+        presetData.draft_id = pluginDraftId;
       }
 
       // Persist the current checked plugins state
@@ -442,7 +641,8 @@ function AddInstanceForm({
       await updatePreset(loadedPreset.id, presetData);
 
       // Reset modified state after successful save and update loaded preset description
-      loadedPresetConfigRef.current = { ...configContents };
+      loadedPresetConfigRef.current = serializeConfigs();
+      loadedPresetCheckedPluginsRef.current = new Set(checkedPlugins);
       setLoadedPreset(prev => ({ ...prev, description: description || '' }));
       setIsPresetModified(false);
       setInternalFormError(null);
@@ -451,7 +651,7 @@ function AddInstanceForm({
     } finally {
       setIsUpdatingPreset(false);
     }
-  }, [loadedPreset, configContents, draft.draftId, factories, checkedPlugins]);
+  }, [checkedPlugins, loadedPreset, pluginDraftId, serializeConfigs, serializeFactories]);
 
   // Handle preset deletion from LoadPresetModal
   const handlePresetDeleted = useCallback((deletedPresetId) => {
@@ -471,47 +671,40 @@ function AddInstanceForm({
     setActiveMainTab(tab);
   }, []);
 
-  const handleConfigChange = useCallback((fileName, newContent) => {
-    setConfigContents(prev => ({ ...prev, [fileName]: newContent }));
+  const handleConfigContentUpdate = useCallback((fileName, newContent) => {
+    syncConfigFile(fileName, newContent);
     if (fileName === 'server.cfg') {
       const hostnameMatch = newContent.match(/^set\s+sv_hostname\s+"([^"]*)"/m);
       if (hostnameMatch && hostnameMatch[1] !== hostnameRef.current) { isUpdatingFromServerCfg.current = true; setHostname(hostnameMatch[1]); setTimeout(() => isUpdatingFromServerCfg.current = false, 0); }
       const portMatch = newContent.match(/^set\s+net_port\s+"(\d+)"/m);
       if (portMatch && portMatch[1] !== portRef.current) { const portVal = portMatch[1]; if (availablePortsRef.current.includes(parseInt(portVal, 10))) { isUpdatingPortFromServerCfg.current = true; setPort(portVal); setTimeout(() => isUpdatingPortFromServerCfg.current = false, 0); } }
     }
-  }, []);
+  }, [syncConfigFile]);
 
-  const editorOnChangeHandlers = useMemo(() => (CONFIG_FILES.reduce((acc, fileName) => { acc[fileName] = (newContent) => handleConfigChange(fileName, newContent); return acc; }, {})), [handleConfigChange]);
   const handleInternalServerCfgLint = useCallback((hasErrors) => { setServerCfgHasLintErrors(hasErrors); if (onServerCfgLintStatusChange) onServerCfgLintStatusChange(hasErrors); }, [onServerCfgLintStatusChange]);
   const qlCfgLinterSource = useCallback(() => (createQlCfgLinter(availablePorts, handleInternalServerCfgLint)), [availablePorts, handleInternalServerCfgLint]);
-  const handleExpandEditor = useCallback((fileName) => {
-    let language;
-    switch (fileName) {
-      case 'server.cfg':
-        language = qlcfgLanguage;
-        break;
-      case 'mappool.txt':
-        language = qlmappoolLanguage;
-        break;
-      case 'access.txt':
-        language = qlaccessLanguage;
-        break;
-      case 'workshop.txt':
-        language = qlworkshopLanguage;
-        break;
-      default:
-        language = undefined;
-    }
+  const getLinterSourceForFile = useCallback(
+    (fileName) => (fileName === 'server.cfg' ? qlCfgLinterSource : null),
+    [qlCfgLinterSource],
+  );
+  const handleExpandEditor = useCallback((selectedFile, content = '') => {
+    const fileName = typeof selectedFile === 'string'
+      ? selectedFile
+      : (selectedFile?.path || selectedFile?.name || '');
     setEditingFileDetails({
       name: fileName,
-      content: configContents[fileName] || '',
-      language,
-      linterSource: fileName === 'server.cfg' ? qlCfgLinterSource : null,
+      content: content || serializeConfigs()[fileName] || '',
+      language: getConfigLanguage(fileName),
+      linterSource: getLinterSourceForFile(fileName),
     });
     setIsFullScreenEditorOpen(true);
-  }, [configContents, qlCfgLinterSource]);
+  }, [getLinterSourceForFile, serializeConfigs]);
   const handleCloseFullScreenEditor = useCallback(() => { setIsFullScreenEditorOpen(false); }, []);
-  const handleSaveFullScreenEditor = useCallback((newContent) => { const fileName = editingFileDetails.name; handleConfigChange(fileName, newContent); setIsFullScreenEditorOpen(false); }, [editingFileDetails.name, handleConfigChange]);
+  const handleSaveFullScreenEditor = useCallback((newContent) => {
+    const fileName = editingFileDetails.name;
+    handleConfigContentUpdate(fileName, newContent);
+    setIsFullScreenEditorOpen(false);
+  }, [editingFileDetails.name, handleConfigContentUpdate]);
   const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
   const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
   const selectedHostOsType = selectedHost?.os_type ?? null;
@@ -527,67 +720,40 @@ function AddInstanceForm({
     }
   }, [lanRateEnabled, lanRateSupported]);
 
-  const handleFileUpload = useCallback((content, fileName, error) => {
-    if (error) {
-      setInternalFormError(`Error uploading ${fileName}: ${error}`);
-      return;
-    }
-    setInternalFormError(null);
-    setConfigContents(prev => ({ ...prev, [fileName]: content }));
-    if (fileName === 'server.cfg') {
-      const hostnameMatch = content.match(/^set\s+sv_hostname\s+"([^"]*)"/m);
-      if (hostnameMatch && hostnameMatch[1] !== hostnameRef.current) { isUpdatingFromServerCfg.current = true; setHostname(hostnameMatch[1]); setTimeout(() => isUpdatingFromServerCfg.current = false, 0); }
-      const portMatch = content.match(/^set\s+net_port\s+"(\d+)"/m);
-      if (portMatch && portMatch[1] !== portRef.current) { const portVal = portMatch[1]; if (availablePortsRef.current.includes(parseInt(portVal, 10))) { isUpdatingPortFromServerCfg.current = true; setPort(portVal); setTimeout(() => isUpdatingPortFromServerCfg.current = false, 0); } }
-    }
-  }, [availablePortsRef, hostnameRef, portRef]);
-
   const localHandleSubmit = async (e) => {
     e.preventDefault();
     if (serverCfgHasLintErrors) { setInternalFormError("Please fix errors in server.cfg before submitting."); return; }
     setInternalFormError(null);
 
-    // Flush any pending script edits to the draft workspace
-    if (scriptManagerRef.current) {
-      await scriptManagerRef.current.flushEdits();
+    if (pluginsManagerRef.current?.flushEdits) {
+      await pluginsManagerRef.current.flushEdits();
     }
 
+    const checkedPluginNames = getSubmitPluginNames(checkedPlugins);
     const submitData = {
       name,
       host_id: parseInt(selectedHostId, 10),
       port: parseInt(port, 10),
       hostname,
       lan_rate_enabled: lanRateEnabled,
-      configs: configContents
+      configs: serializeConfigs(),
+      factories: serializeFactories(),
+      checked_plugins: checkedPluginNames,
+      qlx_plugins: checkedPluginNames.join(', '),
     };
 
-    // Pass draft workspace ID instead of inline scripts
-    if (draft.draftId) {
-      submitData.draft_id = draft.draftId;
+    if (pluginDraftId) {
+      submitData.draft_id = pluginDraftId;
     }
 
-    // Convert checked plugins for qlx_plugins cvar
-    submitData.checked_plugins = Array.from(checkedPlugins)
-      .filter(p => p.endsWith('.py') && !p.endsWith('__init__.py'))
-      .map(p => p.replace(/\.py$/, '').replace(/^.*\//, ''));
-
-    if (submitData.checked_plugins.length > 0) {
-      submitData.qlx_plugins = submitData.checked_plugins.join(', ');
-    } else {
-      submitData.qlx_plugins = '';
-    }
-
-    // Include factories - ALWAYS send factories key (even if empty {})
-    submitData.factories = factories;
-
-    await onSubmit(submitData, { consumeDraft: draft.consume });
+    await onSubmit(submitData, { consumeDraft: pluginConsume });
   };
 
   // Discard draft workspace on cancel/close
   const handleCancel = useCallback(() => {
-    draft.discard();
+    pluginDiscard();
     onCancel();
-  }, [draft, onCancel]);
+  }, [onCancel, pluginDiscard]);
 
   // Configure plugins based on checkboxes
   const togglePluginSelection = useCallback((filename) => {
@@ -603,15 +769,15 @@ function AddInstanceForm({
   }, []);
 
   const handleGetBinaryMeta = useCallback(
-    (path) => getBinaryMeta(draft.draftId, path, 'preset', draftPreset),
-    [draft.draftId, draftPreset],
+    (path) => getBinaryMeta(pluginDraftId, path, 'preset', draftPreset),
+    [draftPreset, pluginDraftId],
   );
 
   const handleSaveBinaryMeta = useCallback(
     (path, description) => (
-      saveBinaryMeta(draft.draftId, path, description, 'preset', draftPreset)
+      saveBinaryMeta(pluginDraftId, path, description, 'preset', draftPreset)
     ),
-    [draft.draftId, draftPreset],
+    [draftPreset, pluginDraftId],
   );
 
   return (
@@ -660,31 +826,36 @@ function AddInstanceForm({
             className="flex-grow min-h-0 bg-[var(--surface-base)] border-x border-b border-[var(--surface-border)] rounded-b-xl p-4 flex flex-col"
           >
             {activeMainTab === 'config' ? (
-              <InstanceConfigTabs CONFIG_FILES={CONFIG_FILES} activeTabIndex={activeTabIndex} onTabChange={setActiveTabIndex} configContents={configContents} editorOnChangeHandlers={editorOnChangeHandlers} selectedPresetId={null} serverCfgLinterSource={qlCfgLinterSource} onExpandEditor={handleExpandEditor} onConfigFileUpload={handleFileUpload} />
+              <FileManager
+                adapter={configsAdapter}
+                capabilities={CONFIG_CAPS}
+                defaultSelectedPath="server.cfg"
+                onExpandEditor={handleExpandEditor}
+                getLanguageForFile={getConfigLanguage}
+                getLinterSourceForFile={getLinterSourceForFile}
+              />
             ) : activeMainTab === 'scripts' ? (
-              <ScriptManager
-                ref={scriptManagerRef}
-                draftId={draft.draftId}
-                tree={draft.tree}
-                onTreeRefresh={draft.refreshTree}
-                readContent={draft.readContent}
-                writeContent={draft.writeContent}
-                upload={draft.upload}
-                deleteFile={draft.deleteFile}
-                checkable={true}
+              <FileManager
+                ref={pluginsManagerRef}
+                adapter={pluginsAdapter}
+                capabilities={PLUGIN_CAPS}
+                checkable
                 checkedFiles={checkedPlugins}
                 onCheck={togglePluginSelection}
-                loading={draft.loading}
-                error={draft.error}
                 getBinaryMeta={handleGetBinaryMeta}
                 saveBinaryMeta={handleSaveBinaryMeta}
+                binaryContext={{
+                  contextType: 'preset',
+                  contextKey: draftPreset || 'default',
+                }}
               />
             ) : (
-              <FactoryManager
-                factories={factories}
-                onFactoriesChange={setFactories}
-                isNewInstance={true}
-                preset="default"
+              <FileManager
+                adapter={factoriesAdapter}
+                capabilities={FACTORY_CAPS}
+                checkable
+                checkedFiles={checkedFactories}
+                onCheck={setFactoryChecked}
               />
             )}
           </div>

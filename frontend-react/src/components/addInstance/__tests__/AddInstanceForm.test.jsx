@@ -2,12 +2,14 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import AddInstanceForm from '../AddInstanceForm';
-
 const mocks = vi.hoisted(() => ({
   consumeDraft: vi.fn(),
   discardDraft: vi.fn(),
   getAvailablePortsForHost: vi.fn(),
+  getBinaryMeta: vi.fn(),
+  getFactoryContent: vi.fn(),
+  getFactoryTree: vi.fn(),
+  saveBinaryMeta: vi.fn(),
   useDraftWorkspace: vi.fn(),
 }));
 
@@ -17,9 +19,78 @@ vi.mock('../../../hooks/useDraftWorkspace', () => ({
 
 vi.mock('../../../services/api', () => ({
   getAvailablePortsForHost: mocks.getAvailablePortsForHost,
+  getFactoryContent: mocks.getFactoryContent,
+  getFactoryTree: mocks.getFactoryTree,
   getPresetById: vi.fn(),
   savePreset: vi.fn(),
   updatePreset: vi.fn(),
+}));
+
+vi.mock('../../../services/draftApi', () => ({
+  getBinaryMeta: mocks.getBinaryMeta,
+  saveBinaryMeta: mocks.saveBinaryMeta,
+}));
+
+vi.mock('../../fileManager', () => ({
+  CONFIG_CAPS: {
+    allowedExtensions: ['.cfg', '.txt'],
+    protectedFiles: ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'],
+  },
+  PLUGIN_CAPS: {
+    allowedExtensions: ['.py', '.txt', '.so'],
+    protectedFiles: [],
+  },
+  FACTORY_CAPS: {
+    allowedExtensions: ['.factories'],
+    protectedFiles: [],
+  },
+  FileManager: React.forwardRef(function MockFileManager(_props, ref) {
+    React.useImperativeHandle(ref, () => ({
+      flushEdits: vi.fn().mockResolvedValue(undefined),
+    }));
+    return <div>file-manager</div>;
+  }),
+  useDraftAdapter: () => ({
+    draftId: 'draft-123',
+    tree: [],
+    loading: false,
+    error: null,
+    refreshTree: vi.fn(),
+    readContent: vi.fn(),
+    writeContent: vi.fn(),
+    upload: vi.fn(),
+    deleteFile: vi.fn(),
+    renameFile: vi.fn(),
+    commit: vi.fn(),
+    discard: mocks.discardDraft,
+    consume: mocks.consumeDraft,
+    hasChanges: false,
+  }),
+  useStateAdapter: ({ initialFiles = {}, serverTree = [] } = {}) => {
+    const [files, setFiles] = React.useState(initialFiles);
+    const reset = React.useCallback((nextFiles = {}) => {
+      setFiles(nextFiles);
+    }, []);
+    const readContent = React.useCallback(async (path) => files[path] || '', [files]);
+    const writeContent = React.useCallback(async (path, content) => {
+      setFiles(prev => ({ ...prev, [path]: content || '' }));
+    }, []);
+    return React.useMemo(() => ({
+      tree: serverTree,
+      readContent,
+      writeContent,
+      upload: vi.fn().mockResolvedValue({}),
+      deleteFile: vi.fn().mockResolvedValue(undefined),
+      renameFile: vi.fn().mockResolvedValue(undefined),
+      checkedFiles: new Set(Object.keys(files)),
+      setChecked: vi.fn().mockResolvedValue(undefined),
+      hasChanges: false,
+      serialize: () => ({ ...files }),
+      reset,
+      loading: false,
+      error: null,
+    }), [files, readContent, reset, serverTree, writeContent]);
+  },
 }));
 
 vi.mock('../InstanceBasicInfoForm', () => ({
@@ -44,33 +115,10 @@ vi.mock('../InstanceBasicInfoForm', () => ({
   ),
 }));
 
-vi.mock('../InstanceConfigTabs', () => ({
-  default: () => <div>config-tabs</div>,
-}));
-
-vi.mock('../SavePresetModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('../LoadPresetModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('../UpdatePresetModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('../../config/FullScreenConfigEditorModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('../FactoryManager/FactoryManager', () => ({
-  default: () => <div>factory-manager</div>,
-}));
-
-vi.mock('../ScriptManager', () => ({
-  ScriptManager: () => <div>script-manager</div>,
-}));
+vi.mock('../SavePresetModal', () => ({ default: () => null }));
+vi.mock('../LoadPresetModal', () => ({ default: () => null }));
+vi.mock('../UpdatePresetModal', () => ({ default: () => null }));
+vi.mock('../../config/FullScreenConfigEditorModal', () => ({ default: () => null }));
 
 vi.mock('../../../codemirror-lang-qlcfg', () => ({
   qlcfgLanguage: {},
@@ -91,9 +139,18 @@ vi.mock('../../../codemirror-lang-qlworkshop', () => ({
 }));
 
 describe('AddInstanceForm draft lifecycle', () => {
-  beforeEach(() => {
+  let AddInstanceForm;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
+    if (!AddInstanceForm) {
+      ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
+    }
     mocks.getAvailablePortsForHost.mockResolvedValue({ available_ports: [] });
+    mocks.getBinaryMeta.mockResolvedValue({});
+    mocks.getFactoryContent.mockResolvedValue({ content: '' });
+    mocks.getFactoryTree.mockResolvedValue([]);
+    mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.useDraftWorkspace.mockReturnValue({
       draftId: 'draft-123',
       tree: [],

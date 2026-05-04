@@ -2,16 +2,13 @@ import React, { useState, useEffect, useRef, Fragment, useCallback } from 'react
 import { Dialog, Transition } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen } from 'lucide-react';
 import { python } from '@codemirror/lang-python';
-import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updateInstance } from '../../services/api';
+import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
-import { useDraftWorkspace } from '../../hooks/useDraftWorkspace';
-import ConfigEditorTabs from '../config/ConfigEditorTabs';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
 import LoadPresetModal from '../addInstance/LoadPresetModal';
 import SavePresetModal from '../addInstance/SavePresetModal';
-import { ScriptManager } from '../addInstance/ScriptManager';
-import FactoryManager from '../addInstance/FactoryManager/FactoryManager';
+import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
 import { useNotification } from '../NotificationProvider';
 import InfoTooltip from '../common/InfoTooltip';
 import { qlcfgLanguage, createQlCfgLinter, stripManagedCvars } from '../../codemirror-lang-qlcfg';
@@ -32,6 +29,8 @@ const LANGUAGE_MAP = {
   'workshop.txt': qlworkshopLanguage,
 };
 const getLanguageForFile = (fileName) => LANGUAGE_MAP[fileName] || null;
+const getServerHostname = (serverCfg = '') => serverCfg.match(/set sv_hostname "([^"]*)"/)?.[1] || '';
+const setsEqual = (a, b) => a.size === b.size && [...a].every(value => b.has(value));
 
 // Mapping between frontend config keys and backend preset API keys
 const CONFIG_KEY_MAP = {
@@ -49,12 +48,15 @@ function EditInstanceConfigModal({
   onConfigSaved,
 }) {
   const [currentInstanceName, setCurrentInstanceName] = useState(initialInstanceName || '');
-  const [configs, setConfigs] = useState(
-    CONFIG_FILES_ORDER.reduce((acc, fileName) => {
+  const [originalInstanceName, setOriginalInstanceName] = useState(initialInstanceName || '');
+  const configsAdapter = useStateAdapter({
+    initialFiles: CONFIG_FILES_ORDER.reduce((acc, fileName) => {
       acc[fileName] = '';
       return acc;
-    }, {})
-  );
+    }, {}),
+    allowedExtensions: CONFIG_CAPS.allowedExtensions,
+    protectedFiles: CONFIG_CAPS.protectedFiles,
+  });
   const [presets, setPresets] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,6 @@ function EditInstanceConfigModal({
   const [error, setError] = useState(null);
   const [presetError, setPresetError] = useState(null);
   const [saveError, setSaveError] = useState(null);
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
 
   // LAN Rate state
   const [lanRateEnabled, setLanRateEnabled] = useState(false);
@@ -80,6 +81,7 @@ function EditInstanceConfigModal({
   // New state for synced hostname
   const isUpdatingFromServerCfg = React.useRef(false);
   const [serverHostname, setServerHostname] = useState('');
+  const [originalServerHostname, setOriginalServerHostname] = useState('');
 
   // State for ExpandedEditorModal
   const [isExpandedEditorOpen, setIsExpandedEditorOpen] = useState(false);
@@ -97,27 +99,64 @@ function EditInstanceConfigModal({
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
   const [checkedPlugins, setCheckedPlugins] = useState(new Set());
+  const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
-  const scriptManagerRef = useRef(null);
+  const pluginFileManagerRef = useRef(null);
   const pluginsSyncedRef = useRef(false);
 
   // Factories tab state
-  const [factories, setFactories] = useState({});
+  const [factoryServerTree, setFactoryServerTree] = useState([]);
+  const factoriesAdapter = useStateAdapter({
+    initialFiles: {},
+    serverTree: factoryServerTree,
+    readServerContent: async (path) => {
+      const data = await getFactoryContent(path, {
+        host: scriptHostName,
+        instanceId,
+      });
+      return data.content || '';
+    },
+    allowedExtensions: FACTORY_CAPS.allowedExtensions,
+    protectedFiles: FACTORY_CAPS.protectedFiles,
+  });
 
   const { showSuccess, showError } = useNotification(); // Get notification functions
 
-  const draft = useDraftWorkspace({
+  const pluginsAdapter = useDraftAdapter({
     source: 'instance',
     host: scriptHostName,
     instanceId,
     active: isOpen && scriptHostName != null,
   });
+  const {
+    hasChanges: configsHaveChanges,
+    readContent: readConfigContent,
+    reset: resetConfigs,
+    serialize: serializeConfigs,
+    writeContent: writeConfigContent,
+  } = configsAdapter;
+  const {
+    checkedFiles: checkedFactories,
+    hasChanges: factoriesHaveChanges,
+    reset: resetFactories,
+    serialize: serializeFactories,
+    setChecked: setFactoryChecked,
+  } = factoriesAdapter;
+  const {
+    consume: consumePlugins,
+    discard: discardPlugins,
+    draftId: pluginDraftId,
+    hasChanges: pluginsHaveChanges,
+    tree: pluginTree,
+  } = pluginsAdapter;
+  const serializedConfigs = serializeConfigs();
+  const serverCfgContent = serializedConfigs['server.cfg'] || '';
 
   // Resolve raw qlx_plugins names to full tree paths once on initial load
   useEffect(() => {
     if (pluginsSyncedRef.current) return;
-    if (rawQlxPlugins.length === 0 || draft.tree.length === 0) return;
+    if (rawQlxPlugins.length === 0 || pluginTree.length === 0) return;
     const fullPaths = [];
     const collectPaths = (node) => {
       if (node.type === 'file' && node.name.endsWith('.py') && node.name !== '__init__.py') {
@@ -129,12 +168,14 @@ function EditInstanceConfigModal({
         node.children.forEach(collectPaths);
       }
     };
-    draft.tree.forEach(collectPaths);
+    pluginTree.forEach(collectPaths);
     pluginsSyncedRef.current = true;
+    const nextCheckedPlugins = new Set(fullPaths);
+    setInitialCheckedPlugins(nextCheckedPlugins);
     if (fullPaths.length > 0) {
-      setCheckedPlugins(new Set(fullPaths));
+      setCheckedPlugins(nextCheckedPlugins);
     }
-  }, [rawQlxPlugins, draft.tree]);
+  }, [rawQlxPlugins, pluginTree]);
 
   // Linter for server.cfg — no port validation in edit mode, but shows managed-cvar info tooltips
   const qlCfgLinterSource = useCallback(() => createQlCfgLinter([], () => {}), []);
@@ -155,15 +196,15 @@ function EditInstanceConfigModal({
   }, []);
 
   const handleGetBinaryMeta = useCallback(
-    (path) => getBinaryMeta(draft.draftId, path, 'instance', String(instanceId)),
-    [draft.draftId, instanceId],
+    (path) => getBinaryMeta(pluginDraftId, path, 'instance', String(instanceId)),
+    [pluginDraftId, instanceId],
   );
 
   const handleSaveBinaryMeta = useCallback(
     (path, description) => (
-      saveBinaryMeta(draft.draftId, path, description, 'instance', String(instanceId))
+      saveBinaryMeta(pluginDraftId, path, description, 'instance', String(instanceId))
     ),
-    [draft.draftId, instanceId],
+    [pluginDraftId, instanceId],
   );
 
 
@@ -177,11 +218,11 @@ function EditInstanceConfigModal({
         setPresetError(null);
         setSaveError(null);
         setSelectedPresetId(''); // Reset preset selection
-        setActiveTabIndex(0); // Reset to first tab
         // Reset scripts state
         setActiveMainTab('config');
         setScriptHostName(null);
         pluginsSyncedRef.current = false;
+        setFactoryServerTree([]);
 
         // Reset restart toggle to default (true) when opening
         setRestartAfterSave(true);
@@ -200,22 +241,44 @@ function EditInstanceConfigModal({
             : [];
           setRawQlxPlugins(configuredPlugins);
           setCheckedPlugins(new Set());
+          setInitialCheckedPlugins(new Set());
 
-          setCurrentInstanceName(instanceDetails.name || `Instance ${instanceId}`);
+          const fetchedInstanceName = instanceDetails.name || `Instance ${instanceId}`;
+          setCurrentInstanceName(fetchedInstanceName);
+          setOriginalInstanceName(fetchedInstanceName);
           // Store host name for Scripts and Factories tabs
-          setScriptHostName(instanceDetails.host_name || null);
+          const fetchedHostName = instanceDetails.host_name || null;
+          setScriptHostName(fetchedHostName);
           setHostOsType(instanceDetails.host_os_type || null);
           const fetchedConfigs = {};
+          Object.entries(configData || {}).forEach(([file, value]) => {
+            if (file === 'factories' || typeof value !== 'string') return;
+            fetchedConfigs[file] = file === 'server.cfg' ? stripManagedCvars(value) : value;
+          });
           CONFIG_FILES_ORDER.forEach(file => {
-            const raw = configData[file] || '';
+            const raw = fetchedConfigs[file] || '';
             fetchedConfigs[file] = file === 'server.cfg' ? stripManagedCvars(raw) : raw;
           });
-          setConfigs(fetchedConfigs);
+          resetConfigs(fetchedConfigs);
+          resetFactories(configData.factories || {});
+          if (fetchedHostName) {
+            try {
+              setFactoryServerTree(await getFactoryTree({
+                host: fetchedHostName,
+                instanceId,
+              }) || []);
+            } catch (factoryTreeError) {
+              console.error("EditInstanceConfigModal: Factory tree fetch error:", factoryTreeError);
+              setFactoryServerTree([]);
+            }
+          }
+          const fetchedServerHostname = getServerHostname(fetchedConfigs['server.cfg']);
+          setServerHostname(fetchedServerHostname);
+          setOriginalServerHostname(fetchedServerHostname);
           setLanRateEnabled(instanceDetails.lan_rate_enabled || false);
           setOriginalLanRateEnabled(instanceDetails.lan_rate_enabled || false);
           setIsDirty(false); // Reset dirty state
           setPresets(presetsData || []);
-          setFactories(configData.factories || {});
         } catch (err) {
           setError(err.message || `Failed to fetch initial data for instance ${instanceId}`);
           console.error("EditInstanceConfigModal: Initial data fetch error:", err);
@@ -226,17 +289,17 @@ function EditInstanceConfigModal({
       };
       fetchInitialData();
     }
-  }, [isOpen, instanceId, initialInstanceName]);
+  }, [isOpen, instanceId, initialInstanceName, resetConfigs, resetFactories]);
 
   // Sync effect: Update serverHostname when server.cfg changes (unless it's an internal update)
   useEffect(() => {
-    if (!isUpdatingFromServerCfg.current && configs['server.cfg']) {
-      const match = configs['server.cfg'].match(/set sv_hostname "([^"]*)"/);
-      if (match && match[1] !== serverHostname) {
-        setServerHostname(match[1]);
+    if (!isUpdatingFromServerCfg.current && serverCfgContent) {
+      const nextHostname = getServerHostname(serverCfgContent);
+      if (nextHostname && nextHostname !== serverHostname) {
+        setServerHostname(nextHostname);
       }
     }
-  }, [configs, serverHostname]);
+  }, [serverCfgContent, serverHostname]);
 
   const handleHostnameChange = (e) => {
     const newHostname = e.target.value;
@@ -244,24 +307,16 @@ function EditInstanceConfigModal({
 
     // Update server.cfg
     isUpdatingFromServerCfg.current = true;
-    setConfigs(prev => {
-      const cfg = prev['server.cfg'] || '';
+    readConfigContent('server.cfg').then((cfg) => {
       const regex = /set sv_hostname "([^"]*)"/;
-      let newCfg;
-      if (regex.test(cfg)) {
-        newCfg = cfg.replace(regex, `set sv_hostname "${newHostname}"`);
-      } else {
-        newCfg = cfg + `\nset sv_hostname "${newHostname}"`;
-      }
-      return { ...prev, 'server.cfg': newCfg };
+      const nextCfg = regex.test(cfg || '')
+        ? cfg.replace(regex, `set sv_hostname "${newHostname}"`)
+        : `${cfg || ''}\nset sv_hostname "${newHostname}"`;
+      return writeConfigContent('server.cfg', nextCfg);
+    }).finally(() => {
+      setTimeout(() => { isUpdatingFromServerCfg.current = false; }, 0);
     });
 
-    setIsDirty(true);
-    setTimeout(() => { isUpdatingFromServerCfg.current = false; }, 0);
-  };
-
-  const handleConfigChange = (filename, value) => {
-    setConfigs(prev => ({ ...prev, [filename]: value }));
     setIsDirty(true);
   };
 
@@ -287,45 +342,58 @@ function EditInstanceConfigModal({
   const handleRestartToggle = () => {
     if (lanRateChanged) return;
     setRestartAfterSave(prev => !prev);
-  }
+  };
 
-  const handleConfigFileUpload = useCallback((content, fileName, error) => {
-    if (error) {
-      setSaveError(`Error uploading ${fileName}: ${error}`); // Use existing saveError state for simplicity
-      return;
-    }
-    setSaveError(null); // Clear any previous errors
-    setConfigs(prev => ({ ...prev, [fileName]: content }));
-    setIsDirty(true);
-  }, []);
+  const checkedPluginsChanged = !setsEqual(checkedPlugins, initialCheckedPlugins);
+  const metadataChanged =
+    currentInstanceName !== originalInstanceName ||
+    serverHostname !== originalServerHostname ||
+    lanRateEnabled !== originalLanRateEnabled ||
+    restartAfterSave !== true ||
+    selectedPresetId !== '';
+
+  useEffect(() => {
+    if (!isOpen || loading) return;
+    setIsDirty(Boolean(
+      configsHaveChanges ||
+      factoriesHaveChanges ||
+      pluginsHaveChanges ||
+      checkedPluginsChanged ||
+      metadataChanged
+    ));
+  }, [
+    checkedPluginsChanged,
+    configsHaveChanges,
+    factoriesHaveChanges,
+    isOpen,
+    loading,
+    metadataChanged,
+    pluginsHaveChanges,
+  ]);
 
   const handleLoadPreset = useCallback(async (presetId) => {
     setPresetError(null);
     try {
       const presetData = await getPresetById(presetId);
-      const newConfigs = {};
+      const newConfigs = { ...(presetData.configs || {}) };
       CONFIG_FILES_ORDER.forEach(file => {
         const presetKey = CONFIG_KEY_MAP[file] || file;
-        const raw = presetData[presetKey] || '';
+        const raw = newConfigs[file] ?? presetData[presetKey] ?? '';
         newConfigs[file] = file === 'server.cfg' ? stripManagedCvars(raw) : raw;
       });
-      setConfigs(newConfigs);
+      resetConfigs(newConfigs);
+      resetFactories(presetData.factories || {});
+      const nextHostname = getServerHostname(newConfigs['server.cfg']);
+      setServerHostname(nextHostname);
       setSelectedPresetId(presetId);
       setIsDirty(true);
-
-      // Load factories from preset
-      if (presetData.factories && Object.keys(presetData.factories).length > 0) {
-        setFactories(presetData.factories);
-      } else {
-        setFactories({});
-      }
 
       setIsLoadPresetModalOpen(false);
       showSuccess(`Preset "${presetData.name}" loaded successfully.`);
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
-  }, [showSuccess]);
+  }, [resetConfigs, resetFactories, showSuccess]);
 
   const handleSavePreset = useCallback(async ({ name, description }) => {
     setIsSavingPreset(true);
@@ -334,25 +402,18 @@ function EditInstanceConfigModal({
       const presetData = {
         name: name.trim(),
         description: description?.trim() || null,
-        server_cfg: configs['server.cfg'] || '',
-        mappool_txt: configs['mappool.txt'] || '',
-        access_txt: configs['access.txt'] || '',
-        workshop_txt: configs['workshop.txt'] || '',
+        configs: serializeConfigs(),
+        factories: serializeFactories(),
       };
 
-      // Include all current factory files
-      if (Object.keys(factories).length > 0) {
-        presetData.factories = factories;
-      }
-
       // Flush any in-progress editor content to the draft before saving preset
-      if (scriptManagerRef.current) {
-        await scriptManagerRef.current.flushEdits();
+      if (pluginFileManagerRef.current?.flushEdits) {
+        await pluginFileManagerRef.current.flushEdits();
       }
 
       // Include draft_id so the backend can snapshot draft files into the preset
-      if (draft.draftId) {
-        presetData.draft_id = draft.draftId;
+      if (pluginDraftId) {
+        presetData.draft_id = pluginDraftId;
         presetData.checked_plugins = Array.from(checkedPlugins);
       }
 
@@ -375,7 +436,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [configs, factories, checkedPlugins, draft.draftId, instanceId, showSuccess, showError]);
+  }, [checkedPlugins, instanceId, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
   const handlePresetDeleted = useCallback((deletedPresetId) => {
     setPresets(prevPresets => prevPresets.filter(p => p.id !== deletedPresetId));
@@ -397,39 +458,23 @@ function EditInstanceConfigModal({
     try {
       const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
 
-      // Update Instance Details (Database - Name/Hostname)
-      // Name is preserved (using currentInstanceName which is synced with prop/API), Hostname is updated
-      const instanceUpdateData = {
+      // Flush any in-progress plugin editor content to the draft before building payload.
+      if (pluginFileManagerRef.current?.flushEdits) {
+        await pluginFileManagerRef.current.flushEdits();
+      }
+
+      const configPayload = {
         name: currentInstanceName,
-        hostname: serverHostname
+        hostname: serverHostname,
+        lan_rate_enabled: lanRateEnabled,
+        restart: restartAfterSave,
+        configs: serializeConfigs(),
+        factories: serializeFactories(),
+        draft_id: pluginDraftId,
+        checked_plugins: Array.from(checkedPlugins)
+          .filter(p => p.endsWith('.py') && !p.endsWith('__init__.py'))
+          .map(p => p.replace(/\.py$/, '').replace(/^.*\//, '')),
       };
-      await updateInstance(instanceId, instanceUpdateData);
-
-      // Flush any in-progress editor content to the draft
-      if (scriptManagerRef.current) {
-        await scriptManagerRef.current.flushEdits();
-      }
-
-      // Update config files
-      const configPayload = { ...configs };
-
-      // Include factories in payload (send all factories state)
-      // The backend will sync the directory to match this map exactly (modifications, additions, deletions)
-      if (factories) {
-        configPayload.factories = factories;
-      }
-
-      if (lanRateChanged) {
-        configPayload.lan_rate_enabled = lanRateEnabled;
-      }
-
-      // Send draft_id so the backend commits draft files alongside config
-      if (draft.draftId) {
-        configPayload.draft_id = draft.draftId;
-        configPayload.checked_plugins = Array.from(checkedPlugins)
-          .filter(p => p.endsWith('.py'))
-          .map(p => p.replace(/\.py$/, '').replace(/^.*\//, ''));
-      }
 
       // Pass restart parameter to updateInstanceConfig
       const response = await updateInstanceConfig(instanceId, configPayload, restartAfterSave);
@@ -442,7 +487,7 @@ function EditInstanceConfigModal({
       const restartMsg = restartAfterSave ? " (Restarting)" : " (Restart skipped)";
       showSuccess(successMsg + restartMsg);
 
-      draft.consume();
+      consumePlugins();
       if (onConfigSaved) {
         onConfigSaved();
       }
@@ -458,10 +503,13 @@ function EditInstanceConfigModal({
     }
   };
 
-  const handleExpandEditor = (fileNameToExpand) => {
+  const handleExpandEditor = (selectedFile, content = '') => {
+    const fileNameToExpand = typeof selectedFile === 'string'
+      ? selectedFile
+      : (selectedFile?.path || selectedFile?.name || '');
     setExpandedPluginPath(null);
     setExpandedFileName(fileNameToExpand);
-    setExpandedFileContent(configs[fileNameToExpand] || '');
+    setExpandedFileContent(content || serializeConfigs()[fileNameToExpand] || '');
     setExpandedFileLanguage(getLanguageForFile(fileNameToExpand));
     setExpandedFileLinterSource(getLinterSource(fileNameToExpand));
     setIsExpandedEditorOpen(true);
@@ -479,11 +527,13 @@ function EditInstanceConfigModal({
   const handleExpandedEditorContentChange = (newContent) => {
     setExpandedFileContent(newContent);
     if (expandedPluginPath) {
-      if (scriptManagerRef.current?.updateContent) {
-        scriptManagerRef.current.updateContent(expandedPluginPath, newContent);
+      if (pluginFileManagerRef.current?.updateContent) {
+        pluginFileManagerRef.current.updateContent(expandedPluginPath, newContent);
       }
     } else {
-      setConfigs(prev => ({ ...prev, [expandedFileName]: newContent }));
+      writeConfigContent(expandedFileName, newContent).catch((err) => {
+        setSaveError(err.message || 'Failed to update expanded editor content.');
+      });
     }
     setIsDirty(true);
   };
@@ -497,7 +547,7 @@ function EditInstanceConfigModal({
     if (isDirty) {
       setShowCloseConfirm(true);
     } else {
-      draft.discard();
+      discardPlugins();
       onClose(); // Call original onClose if not dirty
     }
   };
@@ -505,7 +555,7 @@ function EditInstanceConfigModal({
   const confirmModalClose = () => {
     setShowCloseConfirm(false);
     setIsDirty(false); // Reset dirty state as we are discarding changes
-    draft.discard();
+    discardPlugins();
     onClose(); // Call original onClose
   };
 
@@ -727,45 +777,37 @@ function EditInstanceConfigModal({
                         {/* Content area */}
                         <div className="flex-grow min-h-0 bg-[var(--surface-base)] border-x border-b border-[var(--surface-border)] rounded-b-xl p-4 flex flex-col">
                           {activeMainTab === 'config' ? (
-                            <ConfigEditorTabs
-                              configFilesOrder={CONFIG_FILES_ORDER}
-                              configs={configs}
-                              onConfigChange={handleConfigChange}
+                            <FileManager
+                              adapter={configsAdapter}
+                              capabilities={CONFIG_CAPS}
+                              defaultSelectedPath="server.cfg"
                               onExpandEditor={handleExpandEditor}
-                              activeTabIndex={activeTabIndex}
-                              onTabChange={setActiveTabIndex}
                               getLanguageForFile={getLanguageForFile}
                               getLinterSourceForFile={getLinterSource}
-                              onConfigFileUpload={handleConfigFileUpload}
                             />
                           ) : activeMainTab === 'scripts' ? (
-                            <ScriptManager
-                              ref={scriptManagerRef}
-                              draftId={draft.draftId}
-                              tree={draft.tree}
-                              onTreeRefresh={draft.refreshTree}
-                              readContent={draft.readContent}
-                              writeContent={draft.writeContent}
-                              upload={draft.upload}
-                              deleteFile={draft.deleteFile}
-                              checkable={true}
+                            <FileManager
+                              ref={pluginFileManagerRef}
+                              adapter={pluginsAdapter}
+                              capabilities={PLUGIN_CAPS}
+                              checkable
                               checkedFiles={checkedPlugins}
                               onCheck={togglePluginSelection}
-                              loading={draft.loading}
-                              error={draft.error}
                               onExpandEditor={handleExpandPluginEditor}
                               getBinaryMeta={handleGetBinaryMeta}
                               saveBinaryMeta={handleSaveBinaryMeta}
+                              binaryContext={{
+                                contextType: 'instance',
+                                contextKey: String(instanceId),
+                              }}
                             />
                           ) : (
-                            <FactoryManager
-                              factories={factories}
-                              onFactoriesChange={setFactories}
-                              isNewInstance={false}
-                              preset="default"
-                              hostId={scriptHostName}
-                              instanceId={instanceId}
-                              checkable={true}
+                            <FileManager
+                              adapter={factoriesAdapter}
+                              capabilities={FACTORY_CAPS}
+                              checkable
+                              checkedFiles={checkedFactories}
+                              onCheck={setFactoryChecked}
                             />
                           )}
                         </div>

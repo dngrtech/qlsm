@@ -2,15 +2,17 @@ import React, { useImperativeHandle } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import EditInstanceConfigModal from '../EditInstanceConfigModal';
-
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(),
   flushEdits: vi.fn(),
+  getBinaryMeta: vi.fn(),
+  getFactoryContent: vi.fn(),
+  getFactoryTree: vi.fn(),
   getInstanceById: vi.fn(),
   getInstanceConfig: vi.fn(),
   getPresetById: vi.fn(),
   getPresets: vi.fn(),
+  saveBinaryMeta: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
   updateInstance: vi.fn(),
@@ -31,6 +33,8 @@ vi.mock('@headlessui/react', () => {
 
 vi.mock('../../../services/api', () => ({
   createPreset: mocks.createPreset,
+  getFactoryContent: mocks.getFactoryContent,
+  getFactoryTree: mocks.getFactoryTree,
   getInstanceById: mocks.getInstanceById,
   getInstanceConfig: mocks.getInstanceConfig,
   getPresetById: mocks.getPresetById,
@@ -39,8 +43,9 @@ vi.mock('../../../services/api', () => ({
   updateInstanceConfig: mocks.updateInstanceConfig,
 }));
 
-vi.mock('../../../hooks/useDraftWorkspace', () => ({
-  useDraftWorkspace: mocks.useDraftWorkspace,
+vi.mock('../../../services/draftApi', () => ({
+  getBinaryMeta: mocks.getBinaryMeta,
+  saveBinaryMeta: mocks.saveBinaryMeta,
 }));
 
 vi.mock('../../NotificationProvider', () => ({
@@ -79,21 +84,54 @@ vi.mock('../../addInstance/SavePresetModal', () => ({
   ),
 }));
 
-vi.mock('../../addInstance/FactoryManager/FactoryManager', () => ({
-  default: () => <div>factory-manager</div>,
-}));
-
 vi.mock('../../common/InfoTooltip', () => ({
   default: ({ text }) => <span data-testid="info-tooltip">{text}</span>,
 }));
 
-vi.mock('../../addInstance/ScriptManager', () => ({
-  ScriptManager: React.forwardRef(function MockScriptManager(_props, ref) {
+vi.mock('../../fileManager', () => ({
+  CONFIG_CAPS: {
+    allowedExtensions: ['.cfg', '.txt'],
+    protectedFiles: ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'],
+  },
+  PLUGIN_CAPS: {
+    allowedExtensions: ['.py', '.txt', '.so'],
+    protectedFiles: [],
+  },
+  FACTORY_CAPS: {
+    allowedExtensions: ['.factories'],
+    protectedFiles: [],
+  },
+  FileManager: React.forwardRef(function MockFileManager(_props, ref) {
     useImperativeHandle(ref, () => ({
       flushEdits: mocks.flushEdits,
     }));
-    return <div>script-manager</div>;
+    return <div>file-manager</div>;
   }),
+  useDraftAdapter: () => ({
+    ...mocks.useDraftWorkspace(),
+    hasChanges: false,
+  }),
+  useStateAdapter: ({ initialFiles = {}, serverTree = [] } = {}) => {
+    const [files, setFiles] = React.useState(initialFiles);
+    const reset = React.useCallback((nextFiles = {}) => {
+      setFiles(nextFiles);
+    }, []);
+    return React.useMemo(() => ({
+      tree: serverTree,
+      readContent: vi.fn().mockResolvedValue(''),
+      writeContent: vi.fn().mockResolvedValue(undefined),
+      upload: vi.fn().mockResolvedValue({}),
+      deleteFile: vi.fn().mockResolvedValue(undefined),
+      renameFile: vi.fn().mockResolvedValue(undefined),
+      checkedFiles: new Set(Object.keys(files)),
+      setChecked: vi.fn().mockResolvedValue(undefined),
+      hasChanges: false,
+      serialize: () => ({ ...files }),
+      reset,
+      loading: false,
+      error: null,
+    }), [files, reset, serverTree]);
+  },
 }));
 
 vi.mock('../../../codemirror-lang-qlcfg', () => ({
@@ -115,10 +153,18 @@ vi.mock('../../../codemirror-lang-qlworkshop', () => ({
 }));
 
 describe('EditInstanceConfigModal preset saving', () => {
-  beforeEach(() => {
+  let EditInstanceConfigModal;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
+    if (!EditInstanceConfigModal) {
+      ({ default: EditInstanceConfigModal } = await import('../EditInstanceConfigModal'));
+    }
     mocks.createPreset.mockResolvedValue({ message: 'saved' });
     mocks.flushEdits.mockResolvedValue(undefined);
+    mocks.getBinaryMeta.mockResolvedValue({});
+    mocks.getFactoryContent.mockResolvedValue({ content: '' });
+    mocks.getFactoryTree.mockResolvedValue([]);
     mocks.getInstanceById.mockResolvedValue({
       host_name: 'test-host',
       lan_rate_enabled: false,
@@ -134,6 +180,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     });
     mocks.getPresetById.mockResolvedValue(null);
     mocks.getPresets.mockResolvedValue([]);
+    mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.updateInstance.mockResolvedValue({});
     mocks.updateInstanceConfig.mockResolvedValue({ message: 'saved' });
     mocks.useDraftWorkspace.mockReturnValue({

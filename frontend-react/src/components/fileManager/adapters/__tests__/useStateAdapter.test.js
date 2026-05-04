@@ -32,6 +32,23 @@ describe('useStateAdapter', () => {
     expect(result.current.hasChanges).toBe(true);
   });
 
+  it('notifies when files change', async () => {
+    const onFilesChange = vi.fn();
+    const { result } = renderHook(() => useStateAdapter({
+      initialFiles: { 'a.cfg': 'orig' },
+      allowedExtensions: ['.cfg'],
+      onFilesChange,
+    }));
+
+    expect(onFilesChange).toHaveBeenLastCalledWith({ 'a.cfg': 'orig' });
+
+    await act(async () => {
+      await result.current.writeContent('a.cfg', 'modified');
+    });
+
+    expect(onFilesChange).toHaveBeenLastCalledWith({ 'a.cfg': 'modified' });
+  });
+
   it('deleteFile removes from tree but blocks protected files', async () => {
     const { result } = renderHook(() => useStateAdapter({
       initialFiles: { 'a.cfg': '', 'server.cfg': '' },

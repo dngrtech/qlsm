@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 function getExtension(path) {
   const dotIndex = path.lastIndexOf('.');
@@ -32,11 +32,16 @@ export function useStateAdapter({
   protectedFiles = [],
   serverTree = null,
   readServerContent = null,
+  onFilesChange = null,
 }) {
   const [files, setFiles] = useState(initialFiles);
   const [deletedPaths, setDeletedPaths] = useState(() => new Set());
   const initialRef = useRef(initialFiles);
   const protectedSet = useMemo(() => new Set(protectedFiles), [protectedFiles]);
+
+  useEffect(() => {
+    onFilesChange?.(files);
+  }, [files, onFilesChange]);
 
   const tree = useMemo(() => {
     const byPath = new Map();
