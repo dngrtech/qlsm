@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import BinaryDetailsPanel from '../ScriptManager/BinaryDetailsPanel';
+import BinaryDetailsPanel from '../../fileManager/BinaryDetailsPanel';
 
 const BASE_PROPS = {
   filePath: 'plugins/hook.so',

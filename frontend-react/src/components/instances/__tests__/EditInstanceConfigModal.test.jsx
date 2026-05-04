@@ -55,10 +55,6 @@ vi.mock('../../NotificationProvider', () => ({
   }),
 }));
 
-vi.mock('../../config/ConfigEditorTabs', () => ({
-  default: () => <div>config-tabs</div>,
-}));
-
 vi.mock('../../ExpandedEditorModal', () => ({
   default: () => null,
 }));

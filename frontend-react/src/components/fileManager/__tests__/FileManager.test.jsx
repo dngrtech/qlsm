@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import ScriptManager from '../ScriptManager/ScriptManager';
+import { PLUGIN_CAPS } from '../capabilities';
+import FileManager from '../FileManager';
 
 const BINARY_FILE = {
   name: 'foo.so',
@@ -13,33 +14,30 @@ const BINARY_FILE = {
 };
 
 const mocks = vi.hoisted(() => ({
-  selectFile: null,
-  binaryDetailsProps: null,
+  editorProps: null,
 }));
 
-vi.mock('../ScriptManager/PluginFileTree', () => ({
-  default: ({ onSelectFile }) => {
-    mocks.selectFile = () => onSelectFile(BINARY_FILE);
-    return (
-      <button type="button" onClick={mocks.selectFile}>
-        Select File
-      </button>
-    );
-  },
+vi.mock('../FileTree', () => ({
+  default: ({ onSelectFile }) => (
+    <button type="button" onClick={() => onSelectFile(BINARY_FILE)}>
+      Select File
+    </button>
+  ),
 }));
 
-vi.mock('../ScriptManager/BinaryDetailsPanel', () => ({
+vi.mock('../FileEditorPanel', () => ({
   default: (props) => {
-    mocks.binaryDetailsProps = props;
+    mocks.editorProps = props;
+    if (!props.selectedFile) return <div>Select a file to view or edit</div>;
     return (
       <div>
-        <div data-testid="binary-description">{props.description}</div>
+        <div data-testid="binary-description">{props.binaryDescription}</div>
         <div data-testid="description-save-state">
-          {props.onDescriptionSave ? 'enabled' : 'hidden'}
+          {props.onSaveBinaryDescription ? 'enabled' : 'hidden'}
         </div>
         <button
           type="button"
-          onClick={() => props.onDescriptionSave?.('Saved description')}
+          onClick={() => props.onSaveBinaryDescription?.('Saved description')}
         >
           Save Description
         </button>
@@ -49,53 +47,74 @@ vi.mock('../ScriptManager/BinaryDetailsPanel', () => ({
         >
           Replace Binary
         </button>
-        <button type="button" onClick={props.onDelete}>
-          Delete Binary
-        </button>
       </div>
     );
   },
 }));
 
-vi.mock('../ScriptManager/TextFileEditor', () => ({
+vi.mock('../FileSidebarActions', () => ({
+  default: ({ selectedFile, onDelete }) => (
+    selectedFile ? (
+      <button type="button" onClick={onDelete}>
+        Delete Binary
+      </button>
+    ) : null
+  ),
+}));
+
+vi.mock('../NewFileModal', () => ({
   default: () => null,
 }));
 
-vi.mock('../ScriptManager/NewScriptModal', () => ({
+vi.mock('../RenameFileModal', () => ({
   default: () => null,
 }));
 
-function renderScriptManager(overrides = {}) {
-  const props = {
+vi.mock('../../ConfirmationModal', () => ({
+  default: ({ isOpen, onConfirm }) => (
+    isOpen ? (
+      <button type="button" onClick={onConfirm}>
+        Confirm Delete
+      </button>
+    ) : null
+  ),
+}));
+
+function renderFileManager(overrides = {}) {
+  const adapter = {
     tree: [BINARY_FILE],
-    onTreeRefresh: vi.fn(),
     readContent: vi.fn(),
     writeContent: vi.fn(),
-    upload: vi.fn(),
+    upload: vi.fn().mockResolvedValue({ path: 'plugins/foo.so' }),
     deleteFile: vi.fn().mockResolvedValue(undefined),
-    checkable: false,
-    checkedFiles: new Set(),
-    onCheck: vi.fn(),
+    renameFile: vi.fn(),
+    refreshTree: vi.fn(),
     loading: false,
     error: null,
     ...overrides,
   };
-  return render(<ScriptManager {...props} />);
+  const view = render(
+    <FileManager
+      adapter={adapter}
+      capabilities={PLUGIN_CAPS}
+      getBinaryMeta={overrides.getBinaryMeta}
+      saveBinaryMeta={overrides.saveBinaryMeta}
+    />,
+  );
+  return { adapter, ...view };
 }
 
-describe('ScriptManager binary file handling', () => {
+describe('FileManager binary file handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.selectFile = null;
-    mocks.binaryDetailsProps = null;
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mocks.editorProps = null;
   });
 
-  it('does not delete the selected file when the replacement uploads to the same path', async () => {
+  it('does not delete the selected file when replacement uploads to the same path', async () => {
     const upload = vi.fn().mockResolvedValue({ path: 'plugins/foo.so' });
     const deleteFile = vi.fn().mockResolvedValue(undefined);
 
-    renderScriptManager({ upload, deleteFile });
+    renderFileManager({ upload, deleteFile });
 
     fireEvent.click(screen.getByRole('button', { name: /select file/i }));
     await waitFor(() => expect(screen.getByRole('button', { name: /replace binary/i })).toBeInTheDocument());
@@ -108,7 +127,7 @@ describe('ScriptManager binary file handling', () => {
   it('fetches and passes binary description when a .so file is selected', async () => {
     const getBinaryMeta = vi.fn().mockResolvedValue({ description: 'Speed hook' });
 
-    renderScriptManager({ getBinaryMeta, saveBinaryMeta: vi.fn() });
+    renderFileManager({ getBinaryMeta, saveBinaryMeta: vi.fn() });
 
     fireEvent.click(screen.getByRole('button', { name: /select file/i }));
 
@@ -116,20 +135,20 @@ describe('ScriptManager binary file handling', () => {
     await waitFor(() => {
       expect(screen.getByTestId('binary-description')).toHaveTextContent('Speed hook');
     });
-    expect(mocks.binaryDetailsProps.onDescriptionSave).toEqual(expect.any(Function));
+    expect(mocks.editorProps.onSaveBinaryDescription).toEqual(expect.any(Function));
   });
 
   it('saves binary description for the selected .so file', async () => {
     const saveBinaryMeta = vi.fn().mockResolvedValue({ description: 'Saved description' });
 
-    renderScriptManager({
+    renderFileManager({
       getBinaryMeta: vi.fn().mockResolvedValue({ description: '' }),
       saveBinaryMeta,
     });
 
     fireEvent.click(screen.getByRole('button', { name: /select file/i }));
     await waitFor(() => {
-      expect(mocks.binaryDetailsProps.onDescriptionSave).toEqual(expect.any(Function));
+      expect(mocks.editorProps.onSaveBinaryDescription).toEqual(expect.any(Function));
     });
     fireEvent.click(screen.getByRole('button', { name: /save description/i }));
 
@@ -142,18 +161,18 @@ describe('ScriptManager binary file handling', () => {
   });
 
   it('passes null description save callback when metadata callbacks are absent', async () => {
-    renderScriptManager();
+    renderFileManager();
 
     fireEvent.click(screen.getByRole('button', { name: /select file/i }));
 
-    await waitFor(() => expect(mocks.binaryDetailsProps.onDescriptionSave).toBeNull());
+    await waitFor(() => expect(mocks.editorProps.onSaveBinaryDescription).toBeNull());
     expect(screen.getByTestId('description-save-state')).toHaveTextContent('hidden');
   });
 
   it('clears selected binary details after deleting a .so file', async () => {
     const deleteFile = vi.fn().mockResolvedValue(undefined);
 
-    renderScriptManager({
+    renderFileManager({
       getBinaryMeta: vi.fn().mockResolvedValue({ description: 'Temporary hook' }),
       saveBinaryMeta: vi.fn(),
       deleteFile,
@@ -165,6 +184,7 @@ describe('ScriptManager binary file handling', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /delete binary/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }));
 
     await waitFor(() => expect(deleteFile).toHaveBeenCalledWith('plugins/foo.so'));
     expect(screen.getByText(/select a file to view or edit/i)).toBeInTheDocument();
