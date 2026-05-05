@@ -105,6 +105,18 @@ def _validate_preset_write_payload(data, has_config_updates=True):
         _normalize_preset_factory_files(data['factories'])
 
 
+def _validate_checked_plugins_payload(data):
+    if 'checked_plugins' not in data:
+        return None
+    checked_plugins = data['checked_plugins']
+    if (
+        not isinstance(checked_plugins, list) or
+        not all(isinstance(plugin, str) for plugin in checked_plugins)
+    ):
+        return "checked_plugins must be a list of strings"
+    return None
+
+
 def _validation_error_response(error):
     return jsonify({"error": {"message": str(error)}}), 400
 
@@ -426,8 +438,9 @@ def create_preset_api():
     if not is_valid:
         return jsonify({"error": {"message": error}}), _validation_status(reason)
 
-    if 'checked_plugins' in data and not isinstance(data['checked_plugins'], list):
-        return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
+    checked_plugins_error = _validate_checked_plugins_payload(data)
+    if checked_plugins_error:
+        return jsonify({"error": {"message": checked_plugins_error}}), 400
 
     description = data.get('description', '')
     preset_path = os.path.join(PRESETS_DIR, name)
@@ -571,8 +584,9 @@ def update_preset_api(preset_id):
         if preset.is_builtin and new_name != preset.name:
             return jsonify({"error": {"message": "Cannot rename a built-in preset."}}), 403
 
-    if 'checked_plugins' in data and not isinstance(data['checked_plugins'], list):
-        return jsonify({"error": {"message": "checked_plugins must be a list"}}), 400
+    checked_plugins_error = _validate_checked_plugins_payload(data)
+    if checked_plugins_error:
+        return jsonify({"error": {"message": checked_plugins_error}}), 400
 
     # Check for name change
     if name_provided and new_name != original_preset_name:

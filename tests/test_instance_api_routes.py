@@ -221,6 +221,42 @@ def test_add_instance_rejects_invalid_checked_plugins_before_creating_side_effec
     assert not (tmp_path / 'configs' / 'api-create-host').exists()
 
 
+@patch('ui.routes.instance_routes.enqueue_task')
+def test_add_instance_rejects_non_string_checked_plugins(
+    mock_enqueue, client, app, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+
+    with app.app_context():
+        host = create_host(name='api-create-host', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    payload = {
+        'name': 'new-instance',
+        'host_id': host_id,
+        'port': 27970,
+        'hostname': 'test.hostname',
+        'configs': {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+        },
+        'checked_plugins': ['balance', 123],
+    }
+
+    response = client.post('/api/instances/', json=payload, headers=headers)
+
+    assert response.status_code == 400
+    assert 'checked_plugins must be a list of strings' in response.get_json()['error']['message']
+    mock_enqueue.assert_not_called()
+
+    with app.app_context():
+        assert QLInstance.query.count() == 0
+
+
 def test_create_instance_hostname_too_long(client, app):
     """
     GIVEN a POST request to create an instance

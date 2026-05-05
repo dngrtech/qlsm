@@ -178,6 +178,11 @@ def add_instance_api():
         return jsonify({"error": {"message": qlx_err}}), 400
     checked_plugins = data.get('checked_plugins')
     if checked_plugins is not None:
+        if (
+            not isinstance(checked_plugins, list) or
+            not all(isinstance(plugin, str) for plugin in checked_plugins)
+        ):
+            return jsonify({"error": {"message": "checked_plugins must be a list of strings"}}), 400
         qlx_plugins_str = ', '.join(checked_plugins)
         qlx_plugins, qlx_err = _validate_qlx_plugins(qlx_plugins_str)
         if qlx_err:

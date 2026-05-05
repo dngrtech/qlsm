@@ -182,13 +182,14 @@ function EditInstanceConfigModal({
   const getLinterSource = (fileName) => (fileName === 'server.cfg' ? qlCfgLinterSource : null);
 
   // Configure plugins based on checkboxes
-  const togglePluginSelection = useCallback((filename) => {
+  const togglePluginSelection = useCallback((filename, checked = undefined) => {
     setCheckedPlugins(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(filename)) {
-        newSet.delete(filename);
-      } else {
+      const shouldCheck = checked ?? !newSet.has(filename);
+      if (shouldCheck) {
         newSet.add(filename);
+      } else {
+        newSet.delete(filename);
       }
       return newSet;
     });

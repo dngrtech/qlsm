@@ -711,7 +711,24 @@ def test_create_preset_checked_plugins_invalid_type(client, app):
         'checked_plugins': 'balance.py,ban.py'  # string instead of list
     })
     assert response.status_code == 400
-    assert 'checked_plugins must be a list' in response.get_json()['error']['message']
+    assert 'checked_plugins must be a list of strings' in response.get_json()['error']['message']
+
+
+def test_create_preset_checked_plugins_rejects_non_string_entries(client, app):
+    """checked_plugins entries must be strings."""
+    payload = {
+        'name': 'badplugins2',
+        'description': '',
+        'configs': BASE_CONFIG_MAP,
+        'checked_plugins': ['balance.py', 123],
+    }
+    response = client.post(
+        '/api/presets/',
+        json=payload,
+        headers=auth_headers(app, DEFAULT_USER),
+    )
+    assert response.status_code == 400
+    assert 'checked_plugins must be a list of strings' in response.get_json()['error']['message']
 
 
 def test_update_preset_checked_plugins_invalid_type(client, app, tmp_path, monkeypatch):
@@ -728,7 +745,19 @@ def test_update_preset_checked_plugins_invalid_type(client, app, tmp_path, monke
         'checked_plugins': {'balance': True}  # dict instead of list
     })
     assert response.status_code == 400
-    assert 'checked_plugins must be a list' in response.get_json()['error']['message']
+    assert 'checked_plugins must be a list of strings' in response.get_json()['error']['message']
+
+
+def test_update_preset_checked_plugins_rejects_non_string_entries(client, app, tmp_path, monkeypatch):
+    """PUT checked_plugins entries must be strings."""
+    preset_id, _ = _create_preset_folder(app, 'checktype', BASE_CONFIG_MAP)
+
+    response = client.put(f'/api/presets/{preset_id}', json={
+        'checked_plugins': ['balance.py', 123],
+    }, headers=auth_headers(app, DEFAULT_USER))
+
+    assert response.status_code == 400
+    assert 'checked_plugins must be a list of strings' in response.get_json()['error']['message']
 
 
 def test_update_preset_not_found(client, app):
