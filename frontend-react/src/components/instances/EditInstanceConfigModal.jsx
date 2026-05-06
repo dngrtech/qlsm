@@ -887,7 +887,7 @@ function EditInstanceConfigModal({
                           </div>
                         </div>
 
-                        <div className="mt-3 flex justify-between items-center flex-shrink-0">
+                        <div className="mt-4 flex justify-between items-center flex-shrink-0">
                           {/* Left side - Preset management buttons */}
                           <div className="flex gap-2">
                             <button type="button" onClick={() => setIsLoadPresetModalOpen(true)} className="btn btn-secondary">
