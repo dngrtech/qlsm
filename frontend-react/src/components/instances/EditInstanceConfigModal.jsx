@@ -125,16 +125,21 @@ function EditInstanceConfigModal({
 
   // Factories tab state
   const [factoryServerTree, setFactoryServerTree] = useState([]);
+
+  // When a preset is loaded, read factory content from the preset directory;
+  // otherwise read from the instance's deployed factories directory.
+  const readFactoryContent = useCallback(async (path) => {
+    const params = draftPreset
+      ? { preset: draftPreset }
+      : { host: scriptHostName, instanceId };
+    const data = await getFactoryContent(path, params);
+    return data.content || '';
+  }, [draftPreset, scriptHostName, instanceId]);
+
   const factoriesAdapter = useStateAdapter({
     initialFiles: {},
     serverTree: factoryServerTree,
-    readServerContent: async (path) => {
-      const data = await getFactoryContent(path, {
-        host: scriptHostName,
-        instanceId,
-      });
-      return data.content || '';
-    },
+    readServerContent: readFactoryContent,
     allowedExtensions: FACTORY_CAPS.allowedExtensions,
     protectedFiles: FACTORY_CAPS.protectedFiles,
   });
@@ -418,6 +423,14 @@ function EditInstanceConfigModal({
       resetFactories(factoriesToLoad);
       setCheckedPlugins(new Set(presetData.checked_plugins || []));
       setDraftPreset(presetData.name);
+
+      // Refresh the factory tree to show the preset's available factories
+      try {
+        setFactoryServerTree(await getFactoryTree({ preset: presetData.name }) || []);
+      } catch {
+        setFactoryServerTree([]);
+      }
+
       const nextHostname = getServerHostname(newConfigs['server.cfg']);
       setServerHostname(nextHostname);
       setSelectedPresetId(presetId);
