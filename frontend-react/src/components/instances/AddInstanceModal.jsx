@@ -171,7 +171,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="modal-panel w-full max-w-6xl transform p-6 text-left align-middle transition-all h-[80vh] flex flex-col">
+                <Dialog.Panel className="modal-panel w-full max-w-[87.1rem] transform p-4 lg:p-6 text-left align-middle transition-all h-[90vh] max-h-[90vh] flex flex-col">
                   {/* Accent line decoration (dark mode only) */}
                   <div className="accent-line-top" />
 

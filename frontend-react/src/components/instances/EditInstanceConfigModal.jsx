@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, Fragment, useCallback } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen } from 'lucide-react';
+import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw } from 'lucide-react';
+import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
@@ -28,7 +29,22 @@ const LANGUAGE_MAP = {
   'access.txt': qlaccessLanguage,
   'workshop.txt': qlworkshopLanguage,
 };
-const getLanguageForFile = (fileName) => LANGUAGE_MAP[fileName] || null;
+const getLanguageForFile = (fileName) => {
+  if (fileName?.toLowerCase().endsWith('.cfg')) return qlcfgLanguage;
+  return LANGUAGE_MAP[fileName] || null;
+};
+const FACTORY_LANGUAGE = json();
+const FACTORY_LINTER_SOURCE = () => jsonParseLinter();
+const PYTHON_LANGUAGE = python();
+const getPluginLanguage = (fileName) => (
+  fileName?.toLowerCase().endsWith('.py') ? PYTHON_LANGUAGE : null
+);
+const getFactoryLanguage = (fileName) => (
+  fileName?.toLowerCase().endsWith('.factories') ? FACTORY_LANGUAGE : null
+);
+const getFactoryLinterSource = (fileName) => (
+  fileName?.toLowerCase().endsWith('.factories') ? FACTORY_LINTER_SOURCE : null
+);
 const getServerHostname = (serverCfg = '') => serverCfg.match(/set sv_hostname "([^"]*)"/)?.[1] || '';
 const setsEqual = (a, b) => a.size === b.size && [...a].every(value => b.has(value));
 
@@ -90,6 +106,7 @@ function EditInstanceConfigModal({
   const [expandedFileLanguage, setExpandedFileLanguage] = useState(null);
   const [expandedFileLinterSource, setExpandedFileLinterSource] = useState(null);
   const [expandedPluginPath, setExpandedPluginPath] = useState(null);
+  const [expandedFactoryPath, setExpandedFactoryPath] = useState(null);
 
   // State for preset modals
   const [isLoadPresetModalOpen, setIsLoadPresetModalOpen] = useState(false);
@@ -179,7 +196,9 @@ function EditInstanceConfigModal({
 
   // Linter for server.cfg — no port validation in edit mode, but shows managed-cvar info tooltips
   const qlCfgLinterSource = useCallback(() => createQlCfgLinter([], () => {}), []);
-  const getLinterSource = (fileName) => (fileName === 'server.cfg' ? qlCfgLinterSource : null);
+  const getLinterSource = (fileName) => (
+    fileName?.toLowerCase().endsWith('.cfg') ? qlCfgLinterSource : null
+  );
 
   // Configure plugins based on checkboxes
   const togglePluginSelection = useCallback((filename, checked = undefined) => {
@@ -314,6 +333,8 @@ function EditInstanceConfigModal({
         ? cfg.replace(regex, `set sv_hostname "${newHostname}"`)
         : `${cfg || ''}\nset sv_hostname "${newHostname}"`;
       return writeConfigContent('server.cfg', nextCfg);
+    }).catch((err) => {
+      setSaveError(err?.message || 'Failed to update server.cfg with new hostname.');
     }).finally(() => {
       setTimeout(() => { isUpdatingFromServerCfg.current = false; }, 0);
     });
@@ -509,6 +530,7 @@ function EditInstanceConfigModal({
       ? selectedFile
       : (selectedFile?.path || selectedFile?.name || '');
     setExpandedPluginPath(null);
+    setExpandedFactoryPath(null);
     setExpandedFileName(fileNameToExpand);
     setExpandedFileContent(content || serializeConfigs()[fileNameToExpand] || '');
     setExpandedFileLanguage(getLanguageForFile(fileNameToExpand));
@@ -517,11 +539,24 @@ function EditInstanceConfigModal({
   };
 
   const handleExpandPluginEditor = useCallback((selectedFile, content) => {
+    setExpandedFactoryPath(null);
     setExpandedPluginPath(selectedFile.path);
     setExpandedFileName(selectedFile.name);
     setExpandedFileContent(content);
     setExpandedFileLanguage(selectedFile.name.endsWith('.py') ? python() : null);
     setExpandedFileLinterSource(null);
+    setIsExpandedEditorOpen(true);
+  }, []);
+
+  const handleExpandFactoryEditor = useCallback((selectedFile, content = '') => {
+    const fileName = selectedFile?.name || '';
+    const filePath = selectedFile?.path || fileName;
+    setExpandedPluginPath(null);
+    setExpandedFactoryPath(filePath);
+    setExpandedFileName(fileName);
+    setExpandedFileContent(content);
+    setExpandedFileLanguage(getFactoryLanguage(fileName));
+    setExpandedFileLinterSource(getFactoryLinterSource(fileName));
     setIsExpandedEditorOpen(true);
   }, []);
 
@@ -531,6 +566,10 @@ function EditInstanceConfigModal({
       if (pluginFileManagerRef.current?.updateContent) {
         pluginFileManagerRef.current.updateContent(expandedPluginPath, newContent);
       }
+    } else if (expandedFactoryPath) {
+      factoriesAdapter.writeContent(expandedFactoryPath, newContent).catch((err) => {
+        setSaveError(err.message || 'Failed to update expanded editor content.');
+      });
     } else {
       writeConfigContent(expandedFileName, newContent).catch((err) => {
         setSaveError(err.message || 'Failed to update expanded editor content.');
@@ -541,6 +580,8 @@ function EditInstanceConfigModal({
 
   const handleCloseExpandedEditor = () => {
     // Potentially add unsaved changes check for expanded modal here if needed
+    setExpandedPluginPath(null);
+    setExpandedFactoryPath(null);
     setIsExpandedEditorOpen(false);
   };
 
@@ -604,7 +645,7 @@ function EditInstanceConfigModal({
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="modal-panel w-full max-w-6xl transform p-4 lg:p-6 text-left align-middle transition-all h-[90vh] max-h-[90vh] flex flex-col">
+                <Dialog.Panel className="modal-panel w-full max-w-[87.1rem] transform p-4 lg:p-6 text-left align-middle transition-all h-[90vh] max-h-[90vh] flex flex-col">
                   {/* Accent line decoration (dark mode only) */}
                   <div className="accent-line-top" />
 
@@ -654,93 +695,92 @@ function EditInstanceConfigModal({
                       </div>
                     ) : (
                       <form onSubmit={handleSubmit} className="flex flex-col flex-grow min-h-0">
-                        {/* Server Hostname Input */}
                         <div className="mb-2 lg:mb-4 flex-shrink-0">
-                          <label htmlFor="serverHostname" className="label-tech mb-1.5 block">
-                            Server Hostname
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              name="serverHostname"
-                              id="serverHostname"
-                              value={serverHostname}
-                              onChange={handleHostnameChange}
-                              maxLength={64}
-                              className="input-base pr-16"
-                              placeholder="Enter server hostname"
-                            />
-                            <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                              <span className="font-mono text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--surface-border)] text-[var(--text-muted)]">
-                                AUTO
-                              </span>
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center justify-between">
-                            <p className="text-sm text-[var(--text-muted)] hidden lg:block">
-                              Synced with <code className="text-xs bg-[var(--surface-elevated)] px-1 py-0.5 rounded font-mono text-[var(--text-secondary)]">sv_hostname</code> in server.cfg.
-                            </p>
-                            <p className={`text-xs ml-auto ${serverHostname.length > 64 ? 'text-red-500' : serverHostname.length >= 50 ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>
-                              {serverHostname.length} / 64
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mb-2 lg:mb-4 flex-shrink-0 flex flex-wrap items-end gap-4">
-                          {presetError && (
-                            <p className="text-sm font-medium text-theme-danger">{presetError}</p>
-                          )}
-
-                          {/* Toggle Switches Container */}
-                          <div className="flex items-center gap-6 pb-1">
-                            {/* LAN Rate Toggle */}
-                            <div className="flex items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={handleLanRateToggle}
-                                disabled={saving || loading || !canToggleLanRate}
-                                className="neu-toggle"
-                                aria-pressed={lanRateEnabled}
-                              >
-                                <span className="sr-only">Toggle 99k LAN Rate</span>
-                                <span className={`neu-toggle__track ${lanRateEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-                                  <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
+                            {/* Server Hostname Input */}
+                            <div className="min-w-0 flex-1">
+                              <label htmlFor="serverHostname" className="label-tech mb-1.5 block">
+                                Server Hostname
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  name="serverHostname"
+                                  id="serverHostname"
+                                  value={serverHostname}
+                                  onChange={handleHostnameChange}
+                                  maxLength={64}
+                                  className="input-base pr-16"
+                                  placeholder="Enter server hostname"
+                                />
+                                <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                  <span className="font-mono text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--surface-border)] text-[var(--text-muted)]">
+                                    AUTO
+                                  </span>
                                 </span>
-                              </button>
-                              <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
-                                <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
-                                <span>99k LAN Rate</span>
-                                {lanRateUnsupportedReason && (
-                                  <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={14} />
+                              </div>
+                              <div className="mt-1 flex items-center justify-between">
+                                <p className="text-sm text-[var(--text-muted)] hidden lg:block">
+                                  Synced with <code className="text-xs bg-[var(--surface-elevated)] px-1 py-0.5 rounded font-mono text-[var(--text-secondary)]">sv_hostname</code> in server.cfg.
+                                </p>
+                                <p className={`text-xs ml-auto ${serverHostname.length > 64 ? 'text-red-500' : serverHostname.length >= 50 ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>
+                                  {serverHostname.length} / 64
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Toggle Switches Container */}
+                            <div className="flex flex-shrink-0 flex-wrap items-center gap-5 lg:gap-6">
+                              {/* LAN Rate Toggle */}
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={handleLanRateToggle}
+                                  disabled={saving || loading || !canToggleLanRate}
+                                  className="neu-toggle"
+                                  aria-pressed={lanRateEnabled}
+                                >
+                                  <span className="sr-only">Toggle 99k LAN Rate</span>
+                                  <span className={`neu-toggle__track ${lanRateEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+                                    <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                                  </span>
+                                </button>
+                                <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
+                                  <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
+                                  <span>99k LAN Rate</span>
+                                  {lanRateUnsupportedReason && (
+                                    <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={14} />
+                                  )}
+                                </span>
+                              </div>
+
+                              {/* Restart Toggle */}
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={handleRestartToggle}
+                                  disabled={saving || loading || lanRateChanged}
+                                  className="neu-toggle"
+                                  aria-pressed={restartAfterSave}
+                                >
+                                  <span className="sr-only">Toggle Restart after Save</span>
+                                  <span className={`neu-toggle__track ${restartAfterSave ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+                                    <span className={`neu-toggle__knob ${restartAfterSave ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                                  </span>
+                                </button>
+                                <span className={`flex items-center text-sm font-medium ${lanRateChanged ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+                                  <RotateCw size={16} className={`mr-2 ${restartAfterSave ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}`} />
+                                  Restart after saving
+                                </span>
+                                {lanRateChanged && (
+                                  <InfoTooltip text="Changing 99k LAN Rate requires an instance restart" variant="warning" size={14} />
                                 )}
-                              </span>
-                            </div>
-
-                            {/* Restart Toggle */}
-                            <div className="flex items-center gap-3 border-l border-[var(--surface-border)] pl-6">
-                              <button
-                                type="button"
-                                onClick={handleRestartToggle}
-                                disabled={saving || loading || lanRateChanged}
-                                className="neu-toggle"
-                                aria-pressed={restartAfterSave}
-                              >
-                                <span className="sr-only">Toggle Restart after Save</span>
-                                <span className={`neu-toggle__track ${restartAfterSave ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-                                  <span className={`neu-toggle__knob ${restartAfterSave ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
-                                </span>
-                              </button>
-                              <span className={`flex items-center text-sm font-medium ${lanRateChanged ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
-                                <span className={`mr-1 ${restartAfterSave ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}`}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-rotate-cw"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>
-                                </span>
-                                Restart after saving
-                              </span>
-                              {lanRateChanged && (
-                                <InfoTooltip text="Changing 99k LAN Rate requires an instance restart" variant="warning" size={14} />
-                              )}
+                              </div>
                             </div>
                           </div>
+                          {presetError && (
+                            <p className="mt-2 text-sm font-medium text-theme-danger">{presetError}</p>
+                          )}
                         </div>
 
                         {saveError && (
@@ -754,7 +794,7 @@ function EditInstanceConfigModal({
                         )}
 
                         {/* Main tabs: Configuration Files | Scripts | Factories */}
-                        <div className="flex flex-shrink-0 border border-[var(--surface-border)] bg-[var(--surface-elevated)] rounded-t-lg overflow-hidden mb-0">
+                        <div className="flex flex-shrink-0 border border-[var(--surface-border)] bg-[var(--surface-elevated)] rounded-t-xl overflow-hidden mb-0">
                           {[
                             { key: 'config', icon: Settings, label: 'Configuration Files' },
                             { key: 'scripts', icon: Code2, label: 'Plugins' },
@@ -777,7 +817,7 @@ function EditInstanceConfigModal({
 
                         {/* Content area */}
                         <div className="flex-grow min-h-0 bg-[var(--surface-base)] border-x border-b border-[var(--surface-border)] rounded-b-xl p-4 flex flex-col">
-                          {activeMainTab === 'config' ? (
+                          <div className={activeMainTab === 'config' ? 'flex-1 min-h-0' : 'hidden'}>
                             <FileManager
                               adapter={configsAdapter}
                               capabilities={CONFIG_CAPS}
@@ -786,7 +826,8 @@ function EditInstanceConfigModal({
                               getLanguageForFile={getLanguageForFile}
                               getLinterSourceForFile={getLinterSource}
                             />
-                          ) : activeMainTab === 'scripts' ? (
+                          </div>
+                          <div className={activeMainTab === 'scripts' ? 'flex-1 min-h-0' : 'hidden'}>
                             <FileManager
                               ref={pluginFileManagerRef}
                               adapter={pluginsAdapter}
@@ -795,6 +836,7 @@ function EditInstanceConfigModal({
                               checkedFiles={checkedPlugins}
                               onCheck={togglePluginSelection}
                               onExpandEditor={handleExpandPluginEditor}
+                              getLanguageForFile={getPluginLanguage}
                               getBinaryMeta={handleGetBinaryMeta}
                               saveBinaryMeta={handleSaveBinaryMeta}
                               binaryContext={{
@@ -802,15 +844,19 @@ function EditInstanceConfigModal({
                                 contextKey: String(instanceId),
                               }}
                             />
-                          ) : (
+                          </div>
+                          <div className={activeMainTab === 'factories' ? 'flex-1 min-h-0' : 'hidden'}>
                             <FileManager
                               adapter={factoriesAdapter}
                               capabilities={FACTORY_CAPS}
                               checkable
                               checkedFiles={checkedFactories}
                               onCheck={setFactoryChecked}
+                              onExpandEditor={handleExpandFactoryEditor}
+                              getLanguageForFile={getFactoryLanguage}
+                              getLinterSourceForFile={getFactoryLinterSource}
                             />
-                          )}
+                          </div>
                         </div>
 
                         <div className="mt-2 pt-2 lg:mt-4 lg:pt-4 border-t border-[var(--surface-border)] flex justify-between items-center flex-shrink-0">

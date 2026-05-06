@@ -67,7 +67,7 @@ export default function FileEditorPanel({
 
   if (!selectedFile) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-sm">
         Select a file to view or edit
       </div>
     );
@@ -89,7 +89,7 @@ export default function FileEditorPanel({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-[var(--text-secondary)]">
         Loading...
       </div>
     );
@@ -101,7 +101,7 @@ export default function FileEditorPanel({
         <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] min-w-0">
           <FileIcon className="w-4 h-4 flex-shrink-0" />
           <span className="truncate">{selectedFile.path}</span>
-          {isDirty && <span className="text-yellow-500 text-xs flex-shrink-0">(modified)</span>}
+          {isDirty && <span className="text-[var(--accent-warning)] text-xs flex-shrink-0">(modified)</span>}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {canValidate && (
@@ -116,7 +116,7 @@ export default function FileEditorPanel({
                 type="button"
                 onClick={handleValidate}
                 disabled={validating}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-[var(--surface-elevated)] hover:bg-[var(--surface-elevated)]/80 text-[var(--text-secondary)] rounded disabled:opacity-50"
+                className="flex items-center gap-1 px-2 py-1 text-xs leading-none bg-[var(--surface-elevated)] hover:bg-[var(--surface-elevated)]/80 text-[var(--text-secondary)] rounded disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${validating ? 'animate-spin' : ''}`} />
                 Validate
@@ -147,7 +147,7 @@ export default function FileEditorPanel({
       </div>
 
       {validation && !validation.valid && validation.errors.length > 0 && (
-        <div className="px-3 py-2 bg-red-900/20 border-b border-red-800/30 text-xs text-red-300 max-h-24 overflow-y-auto">
+        <div className="px-3 py-2 bg-[var(--accent-danger)]/10 border-b border-[var(--accent-danger)]/20 text-xs text-[var(--accent-danger)] max-h-24 overflow-y-auto">
           {validation.errors.map((err, index) => (
             <div key={`${err.line || 'global'}-${index}`}>
               {err.line ? `Line ${err.line}: ` : ''}{err.message}

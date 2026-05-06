@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LoaderCircle, Save, FolderOpen, RefreshCw, Settings, Code2, LayoutGrid, CheckCircle } from 'lucide-react';
+import { json, jsonParseLinter } from '@codemirror/lang-json';
+import { python } from '@codemirror/lang-python';
 import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, savePreset, updatePreset } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import InstanceBasicInfoForm from './InstanceBasicInfoForm';
@@ -38,6 +40,9 @@ const CONFIG_LANGUAGE_MAP = {
   'access.txt': qlaccessLanguage,
   'workshop.txt': qlworkshopLanguage,
 };
+const FACTORY_LANGUAGE = json();
+const FACTORY_LINTER_SOURCE = () => jsonParseLinter();
+const PYTHON_LANGUAGE = python();
 
 // Mapping from internal config keys to API keys
 const CONFIG_TO_API_MAP = {
@@ -81,7 +86,20 @@ function extractPresetConfigs(presetData) {
 }
 
 function getConfigLanguage(fileName) {
+  if (fileName?.toLowerCase().endsWith('.cfg')) return qlcfgLanguage;
   return CONFIG_LANGUAGE_MAP[fileName] || undefined;
+}
+
+function getPluginLanguage(fileName) {
+  return fileName?.toLowerCase().endsWith('.py') ? PYTHON_LANGUAGE : null;
+}
+
+function getFactoryLanguage(fileName) {
+  return fileName?.toLowerCase().endsWith('.factories') ? FACTORY_LANGUAGE : null;
+}
+
+function getFactoryLinterSource(fileName) {
+  return fileName?.toLowerCase().endsWith('.factories') ? FACTORY_LINTER_SOURCE : null;
 }
 
 function areSetsEqual(left, right) {
@@ -119,7 +137,7 @@ function AddInstanceForm({
   const [internalFormError, setInternalFormError] = useState(null);
   const [serverCfgHasLintErrors, setServerCfgHasLintErrors] = useState(false);
   const [isFullScreenEditorOpen, setIsFullScreenEditorOpen] = useState(false);
-  const [editingFileDetails, setEditingFileDetails] = useState({ name: '', content: '', language: undefined, linterSource: null });
+  const [editingFileDetails, setEditingFileDetails] = useState({ name: '', path: '', content: '', language: undefined, linterSource: null, kind: 'config' });
 
   // Preset modal states
   const [showSavePresetModal, setShowSavePresetModal] = useState(false);
@@ -401,23 +419,8 @@ function AddInstanceForm({
   useEffect(() => {
     if (initialData.defaultFactories) {
       resetFactories(initialData.defaultFactories);
-      return;
     }
-    if (draftPreset !== 'default' || loadedPreset) return;
-
-    const defaultPreset = (initialData.presets || []).find(p => p.is_builtin && p.name === 'default');
-    if (!defaultPreset) return;
-
-    let cancelled = false;
-    getPresetById(defaultPreset.id)
-      .then((presetData) => {
-        if (!cancelled) resetFactories(presetData.factories || {});
-      })
-      .catch(() => {
-        if (!cancelled) resetFactories({});
-      });
-    return () => { cancelled = true; };
-  }, [draftPreset, initialData.defaultFactories, initialData.presets, loadedPreset, resetFactories]);
+  }, [initialData.defaultFactories, resetFactories]);
 
   useEffect(() => {
     const checkedPluginsChanged = !areSetsEqual(checkedPlugins, initialCheckedPluginsRef.current);
@@ -684,7 +687,7 @@ function AddInstanceForm({
   const handleInternalServerCfgLint = useCallback((hasErrors) => { setServerCfgHasLintErrors(hasErrors); if (onServerCfgLintStatusChange) onServerCfgLintStatusChange(hasErrors); }, [onServerCfgLintStatusChange]);
   const qlCfgLinterSource = useCallback(() => (createQlCfgLinter(availablePorts, handleInternalServerCfgLint)), [availablePorts, handleInternalServerCfgLint]);
   const getLinterSourceForFile = useCallback(
-    (fileName) => (fileName === 'server.cfg' ? qlCfgLinterSource : null),
+    (fileName) => (fileName?.toLowerCase().endsWith('.cfg') ? qlCfgLinterSource : null),
     [qlCfgLinterSource],
   );
   const handleExpandEditor = useCallback((selectedFile, content = '') => {
@@ -693,18 +696,57 @@ function AddInstanceForm({
       : (selectedFile?.path || selectedFile?.name || '');
     setEditingFileDetails({
       name: fileName,
+      path: fileName,
       content: content || serializeConfigs()[fileName] || '',
       language: getConfigLanguage(fileName),
       linterSource: getLinterSourceForFile(fileName),
+      kind: 'config',
     });
     setIsFullScreenEditorOpen(true);
   }, [getLinterSourceForFile, serializeConfigs]);
+  const handleExpandPluginEditor = useCallback((selectedFile, content = '') => {
+    const fileName = selectedFile?.name || '';
+    const filePath = selectedFile?.path || fileName;
+    setEditingFileDetails({
+      name: fileName,
+      path: filePath,
+      content,
+      language: getPluginLanguage(fileName),
+      linterSource: null,
+      kind: 'plugin',
+    });
+    setIsFullScreenEditorOpen(true);
+  }, []);
+  const handleExpandFactoryEditor = useCallback((selectedFile, content = '') => {
+    const fileName = selectedFile?.name || '';
+    const filePath = selectedFile?.path || fileName;
+    setEditingFileDetails({
+      name: fileName,
+      path: filePath,
+      content,
+      language: getFactoryLanguage(fileName),
+      linterSource: getFactoryLinterSource(fileName),
+      kind: 'factory',
+    });
+    setIsFullScreenEditorOpen(true);
+  }, []);
   const handleCloseFullScreenEditor = useCallback(() => { setIsFullScreenEditorOpen(false); }, []);
   const handleSaveFullScreenEditor = useCallback((newContent) => {
-    const fileName = editingFileDetails.name;
-    handleConfigContentUpdate(fileName, newContent);
+    if (editingFileDetails.kind === 'plugin') {
+      pluginsManagerRef.current?.updateContent(editingFileDetails.path || editingFileDetails.name, newContent);
+    } else if (editingFileDetails.kind === 'factory') {
+      factoriesAdapter.writeContent(editingFileDetails.path || editingFileDetails.name, newContent);
+    } else {
+      handleConfigContentUpdate(editingFileDetails.name, newContent);
+    }
     setIsFullScreenEditorOpen(false);
-  }, [editingFileDetails.name, handleConfigContentUpdate]);
+  }, [
+    editingFileDetails.kind,
+    editingFileDetails.name,
+    editingFileDetails.path,
+    factoriesAdapter,
+    handleConfigContentUpdate,
+  ]);
   const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
   const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
   const selectedHostOsType = selectedHost?.os_type ?? null;
@@ -801,7 +843,7 @@ function AddInstanceForm({
         {/* Main tabs: Configuration Files | Scripts | Factories */}
         <div className="flex flex-col flex-grow min-h-0">
           {/* Tab bar container */}
-          <div className="flex flex-shrink-0 border border-[var(--surface-border)] bg-[var(--surface-elevated)] rounded-t-lg overflow-hidden">
+          <div className="flex flex-shrink-0 border border-[var(--surface-border)] bg-[var(--surface-elevated)] rounded-t-xl overflow-hidden">
             {[
               { key: 'config', icon: Settings, label: 'Configuration Files' },
               { key: 'scripts', icon: Code2, label: 'Plugins' },
@@ -826,7 +868,7 @@ function AddInstanceForm({
           <div
             className="flex-grow min-h-0 bg-[var(--surface-base)] border-x border-b border-[var(--surface-border)] rounded-b-xl p-4 flex flex-col"
           >
-            {activeMainTab === 'config' ? (
+            <div className={activeMainTab === 'config' ? 'flex-1 min-h-0' : 'hidden'}>
               <FileManager
                 adapter={configsAdapter}
                 capabilities={CONFIG_CAPS}
@@ -835,7 +877,8 @@ function AddInstanceForm({
                 getLanguageForFile={getConfigLanguage}
                 getLinterSourceForFile={getLinterSourceForFile}
               />
-            ) : activeMainTab === 'scripts' ? (
+            </div>
+            <div className={activeMainTab === 'scripts' ? 'flex-1 min-h-0' : 'hidden'}>
               <FileManager
                 ref={pluginsManagerRef}
                 adapter={pluginsAdapter}
@@ -843,6 +886,8 @@ function AddInstanceForm({
                 checkable
                 checkedFiles={checkedPlugins}
                 onCheck={togglePluginSelection}
+                onExpandEditor={handleExpandPluginEditor}
+                getLanguageForFile={getPluginLanguage}
                 getBinaryMeta={handleGetBinaryMeta}
                 saveBinaryMeta={handleSaveBinaryMeta}
                 binaryContext={{
@@ -850,15 +895,19 @@ function AddInstanceForm({
                   contextKey: draftPreset || 'default',
                 }}
               />
-            ) : (
+            </div>
+            <div className={activeMainTab === 'factories' ? 'flex-1 min-h-0' : 'hidden'}>
               <FileManager
                 adapter={factoriesAdapter}
                 capabilities={FACTORY_CAPS}
                 checkable
                 checkedFiles={checkedFactories}
                 onCheck={setFactoryChecked}
+                onExpandEditor={handleExpandFactoryEditor}
+                getLanguageForFile={getFactoryLanguage}
+                getLinterSourceForFile={getFactoryLinterSource}
               />
-            )}
+            </div>
           </div>
         </div>
       </div>

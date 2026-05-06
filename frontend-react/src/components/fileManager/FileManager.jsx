@@ -54,15 +54,15 @@ const FileManager = forwardRef(function FileManager({
 
   if (adapter.loading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-[var(--text-secondary)]">
         Loading files...
       </div>
     );
   }
 
   return (
-    <div className="flex h-full border border-[var(--surface-border)] rounded overflow-hidden">
-      <div className="w-64 flex-shrink-0 border-r border-[var(--surface-border)] bg-[var(--surface-base)] flex flex-col">
+    <div className="flex h-full min-h-0 border border-[var(--surface-border)] rounded overflow-hidden">
+      <div className="w-64 min-h-0 flex-shrink-0 border-r border-[var(--surface-border)] bg-[var(--surface-base)] flex flex-col">
         <FileTree
           files={controller.files}
           selectedPath={controller.selectedFile?.path}
@@ -81,7 +81,7 @@ const FileManager = forwardRef(function FileManager({
           onDelete={() => controller.setConfirmDeleteOpen(true)}
         />
       </div>
-      <div className="flex-1 min-w-0 bg-[var(--surface-base)]">
+      <div className="flex-1 min-w-0 min-h-0 bg-[var(--surface-base)] flex flex-col">
         {controller.actionError && (
           <div className="px-3 py-2 text-sm text-[var(--accent-danger)] border-b border-[var(--surface-border)]">
             {controller.actionError}
