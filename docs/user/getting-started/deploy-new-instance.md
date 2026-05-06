@@ -42,6 +42,8 @@ Reference: [Instance Actions Menu](../operations/instance-actions-menu.md)
 
 Config editing details live here: [Edit Configs, Plugins, And Factories](../operations/edit-configs.md)
 
+The deploy form uses the same file manager as **Edit Config**. Before creating the instance you can add custom `.cfg` or `.txt` config files, stage plugin file changes, choose checked plugins, and select the `.factories` files that should be deployed.
+
 ## Create Instance
 
 1. Review fields and tabs.
@@ -50,7 +52,7 @@ Config editing details live here: [Edit Configs, Plugins, And Factories](../oper
 
 ## What Happens To Config After Deploy
 
-QLSM deploys QLDS instance and pushes full config snapshot (configs, plugins, and factories) to that instance.
+QLSM deploys QLDS instance and pushes the full selected file snapshot to that instance: configs, checked plugins, plugin files, checked factories, and factory file contents.
 
 - Later edits affect only that instance.
 - Other instances are unchanged.

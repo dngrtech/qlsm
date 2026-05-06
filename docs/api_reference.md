@@ -258,10 +258,20 @@ Example success response:
     "server.cfg": "...",
     "mappool.txt": "...",
     "access.txt": "...",
-    "workshop.txt": ""
+    "workshop.txt": "",
+    "custom.cfg": "..."
+  },
+  "checked_plugins": ["balance", "server_status"],
+  "draft_id": "79e69985-8998-4881-a8ce-1f4fba712fe9",
+  "factories": {
+    "duel.factories": "{...}"
   }
 }
 ```
+
+`configs` is a filename-to-content map. Filenames must be flat `.cfg` or `.txt` names. The protected files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` are always required by update flows; create fills any missing protected file from the default preset. Custom config files are allowed.
+
+`checked_plugins` is a list of plugin names used to build the instance `qlx_plugins` value. `draft_id` is optional and commits a plugin draft workspace into the instance. The legacy `scripts` payload is no longer accepted on create. `factories` is optional; when omitted, QLSM copies default factories for legacy compatibility. When present, QLSM deploys exactly the provided flat `.factories` map.
 
 ### Update LAN Rate Request
 ```json
@@ -317,14 +327,19 @@ Example success response:
 ```json
 {
   "data": {
-    "server_cfg": "set sv_hostname \"My Server\"\n...",
-    "mappool_txt": "campgrounds\nbloodrun\n...",
-    "access_txt": "",
-    "workshop_txt": "",
-    "factories": {}
+    "server.cfg": "set sv_hostname \"My Server\"\n...",
+    "mappool.txt": "campgrounds\nbloodrun\n...",
+    "access.txt": "",
+    "workshop.txt": "",
+    "custom.cfg": "...",
+    "factories": {
+      "duel.factories": "{...}"
+    }
   }
 }
 ```
+
+`PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `factories`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed.
 
 ## Server Status
 
@@ -365,8 +380,110 @@ Example success response:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/drafts` | POST | Create a plugin draft seeded from a preset or instance |
+| `/drafts/<draft_id>` | DELETE | Discard a draft workspace |
+| `/drafts/<draft_id>/touch` | POST | Refresh draft mtime during long edit sessions |
+| `/drafts/<draft_id>/tree` | GET | Get the draft plugin file tree |
+| `/drafts/<draft_id>/content` | GET | Read a draft `.py` or `.txt` file (`?path=`) |
+| `/drafts/<draft_id>/content` | PUT | Write a draft `.py` or `.txt` file |
+| `/drafts/<draft_id>/upload` | POST | Upload `.py`, `.txt`, or `.so` into the draft |
+| `/drafts/<draft_id>/file` | DELETE | Delete a draft file (`?path=`) |
+| `/drafts/<draft_id>/rename` | PATCH | Rename a draft file without changing its extension |
+| `/drafts/<draft_id>/commit` | POST | Commit the draft to an instance or preset and delete the draft |
 | `/drafts/<draft_id>/binary-meta` | GET | Get the description for a `.so` file in a preset or instance context |
 | `/drafts/<draft_id>/binary-meta` | PATCH | Create or update the description for a `.so` file in a preset or instance context |
+
+Drafts are temporary server-side plugin workspaces under `/tmp/qlds-drafts/<uuid>/scripts/`. They are used by the unified plugin file manager so file changes can be staged before an instance or preset save commits them. Stale drafts are cleaned up after one hour unless touched.
+
+### Create Draft Request
+```json
+{
+  "source": "preset",
+  "preset": "default"
+}
+```
+
+Instance source:
+
+```json
+{
+  "source": "instance",
+  "host": "duel-host",
+  "instance_id": 3
+}
+```
+
+### Create Draft Response (201 Created)
+```json
+{
+  "data": {
+    "draft_id": "79e69985-8998-4881-a8ce-1f4fba712fe9"
+  }
+}
+```
+
+### Draft File Tree Response
+```json
+{
+  "data": [
+    {
+      "name": "balance.py",
+      "type": "file",
+      "path": "balance.py",
+      "file_type": "python",
+      "size": 1234,
+      "last_modified": 1772870000.0
+    },
+    {
+      "name": "native",
+      "type": "folder",
+      "path": "native",
+      "children": [
+        {
+          "name": "hook.so",
+          "type": "file",
+          "path": "native/hook.so",
+          "file_type": "binary",
+          "size": 4096,
+          "last_modified": 1772870000.0
+        }
+      ]
+    }
+  ]
+}
+```
+
+Draft paths must be relative paths inside the draft. Text reads and writes support `.py` and `.txt` up to 256 KB. Uploads support `.py`, `.txt`, and ELF `.so` files; `.so` uploads are capped at 10 MB.
+
+### Rename Draft File Request
+```json
+{
+  "old_path": "native/old_hook.so",
+  "new_path": "native/new_hook.so",
+  "context_type": "preset",
+  "context_key": "default"
+}
+```
+
+`context_type` and `context_key` are required only when renaming `.so` files so binary metadata can be moved with the file. Renames cannot change file extensions and cannot overwrite an existing path.
+
+### Commit Draft Request
+```json
+{
+  "target": "instance",
+  "host": "duel-host",
+  "instance_id": 3
+}
+```
+
+Preset target:
+
+```json
+{
+  "target": "preset",
+  "preset": "duel-config"
+}
+```
 
 ### Get Binary Metadata Request
 ```
@@ -393,7 +510,32 @@ Returns an empty description when no row exists.
 }
 ```
 
-Descriptions are trimmed, may be empty, must be 100 characters or fewer, and cannot contain `<`, `>`, `{`, `}`, or `"`. `context_type` must be `preset` or `instance`; `context_key` cannot contain path separators or `..`; `path` must end in `.so`.
+Descriptions are trimmed, may be empty, must be 1000 characters or fewer, and cannot contain `<`, `>`, `{`, `}`, or `"`. `context_type` must be `preset` or `instance`; `context_key` cannot contain path separators or `..`; `path` must end in `.so`.
+
+## Factory Files
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/factories/tree` | GET | List available `.factories` files for a preset or instance |
+| `/factories/content` | GET | Read one `.factories` file |
+
+Factory reads are used by the file manager to browse a preset or instance factory set before the user selects or edits files.
+
+```
+GET /factories/tree?preset=default
+GET /factories/tree?host=duel-host&instance_id=3
+GET /factories/content?preset=default&path=duel.factories
+```
+
+### Factory Content Response
+```json
+{
+  "data": {
+    "path": "duel.factories",
+    "content": "{...}"
+  }
+}
+```
 
 ## Presets
 
@@ -428,17 +570,29 @@ GET /presets/validate-name?name=my-preset
 {
   "name": "duel-config",
   "description": "Standard duel settings",
-  "server_cfg": "set sv_hostname \"Duel Server\"...",
-  "mappool_txt": "aerowalk\ncampgrounds\n...",
-  "access_txt": "",
-  "workshop_txt": "",
-  "factories": {},
+  "configs": {
+    "server.cfg": "set sv_hostname \"Duel Server\"...",
+    "mappool.txt": "aerowalk\ncampgrounds\n...",
+    "access.txt": "",
+    "workshop.txt": "",
+    "duel.cfg": "..."
+  },
+  "draft_id": "79e69985-8998-4881-a8ce-1f4fba712fe9",
+  "checked_plugins": ["balance.py", "server_status.py"],
+  "factories": {
+    "duel.factories": "{...}"
+  },
+  "checked_factories": ["duel.factories"],
   "binary_meta_source": {
     "context_type": "preset",
     "context_key": "default"
   }
 }
 ```
+
+`configs` is the preferred format for preset writes. It accepts flat `.cfg` and `.txt` filenames and syncs the preset config set, removing unprotected config files omitted from the map. The protected baseline files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` cannot be removed. The legacy keys `server_cfg`, `mappool_txt`, `access_txt`, and `workshop_txt` are still accepted for compatibility, but they are partial writes and do not support custom files.
+
+`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving.
 
 `binary_meta_source` is optional on `POST /presets` and `PUT /presets/<id>`. When provided, matching `.so` file descriptions are copied from the source context into the target preset context. Use this when saving an instance or another preset as a new preset.
 
@@ -454,14 +608,28 @@ GET /presets/validate-name?name=my-preset
     "mappool_txt": "...",
     "access_txt": "...",
     "workshop_txt": "",
-    "factories": {},
-    "scripts": [],
+    "configs": {
+      "server.cfg": "...",
+      "mappool.txt": "...",
+      "access.txt": "...",
+      "workshop.txt": "",
+      "duel.cfg": "..."
+    },
+    "factories": {
+      "duel.factories": "{...}"
+    },
+    "scripts": {
+      "balance.py": "..."
+    },
     "checked_plugins": [],
+    "checked_factories": [],
     "last_updated": "2026-01-20T12:00:00",
     "created_at": "2026-01-20T12:00:00"
   }
 }
 ```
+
+For legacy presets, `checked_plugins` or `checked_factories` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility.
 
 ### Preset Name Validation
 - Pattern: `^[a-zA-Z0-9_-]+$` (letters, numbers, hyphens, underscores)

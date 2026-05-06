@@ -8,6 +8,9 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 - `mappool.txt`
 - `access.txt`
 - `workshop.txt`
+- Any custom flat `.cfg` or `.txt` config files you add
+- Plugin files under the preset's plugin tree, including `.py`, `.txt`, and `.so`
+- Factory files under the preset's factory set
 - A set of selected minqlx plugins (checkboxes, not a raw `qlx_plugins` string)
 - A set of selected factory files
 
@@ -39,13 +42,15 @@ The same applies to factory files — select the factories that should be includ
 
 This means you can have completely different plugin and factory sets per instance. Two instances on the same host can each have their own independent selection.
 
+The saved preset keeps both the files and the selection state. A plugin or factory file can exist in the preset without being selected for deployment. When you deploy from that preset, only selected plugins and selected factories are applied.
+
 ## Load A Saved Preset
 
 Use **Load Preset** in the deploy form or in **Edit Config** to open the preset picker.
 
 <img src="../../images/load-preset-modal.png" width="463" />
 
-Loading a preset overwrites the current draft config with the saved preset contents.
+Loading a preset overwrites the current draft with the saved config files, plugin file tree, plugin selections, factory files, and factory selections.
 
 - Built-in presets (e.g., `default`) are always available and cannot be deleted.
 - User-created presets can be deleted from this modal.
@@ -53,7 +58,7 @@ Loading a preset overwrites the current draft config with the saved preset conte
 ## Custom Preset Workflow
 
 1. Open **Deploy New Instance** (or **Edit Config** on an existing instance).
-2. Adjust config files, plugin selections, and factory selections for your gamemode.
+2. Adjust config files, plugin files, plugin selections, factory files, and factory selections for your gamemode.
 3. Click **Save as Preset** or **Save As New** and give it a name.
 4. On future deployments, click **Load Preset** and select your saved preset.
 
@@ -74,6 +79,7 @@ Use **Update Preset** to overwrite the saved preset with your current draft.
 A preset is only input at deploy time. After the instance is created, it keeps its own independent file set.
 
 - Editing an instance's config later affects only that instance.
+- Editing an instance's plugin or factory files later affects only that instance.
 - Other instances are not affected.
 - The original preset files are not modified.
 

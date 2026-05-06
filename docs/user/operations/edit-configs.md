@@ -2,25 +2,29 @@
 
 ## Configuration Files
 
-The config editor has file-level tabs for:
+The **Config** tab uses the file manager. These protected baseline files are always present:
 
 - `server.cfg`
 - `mappool.txt`
 - `access.txt`
 - `workshop.txt`
 
+Protected files can be edited, but they cannot be renamed or deleted. You can also add custom flat `.cfg` and `.txt` files with **New** or **Upload**. Custom config files can be renamed or deleted.
+
 ![](../images/instance-edit-config.png)
 
 
 ## Editor Buttons
 
-Each file editor includes these controls:
+The file manager includes these controls where the file type supports them:
 
+- Create a new file
 - Upload file content <img class="docs-inline-icon" src="../../images/file-upload-button.png" width="34" />
+- Rename or delete a selected custom file
 - Copy content <img class="docs-inline-icon" src="../../images/file-copy-button.png" width="34" />
 - Expand to full-screen editor <img class="docs-inline-icon" src="../../images/expand-fulls-screen-button.png" width="34" />
 
-Use `Upload` when you want to paste in an existing file from another server. Use **Copy** when you want to export the current contents. Use **Expand** when you need more room for editing.
+Use **Upload** when you want to bring in an existing file from another server. Use **Copy** when you want to export the current text. Use **Expand** when you need more room for editing.
 
 ## Linting
 
@@ -90,11 +94,17 @@ QLSM assembles all managed cvars into a single argument string that is passed to
 
 The `Plugins` tab manages Python plugins for this instance:
 
-- file tree plus editor
-- checkbox selection for which plugins are included
+- folders and files in the plugin tree
+- `.py`, `.txt`, and native `.so` plugin files
+- checkbox selection for which Python plugins are included in `qlx_plugins`
 - `Validate` button for checking Python plugin files
+- binary file details and descriptions for `.so` files
 
 ![](../images/plugins.png)
+
+Use **New**, **Upload**, **Rename**, and **Delete** to stage plugin file changes. Plugin changes are saved through a draft workspace while the modal or deploy form is open; they are committed to the instance or preset only when you save, update, or create.
+
+`.so` files are shown as binary files instead of text. You can replace the binary and add a short description so the file is easier to identify later.
 
 ### Validate Plugin
 
@@ -115,6 +125,7 @@ The **Factories** tab controls factory files included in the deployment bundle.
 
 - Only selected factory files are applied to the instance.
 - If you edit a factory file here, the edited version is what gets applied.
+- You can create, upload, rename, and delete flat `.factories` files.
 
 ![](../images/factories.png)
 

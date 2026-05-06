@@ -16,12 +16,14 @@ This document outlines the technical stack, development environment setup, key t
    *   Headless UI (for accessible, unstyled primitives like Menus, Listbox, Tabs, Transitions, Portals, used in action menus and the Add Instance page)
    *   `@floating-ui/react-dom` (for robust positioning of floating elements like dropdown menus in `HostActionsMenu.jsx` and `InstanceActionsMenu.jsx`)
    *   `lucide-react` (for icons, including sort icons, button icons, and dropdown indicators)
-   *   `CodeMirrorEditor.jsx` (reusable component for text editing with syntax highlighting, used in `InstanceConfigTabs.jsx`)
-   *   `InstanceBasicInfoForm.jsx`, `InstancePresetSelector.jsx`, `InstanceConfigTabs.jsx` (components for the Add Instance page, structuring the form and config editing)
+   *   `CodeMirrorEditor.jsx` (reusable component for text editing with syntax highlighting, used by the unified file manager)
+   *   `FileManager.jsx` and `frontend-react/src/components/fileManager/` (shared file tree, editor panel, upload/create/rename/delete controls, binary details panel, and adapter-based state handling for configs, plugins, and factories)
+   *   `InstanceBasicInfoForm.jsx` plus add/edit instance containers that embed the shared file manager for config, plugin, and factory editing
 * **Styling (New):** Tailwind CSS. Modernized styling for dropdowns (Listboxes) and Tabs on the Add Instance page.
 * **Frontend Features:**
     *   Client-side table sorting.
-    *   CodeMirror 6 integration for editing Quake Live configuration files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, `factory.factories`) with custom language modes for basic syntax highlighting.
+    *   CodeMirror 6 integration for editing Quake Live configuration files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, custom `.cfg`/`.txt` files, and `.factories` files) with custom language modes and lint gutters where available.
+    *   Unified config/plugin/factory file management. Configs and factories use an in-memory state adapter until the form is saved; plugins use server-side draft workspaces so `.py`, `.txt`, and `.so` files can be staged before committing to a preset or instance.
 * **Task Queue:** Flask-RQ2 + Redis
 * **Automation (Instance Mgmt):** Ansible (executed via direct `os.system` calls to `ansible-playbook` CLI within RQ tasks)
 * **Automation (Host Provisioning):** Terraform (executed via `subprocess` calls to `terraform` CLI within RQ tasks)
@@ -97,11 +99,12 @@ The Flask application follows the application factory pattern, which provides se
     -   `index_routes.py`: Handles the main index page.
     *   `host_routes.py`: Handles CRUD operations for Hosts, protected by `@jwt_required()`.
     *   `instance_routes.py`: Handles CRUD operations for QLInstances, protected by `@jwt_required()`.
-    *   `preset_api_routes.py`: Handles CRUD operations for ConfigPresets, protected by `@jwt_required()`. Mutating operations (rename, content update, delete) are rejected with `403` for any preset where `is_builtin = True`.
+    *   `preset_api_routes.py`: Handles CRUD operations for ConfigPresets, protected by `@jwt_required()`. Preset writes accept generic config and factory maps, plugin draft IDs, checked plugin lists, and checked factory lists. Mutating operations (rename, content update, delete) are rejected with `403` for any preset where `is_builtin = True`.
     *   `server_status_routes.py`: Handles live status retrieval (`GET /api/server-status`) and workshop preview lookup (`GET /api/server-status/workshop-preview/<workshop_id>`).
     *   `settings_routes.py`: Handles application settings management (API keys, rate limit config).
     *   `user_routes.py`: Handles user management endpoints.
-    *   `draft_routes.py`: Handles draft/pending instance configuration management.
+    *   `draft_routes.py`: Handles server-side plugin draft workspaces for preset and instance editing, including tree/content reads, upload, delete, rename, touch, and commit.
+    *   `binary_meta_routes.py`: Handles `.so` plugin descriptions for draft file manager sessions.
     *   `script_routes.py`: Handles script management endpoints.
     *   `factory_routes.py`: Handles factory file management.
     *   `external_api_routes.py`: Versioned external API at `/api/v1/`. Uses Bearer token authentication via the `ApiKey` model (not JWT cookies). Exposes a rate-limited `GET /api/v1/instances` endpoint for external service integration.
@@ -188,7 +191,7 @@ class QLInstance(db.Model):
 
 ```
 
-**ConfigPreset Model:** Stores preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer to the preset directory. Built-in presets (e.g., `default`) are flagged with `is_builtin = True` and are read-only — the API rejects any attempt to rename, update, or delete them.
+**ConfigPreset Model:** Stores preset metadata. File contents are stored on the filesystem; the model holds a `path` pointer to the preset directory. Built-in presets (e.g., `default`) are flagged with `is_builtin = True` and are read-only — the API rejects any attempt to rename, update, or delete them. Presets can include the protected baseline config files, additional `.cfg`/`.txt` files, plugin files under `scripts/`, factory files under `factories/`, and selection metadata in `checked_plugins.json` and `checked_factories.json`.
 
 ```python
 class ConfigPreset(db.Model):

@@ -25,7 +25,7 @@ graph TD
         Caddy -->|🔁 Reverse Proxy API Requests| FlaskApp[🧩 Flask API + Gunicorn]
 
         FlaskApp -->|🔄 Reads/Writes Host & Instance Data| SQLite["🗄️ SQLite DB <br> - Host (name, ip, provider, region, size, status, qlfilter_status, ssh_key_path, logs) <br> - QLInstance (name, port, hostname, status, host_id, logs) <br> - ConfigPreset (...)"]
-        FlaskApp -->|💾 Reads/Writes Instance Config Files| FileSystem["📁 Filesystem <br> (configs/<host>/<instance_id>/*)"]
+        FlaskApp -->|💾 Reads/Writes Instance & Preset Files| FileSystem["📁 Filesystem <br> configs/, scripts/, factories/"]
         FlaskApp -->|📤 Enqueues Ansible or Terraform Tasks| Redis["🧠 Redis"]
         FlaskApp -->|⚙️ Reads/Writes| DotEnv["⚙️ Dotenv Config"]
         FlaskApp -->|🔑 Self-host key setup| HostSSH["📁 /host-ssh mount"]
@@ -63,14 +63,14 @@ graph TD
     * **Database Models (`ui/models.py`):** Defines the `User`, `Host`, `QLInstance`, `ConfigPreset`, `ApiKey`, and `AppSetting` data structures using SQLAlchemy ORM.
     * **Database Helpers (`ui/database.py`):** Provides CRUD operations for models and database initialization.
     * **CLI Modules (`ui/user_cli.py`, `ui/preset_cli.py`):** Register focused Flask CLI commands for user bootstrap and preset management.
-    * **API Routes (`ui/routes/` package):** Defines API endpoints, organized into blueprints. These endpoints return JSON responses. Key route modules: `auth_api_routes.py`, `host_routes.py`, `instance_routes.py`, `preset_api_routes.py`, `server_status_routes.py`, `settings_routes.py`, `user_routes.py`, `draft_routes.py`, `script_routes.py`, `factory_routes.py`, and `external_api_routes.py` (versioned external API at `/api/v1/`).
+    * **API Routes (`ui/routes/` package):** Defines API endpoints, organized into blueprints. These endpoints return JSON responses. Key route modules: `auth_api_routes.py`, `host_routes.py`, `instance_routes.py`, `preset_api_routes.py`, `server_status_routes.py`, `settings_routes.py`, `user_routes.py`, `draft_routes.py`, `binary_meta_routes.py`, `script_routes.py`, `factory_routes.py`, and `external_api_routes.py` (versioned external API at `/api/v1/`).
 *   **SQLite DB:** A simple file-based database storing application metadata:
     * **Host Model:** Stores information about target servers: name, provisioned IP address, provider, region/size, status (Enum), `qlfilter_status` (Enum), SSH key path, `ssh_port`, `os_type`, `is_standalone`, `timezone`, `cpu_count`, `auto_restart_schedule`, and logs. `cpu_count` records the detected or inferred Linux CPU count used for transparent QLDS affinity assignment. For standalone hosts, `ssh_key_path` remains the single persisted automation credential even when the operator initially onboarded with password auth, and `os_type` is populated from SSH-based OS auto-detection rather than a user-selected dropdown. Self hosts snapshot local `/etc/os-release` detection into `os_type` when available; if detection fails, the field remains `null` instead of assuming Debian.
-    * **QLInstance Model:** Stores information about Quake Live server instances: name, port, hostname, `lan_rate_enabled`, `qlx_plugins`, `cpu_affinity`, ZMQ connection fields (`zmq_rcon_port`, `zmq_rcon_password`, `zmq_stats_port`, `zmq_stats_password`), status (Enum), logs, and a foreign key (`host_id`) linking it to its parent `Host`. `cpu_affinity` records the optional Linux CPU index assigned to the systemd service when the host has more than one CPU. Config files are stored on the filesystem.
-    * **ConfigPreset Model:** Stores reusable configuration preset metadata. Config file contents are stored on the filesystem; the model holds a `path` pointer. Rows include an `is_builtin` flag; built-in presets live under `configs/presets/_builtin/<name>/` and are read-only — the API blocks renames, content updates, and deletes on them. Built-in presets are seeded from the Docker image on container start via `flask sync-builtin-presets` (run automatically by the entrypoint).
+    * **QLInstance Model:** Stores information about Quake Live server instances: name, port, hostname, `lan_rate_enabled`, `qlx_plugins`, `cpu_affinity`, ZMQ connection fields (`zmq_rcon_port`, `zmq_rcon_password`, `zmq_stats_port`, `zmq_stats_password`), status (Enum), logs, and a foreign key (`host_id`) linking it to its parent `Host`. `cpu_affinity` records the optional Linux CPU index assigned to the systemd service when the host has more than one CPU. Instance configs, plugin files, and factory files are stored on the filesystem.
+    * **ConfigPreset Model:** Stores reusable configuration preset metadata. Config, plugin, and factory file contents are stored on the filesystem; the model holds a `path` pointer. Rows include an `is_builtin` flag; built-in presets live under `configs/presets/_builtin/<name>/` and are read-only — the API blocks renames, content updates, and deletes on them. Built-in presets are seeded from the Docker image on container start via `flask sync-builtin-presets` (run automatically by the entrypoint).
     * **ApiKey Model:** Stores API keys for external service authentication (Bearer token auth for `/api/v1/` endpoints).
     * **AppSetting Model:** Generic key-value store for application settings (e.g., rate limit configuration).
-*   **FileSystem (Instance Configs):** Instance-specific configuration files (e.g., `server.cfg`, `mappool.txt`) are stored directly on the application server's filesystem under `configs/<host_name>/<instance_id>/`.
+*   **FileSystem (Managed Files):** Instance-specific files are stored under `configs/<host_name>/<instance_id>/`. Preset files are stored under `configs/presets/<name>/` or `configs/presets/_builtin/<name>/`. The top-level instance or preset directory contains `.cfg` and `.txt` config files. Plugin drafts and saved plugin files live in `scripts/`; factory files live in `factories/`. Selection metadata is stored in `checked_plugins.json` and `checked_factories.json` for presets.
 *   **Redis:** An in-memory data store used as the message broker for the RQ task queue.
 *   **RQ Worker:** A separate process that listens to the Redis queue for tasks defined in `ui/tasks.py`. It dequeues tasks for host provisioning/setup and instance management.
 *   **Automation Runner:** Represents the logic within the RQ worker responsible for executing the automation tools, now refactored into the `ui/task_logic/` package:
@@ -177,11 +177,14 @@ qlsm/
 │   │       ├── server.cfg       # Main QLDS config
 │   │       ├── mappool.txt      # Map rotation
 │   │       ├── access.txt       # Access control
-│   │       └── workshop.txt     # Workshop items
+│   │       ├── workshop.txt     # Workshop items
+│   │       ├── *.cfg, *.txt     # Additional user-managed config files
+│   │       ├── scripts/         # Instance minqlx plugins (.py, .txt, .so)
+│   │       └── factories/       # Instance factory files (.factories)
 │   └── presets/                 # Preset config bundles
 │       ├── _builtin/            # Read-only presets shipped with QLSM
 │       │   └── default/         # Default baseline preset
-│       └── <user-preset>/       # User-created presets
+│       └── <user-preset>/       # User-created presets with the same file layout
 │
 └── docs/                        # Documentation
 ```
@@ -207,14 +210,14 @@ qlsm/
 
 ### Instance Deployment
 1. User submits form → `POST /api/instances`
-2. Instance record created, config files written to `configs/<host>/<id>/`
+2. Instance record created; config files, selected plugins, and selected factories are written to `configs/<host>/<id>/`
 3. RQ task queued → `deploy_instance_logic()`
 4. Ansible `add_qlds_instance.yml` → Deploys to host
 5. Instance status → RUNNING
 
 ### Instance Config Update
-1. User edits config → `PUT /api/instances/<id>/config`
-2. Config files updated in `configs/<host>/<id>/`
+1. User edits config, plugins, or factories → `PUT /api/instances/<id>/config`
+2. Managed config and factory maps are synced in `configs/<host>/<id>/`; plugin changes are committed from a draft workspace when `draft_id` is provided
 3. RQ task queued → `apply_instance_config_logic()`
 4. Ansible `sync_instance_configs_and_restart.yml` → Syncs configs and restarts
 5. Instance status → RUNNING
