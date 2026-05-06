@@ -840,7 +840,7 @@ function AddInstanceForm({
       <div className="flex-shrink-0 mb-6">
         <InstanceBasicInfoForm name={name} onNameChange={(e) => setName(e.target.value)} selectedHostId={selectedHostId} onHostChange={handleHostChange} hosts={initialData.hosts || []} port={port} onPortChange={setPort} availablePorts={availablePorts} loadingPorts={loadingPorts} hostname={hostname} onHostnameChange={(e) => setHostname(e.target.value)} lanRateEnabled={lanRateEnabled} onLanRateChange={setLanRateEnabled} lanRateDisabled={!lanRateSupported} lanRateUnavailableReason={lanRateUnavailableReason} />
       </div>
-      <div className="flex flex-col flex-grow min-h-0 mb-6">
+      <div className="flex flex-col flex-grow min-h-0 mb-2">
         {/* Show loaded preset indicator */}
         {loadedPreset && (
           <div className="flex items-center text-sm text-[var(--text-secondary)] mb-2 flex-shrink-0">
@@ -929,7 +929,7 @@ function AddInstanceForm({
         </div>
       )}
       {/* Footer with Save/Load Preset on left, Cancel/Create Instance on right */}
-      <div className="flex justify-between items-center flex-shrink-0 mt-4 pt-4 border-t border-[var(--surface-border)]">
+      <div className="flex justify-between items-center flex-shrink-0 mt-2">
         {/* Left side - Preset buttons + Esc hint */}
         <div className="flex items-center gap-3">
           <div className="flex gap-2">
