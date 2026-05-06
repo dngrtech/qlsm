@@ -929,7 +929,7 @@ function AddInstanceForm({
         </div>
       )}
       {/* Footer with Save/Load Preset on left, Cancel/Create Instance on right */}
-      <div className="flex justify-between items-center flex-shrink-0 mt-2">
+      <div className="flex justify-between items-center flex-shrink-0 mt-3">
         {/* Left side - Preset buttons + Esc hint */}
         <div className="flex items-center gap-3">
           <div className="flex gap-2">
