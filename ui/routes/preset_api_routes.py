@@ -117,6 +117,18 @@ def _validate_checked_plugins_payload(data):
     return None
 
 
+def _validate_checked_factories_payload(data):
+    if 'checked_factories' not in data:
+        return None
+    checked_factories = data['checked_factories']
+    if (
+        not isinstance(checked_factories, list) or
+        not all(isinstance(f, str) and f.lower().endswith('.factories') for f in checked_factories)
+    ):
+        return "checked_factories must be a list of .factories filenames"
+    return None
+
+
 def _validation_error_response(error):
     return jsonify({"error": {"message": str(error)}}), 400
 
@@ -215,15 +227,28 @@ def _write_preset_scripts(preset_path, scripts_data):
 
 
 def _read_preset_factories(preset_path):
-    """Read top-level .factories files from a preset's factories/ folder."""
+    """Read selected .factories files from a preset's factories/ folder.
+
+    If checked_factories.json exists, only the listed filenames are returned
+    (those are the user-selected factories for the preset). If it is absent,
+    all files in factories/ are returned for backward-compatibility with
+    presets created before this field was introduced.
+    """
     factories = {}
     factories_dir = os.path.join(preset_path, 'factories')
     if not os.path.exists(factories_dir):
         return factories
 
+    checked = _read_preset_checked_factories(preset_path)
+    # checked == None  → legacy preset, include all files
+    # checked == []   → no factories selected
+    # checked == [..] → only those filenames are selected
+
     for filename in sorted(os.listdir(factories_dir)):
         filepath = os.path.join(factories_dir, filename)
         if not os.path.isfile(filepath) or not filename.lower().endswith('.factories'):
+            continue
+        if checked is not None and filename not in checked:
             continue
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -285,6 +310,34 @@ def _write_preset_checked_plugins(preset_path, checked_plugins):
         current_app.logger.info(f"Wrote checked_plugins.json: {filepath}")
     except Exception as e:
         current_app.logger.error(f"Error writing checked_plugins.json to {filepath}: {e}")
+
+
+def _read_preset_checked_factories(preset_path):
+    """Read checked_factories.json from a preset folder.
+    Returns a list of factory filenames, or None if the file does not exist.
+    None means "legacy" — treat all files in factories/ as selected.
+    """
+    filepath = os.path.join(preset_path, 'checked_factories.json')
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        current_app.logger.error(f"Error reading checked_factories.json from {filepath}: {e}")
+        return None
+
+
+def _write_preset_checked_factories(preset_path, checked_factories):
+    """Write checked_factories.json to a preset folder."""
+    os.makedirs(preset_path, exist_ok=True)
+    filepath = os.path.join(preset_path, 'checked_factories.json')
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(checked_factories, f)
+        current_app.logger.info(f"Wrote checked_factories.json: {filepath}")
+    except Exception as e:
+        current_app.logger.error(f"Error writing checked_factories.json to {filepath}: {e}")
 
 
 def _write_preset_configs(preset_path, config_data):
@@ -442,6 +495,10 @@ def create_preset_api():
     if checked_plugins_error:
         return jsonify({"error": {"message": checked_plugins_error}}), 400
 
+    checked_factories_error = _validate_checked_factories_payload(data)
+    if checked_factories_error:
+        return jsonify({"error": {"message": checked_factories_error}}), 400
+
     description = data.get('description', '')
     preset_path = os.path.join(PRESETS_DIR, name)
 
@@ -483,9 +540,12 @@ def create_preset_api():
         if 'factories' in data:
             _write_preset_factories(preset_path, data['factories'])
 
-        # Step 1d: Write checked plugins if provided
+        # Step 1d: Write checked plugins/factories if provided
         if 'checked_plugins' in data:
             _write_preset_checked_plugins(preset_path, data['checked_plugins'])
+
+        if 'checked_factories' in data:
+            _write_preset_checked_factories(preset_path, data['checked_factories'])
 
         # Step 2: Create DB record
         preset_data = {
@@ -510,6 +570,7 @@ def create_preset_api():
         response_data['scripts'] = _read_preset_scripts(preset_path)
         response_data['factories'] = _read_preset_factories(preset_path)
         response_data['checked_plugins'] = _read_preset_checked_plugins(preset_path)
+        response_data['checked_factories'] = _read_preset_checked_factories(preset_path)
 
         if metadata_copied:
             db.session.commit()
@@ -556,6 +617,7 @@ def get_preset_api(preset_id):
     response_data['scripts'] = _read_preset_scripts(preset.path)
     response_data['factories'] = _read_preset_factories(preset.path)
     response_data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
+    response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
 
     return jsonify({"data": response_data})
 
@@ -587,6 +649,10 @@ def update_preset_api(preset_id):
     checked_plugins_error = _validate_checked_plugins_payload(data)
     if checked_plugins_error:
         return jsonify({"error": {"message": checked_plugins_error}}), 400
+
+    checked_factories_error = _validate_checked_factories_payload(data)
+    if checked_factories_error:
+        return jsonify({"error": {"message": checked_factories_error}}), 400
 
     # Check for name change
     if name_provided and new_name != original_preset_name:
@@ -637,9 +703,12 @@ def update_preset_api(preset_id):
         if 'factories' in data:
             _write_preset_factories(preset.path, data['factories'])
 
-        # Update checked plugins if provided
+        # Update checked plugins/factories if provided
         if 'checked_plugins' in data:
             _write_preset_checked_plugins(preset.path, data['checked_plugins'])
+
+        if 'checked_factories' in data:
+            _write_preset_checked_factories(preset.path, data['checked_factories'])
 
         # Handle name change (rename folder)
         renamed_preset = name_provided and new_name != original_preset_name
@@ -687,6 +756,7 @@ def update_preset_api(preset_id):
             response_data['scripts'] = _read_preset_scripts(updated_preset.path)
             response_data['factories'] = _read_preset_factories(updated_preset.path)
             response_data['checked_plugins'] = _read_preset_checked_plugins(updated_preset.path)
+            response_data['checked_factories'] = _read_preset_checked_factories(updated_preset.path)
 
             if metadata_copied or metadata_renamed:
                 db.session.commit()

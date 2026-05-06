@@ -407,7 +407,15 @@ function EditInstanceConfigModal({
         newConfigs[file] = file === 'server.cfg' ? stripManagedCvars(raw) : raw;
       });
       resetConfigs(newConfigs);
-      resetFactories(presetData.factories || {});
+      // checked_factories: null = legacy preset (use all factory files); [] or [...] = explicit selection
+      const factoriesToLoad = presetData.checked_factories != null
+        ? Object.fromEntries(
+            presetData.checked_factories
+              .filter(f => presetData.factories?.[f] !== undefined)
+              .map(f => [f, presetData.factories[f]])
+          )
+        : (presetData.factories || {});
+      resetFactories(factoriesToLoad);
       setCheckedPlugins(new Set(presetData.checked_plugins || []));
       setDraftPreset(presetData.name);
       const nextHostname = getServerHostname(newConfigs['server.cfg']);
@@ -426,11 +434,13 @@ function EditInstanceConfigModal({
     setIsSavingPreset(true);
     setPresetError(null);
     try {
+      const serializedFactories = serializeFactories();
       const presetData = {
         name: name.trim(),
         description: description?.trim() || null,
         configs: serializeConfigs(),
-        factories: serializeFactories(),
+        factories: serializedFactories,
+        checked_factories: Object.keys(serializedFactories),
       };
 
       // Flush any in-progress editor content to the draft before saving preset

@@ -545,7 +545,15 @@ function AddInstanceForm({
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
-      resetFactories(presetData.factories || {});
+      // checked_factories: null = legacy preset (use all factory files); [] or [...] = explicit selection
+      const factoriesToLoad = presetData.checked_factories != null
+        ? Object.fromEntries(
+            presetData.checked_factories
+              .filter(f => presetData.factories?.[f] !== undefined)
+              .map(f => [f, presetData.factories[f]])
+          )
+        : (presetData.factories || {});
+      resetFactories(factoriesToLoad);
       setIsPresetModified(false);
 
       initialHostnameRef.current = newInitialHostname;
@@ -575,11 +583,13 @@ function AddInstanceForm({
     setIsSavingPreset(true);
     try {
       // Map internal config keys to API keys
+      const serializedFactories = serializeFactories();
       const presetData = {
         name,
         description: description || null,
         configs: serializeConfigs(),
-        factories: serializeFactories(),
+        factories: serializedFactories,
+        checked_factories: Object.keys(serializedFactories),
       };
 
       if (pluginsManagerRef.current?.flushEdits) {
@@ -624,10 +634,12 @@ function AddInstanceForm({
     setShowUpdateConfirm(false);
     setIsUpdatingPreset(true);
     try {
+      const serializedFactoriesUpdate = serializeFactories();
       const presetData = {
         description: description,
         configs: serializeConfigs(),
-        factories: serializeFactories(),
+        factories: serializedFactoriesUpdate,
+        checked_factories: Object.keys(serializedFactoriesUpdate),
       };
 
       if (pluginsManagerRef.current?.flushEdits) {
