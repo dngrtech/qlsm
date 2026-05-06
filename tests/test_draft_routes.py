@@ -419,9 +419,9 @@ class TestDraftUpload:
         )
         assert response.status_code == 400
 
-    def test_upload_so_exceeding_100kb_rejected(self, client, auth_headers, preset_with_scripts, monkeypatch):
+    def test_upload_so_exceeding_10mb_rejected(self, client, auth_headers, preset_with_scripts, monkeypatch):
         draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)
-        big_content = b'\x7fELF' + b'\x00' * (100 * 1024 + 1 - 4)
+        big_content = b'\x7fELF' + b'\x00' * (10 * 1024 * 1024 + 1 - 4)
         data = {
             'file': (io.BytesIO(big_content), 'huge.so')
         }
@@ -431,7 +431,7 @@ class TestDraftUpload:
             headers=auth_headers
         )
         assert response.status_code == 400
-        assert '100KB' in response.get_json()['error']['message']
+        assert '10MB' in response.get_json()['error']['message']
 
     def test_upload_txt_exceeding_256kb_rejected(self, client, auth_headers, preset_with_scripts, monkeypatch):
         draft_id = self._create_draft(client, auth_headers, monkeypatch, preset_with_scripts)

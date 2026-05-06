@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Box, Code, FileText, Folder, FolderOpen, Lock, Search } from 'lucide-react';
+
+import { sortFileTree } from './fileManagerUtils';
 
 const FILE_TYPE_ICONS = {
   python: Code,
@@ -24,6 +26,15 @@ function isCheckableFile(item, fileType, checkable) {
   return fileType === 'python' || item.name?.endsWith('.factories');
 }
 
+function getTreeSignature(items = []) {
+  return items.map(item => {
+    if (item.type === 'folder') {
+      return `${item.path}:folder[${getTreeSignature(item.children || [])}]`;
+    }
+    return `${item.path}:file`;
+  }).join('|');
+}
+
 function TreeItem({
   item,
   depth,
@@ -34,7 +45,7 @@ function TreeItem({
   onCheck,
   foldersEnabled,
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const isFolder = item.type === 'folder';
   const isSelected = !isFolder && item.path === selectedPath;
   const fileType = item.file_type || getFileType(item.name);
@@ -131,35 +142,26 @@ export default function FileTree({
   foldersEnabled = false,
 }) {
   const [search, setSearch] = useState('');
+  const filesSignature = useMemo(() => getTreeSignature(files || []), [files]);
+  const filesSignatureRef = useRef(null);
   const sortPriorityRef = useRef(null);
+  const userChangedChecksRef = useRef(false);
 
-  useEffect(() => {
+  if (sortPriorityRef.current === null || filesSignatureRef.current !== filesSignature) {
+    filesSignatureRef.current = filesSignature;
     sortPriorityRef.current = new Set(checkedFiles || []);
-  }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (sortPriorityRef.current === null) {
-    sortPriorityRef.current = new Set(checkedFiles || []);
+    userChangedChecksRef.current = false;
+  } else if (
+    checkable &&
+    !userChangedChecksRef.current &&
+    sortPriorityRef.current.size === 0 &&
+    checkedFiles?.size > 0
+  ) {
+    sortPriorityRef.current = new Set(checkedFiles);
   }
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const sortPriority = sortPriorityRef.current;
-
-    function sortItems(items) {
-      return [...items].sort((a, b) => {
-        if (a.type === 'folder' && b.type !== 'folder') return -1;
-        if (a.type !== 'folder' && b.type === 'folder') return 1;
-        if (checkable) {
-          const aChecked = sortPriority?.has(a.path);
-          const bChecked = sortPriority?.has(b.path);
-          if (aChecked && !bChecked) return -1;
-          if (!aChecked && bChecked) return 1;
-        }
-        return a.name.localeCompare(b.name);
-      }).map(item => item.type === 'folder' && item.children
-        ? { ...item, children: sortItems(item.children) }
-        : item);
-    }
 
     function filterTree(items) {
       return items.reduce((acc, item) => {
@@ -173,13 +175,21 @@ export default function FileTree({
       }, []);
     }
 
-    const sorted = sortItems(files || []);
+    const sorted = sortFileTree(files || [], {
+      checkable,
+      checkedFiles: sortPriorityRef.current || checkedFiles,
+    });
     return term ? filterTree(sorted) : sorted;
-  }, [files, search, checkable]);
+  }, [files, search, checkable, checkedFiles]);
+
+  const handleCheck = (path, checked) => {
+    userChangedChecksRef.current = true;
+    onCheck(path, checked);
+  };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-2">
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex-shrink-0 p-2">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
@@ -191,7 +201,7 @@ export default function FileTree({
           />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-1 scrollbar-thick">
+      <div className="flex-1 min-h-0 overflow-y-auto px-1 scrollbar-thick">
         {filtered.map(item => (
           <TreeItem
             key={item.path}
@@ -201,7 +211,7 @@ export default function FileTree({
             onSelectFile={onSelectFile}
             checkable={checkable}
             checkedFiles={checkedFiles}
-            onCheck={onCheck}
+            onCheck={handleCheck}
             foldersEnabled={foldersEnabled}
           />
         ))}

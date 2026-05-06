@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   showSuccess: vi.fn(),
   updateInstance: vi.fn(),
   updateInstanceConfig: vi.fn(),
+  fileManagerProps: [],
   useDraftWorkspace: vi.fn(),
 }));
 
@@ -97,7 +98,8 @@ vi.mock('../../fileManager', () => ({
     allowedExtensions: ['.factories'],
     protectedFiles: [],
   },
-  FileManager: React.forwardRef(function MockFileManager(_props, ref) {
+  FileManager: React.forwardRef(function MockFileManager(props, ref) {
+    mocks.fileManagerProps.push(props);
     useImperativeHandle(ref, () => ({
       flushEdits: mocks.flushEdits,
     }));
@@ -153,6 +155,7 @@ describe('EditInstanceConfigModal preset saving', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mocks.fileManagerProps = [];
     if (!EditInstanceConfigModal) {
       ({ default: EditInstanceConfigModal } = await import('../EditInstanceConfigModal'));
     }
@@ -310,5 +313,61 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(toggle).not.toBeDisabled();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByText('99k LAN rate is only supported on Debian hosts.')).not.toBeInTheDocument();
+  });
+
+  it('uses python highlighting for plugin .py files', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /plugins/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /plugins/i }));
+
+    await waitFor(() => {
+      expect(mocks.fileManagerProps.some(props => props.binaryContext?.contextType === 'instance')).toBe(true);
+    });
+    const pluginManagerProps = mocks.fileManagerProps.find(
+      props => props.binaryContext?.contextType === 'instance',
+    );
+
+    expect(pluginManagerProps.getLanguageForFile('balance.py')).toBeTruthy();
+    expect(pluginManagerProps.getLanguageForFile('readme.txt')).toBeNull();
+    expect(pluginManagerProps.onExpandEditor).toEqual(expect.any(Function));
+  });
+
+  it('uses JSON highlighting and linting for factory files', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /factories/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /factories/i }));
+
+    await waitFor(() => {
+      expect(mocks.fileManagerProps.some(
+        props => props.capabilities.allowedExtensions.includes('.factories'),
+      )).toBe(true);
+    });
+    const factoryManagerProps = mocks.fileManagerProps.find(
+      props => props.capabilities.allowedExtensions.includes('.factories'),
+    );
+
+    expect(factoryManagerProps.getLanguageForFile('ca.factories')).toBeTruthy();
+    expect(factoryManagerProps.getLinterSourceForFile('ca.factories')).toEqual(expect.any(Function));
+    expect(factoryManagerProps.getLanguageForFile('readme.txt')).toBeNull();
+    expect(factoryManagerProps.getLinterSourceForFile('readme.txt')).toBeNull();
+    expect(factoryManagerProps.onExpandEditor).toEqual(expect.any(Function));
   });
 });

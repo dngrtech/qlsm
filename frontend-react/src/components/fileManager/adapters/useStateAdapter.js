@@ -36,6 +36,7 @@ export function useStateAdapter({
 }) {
   const [files, setFiles] = useState(initialFiles);
   const [deletedPaths, setDeletedPaths] = useState(() => new Set());
+  const [resetCount, setResetCount] = useState(0);
   const initialRef = useRef(initialFiles);
   const protectedSet = useMemo(() => new Set(protectedFiles), [protectedFiles]);
 
@@ -162,9 +163,11 @@ export function useStateAdapter({
     setFiles(newInitial);
     setDeletedPaths(new Set());
     initialRef.current = newInitial;
+    setResetCount(c => c + 1);
   }, []);
 
   return {
+    resetCount,
     tree,
     readContent,
     writeContent,

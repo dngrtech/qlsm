@@ -603,10 +603,10 @@ body {
   background: var(--text-muted);
 }
 
-/* CodeMirror scrollbar — match app's grey scrollbar style */
+/* CodeMirror scrollbar — match file tree scrollbar style */
 .cm-scroller {
   scrollbar-width: auto;
-  scrollbar-color: var(--surface-border-strong) transparent;
+  scrollbar-color: var(--surface-border-strong) var(--surface-elevated);
 }
 
 .cm-scroller::-webkit-scrollbar {
@@ -615,12 +615,14 @@ body {
 }
 
 .cm-scroller::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--surface-elevated);
+  border-radius: 4px;
 }
 
 .cm-scroller::-webkit-scrollbar-thumb {
   background: var(--surface-border-strong);
   border-radius: 4px;
+  border: 3px solid var(--surface-elevated);
 }
 
 .cm-scroller::-webkit-scrollbar-thumb:hover {

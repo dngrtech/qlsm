@@ -27,7 +27,7 @@ export default function FileSidebarActions({
     : isProtected ? 'Built-in file, cannot be deleted' : 'Delete selected file';
 
   return (
-    <div className="border-t border-[var(--surface-border)] p-2 space-y-1.5">
+    <div className="flex-shrink-0 border-t border-[var(--surface-border)] p-2 space-y-1.5">
       {(canCreate || canUpload) && (
         <div className="grid grid-cols-2 gap-2">
           {canCreate && (

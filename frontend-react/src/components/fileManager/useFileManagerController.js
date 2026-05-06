@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   basename,
@@ -6,11 +6,27 @@ import {
   flattenFiles,
   getErrorMessage,
   getFileType,
+  getInitialSelectableFile,
   isCheckablePath,
   joinPath,
 } from './fileManagerUtils';
 
 const EMPTY_TREE = [];
+
+function filterExcludedFiles(items = [], excludedPaths = new Set()) {
+  if (!excludedPaths.size) return items;
+  return items.reduce((acc, item) => {
+    if (item.type === 'folder') {
+      acc.push({
+        ...item,
+        children: filterExcludedFiles(item.children || [], excludedPaths),
+      });
+      return acc;
+    }
+    if (!excludedPaths.has(item.path)) acc.push(item);
+    return acc;
+  }, []);
+}
 
 export function useFileManagerController({
   adapter,
@@ -34,6 +50,9 @@ export function useFileManagerController({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [binaryDescription, setBinaryDescription] = useState('');
   const [actionError, setActionError] = useState(null);
+  const pendingLocalPathsRef = useRef(new Set());
+  const pendingRemovedPathsRef = useRef(new Set());
+  const prevResetCountRef = useRef(adapter.resetCount ?? 0);
   const emptyCheckedFiles = useMemo(() => new Set(), []);
   const noopCheck = useCallback(() => undefined, []);
 
@@ -52,6 +71,16 @@ export function useFileManagerController({
     }
     setEditedContent({});
   }, [adapter, editedContent]);
+
+  useEffect(() => {
+    const current = adapter.resetCount ?? 0;
+    if (current === prevResetCountRef.current) return;
+    prevResetCountRef.current = current;
+    setEditedContent({});
+    setSelectedFile(null);
+    setCurrentContent('');
+    setBinaryDescription('');
+  }, [adapter.resetCount]);
 
   const handleSelectFile = useCallback(async (item) => {
     if (!item || item.type === 'folder') return;
@@ -87,19 +116,46 @@ export function useFileManagerController({
   }, [adapter, editedContent, getBinaryMeta]);
 
   useEffect(() => {
-    if (selectedFile || adapter.loading || flatFiles.length === 0) return;
-    const preferred = defaultSelectedPath
-      ? flatFiles.find(file => file.path === defaultSelectedPath)
-      : null;
-    const checked = checkable
-      ? flatFiles.find(file => effectiveCheckedFiles.has(file.path))
-      : null;
-    handleSelectFile(preferred || checked || flatFiles[0]);
+    if (adapter.loading) return;
+    for (const path of pendingLocalPathsRef.current) {
+      if (flatFiles.some(file => file.path === path)) {
+        pendingLocalPathsRef.current.delete(path);
+      }
+    }
+    for (const path of pendingRemovedPathsRef.current) {
+      if (!flatFiles.some(file => file.path === path)) {
+        pendingRemovedPathsRef.current.delete(path);
+      }
+    }
+
+    const removedPaths = pendingRemovedPathsRef.current;
+    const selectedExists = selectedFile && (
+      pendingLocalPathsRef.current.has(selectedFile.path) ||
+      flatFiles.some(file => file.path === selectedFile.path && !removedPaths.has(file.path))
+    );
+    if (selectedExists) return;
+
+    const selectableFiles = filterExcludedFiles(files, removedPaths);
+    const nextSelection = getInitialSelectableFile(selectableFiles, {
+      checkable,
+      checkedFiles: effectiveCheckedFiles,
+      defaultSelectedPath,
+    });
+
+    if (nextSelection) {
+      handleSelectFile(nextSelection);
+      return;
+    }
+
+    if (selectedFile) setSelectedFile(null);
+    setCurrentContent('');
+    setBinaryDescription('');
   }, [
     adapter.loading,
     checkable,
     defaultSelectedPath,
     effectiveCheckedFiles,
+    files,
     flatFiles,
     handleSelectFile,
     selectedFile,
@@ -128,29 +184,48 @@ export function useFileManagerController({
     try {
       await adapter.writeContent(path, template);
       await adapter.refreshTree?.();
-      if (checkable && isCheckablePath(path)) await effectiveOnCheck(path, true);
+      if (checkable && isCheckablePath(path) && onCheck && onCheck !== adapter.setChecked) {
+        await onCheck(path, true);
+      }
       setShowNewModal(false);
-      await selectPath(path, { name, path, type: 'file', file_type: getFileType(name) });
+      setActionError(null);
+      pendingLocalPathsRef.current.add(path);
+      setSelectedFile({ name, path, type: 'file', file_type: getFileType(name) });
+      setCurrentContent(template);
+      setEditedContent(prev => ({ ...prev, [path]: template }));
     } catch (err) {
       setActionError(getErrorMessage(err, 'Create failed'));
     }
-  }, [adapter, capabilities, checkable, effectiveOnCheck, selectPath, selectedDir]);
+  }, [adapter, capabilities, checkable, onCheck, selectedDir]);
 
   const handleUpload = useCallback(async (file) => {
     try {
       const result = await adapter.upload(file, selectedDir);
       const path = result?.path || joinPath(selectedDir, file.name);
-      if (checkable && isCheckablePath(path)) await effectiveOnCheck(path, true);
-      await selectPath(path, {
+      if (checkable && isCheckablePath(path) && onCheck && onCheck !== adapter.setChecked) {
+        await onCheck(path, true);
+      }
+      const fileType = getFileType(path);
+      setActionError(null);
+      pendingLocalPathsRef.current.add(path);
+      setSelectedFile({
         name: basename(path),
         path,
         type: 'file',
-        file_type: getFileType(path),
+        file_type: fileType,
       });
+      if (fileType === 'binary') {
+        setCurrentContent('');
+        setBinaryDescription('');
+      } else {
+        const content = await file.text();
+        setCurrentContent(content);
+        setEditedContent(prev => ({ ...prev, [path]: content }));
+      }
     } catch (err) {
       setActionError(getErrorMessage(err, 'Upload failed'));
     }
-  }, [adapter, checkable, effectiveOnCheck, selectPath, selectedDir]);
+  }, [adapter, checkable, onCheck, selectedDir]);
 
   const handleRename = useCallback(async (newName) => {
     if (!selectedFile) return;
@@ -189,6 +264,8 @@ export function useFileManagerController({
         delete next[selectedFile.path];
         return next;
       });
+      pendingLocalPathsRef.current.delete(selectedFile.path);
+      pendingRemovedPathsRef.current.add(selectedFile.path);
       setSelectedFile(null);
       setCurrentContent('');
       setBinaryDescription('');

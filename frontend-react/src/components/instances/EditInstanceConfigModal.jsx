@@ -118,6 +118,7 @@ function EditInstanceConfigModal({
   const [checkedPlugins, setCheckedPlugins] = useState(new Set());
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
+  const [draftPreset, setDraftPreset] = useState(null); // null = seed from instance; string = seed from preset
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const pluginFileManagerRef = useRef(null);
   const pluginsSyncedRef = useRef(false);
@@ -141,10 +142,11 @@ function EditInstanceConfigModal({
   const { showSuccess, showError } = useNotification(); // Get notification functions
 
   const pluginsAdapter = useDraftAdapter({
-    source: 'instance',
-    host: scriptHostName,
-    instanceId,
-    active: isOpen && scriptHostName != null,
+    source: draftPreset ? 'preset' : 'instance',
+    preset: draftPreset || undefined,
+    host: draftPreset ? undefined : scriptHostName,
+    instanceId: draftPreset ? undefined : instanceId,
+    active: isOpen && (draftPreset != null || scriptHostName != null),
   });
   const {
     hasChanges: configsHaveChanges,
@@ -241,6 +243,7 @@ function EditInstanceConfigModal({
         // Reset scripts state
         setActiveMainTab('config');
         setScriptHostName(null);
+        setDraftPreset(null);
         pluginsSyncedRef.current = false;
         setFactoryServerTree([]);
 
@@ -405,6 +408,8 @@ function EditInstanceConfigModal({
       });
       resetConfigs(newConfigs);
       resetFactories(presetData.factories || {});
+      setCheckedPlugins(new Set(presetData.checked_plugins || []));
+      setDraftPreset(presetData.name);
       const nextHostname = getServerHostname(newConfigs['server.cfg']);
       setServerHostname(nextHostname);
       setSelectedPresetId(presetId);

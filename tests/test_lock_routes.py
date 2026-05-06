@@ -199,6 +199,67 @@ def test_manage_instance_config_releases_lock_on_invalid_qlx_plugins(
     mock_release.assert_called_once()
 
 
+@patch('ui.routes.instance_routes.acquire_lock')
+def test_manage_instance_config_rejects_blank_hostname_before_writing(
+    mock_lock, app_with_instance, tmp_path, monkeypatch
+):
+    """Config PUT must reject blank hostname instead of syncing stale metadata."""
+    monkeypatch.chdir(tmp_path)
+    config_root = tmp_path / 'configs' / 'test-host' / '1'
+    config_root.mkdir(parents=True)
+    server_cfg = config_root / 'server.cfg'
+    server_cfg.write_text('original-config')
+
+    client = app_with_instance.test_client()
+    headers = _get_auth_headers(app_with_instance)
+
+    with app_with_instance.app_context():
+        resp = client.put(
+            '/api/instances/1/config',
+            json={
+                'hostname': '   ',
+                'configs': _full_configs(server_cfg='set sv_hostname ""'),
+            },
+            headers=headers,
+        )
+        instance = db.session.get(QLInstance, 1)
+
+    assert resp.status_code == 400
+    assert 'Server Hostname cannot be empty' in resp.get_json()['error']['message']
+    assert server_cfg.read_text() == 'original-config'
+    assert instance.hostname == 'test-host'
+    assert instance.status == InstanceStatus.RUNNING
+    mock_lock.assert_not_called()
+
+
+@patch('ui.routes.instance_routes.enqueue_task')
+@patch('ui.routes.instance_routes._sync_configs_to_disk', side_effect=OSError('disk full'))
+@patch('ui.routes.instance_routes.release_lock')
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+def test_manage_instance_config_keeps_status_when_filesystem_write_fails(
+    mock_lock, mock_release, mock_sync_configs, mock_enqueue, app_with_instance
+):
+    """Config PUT must not commit CONFIGURING until filesystem writes succeed."""
+    client = app_with_instance.test_client()
+    headers = _get_auth_headers(app_with_instance)
+
+    with app_with_instance.app_context():
+        resp = client.put(
+            '/api/instances/1/config',
+            json={'configs': _full_configs()},
+            headers=headers,
+        )
+        db.session.expire_all()
+        instance = db.session.get(QLInstance, 1)
+
+    assert resp.status_code == 500
+    assert 'disk full' in resp.get_json()['error']['message']
+    assert instance.status == InstanceStatus.RUNNING
+    mock_sync_configs.assert_called_once()
+    mock_enqueue.assert_not_called()
+    mock_release.assert_called_once()
+
+
 @patch('ui.routes.instance_routes.enqueue_task')
 @patch('ui.routes.instance_routes.acquire_lock', return_value=True)
 def test_manage_instance_config_updates_lan_rate_and_queues_single_apply_task(

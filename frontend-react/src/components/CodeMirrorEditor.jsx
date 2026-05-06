@@ -67,7 +67,7 @@ const lightHighlightStyle = HighlightStyle.define([
 const darkEditorTheme = EditorView.theme({
   '& .custom-line-comment': { color: '#6A9955 !important' },
   '&': { height: '100%', backgroundColor: 'transparent !important' },
-  '& .cm-scroller': { backgroundColor: 'transparent !important', scrollbarColor: '#555 transparent' },
+  '& .cm-scroller': { backgroundColor: 'transparent !important', scrollbarColor: 'var(--surface-border-strong) var(--surface-elevated)' },
   '& .cm-content': { backgroundColor: 'transparent !important' },
   '& .cm-gutters': { backgroundColor: 'var(--surface-base) !important', borderRight: '1px solid var(--surface-border)', color: 'var(--text-muted) !important' },
   '& .cm-gutter': { backgroundColor: 'var(--surface-base) !important' },
@@ -75,9 +75,9 @@ const darkEditorTheme = EditorView.theme({
   '& .cm-activeLineGutter': { backgroundColor: 'rgba(255, 255, 255, 0.05) !important' },
   '& .cm-activeLine': { backgroundColor: 'rgba(255, 255, 255, 0.03) !important' },
   '& .cm-scroller::-webkit-scrollbar': { width: '14px', height: '14px' },
-  '& .cm-scroller::-webkit-scrollbar-track': { background: 'transparent' },
-  '& .cm-scroller::-webkit-scrollbar-thumb': { background: '#555', borderRadius: '4px' },
-  '& .cm-scroller::-webkit-scrollbar-thumb:hover': { background: '#777' },
+  '& .cm-scroller::-webkit-scrollbar-track': { background: 'var(--surface-elevated)', borderRadius: '4px' },
+  '& .cm-scroller::-webkit-scrollbar-thumb': { background: 'var(--surface-border-strong)', borderRadius: '4px', border: '3px solid var(--surface-elevated)' },
+  '& .cm-scroller::-webkit-scrollbar-thumb:hover': { background: 'var(--text-muted)' },
   '& .cm-panels': { backgroundColor: '#1e1e1e', zIndex: '100' },
   '& .cm-panels-top': { borderBottom: '1px solid #444' },
   '& .cm-search': { padding: '4px 8px' },
@@ -90,7 +90,7 @@ const darkEditorTheme = EditorView.theme({
 // Light editor chrome theme
 const lightEditorTheme = EditorView.theme({
   '&': { height: '100%', backgroundColor: '#f6f8fa !important' },
-  '& .cm-scroller': { backgroundColor: '#f6f8fa !important', scrollbarColor: '#c1c8d1 transparent' },
+  '& .cm-scroller': { backgroundColor: '#f6f8fa !important', scrollbarColor: 'var(--surface-border-strong) var(--surface-elevated)' },
   '& .cm-content': { backgroundColor: 'transparent !important', color: '#24292f' },
   '& .cm-gutters': { backgroundColor: '#eef1f5 !important', borderRight: '1px solid #d0d7de !important', color: '#636c76 !important' },
   '& .cm-gutter': { backgroundColor: '#eef1f5 !important' },
@@ -101,9 +101,9 @@ const lightEditorTheme = EditorView.theme({
   '& .cm-selectionBackground': { backgroundColor: 'rgba(59, 130, 246, 0.2) !important' },
   '& .cm-matchingBracket': { backgroundColor: 'rgba(5, 80, 174, 0.15) !important', color: '#0550ae !important' },
   '& .cm-scroller::-webkit-scrollbar': { width: '14px', height: '14px' },
-  '& .cm-scroller::-webkit-scrollbar-track': { background: 'transparent' },
-  '& .cm-scroller::-webkit-scrollbar-thumb': { background: '#c1c8d1', borderRadius: '4px' },
-  '& .cm-scroller::-webkit-scrollbar-thumb:hover': { background: '#a0a8b4' },
+  '& .cm-scroller::-webkit-scrollbar-track': { background: 'var(--surface-elevated)', borderRadius: '4px' },
+  '& .cm-scroller::-webkit-scrollbar-thumb': { background: 'var(--surface-border-strong)', borderRadius: '4px', border: '3px solid var(--surface-elevated)' },
+  '& .cm-scroller::-webkit-scrollbar-thumb:hover': { background: 'var(--text-muted)' },
   '& .cm-panels': { backgroundColor: '#eef1f5', zIndex: '100', color: '#24292f' },
   '& .cm-panels-top': { borderBottom: '1px solid #d0d7de' },
   '& .cm-search': { padding: '4px 8px' },
@@ -119,6 +119,7 @@ const getExtensions = (currentLanguage, currentLinterSource, onChangeCallback, i
 
   const baseExtensions = [
     lineNumbers(),
+    lintGutter(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     history(),
@@ -178,10 +179,9 @@ const getExtensions = (currentLanguage, currentLinterSource, onChangeCallback, i
 
     }
 
-    // Add linter and gutter if a linter function was determined
+    // The gutter is always present so text alignment is stable across file types.
     if (activeLinter) {
       baseExtensions.push(linter(activeLinter));
-      baseExtensions.push(lintGutter());
     }
   }
   return baseExtensions;

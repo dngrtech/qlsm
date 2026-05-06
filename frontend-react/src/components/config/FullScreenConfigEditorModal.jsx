@@ -102,7 +102,7 @@ const FullScreenConfigEditorModal = ({
                     </button>
                   </div>
 
-                  <div className="relative z-10 flex-grow overflow-hidden min-h-0">
+                  <div className="relative z-10 flex-grow overflow-hidden min-h-0 bg-[var(--surface-base)]">
                     <CodeMirrorEditor
                       value={currentContent}
                       onChange={handleContentChange}

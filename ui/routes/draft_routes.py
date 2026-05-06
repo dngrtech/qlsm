@@ -191,7 +191,7 @@ def _build_draft_tree(path, base_path=None):
 
 TEXT_EXTENSIONS = {'.py', '.txt'}
 MAX_TEXT_FILE_SIZE = 256 * 1024      # 256KB for .py, .txt
-MAX_BINARY_FILE_SIZE = 100 * 1024    # 100KB for .so
+MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024  # 10MB for .so
 ELF_MAGIC = b'\x7fELF'
 
 

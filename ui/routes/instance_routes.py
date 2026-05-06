@@ -744,11 +744,10 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
             if not stripped_name:
                 return jsonify({"error": {"message": "Name cannot be empty"}}), 400
             existing_instance = QLInstance.query.filter(
-                QLInstance.host_id == instance.host_id,
                 db.func.lower(QLInstance.name) == stripped_name.lower()
             ).first()
             if existing_instance and existing_instance.id != instance.id:
-                return jsonify({"error": {"message": f"An instance with the name '{stripped_name}' already exists on this host."}}), 409
+                return jsonify({"error": {"message": f"An instance with the name '{stripped_name}' already exists."}}), 409
             metadata_update_kwargs['name'] = stripped_name
 
         new_hostname = data.get('hostname')
@@ -756,10 +755,11 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
             if not isinstance(new_hostname, str):
                 return jsonify({"error": {"message": "Server Hostname must be a string"}}), 400
             stripped_hostname = new_hostname.strip()
-            if stripped_hostname:
-                if len(stripped_hostname) > 64:
-                    return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
-                metadata_update_kwargs['hostname'] = stripped_hostname
+            if not stripped_hostname:
+                return jsonify({"error": {"message": "Server Hostname cannot be empty."}}), 400
+            if len(stripped_hostname) > 64:
+                return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
+            metadata_update_kwargs['hostname'] = stripped_hostname
 
         if (
             'lan_rate_enabled' in data and
@@ -803,6 +803,7 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
         if not acquire_lock('instance', instance.id, lock_token, ttl=360):
             return jsonify({"error": {"message": f'Another operation is running on instance "{instance.name}". Please wait for it to complete.'}}), 409
         lock_transferred = False
+        status_committed = False
 
         try:
             checked_plugins = data.get('checked_plugins')
@@ -822,12 +823,6 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 if qlx_err:
                     return jsonify({"error": {"message": qlx_err}}), 400
                 update_kwargs['qlx_plugins'] = validated_plugins
-
-            try:
-                update_instance(instance.id, **update_kwargs)
-            except sqlalchemy.exc.IntegrityError:
-                db.session.rollback()
-                return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
 
             if configs_present:
                 _sync_configs_to_disk(instance_config_dir, configs_to_save)
@@ -863,6 +858,13 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 instance_factories_dir = os.path.join(instance_config_dir, 'factories')
                 _sync_factories_to_disk(instance_factories_dir, factories_to_save)
 
+            try:
+                update_instance(instance.id, **update_kwargs)
+                status_committed = True
+            except sqlalchemy.exc.IntegrityError:
+                db.session.rollback()
+                return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
+
             restart = data.get('restart', True)
             job = enqueue_task(apply_instance_config, instance.id, restart=restart, lock_token=lock_token, on_failure=instance_job_failure_handler)
             if job:
@@ -876,6 +878,11 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
 
         except Exception as e:
             current_app.logger.error(f"Error saving updated config files for instance {instance.id}: {e}", exc_info=True)
+            if status_committed:
+                try:
+                    update_instance(instance.id, status=InstanceStatus.ERROR)
+                except Exception as status_error:
+                    current_app.logger.error(f"Failed to mark instance {instance.id} ERROR after config save failure: {status_error}", exc_info=True)
             return jsonify({"error": {"message": f'Error saving configuration files: {str(e)}'}}), 500
         finally:
             if not lock_transferred:
