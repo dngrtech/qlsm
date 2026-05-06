@@ -58,6 +58,8 @@ export function useFileManagerController({
 
   const files = adapter.tree || EMPTY_TREE;
   const flatFiles = useMemo(() => flattenFiles(files), [files]);
+  const serializeAdapter = adapter.serialize;
+  const serializedFiles = useMemo(() => serializeAdapter?.(), [serializeAdapter]);
   const effectiveCheckedFiles = checkedFiles || adapter.checkedFiles || emptyCheckedFiles;
   const effectiveOnCheck = onCheck || adapter.setChecked || noopCheck;
   const selectedDir = dirname(selectedFile?.path || '');
@@ -81,6 +83,13 @@ export function useFileManagerController({
     setCurrentContent('');
     setBinaryDescription('');
   }, [adapter.resetCount]);
+
+  useEffect(() => {
+    if (!selectedFile || !serializedFiles) return;
+    if (!Object.prototype.hasOwnProperty.call(serializedFiles, selectedFile.path)) return;
+    const nextContent = serializedFiles[selectedFile.path] ?? '';
+    setCurrentContent(prev => (prev === nextContent ? prev : nextContent));
+  }, [selectedFile, serializedFiles]);
 
   const handleSelectFile = useCallback(async (item) => {
     if (!item || item.type === 'folder') return;

@@ -16,6 +16,20 @@ function createAdapter(tree) {
   };
 }
 
+function createSerializableAdapter(files) {
+  return {
+    tree: Object.keys(files).map(path => ({ name: path, path, type: 'file' })),
+    readContent: vi.fn(path => Promise.resolve(files[path] || '')),
+    writeContent: vi.fn().mockResolvedValue(undefined),
+    upload: vi.fn(),
+    deleteFile: vi.fn(),
+    renameFile: vi.fn(),
+    serialize: () => ({ ...files }),
+    loading: false,
+    error: null,
+  };
+}
+
 describe('useFileManagerController initial selection', () => {
   it('does not auto-select unchecked files in checkable managers', async () => {
     const adapter = createAdapter([
@@ -121,5 +135,32 @@ describe('useFileManagerController initial selection', () => {
     expect(setChecked).not.toHaveBeenCalled();
     expect(result.current.actionError).toBeNull();
     expect(result.current.selectedFile?.path).toBe('new.factories');
+  });
+
+  it('refreshes the selected editor when adapter content changes externally', async () => {
+    const { result, rerender } = renderHook(
+      ({ files }) => useFileManagerController({
+        adapter: createSerializableAdapter(files),
+        capabilities: { allowedExtensions: ['.cfg'] },
+        defaultSelectedPath: 'server.cfg',
+      }),
+      {
+        initialProps: {
+          files: {
+            'server.cfg': 'set sv_hostname "Old"',
+          },
+        },
+      },
+    );
+
+    await waitFor(() => expect(result.current.currentContent).toBe('set sv_hostname "Old"'));
+
+    rerender({
+      files: {
+        'server.cfg': 'set sv_hostname "New"',
+      },
+    });
+
+    await waitFor(() => expect(result.current.currentContent).toBe('set sv_hostname "New"'));
   });
 });
