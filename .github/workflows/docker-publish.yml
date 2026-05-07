@@ -105,7 +105,7 @@ jobs:
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous
           docker tag  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous \
                       ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          docker compose -f /root/qlsm/docker-compose.yml up -d
+          docker compose -f /root/qlsm/docker-compose.yml up -d --wait
 
       - name: Report status
         run: docker compose -f /root/qlsm/docker-compose.yml ps
