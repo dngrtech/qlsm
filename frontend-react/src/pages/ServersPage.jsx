@@ -78,7 +78,7 @@ export default function ServersPage() {
     const [rconKey, setRconKey] = useState(null); // { instanceId, hostId }
     const [isRconConsoleOpen, setIsRconConsoleOpen] = useState(false);
     const handleOpenRconConsole = (instance) => { setRconKey({ instanceId: instance.id, hostId: instance.host_id }); setIsRconConsoleOpen(true); };
-    const handleCloseRconConsole = () => { setIsRconConsoleOpen(false); setRconKey(null); };
+    const handleCloseRconConsole = () => { setIsRconConsoleOpen(false); };
     const rconInstance = useMemo(() => {
         if (!rconKey) return null;
         const host = serversData.find(h => h.id === rconKey.hostId);
@@ -355,7 +355,7 @@ export default function ServersPage() {
             <ForceUpdateWorkshopModal isOpen={isWorkshopModalOpen} onClose={closeWorkshopModal} onSubmit={handleWorkshopUpdateSubmit} host={hostForWorkshopUpdate} />
             <HostAutoRestartScheduleModal isOpen={isAutoRestartModalOpen} onClose={closeAutoRestartModal} onSubmit={handleAutoRestartSubmit} host={hostForAutoRestart} />
             <ResizeHostModal isOpen={isResizeModalOpen} onClose={closeResizeModal} onSubmit={handleResizeSubmit} host={hostForResize} error={resizeError} isSubmitting={isResizeSubmitting} />
-            {isRconConsoleOpen && rconInstance && <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />}
+            <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />
             <LiveServerStatusModal isOpen={isLiveStatusOpen} onClose={() => setIsLiveStatusOpen(false)} instance={selectedLiveStatusInstance} serverStatus={selectedLiveStatusInstance ? serverStatusMap[String(selectedLiveStatusInstance.id)] : null} />
         </div>
     );
