@@ -6,8 +6,8 @@
  * Uses CodeMirror 6 with a custom Quake color extension for output display.
  */
 
-import React, { useState, useRef, useEffect, useCallback, useMemo, Fragment } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, Terminal, Wifi, WifiOff, RefreshCw, Send } from 'lucide-react';
 import { useRconSocket } from '../hooks/useRconSocket';
 
@@ -235,38 +235,20 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
     const StatusIcon = statusStyles.icon;
 
     return (
-        <Transition appear show={isOpen} as={Fragment}>
-            <Dialog
+        <Dialog
+                open={isOpen}
                 as="div"
                 className="relative z-50"
                 onClose={onClose}
                 initialFocus={inputRef}
             >
-                <Transition.Child
-                    as={Fragment}
-                    enter="ease-out duration-300"
-                    enterFrom="opacity-0"
-                    enterTo="opacity-100"
-                    leave="ease-in duration-200"
-                    leaveFrom="opacity-100"
-                    leaveTo="opacity-0"
-                >
-                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-                </Transition.Child>
+            <DialogBackdrop transition className="fixed inset-0 bg-black/60 backdrop-blur-sm transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
                 <div className="fixed inset-0 overflow-y-auto">
                     <div className="flex min-h-full items-center justify-center p-4 text-center">
-                        <Transition.Child
-                            as={Fragment}
-                            enter="ease-out duration-300"
-                            enterFrom="opacity-0 scale-95"
-                            enterTo="opacity-100 scale-100"
-                            leave="ease-in duration-200"
-                            leaveFrom="opacity-100 scale-100"
-                            leaveTo="opacity-0 scale-95"
-                        >
                             <Dialog.Panel
-                                className="rcon-console-modal w-full transform overflow-hidden rounded-xl bg-theme-raised border border-theme-strong text-left align-middle shadow-xl transition-all flex flex-col relative"
+                                transition
+                                className="rcon-console-modal w-full transform overflow-hidden rounded-xl bg-theme-raised border border-theme-strong text-left align-middle shadow-xl transition-all flex flex-col relative transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95"
                                 style={{ height: '70vh', maxWidth: '1000px' }}
                             >
                                 {/* Accent line at top */}
@@ -355,11 +337,9 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
                                     </button>
                                 </form>
                             </Dialog.Panel>
-                        </Transition.Child>
                     </div>
                 </div>
-            </Dialog>
-        </Transition>
+        </Dialog>
     );
 }
 

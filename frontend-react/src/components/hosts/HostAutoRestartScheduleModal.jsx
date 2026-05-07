@@ -1,5 +1,5 @@
-import React, { useState, Fragment, useEffect } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { PowerIcon, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { WheelPicker, WheelPickerWrapper } from '@ncdai/react-wheel-picker';
@@ -101,8 +101,6 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
         }
     }, [isOpen, host]);
 
-    if (!host) return null;
-
     const handleClose = () => onClose();
 
     const toggleDay = (day) =>
@@ -129,7 +127,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                 onCalendarStr = `*-*-${selectedDates.join(',')} ${timeStr}`;
             }
         }
-        onSubmit(host.id, onCalendarStr);
+        onSubmit(host?.id, onCalendarStr);
         handleClose();
     };
 
@@ -142,32 +140,12 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
     };
 
     return (
-        <Transition appear show={isOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-50" onClose={handleClose}>
-                <Transition.Child
-                    as={Fragment}
-                    enter="ease-out duration-300"
-                    enterFrom="opacity-0"
-                    enterTo="opacity-100"
-                    leave="ease-in duration-200"
-                    leaveFrom="opacity-100"
-                    leaveTo="opacity-0"
-                >
-                    <div className="modal-backdrop fixed inset-0" aria-hidden="true" />
-                </Transition.Child>
+        <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleClose}>
+            <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
                 <div className="fixed inset-0 overflow-y-auto scrollbar-thick">
                     <div className="flex min-h-full items-center justify-center p-4">
-                        <Transition.Child
-                            as={Fragment}
-                            enter="ease-out duration-300"
-                            enterFrom="opacity-0 translate-y-4 scale-95"
-                            enterTo="opacity-100 translate-y-0 scale-100"
-                            leave="ease-in duration-200"
-                            leaveFrom="opacity-100 scale-100"
-                            leaveTo="opacity-0 scale-95"
-                        >
-                            <Dialog.Panel className="modal-panel w-full max-w-[480px] transform p-6 text-left align-middle transition-all">
+                            <Dialog.Panel transition className="modal-panel w-full max-w-[480px] transform p-6 text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:translate-y-4 data-[closed]:scale-95">
                                 <div className="accent-line-top" />
 
                                 {/* Header */}
@@ -185,7 +163,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                 <form onSubmit={handleSubmit}>
                                     <div className="space-y-6">
                                         <p className="text-sm text-[var(--text-muted)]">
-                                            Schedule automated reboots for <strong>{host.name}</strong>. Reboots will
+                                            Schedule automated reboots for <strong>{host?.name}</strong>. Reboots will
                                             automatically update workshop items on all QL instances.
                                         </p>
 
@@ -315,7 +293,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                                             <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
                                                                 Timezone:{' '}
                                                                 <span className="font-medium text-[var(--accent-primary)]">
-                                                                    {host.timezone || 'UTC'}
+                                                                    {host?.timezone || 'UTC'}
                                                                 </span>
                                                             </p>
                                                         </div>
@@ -358,11 +336,9 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                     </div>
                                 </form>
                             </Dialog.Panel>
-                        </Transition.Child>
                     </div>
                 </div>
-            </Dialog>
-        </Transition>
+        </Dialog>
     );
 }
 

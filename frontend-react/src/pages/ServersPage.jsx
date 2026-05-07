@@ -78,7 +78,7 @@ export default function ServersPage() {
     const [rconKey, setRconKey] = useState(null); // { instanceId, hostId }
     const [isRconConsoleOpen, setIsRconConsoleOpen] = useState(false);
     const handleOpenRconConsole = (instance) => { setRconKey({ instanceId: instance.id, hostId: instance.host_id }); setIsRconConsoleOpen(true); };
-    const handleCloseRconConsole = () => { setIsRconConsoleOpen(false); setRconKey(null); };
+    const handleCloseRconConsole = () => { setIsRconConsoleOpen(false); };
     const rconInstance = useMemo(() => {
         if (!rconKey) return null;
         const host = serversData.find(h => h.id === rconKey.hostId);
@@ -346,12 +346,8 @@ export default function ServersPage() {
             <AddInstanceModal isOpen={isAddInstanceModalOpen} onClose={() => { setIsAddInstanceModalOpen(false); setAddInstanceModalHostId(null); }} onInstanceAdded={() => { setAddInstanceModalHostId(null); refreshData(false); }} initialHostId={addInstanceModalHostId} />
             <HostDetailDrawer host={currentHostForDrawer || selectedHostId} open={isHostDrawerOpen} onClose={() => setIsHostDrawerOpen(false)} onHostUpdated={() => refreshData(false)} onHostDeleted={() => refreshData(false)} onDeleteHost={(host) => requestDeleteHost({ id: host.id, name: host.name })} onRequestRestart={handleRequestHostRestart} onQlfilterAction={handleQlfilterAction} onSwitchToInstanceDrawer={(instanceId) => { setIsHostDrawerOpen(false); handleOpenInstanceDetails(instanceId); }} />
             <InstanceDetailsModal isOpen={isInstanceDetailsOpen} onClose={() => setIsInstanceDetailsOpen(false)} instanceId={selectedInstanceId} onInstanceDeleted={() => refreshData(false)} onInstanceUpdated={() => refreshData(false)} onOpenEditConfig={handleOpenEditConfig} onOpenHostDrawer={(hostId) => { setIsInstanceDetailsOpen(false); handleOpenHostDrawer(hostId); }} serverStatus={selectedInstanceId ? serverStatusMap[String(selectedInstanceId)] : null} />
-            {selectedInstanceForConfig && (
-                <EditInstanceConfigModal isOpen={isEditConfigOpen} onClose={() => { setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); }} instanceId={selectedInstanceForConfig.id} instanceName={selectedInstanceForConfig.name} onConfigSaved={() => { refreshData(false); setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); }} />
-            )}
-            {hostForRestart && (
-                <ConfirmationModal isOpen={isHostRestartModalOpen} onClose={closeHostRestartModal} onConfirm={confirmHostRestart} title={`Restart Host "${hostForRestart.name}"`} message={`Are you sure you want to restart host "${hostForRestart.name}"? This will temporarily make the host and its instances unavailable.`} confirmButtonText="Restart" confirmButtonVariant="warning" />
-            )}
+            <EditInstanceConfigModal isOpen={isEditConfigOpen} onClose={() => { setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); }} instanceId={selectedInstanceForConfig?.id} instanceName={selectedInstanceForConfig?.name} onConfigSaved={() => { refreshData(false); setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); }} />
+            <ConfirmationModal isOpen={isHostRestartModalOpen} onClose={closeHostRestartModal} onConfirm={confirmHostRestart} title={`Restart Host "${hostForRestart?.name}"`} message={`Are you sure you want to restart host "${hostForRestart?.name}"? This will temporarily make the host and its instances unavailable.`} confirmButtonText="Restart" confirmButtonVariant="warning" />
             <ViewLogsModal isOpen={isViewLogsModalOpen} onClose={closeViewLogsModal} instance={selectedInstanceForLogs} />
             <ViewChatLogsModal isOpen={isViewChatLogsModalOpen} onClose={closeViewChatLogsModal} instance={selectedInstanceForChatLogs} />
             <ConfirmationModal isOpen={isLanRateModalOpen} onClose={closeLanRateModal} onConfirm={confirmToggleLanRate} title={lanRateAction?.enabling ? 'Enable 99k LAN Rate' : 'Disable 99k LAN Rate'} message={`Are you sure you want to ${lanRateAction?.enabling ? 'enable' : 'disable'} 99k LAN rate mode for instance "${lanRateAction?.name}"? The instance will be reconfigured and restarted.`} confirmButtonText={lanRateAction?.enabling ? 'Enable' : 'Disable'} confirmButtonVariant="amber" />
@@ -359,7 +355,7 @@ export default function ServersPage() {
             <ForceUpdateWorkshopModal isOpen={isWorkshopModalOpen} onClose={closeWorkshopModal} onSubmit={handleWorkshopUpdateSubmit} host={hostForWorkshopUpdate} />
             <HostAutoRestartScheduleModal isOpen={isAutoRestartModalOpen} onClose={closeAutoRestartModal} onSubmit={handleAutoRestartSubmit} host={hostForAutoRestart} />
             <ResizeHostModal isOpen={isResizeModalOpen} onClose={closeResizeModal} onSubmit={handleResizeSubmit} host={hostForResize} error={resizeError} isSubmitting={isResizeSubmitting} />
-            {isRconConsoleOpen && rconInstance && <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />}
+            <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />
             <LiveServerStatusModal isOpen={isLiveStatusOpen} onClose={() => setIsLiveStatusOpen(false)} instance={selectedLiveStatusInstance} serverStatus={selectedLiveStatusInstance ? serverStatusMap[String(selectedLiveStatusInstance.id)] : null} />
         </div>
     );

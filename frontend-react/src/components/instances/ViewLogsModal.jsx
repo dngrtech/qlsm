@@ -1,5 +1,5 @@
-import React, { useState, useEffect, Fragment } from 'react';
-import { Dialog, Transition, RadioGroup } from '@headlessui/react';
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogBackdrop, RadioGroup } from '@headlessui/react';
 import { X, RefreshCw, Terminal, AlertCircle, Clock, List, Maximize, DatabaseZap } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import ExpandedEditorModal from '../ExpandedEditorModal';
@@ -105,32 +105,12 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
 
     return (
         <>
-            <Transition appear show={isOpen} as={Fragment}>
-                <Dialog as="div" className="relative z-50" onClose={onClose}>
-                <Transition.Child
-                    as={Fragment}
-                    enter="ease-out duration-300"
-                    enterFrom="opacity-0"
-                    enterTo="opacity-100"
-                    leave="ease-in duration-200"
-                    leaveFrom="opacity-100"
-                    leaveTo="opacity-0"
-                >
-                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-                </Transition.Child>
+            <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
+                <DialogBackdrop transition className="fixed inset-0 bg-black/60 backdrop-blur-sm transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
                 <div className="fixed inset-0 overflow-y-auto">
                     <div className="flex min-h-full items-center justify-center p-4 text-center">
-                        <Transition.Child
-                            as={Fragment}
-                            enter="ease-out duration-300"
-                            enterFrom="opacity-0 scale-95"
-                            enterTo="opacity-100 scale-100"
-                            leave="ease-in duration-200"
-                            leaveFrom="opacity-100 scale-100"
-                            leaveTo="opacity-0 scale-95"
-                        >
-                            <Dialog.Panel className="view-logs-modal w-full transform overflow-hidden rounded-xl bg-theme-raised border border-theme-strong text-left align-middle shadow-xl transition-all flex flex-col relative" style={{ height: '80vh', maxWidth: '1400px' }}>
+                            <Dialog.Panel transition className="view-logs-modal w-full transform overflow-hidden rounded-xl bg-theme-raised border border-theme-strong text-left align-middle shadow-xl transition-all flex flex-col relative transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95" style={{ height: '80vh', maxWidth: '1400px' }}>
                                 {/* Accent line at top */}
                                 <div className="accent-line-top" />
 
@@ -301,11 +281,9 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                                     )}
                                 </div>
                             </Dialog.Panel>
-                        </Transition.Child>
                     </div>
                 </div>
-                </Dialog>
-            </Transition>
+            </Dialog>
 
             {isExpandedEditorOpen && (
                 <ExpandedEditorModal

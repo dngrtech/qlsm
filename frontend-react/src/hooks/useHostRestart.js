@@ -34,12 +34,10 @@ export function useHostRestart(showSuccess, showError, refreshFn) {
             showError(errorMsg);
         }
         setIsRestartModalOpen(false);
-        setHostForRestart(null);
     };
 
     const closeRestartModal = () => {
         setIsRestartModalOpen(false);
-        setHostForRestart(null);
     };
 
     return { hostForRestart, isRestartModalOpen, requestRestart, confirmRestart, closeRestartModal };
