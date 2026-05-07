@@ -24,6 +24,7 @@ on:
       # Game assets & bootstrap data
       - "ql-assets/**"
       - "configs/presets/default/**"
+      - "configs/presets/_builtin/**"
       # Build definition itself
       - "Dockerfile"
       - ".dockerignore"
@@ -94,8 +95,8 @@ jobs:
     steps:
       - name: Pull and deploy new image
         run: |
-          docker compose -f /opt/qlsm/docker-compose.yml pull
-          docker compose -f /opt/qlsm/docker-compose.yml up -d --wait
+          docker compose -f /root/qlsm/docker-compose.yml pull
+          docker compose -f /root/qlsm/docker-compose.yml up -d --wait
 
       - name: Auto-rollback on failure
         if: failure()
@@ -104,7 +105,7 @@ jobs:
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous
           docker tag  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:previous \
                       ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          docker compose -f /opt/qlsm/docker-compose.yml up -d
+          docker compose -f /root/qlsm/docker-compose.yml up -d
 
       - name: Report status
-        run: docker compose -f /opt/qlsm/docker-compose.yml ps
+        run: docker compose -f /root/qlsm/docker-compose.yml ps
