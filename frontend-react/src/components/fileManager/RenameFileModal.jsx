@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import { useEffect, useState } from 'react';
+import { Dialog } from '@headlessui/react';
 import { Pencil, X } from 'lucide-react';
 
 function getExtension(name) {
@@ -52,31 +52,11 @@ export default function RenameFileModal({
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[60]" onClose={onClose}>
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-200"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-150"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="modal-backdrop fixed inset-0" />
-        </Transition.Child>
+    <Dialog open={isOpen} as="div" className="relative z-[60]" onClose={onClose}>
+      <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-200 data-[leave]:ease-in data-[leave]:duration-150 data-[closed]:opacity-0" />
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-200"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-150"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="modal-panel w-full max-w-md p-6">
+              <Dialog.Panel transition className="modal-panel w-full max-w-md p-6 transition data-[enter]:ease-out data-[enter]:duration-200 data-[leave]:ease-in data-[leave]:duration-150 data-[closed]:opacity-0 data-[closed]:scale-95">
                 <Dialog.Title className="text-lg font-display font-semibold uppercase tracking-wider text-[var(--text-primary)] mb-4 flex items-center justify-between">
                   Rename File
                   <button type="button" onClick={onClose} className="logs-modal-close-btn">
@@ -113,10 +93,8 @@ export default function RenameFileModal({
                   </button>
                 </div>
               </Dialog.Panel>
-            </Transition.Child>
           </div>
         </div>
-      </Dialog>
-    </Transition>
+    </Dialog>
   );
 }

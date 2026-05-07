@@ -1,5 +1,5 @@
-import React, { Fragment, useState, useEffect } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import React, { useState, useEffect } from 'react';
+import { Dialog } from '@headlessui/react';
 import { X, KeyRound, AlertTriangle, LoaderCircle } from 'lucide-react';
 
 function ResetPasswordModal({ isOpen, onClose, onSubmit, user }) {
@@ -66,32 +66,12 @@ function ResetPasswordModal({ isOpen, onClose, onSubmit, user }) {
   if (!user) return null;
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleClose}>
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="modal-backdrop fixed inset-0" />
-        </Transition.Child>
+    <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleClose}>
+      <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 translate-y-4 scale-95"
-              enterTo="opacity-100 translate-y-0 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="modal-panel w-full max-w-md transform p-6 text-left align-middle transition-all">
+              <Dialog.Panel transition className="modal-panel w-full max-w-md transform p-6 text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:translate-y-4 data-[closed]:scale-95">
                 {/* Accent line decoration */}
                 <div className="accent-line-top" />
 
@@ -186,11 +166,9 @@ function ResetPasswordModal({ isOpen, onClose, onSubmit, user }) {
                   </div>
                 </form>
               </Dialog.Panel>
-            </Transition.Child>
           </div>
         </div>
-      </Dialog>
-    </Transition>
+    </Dialog>
   );
 }
 

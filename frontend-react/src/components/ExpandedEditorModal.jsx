@@ -1,5 +1,5 @@
-import React, { Fragment } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import React from 'react';
+import { Dialog } from '@headlessui/react';
 import CodeMirrorEditor from './CodeMirrorEditor';
 import { X } from 'lucide-react';
 
@@ -15,32 +15,12 @@ function ExpandedEditorModal({
   titlePrefix = 'Editing:',
 }) {
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-[70]" onClose={onClose}>
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
-        >
-          <div className="modal-backdrop fixed inset-0" aria-hidden="true" />
-        </Transition.Child>
+    <Dialog open={isOpen} as="div" className="relative z-[70]" onClose={onClose}>
+      <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="modal-panel flex flex-col w-[95vw] h-[95vh] transform overflow-hidden text-left align-middle transition-all">
+              <Dialog.Panel transition className="modal-panel flex flex-col w-[95vw] h-[95vh] transform overflow-hidden text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95">
                 <div className="accent-line-top" />
 
                 <div className="relative z-10 flex items-center justify-between p-4 border-b border-[var(--surface-border)]">
@@ -82,11 +62,9 @@ function ExpandedEditorModal({
                   </button>
                 </div>
               </Dialog.Panel>
-            </Transition.Child>
           </div>
         </div>
-      </Dialog>
-    </Transition>
+    </Dialog>
   );
 }
 

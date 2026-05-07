@@ -1,5 +1,5 @@
-import React, { useState, useEffect, Fragment, useCallback } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Dialog } from '@headlessui/react';
 import { AlertTriangle, LoaderCircle, X } from 'lucide-react';
 import AddInstanceForm from '../addInstance/AddInstanceForm';
 import { getHosts, getPresets, getPresetById, getDefaultConfigFile, createInstance } from '../../services/api';
@@ -146,32 +146,12 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
 
   return (
     <>
-      <Transition appear show={isOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={handleAttemptClose}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="modal-backdrop fixed inset-0" aria-hidden="true" />
-          </Transition.Child>
+      <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleAttemptClose}>
+        <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
           <div className="fixed inset-0 overflow-y-auto scrollbar-thick">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 translate-y-4 scale-95"
-                enterTo="opacity-100 translate-y-0 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <Dialog.Panel className="modal-panel w-full max-w-[87.1rem] transform p-4 lg:p-6 text-left align-middle transition-all h-[90vh] max-h-[90vh] flex flex-col">
+                <Dialog.Panel transition className="modal-panel w-full max-w-[87.1rem] transform p-4 lg:p-6 text-left align-middle transition-all h-[90vh] max-h-[90vh] flex flex-col transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:translate-y-4 data-[closed]:scale-95">
                   {/* Accent line decoration (dark mode only) */}
                   <div className="accent-line-top" />
 
@@ -236,11 +216,9 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
                     )}
                   </div>
                 </Dialog.Panel>
-              </Transition.Child>
             </div>
           </div>
-        </Dialog>
-      </Transition>
+      </Dialog>
 
       <ConfirmationModal
         isOpen={showCloseConfirmModal}
