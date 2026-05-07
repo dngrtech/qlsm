@@ -6,9 +6,7 @@ function ForceUpdateWorkshopModal({ isOpen, onClose, onSubmit, host }) {
     const [workshopId, setWorkshopId] = useState('');
     const [selectedInstances, setSelectedInstances] = useState({});
 
-    if (!host) return null;
-
-    const validInstances = host.instances?.filter(instance => {
+    const validInstances = host?.instances?.filter(instance => {
         const s = instance.status?.toLowerCase();
         return s !== 'deleting' && s !== 'error' && s !== 'deploying' && s !== 'configuring' && s !== 'restarting';
     }) || [];

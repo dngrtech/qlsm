@@ -193,7 +193,6 @@ function UserManagementPage() {
         isOpen={isResetPasswordModalOpen}
         onClose={() => {
           setIsResetPasswordModalOpen(false);
-          setSelectedUserForReset(null);
         }}
         onSubmit={handleResetPassword}
         user={selectedUserForReset}

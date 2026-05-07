@@ -15,7 +15,6 @@ export function useHostResize(showSuccess, showError, onSuccess) {
 
     const closeResizeModal = useCallback(() => {
         setIsResizeModalOpen(false);
-        setHostForResize(null);
         setResizeError('');
     }, []);
 

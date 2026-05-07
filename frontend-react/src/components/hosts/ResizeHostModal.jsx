@@ -11,11 +11,9 @@ function ResizeHostModal({ isOpen, onClose, onSubmit, host, error, isSubmitting 
         if (!isOpen) setSelectedPlan('');
     }, [isOpen]);
 
-    if (!host) return null;
-
-    const currentPlanId = host.machine_size;
-    const currentPlan = getPlan('vultr', currentPlanId);
-    const upgradeOptions = getUpgradeOptions('vultr', currentPlanId, host.region);
+    const currentPlanId = host?.machine_size;
+    const currentPlan = host ? getPlan('vultr', currentPlanId) : null;
+    const upgradeOptions = host ? getUpgradeOptions('vultr', currentPlanId, host.region) : [];
     const noUpgrades = upgradeOptions.length === 0;
 
     const handleClose = () => {
@@ -57,7 +55,7 @@ function ResizeHostModal({ isOpen, onClose, onSubmit, host, error, isSubmitting 
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div>
                                         <label className="label-tech mb-1.5 block">Host</label>
-                                        <p className="text-sm font-mono text-[var(--text-primary)]">{host.name}</p>
+                                        <p className="text-sm font-mono text-[var(--text-primary)]">{host?.name}</p>
                                     </div>
 
                                     <div>

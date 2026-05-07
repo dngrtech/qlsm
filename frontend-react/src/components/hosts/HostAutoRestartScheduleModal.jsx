@@ -101,8 +101,6 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
         }
     }, [isOpen, host]);
 
-    if (!host) return null;
-
     const handleClose = () => onClose();
 
     const toggleDay = (day) =>
@@ -129,7 +127,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                 onCalendarStr = `*-*-${selectedDates.join(',')} ${timeStr}`;
             }
         }
-        onSubmit(host.id, onCalendarStr);
+        onSubmit(host?.id, onCalendarStr);
         handleClose();
     };
 
@@ -165,7 +163,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                 <form onSubmit={handleSubmit}>
                                     <div className="space-y-6">
                                         <p className="text-sm text-[var(--text-muted)]">
-                                            Schedule automated reboots for <strong>{host.name}</strong>. Reboots will
+                                            Schedule automated reboots for <strong>{host?.name}</strong>. Reboots will
                                             automatically update workshop items on all QL instances.
                                         </p>
 
@@ -295,7 +293,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                                             <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
                                                                 Timezone:{' '}
                                                                 <span className="font-medium text-[var(--accent-primary)]">
-                                                                    {host.timezone || 'UTC'}
+                                                                    {host?.timezone || 'UTC'}
                                                                 </span>
                                                             </p>
                                                         </div>

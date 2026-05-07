@@ -12,7 +12,6 @@ export function useWorkshopUpdate(showSuccess, showError, onSuccess) {
 
     const closeWorkshopModal = useCallback(() => {
         setIsWorkshopModalOpen(false);
-        setHostForWorkshopUpdate(null);
     }, []);
 
     const handleWorkshopUpdateSubmit = useCallback(async (workshopId, restartInstanceIds) => {

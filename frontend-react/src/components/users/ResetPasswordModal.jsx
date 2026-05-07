@@ -53,7 +53,7 @@ function ResetPasswordModal({ isOpen, onClose, onSubmit, user }) {
 
     setLoading(true);
     try {
-      await onSubmit(user.id, password);
+      await onSubmit(user?.id, password);
       handleClose();
     } catch (err) {
       const errorMessage = err.error?.message || err.message || 'Failed to reset password.';
@@ -62,8 +62,6 @@ function ResetPasswordModal({ isOpen, onClose, onSubmit, user }) {
       setLoading(false);
     }
   };
-
-  if (!user) return null;
 
   return (
     <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleClose}>
@@ -83,7 +81,7 @@ function ResetPasswordModal({ isOpen, onClose, onSubmit, user }) {
                       <span className="font-display text-xl font-semibold tracking-wider uppercase text-theme-primary block">
                         Reset Password
                       </span>
-                      <span className="text-sm text-slate-400 font-mono">{user.username}</span>
+                      <span className="text-sm text-slate-400 font-mono">{user?.username}</span>
                     </div>
                   </Dialog.Title>
                   <button
