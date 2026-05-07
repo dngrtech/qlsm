@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, RadioGroup } from '@headlessui/react';
+import { Dialog, DialogBackdrop, RadioGroup } from '@headlessui/react';
 import { X, RefreshCw, Terminal, AlertCircle, Clock, List, Maximize, DatabaseZap } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import ExpandedEditorModal from '../ExpandedEditorModal';
@@ -106,7 +106,7 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
     return (
         <>
             <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
-                <Dialog.Backdrop transition className="fixed inset-0 bg-black/60 backdrop-blur-sm transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+                <DialogBackdrop transition className="fixed inset-0 bg-black/60 backdrop-blur-sm transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
                 <div className="fixed inset-0 overflow-y-auto">
                     <div className="flex min-h-full items-center justify-center p-4 text-center">

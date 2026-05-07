@@ -1,5 +1,5 @@
 import React, { Fragment, useState, useEffect, useRef } from 'react';
-import { Dialog, Transition, Listbox } from '@headlessui/react';
+import { Dialog, DialogBackdrop, Transition, Listbox } from '@headlessui/react';
 import { X, RefreshCw, Download, Search, Settings, ChevronDown, Check, FileText, Terminal, AlertCircle } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import { chatLogLanguage } from '../../utils/chatLogLanguage';
@@ -137,7 +137,7 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
 
     return (
         <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
-            <Dialog.Backdrop transition className="fixed inset-0 bg-black/60 backdrop-blur-sm transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+            <DialogBackdrop transition className="fixed inset-0 bg-black/60 backdrop-blur-sm transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
                 <div className="fixed inset-0 overflow-y-auto">
                     <div className="flex min-h-full items-center justify-center p-4 text-center">

@@ -1,5 +1,5 @@
 import React, { Fragment, useState, useEffect } from 'react';
-import { Dialog, Transition, Listbox, Portal } from '@headlessui/react';
+import { Dialog, DialogBackdrop, Transition, Listbox, Portal } from '@headlessui/react';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react-dom';
 import { LoaderCircle, FolderOpen, X, Check, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
@@ -87,7 +87,7 @@ function LoadPresetModal({
   if (showDeleteConfirmation) {
     return (
       <Dialog open={isOpen} as="div" className={classNames("relative", zIndexClass)} onClose={handleCancelDelete}>
-        <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+        <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
           <div className="fixed inset-0 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
@@ -157,7 +157,7 @@ function LoadPresetModal({
   if (showConfirmation) {
     return (
       <Dialog open={isOpen} as="div" className={classNames("relative", zIndexClass)} onClose={handleCancelConfirmation}>
-        <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+        <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
           <div className="fixed inset-0 overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4 text-center">
@@ -220,7 +220,7 @@ function LoadPresetModal({
   // Main preset selection view
   return (
     <Dialog open={isOpen} as="div" className={classNames("relative", zIndexClass)} onClose={onClose}>
-      <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+      <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">

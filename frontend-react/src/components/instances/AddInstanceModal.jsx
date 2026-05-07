@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dialog } from '@headlessui/react';
+import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { AlertTriangle, LoaderCircle, X } from 'lucide-react';
 import AddInstanceForm from '../addInstance/AddInstanceForm';
 import { getHosts, getPresets, getPresetById, getDefaultConfigFile, createInstance } from '../../services/api';
@@ -147,7 +147,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
   return (
     <>
       <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleAttemptClose}>
-        <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+        <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
           <div className="fixed inset-0 overflow-y-auto scrollbar-thick">
             <div className="flex min-h-full items-center justify-center p-4 text-center">

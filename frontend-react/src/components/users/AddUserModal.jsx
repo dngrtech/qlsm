@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog } from '@headlessui/react';
+import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, UserPlus, AlertTriangle, LoaderCircle } from 'lucide-react';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -78,7 +78,7 @@ function AddUserModal({ isOpen, onClose, onSubmit }) {
 
   return (
     <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleClose}>
-      <Dialog.Backdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
+      <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
