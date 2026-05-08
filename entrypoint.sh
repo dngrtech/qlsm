@@ -45,7 +45,7 @@ seed_builtin_presets() {
             if [ "$preset_name" = "default" ] && [ -d /app/configs/presets/default ] && [ ! -d "$BUILTIN_PRESETS_DST/default" ]; then
                 continue
             fi
-            cp -an "$preset_dir" "$BUILTIN_PRESETS_DST/"
+            cp -a "$preset_dir" "$BUILTIN_PRESETS_DST/"
         done
     fi
 }
