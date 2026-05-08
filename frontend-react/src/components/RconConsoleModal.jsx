@@ -31,14 +31,6 @@ import { quakeColorPlugin } from '../utils/quakeColorExtension';
 import { rconTheme } from '../utils/rconTheme';
 
 
-/**
- * Strip Quake color codes from text (for plain text operations).
- */
-function stripColorCodes(text) {
-    return text.replace(/\^[0-9]/g, '');
-}
-
-
 function RconConsoleModal({ isOpen, onClose, instance }) {
     const [inputValue, setInputValue] = useState('');
     const [commandHistory, setCommandHistory] = useState([]);
@@ -46,8 +38,12 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
     const [showStats, setShowStats] = useState(true);
 
     const inputRef = useRef(null);
-    const editorContainerRef = useRef(null);
     const editorViewRef = useRef(null);
+    const [editorContainer, setEditorContainer] = useState(null);
+
+    const setEditorContainerRef = useCallback((node) => {
+        setEditorContainer(node);
+    }, []);
 
     const handleNewMessage = useCallback((msg) => {
         if (!editorViewRef.current) return;
@@ -124,7 +120,7 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
 
     // Initialize/reinitialize CodeMirror when modal opens
     useEffect(() => {
-        if (!isOpen || !editorContainerRef.current || editorViewRef.current) return;
+        if (!isOpen || !editorContainer || editorViewRef.current) return;
 
         const state = EditorState.create({
             doc: '',
@@ -133,7 +129,7 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
 
         editorViewRef.current = new EditorView({
             state,
-            parent: editorContainerRef.current,
+            parent: editorContainer,
         });
 
         return () => {
@@ -142,8 +138,7 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
                 editorViewRef.current = null;
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, editorExtensions]);
+    }, [isOpen, editorContainer, editorExtensions]);
 
     // Progressive append sync is now handled directly inside the useRconSocket callback
 
@@ -302,7 +297,7 @@ function RconConsoleModal({ isOpen, onClose, instance }) {
                                 {/* CodeMirror Output Area */}
                                 <div className="flex-1 overflow-hidden bg-theme-base p-4">
                                     <div
-                                        ref={editorContainerRef}
+                                        ref={setEditorContainerRef}
                                         className="h-full rounded-lg border-2 border-theme-strong overflow-hidden [&_.cm-editor]:h-full"
                                         style={{ background: 'rgba(0,0,0,0.4)' }}
                                     />

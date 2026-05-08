@@ -355,7 +355,9 @@ export default function ServersPage() {
             <ForceUpdateWorkshopModal isOpen={isWorkshopModalOpen} onClose={closeWorkshopModal} onSubmit={handleWorkshopUpdateSubmit} host={hostForWorkshopUpdate} />
             <HostAutoRestartScheduleModal isOpen={isAutoRestartModalOpen} onClose={closeAutoRestartModal} onSubmit={handleAutoRestartSubmit} host={hostForAutoRestart} />
             <ResizeHostModal isOpen={isResizeModalOpen} onClose={closeResizeModal} onSubmit={handleResizeSubmit} host={hostForResize} error={resizeError} isSubmitting={isResizeSubmitting} />
-            <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />
+            {rconInstance && (
+                <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />
+            )}
             <LiveServerStatusModal isOpen={isLiveStatusOpen} onClose={() => setIsLiveStatusOpen(false)} instance={selectedLiveStatusInstance} serverStatus={selectedLiveStatusInstance ? serverStatusMap[String(selectedLiveStatusInstance.id)] : null} />
         </div>
     );

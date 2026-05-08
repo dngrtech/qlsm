@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServersPage from '../ServersPage';
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   toggleExpand: vi.fn(),
   noop: vi.fn(),
   NullComponent: () => null,
+  RconConsole: vi.fn(() => null),
 }));
 
 vi.mock('../../hooks/useServers', () => ({
@@ -178,12 +179,16 @@ vi.mock('../../components/instances/InstanceDetailsModal', () => ({ default: moc
 vi.mock('../../components/instances/EditInstanceConfigModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/instances/ViewLogsModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/instances/ViewChatLogsModal', () => ({ default: mocks.NullComponent }));
-vi.mock('../../components/RconConsoleModal', () => ({ default: mocks.NullComponent }));
+vi.mock('../../components/RconConsoleModal', () => ({ default: mocks.RconConsole }));
 vi.mock('../../components/instances/LiveServerStatusModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/hosts/ForceUpdateWorkshopModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/hosts/HostAutoRestartScheduleModal', () => ({ default: mocks.NullComponent }));
 
 describe('ServersPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders the QLFilter column in the active host-card layout', () => {
     render(
       <MemoryRouter>
@@ -196,5 +201,15 @@ describe('ServersPage', () => {
       'src',
       '/images/qlfilter-on.png'
     );
+  });
+
+  it('does not mount the RCON console before an instance is selected', () => {
+    render(
+      <MemoryRouter>
+        <ServersPage />
+      </MemoryRouter>
+    );
+
+    expect(mocks.RconConsole).not.toHaveBeenCalled();
   });
 });
