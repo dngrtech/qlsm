@@ -52,25 +52,19 @@ export function useHosts() {
     fetchHostsData(true);
   }, [fetchHostsData]);
 
+  const shouldPoll = useMemo(
+    () => hosts.some(host =>
+      POLLABLE_HOST_STATUSES.includes(host.status) ||
+      POLLABLE_QLFILTER_STATUSES.includes(host.qlfilter_status)
+    ),
+    [hosts]
+  );
+
   useEffect(() => {
-    let intervalId;
-    const shouldPollForHostStatus = hosts.some(host => POLLABLE_HOST_STATUSES.includes(host.status));
-    const shouldPollForQlfilterStatus = hosts.some(host => POLLABLE_QLFILTER_STATUSES.includes(host.qlfilter_status));
-    
-    const shouldPoll = shouldPollForHostStatus || shouldPollForQlfilterStatus;
-
-    if (shouldPoll) {
-      intervalId = setInterval(() => {
-        fetchHostsData(false);
-      }, POLLING_INTERVAL);
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [hosts, fetchHostsData]);
+    if (!shouldPoll) return;
+    const intervalId = setInterval(() => fetchHostsData(false), POLLING_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, [shouldPoll, fetchHostsData]);
 
   const handleDeleteRequest = (hostId, hostName) => {
     setSelectedHost({ id: hostId, name: hostName });

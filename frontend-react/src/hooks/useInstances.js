@@ -56,22 +56,16 @@ export function useInstances() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Ensure initial fetch runs only once on mount
 
+  const shouldPoll = useMemo(
+    () => instances.some(instance => POLLABLE_INSTANCE_STATUSES.includes(instance.status)),
+    [instances]
+  );
+
   useEffect(() => {
-    let intervalId;
-    const shouldPoll = instances.some(instance => POLLABLE_INSTANCE_STATUSES.includes(instance.status));
-
-    if (shouldPoll) {
-      intervalId = setInterval(() => {
-        refreshInstances(false);
-      }, POLLING_INTERVAL);
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [instances, refreshInstances]);
+    if (!shouldPoll) return;
+    const intervalId = setInterval(() => refreshInstances(false), POLLING_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, [shouldPoll, refreshInstances]);
 
   const handleDeleteRequest = (instanceId, instanceName) => {
     setSelectedInstance({ id: instanceId, name: instanceName });
