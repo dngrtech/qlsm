@@ -250,3 +250,53 @@ class TestRejectReservedAndDeep:
 
 
 # --- Additional tests appended in Task 14 ---
+
+def test_create_instance_with_folder(client, app, auth_token, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        host = create_host(name='create-host', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+    payload = {
+        'name': 'with-folder-inst',
+        'hostname': 'h.example',
+        'host_id': host_id,
+        'port': 27970,
+        'configs': _full_configs(**{'custom_entities/items.ent': '// items'}),
+        'config_folders': ['custom_entities'],
+    }
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='fake-job')):
+        resp = client.post(
+            '/api/instances/',
+            json=payload,
+            headers={'Authorization': f'Bearer {auth_token}'},
+        )
+    assert resp.status_code in (201, 202), resp.get_json()
+
+
+def test_create_instance_invalid_config_folders_leaves_no_db_row(client, app, auth_token, tmp_path, monkeypatch):
+    """Regression for accepted finding #4: invalid config_folders must be rejected
+    BEFORE any DB write, so no orphaned Instance row is left behind on a 400."""
+    monkeypatch.chdir(tmp_path)
+    from ui.models import QLInstance
+    with app.app_context():
+        host = create_host(name='reject-host', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+        before = QLInstance.query.filter_by(name='no-row-please').count()
+    payload = {
+        'name': 'no-row-please',
+        'hostname': 'h.example',
+        'host_id': host_id,
+        'port': 27971,
+        'configs': _full_configs(),
+        'config_folders': ['scripts'],   # reserved → must be rejected up-front
+    }
+    resp = client.post(
+        '/api/instances/',
+        json=payload,
+        headers={'Authorization': f'Bearer {auth_token}'},
+    )
+    assert resp.status_code == 400, resp.get_json()
+    with app.app_context():
+        after = QLInstance.query.filter_by(name='no-row-please').count()
+    assert after == before, "Invalid config_folders must not create an Instance row"

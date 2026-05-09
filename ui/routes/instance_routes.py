@@ -349,6 +349,12 @@ def add_instance_api():
         if err:
             return jsonify({"error": {"message": err}}), code
 
+        config_folders_create = data.get('config_folders') or []
+        if config_folders_create:
+            err, code = _validate_config_folders(config_folders_create)
+            if err:
+                return jsonify({"error": {"message": err}}), code
+
         if 'factories' in data:
             factories_data = data.get('factories', {})
             err, code = _validate_factories_map(factories_data)
@@ -366,8 +372,11 @@ def add_instance_api():
         os.makedirs(instance_config_dir, exist_ok=True)
         current_app.logger.info(f"Created instance config directory: {instance_config_dir}")
 
-        _sync_configs_to_disk(instance_config_dir, configs_to_save)
-        current_app.logger.info(f"Synced {len(configs_to_save)} config files for instance {instance.id}")
+        _sync_configs_to_disk(instance_config_dir, configs_to_save, config_folders_create)
+        current_app.logger.info(
+            f"Synced {len(configs_to_save)} config files and "
+            f"{len(config_folders_create)} folders for instance {instance.id}"
+        )
 
         # --- Handle scripts via draft ---
         instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')

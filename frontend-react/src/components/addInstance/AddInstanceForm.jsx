@@ -214,8 +214,10 @@ function AddInstanceForm({
 
   const configsAdapter = useStateAdapter({
     initialFiles: configContents,
+    initialFolders: [],
     allowedExtensions: CONFIG_CAPS.allowedExtensions,
     protectedFiles: CONFIG_CAPS.protectedFiles,
+    reservedFolderNames: CONFIG_CAPS.reservedFolderNames,
     onFilesChange: handleConfigAdapterFilesChange,
   });
 
@@ -538,6 +540,8 @@ function AddInstanceForm({
       }
 
       syncConfigState(newConfigs, { resetAdapter: true, markInitial: true });
+      const newFolders = Array.isArray(presetData.config_folders) ? presetData.config_folders : [];
+      if (newFolders.length > 0) resetConfigs(newConfigs, newFolders);
       initialConfigContentsRef.current = newConfigs;
 
       // Track which preset was loaded (for update feature)
@@ -587,7 +591,7 @@ function AddInstanceForm({
       const presetData = {
         name,
         description: description || null,
-        configs: serializeConfigs(),
+        configs: serializeConfigs().files,
         factories: serializedFactories,
         checked_factories: Object.keys(serializedFactories),
       };
@@ -637,7 +641,7 @@ function AddInstanceForm({
       const serializedFactoriesUpdate = serializeFactories();
       const presetData = {
         description: description,
-        configs: serializeConfigs(),
+        configs: serializeConfigs().files,
         factories: serializedFactoriesUpdate,
         checked_factories: Object.keys(serializedFactoriesUpdate),
       };
@@ -656,7 +660,7 @@ function AddInstanceForm({
       await updatePreset(loadedPreset.id, presetData);
 
       // Reset modified state after successful save and update loaded preset description
-      loadedPresetConfigRef.current = serializeConfigs();
+      loadedPresetConfigRef.current = serializeConfigs().files;
       loadedPresetCheckedPluginsRef.current = new Set(checkedPlugins);
       setLoadedPreset(prev => ({ ...prev, description: description || '' }));
       setIsPresetModified(false);
@@ -709,7 +713,7 @@ function AddInstanceForm({
     setEditingFileDetails({
       name: fileName,
       path: fileName,
-      content: content || serializeConfigs()[fileName] || '',
+      content: content || serializeConfigs().files[fileName] || '',
       language: getConfigLanguage(fileName),
       linterSource: getLinterSourceForFile(fileName),
       kind: 'config',
@@ -790,7 +794,7 @@ function AddInstanceForm({
       port: parseInt(port, 10),
       hostname,
       lan_rate_enabled: lanRateEnabled,
-      configs: serializeConfigs(),
+      ...(() => { const { files, folders } = serializeConfigs(); return { configs: files, config_folders: folders }; })(),
       factories: serializeFactories(),
       checked_plugins: checkedPluginNames,
       qlx_plugins: checkedPluginNames.join(', '),
