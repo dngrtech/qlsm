@@ -25,32 +25,77 @@ instance_api_bp = Blueprint('instance_api_routes', __name__) # url_prefix will b
 
 _QLX_PLUGINS_RE = re.compile(r'^[a-zA-Z0-9_, ]*$')
 PROTECTED_CONFIG_FILES = {'server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'}
-ALLOWED_CONFIG_EXTENSIONS = {'.cfg', '.txt'}
+ALLOWED_CONFIG_EXTENSIONS = {'.cfg', '.txt', '.ent'}
 ALLOWED_FACTORY_EXTENSIONS = {'.factories'}
+RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories'}
+_FOLDER_NAME_RE = re.compile(r'^[A-Za-z0-9._-]+$')
+MAX_CONFIG_PATH_DEPTH = 2  # one folder + filename
 
 
-def _validate_filename(name, allowed_extensions):
-    """Return an error string when a managed file name is unsafe."""
+def _validate_path_segment(name, allowed_extensions=None):
+    """Validate a single path segment (file or folder name).
+
+    When allowed_extensions is None, treat name as a folder segment and skip
+    the extension check.
+    """
     if not isinstance(name, str) or not name:
-        return "Invalid filename"
+        return "Invalid name"
     if '/' in name or '\\' in name or '..' in name or name.startswith('.'):
-        return f"Invalid filename: {name}"
-    ext = os.path.splitext(name)[1].lower()
-    if ext not in allowed_extensions:
-        return f"Disallowed extension {ext} for {name}"
+        return f"Invalid name: {name}"
+    if not _FOLDER_NAME_RE.match(name):
+        return f"Invalid characters in: {name}"
+    if len(name) > 64:
+        return f"Name too long: {name}"
+    if allowed_extensions is not None:
+        ext = os.path.splitext(name)[1].lower()
+        if ext not in allowed_extensions:
+            return f"Disallowed extension {ext} for {name}"
     return None
 
 
+def _validate_relative_path(path, allowed_extensions, max_depth=MAX_CONFIG_PATH_DEPTH):
+    """Validate a relative file path. Each segment is validated; depth is capped."""
+    if not isinstance(path, str) or not path:
+        return "Invalid path"
+    if path.startswith('/') or path.endswith('/'):
+        return f"Invalid path: {path}"
+    segments = path.split('/')
+    if len(segments) > max_depth:
+        return f"Path too deep: {path} (max depth {max_depth})"
+    for i, segment in enumerate(segments):
+        is_last = (i == len(segments) - 1)
+        err = _validate_path_segment(
+            segment,
+            allowed_extensions if is_last else None,
+        )
+        if err:
+            return err
+    return None
+
+
+def _validate_filename(name, allowed_extensions):
+    """Backwards-compatible flat-name validator (no `/`)."""
+    return _validate_relative_path(name, allowed_extensions, max_depth=1)
+
+
 def _validate_configs_map(configs_data, require_protected=True):
-    """Validate configs map. Returns (error_message, status_code) or (None, None)."""
+    """Validate configs map. Keys may be relative paths up to MAX_CONFIG_PATH_DEPTH.
+
+    Returns (error_message, status_code) or (None, None).
+    """
     if not isinstance(configs_data, dict):
         return "configs must be a dict", 400
-    for filename, content in configs_data.items():
-        err = _validate_filename(filename, ALLOWED_CONFIG_EXTENSIONS)
+    for path, content in configs_data.items():
+        err = _validate_relative_path(path, ALLOWED_CONFIG_EXTENSIONS)
         if err:
             return err, 400
         if content is not None and not isinstance(content, str):
-            return f"Config content for {filename} must be a string", 400
+            return f"Config content for {path} must be a string", 400
+        # Reject reserved-folder collisions
+        if '/' in path:
+            top = path.split('/', 1)[0]
+            if top.lower() in RESERVED_CONFIG_FOLDER_NAMES:
+                return f"Reserved folder name: {top}", 400
     missing = PROTECTED_CONFIG_FILES - set(configs_data.keys())
     if require_protected and missing:
         return f"Built-in files cannot be removed: {', '.join(sorted(missing))}", 400

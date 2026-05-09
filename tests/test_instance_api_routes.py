@@ -383,7 +383,7 @@ def test_update_config_accepts_custom_cfg_and_syncs_removed_files(
     ('configs', 'message'),
     [
         (_full_configs(**{'evil.exe': 'bad'}), 'Disallowed extension'),
-        (_full_configs(**{'../evil.cfg': 'bad'}), 'Invalid filename'),
+        (_full_configs(**{'../evil.cfg': 'bad'}), 'Invalid name'),
         ({'mappool.txt': '', 'access.txt': '', 'workshop.txt': ''}, 'server.cfg'),
     ],
 )
