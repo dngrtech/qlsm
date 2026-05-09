@@ -70,8 +70,10 @@ function EditInstanceConfigModal({
       acc[fileName] = '';
       return acc;
     }, {}),
+    initialFolders: [],
     allowedExtensions: CONFIG_CAPS.allowedExtensions,
     protectedFiles: CONFIG_CAPS.protectedFiles,
+    reservedFolderNames: CONFIG_CAPS.reservedFolderNames,
   });
   const [presets, setPresets] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState('');
@@ -174,8 +176,8 @@ function EditInstanceConfigModal({
     hasChanges: pluginsHaveChanges,
     tree: pluginTree,
   } = pluginsAdapter;
-  const serializedConfigs = serializeConfigs();
-  const serverCfgContent = serializedConfigs['server.cfg'] || '';
+  const { files: serializedConfigFiles } = serializeConfigs();
+  const serverCfgContent = serializedConfigFiles['server.cfg'] || '';
 
   // Resolve raw qlx_plugins names to full tree paths once on initial load
   useEffect(() => {
@@ -278,16 +280,19 @@ function EditInstanceConfigModal({
           const fetchedHostName = instanceDetails.host_name || null;
           setScriptHostName(fetchedHostName);
           setHostOsType(instanceDetails.host_os_type || null);
+          const incomingFolders = Array.isArray(configData?.config_folders)
+            ? configData.config_folders
+            : [];
           const fetchedConfigs = {};
           Object.entries(configData || {}).forEach(([file, value]) => {
-            if (file === 'factories' || typeof value !== 'string') return;
+            if (file === 'factories' || file === 'config_folders' || typeof value !== 'string') return;
             fetchedConfigs[file] = file === 'server.cfg' ? stripManagedCvars(value) : value;
           });
           CONFIG_FILES_ORDER.forEach(file => {
-            const raw = fetchedConfigs[file] || '';
-            fetchedConfigs[file] = file === 'server.cfg' ? stripManagedCvars(raw) : raw;
+            if (!(file in fetchedConfigs)) fetchedConfigs[file] = '';
+            else if (file === 'server.cfg') fetchedConfigs[file] = stripManagedCvars(fetchedConfigs[file]);
           });
-          resetConfigs(fetchedConfigs);
+          resetConfigs(fetchedConfigs, incomingFolders);
           resetFactories(configData.factories || {});
           if (fetchedHostName) {
             try {
@@ -411,7 +416,7 @@ function EditInstanceConfigModal({
         const raw = newConfigs[file] ?? presetData[presetKey] ?? '';
         newConfigs[file] = file === 'server.cfg' ? stripManagedCvars(raw) : raw;
       });
-      resetConfigs(newConfigs);
+      resetConfigs(newConfigs, presetData.config_folders || []);
       // checked_factories: null = legacy preset (use all factory files); [] or [...] = explicit selection
       const factoriesToLoad = presetData.checked_factories != null
         ? Object.fromEntries(
@@ -448,10 +453,12 @@ function EditInstanceConfigModal({
     setPresetError(null);
     try {
       const serializedFactories = serializeFactories();
+      const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
         name: name.trim(),
         description: description?.trim() || null,
-        configs: serializeConfigs(),
+        configs: cfgFiles,
+        config_folders: cfgFolders,
         factories: serializedFactories,
         checked_factories: Object.keys(serializedFactories),
       };
@@ -513,12 +520,14 @@ function EditInstanceConfigModal({
         await pluginFileManagerRef.current.flushEdits();
       }
 
+      const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const configPayload = {
         name: currentInstanceName,
         hostname: serverHostname,
         lan_rate_enabled: lanRateEnabled,
         restart: restartAfterSave,
-        configs: serializeConfigs(),
+        configs: cfgFiles,
+        config_folders: cfgFolders,
         factories: serializeFactories(),
         draft_id: pluginDraftId,
         checked_plugins: Array.from(checkedPlugins)
@@ -560,7 +569,7 @@ function EditInstanceConfigModal({
     setExpandedPluginPath(null);
     setExpandedFactoryPath(null);
     setExpandedFileName(fileNameToExpand);
-    setExpandedFileContent(content || serializeConfigs()[fileNameToExpand] || '');
+    setExpandedFileContent(content || serializeConfigs().files[fileNameToExpand] || '');
     setExpandedFileLanguage(getLanguageForFile(fileNameToExpand));
     setExpandedFileLinterSource(getLinterSource(fileNameToExpand));
     setIsExpandedEditorOpen(true);

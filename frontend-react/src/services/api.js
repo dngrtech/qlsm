@@ -297,6 +297,7 @@ export const updateInstanceConfig = async (instanceId, configData, restart = tru
     // Extract non-config metadata so the backend receives it at the top level.
     const {
       configs: explicitConfigs,
+      config_folders,
       scripts,
       factories,
       qlx_plugins,
@@ -308,6 +309,9 @@ export const updateInstanceConfig = async (instanceId, configData, restart = tru
       ...configs
     } = configData;
     const payload = { configs: explicitConfigs ?? configs, restart };
+    if (config_folders !== undefined) {
+      payload.config_folders = config_folders;
+    }
     if (scripts && Object.keys(scripts).length > 0) {
       payload.scripts = scripts;
     }
