@@ -23,13 +23,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@headlessui/react', () => {
   const Dialog = ({ children }) => <div>{children}</div>;
-  Dialog.Panel = ({ children, ...props }) => <div {...props}>{children}</div>;
+  Dialog.Panel = ({ children, transition: _transition, ...props }) => <div {...props}>{children}</div>;
   Dialog.Title = ({ children, ...props }) => <div {...props}>{children}</div>;
+  const DialogBackdrop = ({ children, transition: _transition, ...props }) => <div {...props}>{children}</div>;
 
   const Transition = ({ show, children }) => (show ? <>{children}</> : null);
   Transition.Child = ({ children }) => <>{children}</>;
 
-  return { Dialog, Transition };
+  return { Dialog, DialogBackdrop, Transition };
 });
 
 vi.mock('../../../services/api', () => ({
@@ -124,7 +125,7 @@ vi.mock('../../fileManager', () => ({
       checkedFiles: new Set(Object.keys(files)),
       setChecked: vi.fn().mockResolvedValue(undefined),
       hasChanges: false,
-      serialize: () => ({ ...files }),
+      serialize: () => ({ files: { ...files }, folders: [] }),
       reset,
       loading: false,
       error: null,
@@ -232,7 +233,33 @@ describe('EditInstanceConfigModal preset saving', () => {
       expect.objectContaining({
         draft_id: 'draft-123',
         checked_plugins: ['discord_extensions/balance.py'],
+        factories: {},
+        checked_factories: [],
       })
+    );
+  });
+
+  it('sends factory adapter files when saving instance configuration', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        factories: {},
+      }),
+      true,
     );
   });
 

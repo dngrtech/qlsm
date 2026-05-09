@@ -452,7 +452,7 @@ function EditInstanceConfigModal({
     setIsSavingPreset(true);
     setPresetError(null);
     try {
-      const serializedFactories = serializeFactories();
+      const { files: serializedFactories } = serializeFactories();
       const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
         name: name.trim(),
@@ -528,7 +528,7 @@ function EditInstanceConfigModal({
         restart: restartAfterSave,
         configs: cfgFiles,
         config_folders: cfgFolders,
-        factories: serializeFactories(),
+        factories: serializeFactories().files,
         draft_id: pluginDraftId,
         checked_plugins: Array.from(checkedPlugins)
           .filter(p => p.endsWith('.py') && !p.endsWith('__init__.py'))

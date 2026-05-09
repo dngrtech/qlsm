@@ -587,7 +587,7 @@ function AddInstanceForm({
     setIsSavingPreset(true);
     try {
       // Map internal config keys to API keys
-      const serializedFactories = serializeFactories();
+      const { files: serializedFactories } = serializeFactories();
       const presetData = {
         name,
         description: description || null,
@@ -638,7 +638,7 @@ function AddInstanceForm({
     setShowUpdateConfirm(false);
     setIsUpdatingPreset(true);
     try {
-      const serializedFactoriesUpdate = serializeFactories();
+      const { files: serializedFactoriesUpdate } = serializeFactories();
       const presetData = {
         description: description,
         configs: serializeConfigs().files,
@@ -795,7 +795,7 @@ function AddInstanceForm({
       hostname,
       lan_rate_enabled: lanRateEnabled,
       ...(() => { const { files, folders } = serializeConfigs(); return { configs: files, config_folders: folders }; })(),
-      factories: serializeFactories(),
+      factories: serializeFactories().files,
       checked_plugins: checkedPluginNames,
       qlx_plugins: checkedPluginNames.join(', '),
     };

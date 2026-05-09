@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
   getFactoryTree: vi.fn(),
   getPresetById: vi.fn(),
   fileManagerProps: [],
+  savePreset: vi.fn(),
   saveBinaryMeta: vi.fn(),
+  updatePreset: vi.fn(),
   useDraftWorkspace: vi.fn(),
 }));
 
@@ -24,8 +26,8 @@ vi.mock('../../../services/api', () => ({
   getFactoryContent: mocks.getFactoryContent,
   getFactoryTree: mocks.getFactoryTree,
   getPresetById: mocks.getPresetById,
-  savePreset: vi.fn(),
-  updatePreset: vi.fn(),
+  savePreset: mocks.savePreset,
+  updatePreset: mocks.updatePreset,
 }));
 
 vi.mock('../../../services/draftApi', () => ({
@@ -88,7 +90,7 @@ vi.mock('../../fileManager', () => ({
       checkedFiles: new Set(Object.keys(files)),
       setChecked: vi.fn().mockResolvedValue(undefined),
       hasChanges: false,
-      serialize: () => ({ ...files }),
+      serialize: () => ({ files: { ...files }, folders: [] }),
       reset,
       loading: false,
       error: null,
@@ -118,7 +120,18 @@ vi.mock('../InstanceBasicInfoForm', () => ({
   ),
 }));
 
-vi.mock('../SavePresetModal', () => ({ default: () => null }));
+vi.mock('../SavePresetModal', () => ({
+  default: ({ isOpen, onSave }) => (
+    isOpen ? (
+      <button
+        type="button"
+        onClick={() => onSave({ name: 'saved-preset', description: 'copy' })}
+      >
+        Confirm Save Preset
+      </button>
+    ) : null
+  ),
+}));
 vi.mock('../LoadPresetModal', () => ({ default: () => null }));
 vi.mock('../UpdatePresetModal', () => ({ default: () => null }));
 vi.mock('../../config/FullScreenConfigEditorModal', () => ({ default: () => null }));
@@ -155,7 +168,9 @@ describe('AddInstanceForm draft lifecycle', () => {
     mocks.getFactoryContent.mockResolvedValue({ content: '' });
     mocks.getFactoryTree.mockResolvedValue([]);
     mocks.getPresetById.mockResolvedValue({});
+    mocks.savePreset.mockResolvedValue({ message: 'saved' });
     mocks.saveBinaryMeta.mockResolvedValue({});
+    mocks.updatePreset.mockResolvedValue({ message: 'updated' });
     mocks.useDraftWorkspace.mockReturnValue({
       draftId: 'draft-123',
       tree: [],
@@ -313,6 +328,44 @@ describe('AddInstanceForm draft lifecycle', () => {
       factories: {},
     }));
     expect(mocks.getPresetById).not.toHaveBeenCalled();
+  });
+
+  it('saves factory adapter files as checked factory filenames', async () => {
+    render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+          defaultFactories: {
+            'ca.factories': '{"factory": true}',
+          },
+        }}
+        initialHostId={null}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save as preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
+
+    await waitFor(() => expect(mocks.savePreset).toHaveBeenCalledTimes(1));
+    expect(mocks.savePreset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factories: { 'ca.factories': '{"factory": true}' },
+        checked_factories: ['ca.factories'],
+      }),
+    );
   });
 
   it('uses ql cfg highlighting and linting for any .cfg config file', async () => {
