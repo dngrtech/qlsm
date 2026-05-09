@@ -165,4 +165,61 @@ describe('useFileManagerController initial selection', () => {
 
     await waitFor(() => expect(result.current.currentContent).toBe('set sv_hostname "New"'));
   });
+
+  it('downloads row menu content from the requested file', async () => {
+    const createObjectURL = vi.fn(() => 'blob:test-url');
+    const revokeObjectURL = vi.fn();
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+
+    const adapter = createSerializableAdapter({
+      'selected.cfg': 'selected content',
+      'other.cfg': 'other content',
+    });
+
+    const { result } = renderHook(() => useFileManagerController({
+      adapter,
+      capabilities: { allowedExtensions: ['.cfg'] },
+      defaultSelectedPath: 'selected.cfg',
+    }));
+
+    await waitFor(() => expect(result.current.selectedFile?.path).toBe('selected.cfg'));
+
+    await act(async () => {
+      await result.current.handleDownload({ name: 'other.cfg', path: 'other.cfg', type: 'file' });
+    });
+
+    expect(adapter.readContent).toHaveBeenCalledWith('other.cfg');
+    const blob = createObjectURL.mock.calls[0][0];
+    await expect(blob.text()).resolves.toBe('other content');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:test-url');
+
+    anchorClick.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('selects and opens the uploaded file', async () => {
+    const adapter = createAdapter([]);
+    adapter.upload.mockResolvedValue({ path: 'uploaded.cfg' });
+    adapter.readContent.mockImplementation(path => Promise.resolve(
+      path === 'uploaded.cfg' ? 'uploaded content' : '',
+    ));
+
+    const { result } = renderHook(() => useFileManagerController({
+      adapter,
+      capabilities: { allowedExtensions: ['.cfg'] },
+    }));
+
+    await act(async () => {
+      await result.current.handleUpload(new File(['uploaded content'], 'uploaded.cfg'));
+    });
+
+    expect(adapter.upload).toHaveBeenCalledWith(expect.any(File), '');
+    expect(result.current.selectedFile?.path).toBe('uploaded.cfg');
+    expect(result.current.currentContent).toBe('uploaded content');
+  });
 });

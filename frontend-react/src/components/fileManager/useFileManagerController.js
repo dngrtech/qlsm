@@ -269,10 +269,11 @@ export function useFileManagerController({
       if (dir) expandFolder(dir);
       setActionError(null);
       pendingLocalPathsRef.current.add(path);
+      await selectPath(path, { path, name: basename(path), type: 'file' });
     } catch (err) {
       setActionError(getErrorMessage(err, 'Upload failed'));
     }
-  }, [adapter, checkable, expandFolder, onCheck, selectedFile]);
+  }, [adapter, checkable, expandFolder, onCheck, selectPath, selectedFile]);
 
   const openRenameModal = useCallback((item) => {
     setRenameTarget({ kind: item.type, path: item.path });
@@ -407,8 +408,9 @@ export function useFileManagerController({
     }
   }, [saveBinaryMeta, selectedFile]);
 
-  const handleDownload = useCallback((item) => {
-    const content = editedContent[item.path] ?? currentContent;
+  const handleDownload = useCallback(async (item) => {
+    const content = editedContent[item.path] ??
+      (item.path === selectedFile?.path ? currentContent : await adapter.readContent(item.path));
     const blob = new Blob([content || ''], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -416,7 +418,7 @@ export function useFileManagerController({
     a.download = basename(item.path);
     a.click();
     URL.revokeObjectURL(url);
-  }, [editedContent, currentContent]);
+  }, [adapter, editedContent, currentContent, selectedFile]);
 
   const handleCopyContent = useCallback(async (item) => {
     const content = editedContent[item.path] ?? (item.path === selectedFile?.path ? currentContent : await adapter.readContent(item.path));

@@ -24,7 +24,7 @@
         archive: yes
         recursive: yes
         rsync_path: "sudo -u ql rsync"
-        delete: yes
+        delete: no
         rsync_opts:
           - "--include=*/"
           - "--include=*.cfg"
