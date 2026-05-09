@@ -46,8 +46,13 @@ export function useFileManagerController({
   const [editedContent, setEditedContent] = useState({});
   const [contentLoading, setContentLoading] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [newModalMode, setNewModalMode] = useState('file');
+  const [newModalTargetDir, setNewModalTargetDir] = useState('');
   const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [expandedFolders, setExpandedFolders] = useState(() => new Set());
   const [binaryDescription, setBinaryDescription] = useState('');
   const [actionError, setActionError] = useState(null);
   const pendingLocalPathsRef = useRef(new Set());
@@ -59,13 +64,19 @@ export function useFileManagerController({
   const files = adapter.tree || EMPTY_TREE;
   const flatFiles = useMemo(() => flattenFiles(files), [files]);
   const serializeAdapter = adapter.serialize;
-  const serializedFiles = useMemo(() => serializeAdapter?.(), [serializeAdapter]);
+  const serializedFiles = useMemo(() => {
+    const result = serializeAdapter?.();
+    return result?.files || result;
+  }, [serializeAdapter]);
   const effectiveCheckedFiles = checkedFiles || adapter.checkedFiles || emptyCheckedFiles;
   const effectiveOnCheck = onCheck || adapter.setChecked || noopCheck;
   const selectedDir = dirname(selectedFile?.path || '');
   const siblingNames = useMemo(() => flatFiles
     .filter(file => dirname(file.path) === selectedDir)
     .map(file => basename(file.path)), [flatFiles, selectedDir]);
+  const rootFolderNames = useMemo(() => files
+    .filter(item => item.type === 'folder')
+    .map(item => item.name), [files]);
 
   const flushEdits = useCallback(async () => {
     for (const [path, content] of Object.entries(editedContent)) {
@@ -82,6 +93,7 @@ export function useFileManagerController({
     setSelectedFile(null);
     setCurrentContent('');
     setBinaryDescription('');
+    setExpandedFolders(new Set());
   }, [adapter.resetCount]);
 
   useEffect(() => {
@@ -90,6 +102,24 @@ export function useFileManagerController({
     const nextContent = serializedFiles[selectedFile.path] ?? '';
     setCurrentContent(prev => (prev === nextContent ? prev : nextContent));
   }, [selectedFile, serializedFiles]);
+
+  const expandFolder = useCallback((path) => {
+    if (!path) return;
+    setExpandedFolders(prev => {
+      if (prev.has(path)) return prev;
+      const next = new Set(prev);
+      next.add(path);
+      return next;
+    });
+  }, []);
+
+  const handleToggleFolder = useCallback((path) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      return next;
+    });
+  }, []);
 
   const handleSelectFile = useCallback(async (item) => {
     if (!item || item.type === 'folder') return;
@@ -187,101 +217,166 @@ export function useFileManagerController({
     if (item) await handleSelectFile(item);
   }, [flatFiles, handleSelectFile]);
 
-  const handleCreate = useCallback(async (name) => {
-    const path = joinPath(selectedDir, name);
-    const template = capabilities.newFileTemplate?.(path) ?? '';
+  const openNewFileModal = useCallback((targetDir = '') => {
+    setNewModalMode('file');
+    setNewModalTargetDir(targetDir);
+    setShowNewModal(true);
+  }, []);
+
+  const openNewFolderModal = useCallback(() => {
+    setNewModalMode('folder');
+    setNewModalTargetDir('');
+    setShowNewModal(true);
+  }, []);
+
+  const handleCreateFromModal = useCallback(async (name) => {
     try {
+      if (newModalMode === 'folder') {
+        if (!adapter.createFolder) throw new Error('Folder creation not supported');
+        await adapter.createFolder(name);
+        await adapter.refreshTree?.();
+        expandFolder(name);
+        setShowNewModal(false);
+        setActionError(null);
+        return;
+      }
+      const targetDir = newModalTargetDir || dirname(selectedFile?.path || '');
+      const path = joinPath(targetDir, name);
+      const template = capabilities.newFileTemplate?.(path) ?? '';
       await adapter.writeContent(path, template);
       await adapter.refreshTree?.();
       if (checkable && isCheckablePath(path) && onCheck && onCheck !== adapter.setChecked) {
         await onCheck(path, true);
       }
+      if (targetDir) expandFolder(targetDir);
       setShowNewModal(false);
       setActionError(null);
       pendingLocalPathsRef.current.add(path);
-      setSelectedFile({ name, path, type: 'file', file_type: getFileType(name) });
-      setCurrentContent(template);
-      setEditedContent(prev => ({ ...prev, [path]: template }));
     } catch (err) {
       setActionError(getErrorMessage(err, 'Create failed'));
     }
-  }, [adapter, capabilities, checkable, onCheck, selectedDir]);
+  }, [adapter, capabilities, checkable, expandFolder, newModalMode, newModalTargetDir, onCheck, selectedFile]);
 
-  const handleUpload = useCallback(async (file) => {
+  const handleUpload = useCallback(async (file, targetDir = null) => {
     try {
-      const result = await adapter.upload(file, selectedDir);
-      const path = result?.path || joinPath(selectedDir, file.name);
+      const dir = targetDir ?? dirname(selectedFile?.path || '');
+      const result = await adapter.upload(file, dir);
+      const path = result?.path || joinPath(dir, file.name);
       if (checkable && isCheckablePath(path) && onCheck && onCheck !== adapter.setChecked) {
         await onCheck(path, true);
       }
-      const fileType = getFileType(path);
+      if (dir) expandFolder(dir);
       setActionError(null);
       pendingLocalPathsRef.current.add(path);
-      setSelectedFile({
-        name: basename(path),
-        path,
-        type: 'file',
-        file_type: fileType,
-      });
-      if (fileType === 'binary') {
-        setCurrentContent('');
-        setBinaryDescription('');
-      } else {
-        const content = await file.text();
-        setCurrentContent(content);
-        setEditedContent(prev => ({ ...prev, [path]: content }));
-      }
     } catch (err) {
       setActionError(getErrorMessage(err, 'Upload failed'));
     }
-  }, [adapter, checkable, onCheck, selectedDir]);
+  }, [adapter, checkable, expandFolder, onCheck, selectedFile]);
+
+  const openRenameModal = useCallback((item) => {
+    setRenameTarget({ kind: item.type, path: item.path });
+    setShowRenameModal(true);
+  }, []);
 
   const handleRename = useCallback(async (newName) => {
-    if (!selectedFile) return;
-    const oldPath = selectedFile.path;
-    const newPath = joinPath(dirname(oldPath), newName);
-    const context = oldPath.endsWith('.so') ? binaryContext : null;
+    if (!renameTarget) return;
+    const oldPath = renameTarget.path;
     try {
-      await adapter.renameFile(oldPath, newPath, context);
-      await adapter.refreshTree?.();
-      if (checkable && effectiveCheckedFiles.has(oldPath)) {
-        await effectiveOnCheck(oldPath, false);
-        await effectiveOnCheck(newPath, true);
+      if (renameTarget.kind === 'folder') {
+        if (!adapter.renameFolder) throw new Error('Folder rename not supported');
+        await adapter.renameFolder(oldPath, newName);
+        setEditedContent(prev => {
+          const next = {};
+          for (const [path, content] of Object.entries(prev)) {
+            if (path === oldPath || path.startsWith(oldPath + '/')) {
+              next[newName + path.slice(oldPath.length)] = content;
+            } else {
+              next[path] = content;
+            }
+          }
+          return next;
+        });
+        await adapter.refreshTree?.();
+        setExpandedFolders(prev => {
+          const next = new Set();
+          for (const p of prev) {
+            if (p === oldPath) next.add(newName);
+            else if (p.startsWith(oldPath + '/')) next.add(newName + p.slice(oldPath.length));
+            else next.add(p);
+          }
+          return next;
+        });
+      } else {
+        const newPath = joinPath(dirname(oldPath), newName);
+        const context = oldPath.endsWith('.so') ? binaryContext : null;
+        await adapter.renameFile(oldPath, newPath, context);
+        await adapter.refreshTree?.();
+        if (checkable && effectiveCheckedFiles.has(oldPath)) {
+          await effectiveOnCheck(oldPath, false);
+          await effectiveOnCheck(newPath, true);
+        }
+        setEditedContent(prev => {
+          if (prev[oldPath] === undefined) return prev;
+          const next = { ...prev, [newPath]: prev[oldPath] };
+          delete next[oldPath];
+          return next;
+        });
+        if (selectedFile?.path === oldPath) {
+          setSelectedFile({ ...selectedFile, name: newName, path: newPath });
+        }
       }
-      setEditedContent(prev => {
-        if (prev[oldPath] === undefined) return prev;
-        const next = { ...prev, [newPath]: prev[oldPath] };
-        delete next[oldPath];
-        return next;
-      });
-      setSelectedFile({ ...selectedFile, name: newName, path: newPath });
       setShowRenameModal(false);
+      setRenameTarget(null);
     } catch (err) {
       setActionError(getErrorMessage(err, 'Rename failed'));
     }
-  }, [adapter, binaryContext, checkable, effectiveCheckedFiles, effectiveOnCheck, selectedFile]);
+  }, [adapter, binaryContext, checkable, effectiveCheckedFiles, effectiveOnCheck, renameTarget, selectedFile]);
+
+  const requestDelete = useCallback((item) => {
+    if (item.type === 'folder') {
+      const fileCount = flattenFiles(item.children || []).length;
+      setDeleteTarget({ kind: 'folder', item, fileCount });
+    } else {
+      setDeleteTarget({ kind: 'file', item, fileCount: 0 });
+    }
+    setConfirmDeleteOpen(true);
+  }, []);
 
   const handleDelete = useCallback(async () => {
-    if (!selectedFile) return;
+    if (!deleteTarget) return;
     try {
-      await adapter.deleteFile(selectedFile.path);
-      if (checkable && effectiveCheckedFiles.has(selectedFile.path)) {
-        await effectiveOnCheck(selectedFile.path, false);
+      if (deleteTarget.kind === 'folder') {
+        if (!adapter.deleteFolder) throw new Error('Folder delete not supported');
+        await adapter.deleteFolder(deleteTarget.item.path);
+        await adapter.refreshTree?.();
+        setExpandedFolders(prev => {
+          const next = new Set(prev);
+          next.delete(deleteTarget.item.path);
+          return next;
+        });
+      } else {
+        await adapter.deleteFile(deleteTarget.item.path);
+        if (checkable && effectiveCheckedFiles.has(deleteTarget.item.path)) {
+          await effectiveOnCheck(deleteTarget.item.path, false);
+        }
+        setEditedContent(prev => {
+          const next = { ...prev };
+          delete next[deleteTarget.item.path];
+          return next;
+        });
+        pendingRemovedPathsRef.current.add(deleteTarget.item.path);
+        if (selectedFile?.path === deleteTarget.item.path) {
+          setSelectedFile(null);
+          setCurrentContent('');
+          setBinaryDescription('');
+        }
       }
-      setEditedContent(prev => {
-        const next = { ...prev };
-        delete next[selectedFile.path];
-        return next;
-      });
-      pendingLocalPathsRef.current.delete(selectedFile.path);
-      pendingRemovedPathsRef.current.add(selectedFile.path);
-      setSelectedFile(null);
-      setCurrentContent('');
-      setBinaryDescription('');
+      setConfirmDeleteOpen(false);
+      setDeleteTarget(null);
     } catch (err) {
       setActionError(getErrorMessage(err, 'Delete failed'));
     }
-  }, [adapter, checkable, effectiveCheckedFiles, effectiveOnCheck, selectedFile]);
+  }, [adapter, checkable, deleteTarget, effectiveCheckedFiles, effectiveOnCheck, selectedFile]);
 
   const handleReplace = useCallback(async (file) => {
     if (!selectedFile) return;
@@ -311,10 +406,44 @@ export function useFileManagerController({
     }
   }, [saveBinaryMeta, selectedFile]);
 
+  const handleDownload = useCallback((item) => {
+    const content = editedContent[item.path] ?? currentContent;
+    const blob = new Blob([content || ''], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = basename(item.path);
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [editedContent, currentContent]);
+
+  const handleCopyContent = useCallback(async (item) => {
+    const content = editedContent[item.path] ?? (item.path === selectedFile?.path ? currentContent : await adapter.readContent(item.path));
+    const { copyToClipboard } = await import('../../utils/clipboard');
+    await copyToClipboard(content || '');
+  }, [adapter, currentContent, editedContent, selectedFile]);
+
+  const handleNewFileInFolder = useCallback((folderItem) => {
+    openNewFileModal(folderItem.path);
+  }, [openNewFileModal]);
+
+  const handleUploadToFolder = useCallback((folderItem, file) => {
+    handleUpload(file, folderItem.path);
+  }, [handleUpload]);
+
   const language = selectedFile && getLanguageForFile ? getLanguageForFile(selectedFile.path) : null;
   const linterSource = selectedFile && getLinterSourceForFile
     ? getLinterSourceForFile(selectedFile.path)
     : null;
+
+  const renameTargetItem = renameTarget
+    ? flatFiles.find(f => f.path === renameTarget.path) || files.find(i => i.type === 'folder' && i.path === renameTarget.path)
+    : null;
+  const renameTargetSiblings = renameTarget?.kind === 'folder'
+    ? rootFolderNames
+    : flatFiles
+        .filter(f => dirname(f.path) === dirname(renameTarget?.path || ''))
+        .map(f => basename(f.path));
 
   return {
     actionError,
@@ -322,21 +451,38 @@ export function useFileManagerController({
     confirmDeleteOpen,
     contentLoading,
     currentContent,
+    deleteTarget,
     effectiveCheckedFiles,
     effectiveOnCheck,
+    expandedFolders,
     files,
     flushEdits,
     handleContentChange,
-    handleCreate,
+    handleCreateFromModal,
     handleDelete,
+    handleDownload,
+    handleCopyContent,
+    handleNewFileInFolder,
     handleRename,
     handleReplace,
     handleSaveBinaryDescription,
     handleSelectFile,
+    handleToggleFolder,
     handleUpload,
+    handleUploadToFolder,
     isDirty: selectedFile ? editedContent[selectedFile.path] !== undefined : false,
     language,
     linterSource,
+    newModalMode,
+    newModalTargetDir,
+    openNewFileModal,
+    openNewFolderModal,
+    openRenameModal,
+    renameTarget,
+    renameTargetItem,
+    renameTargetSiblings,
+    requestDelete,
+    rootFolderNames,
     selectedFile,
     setConfirmDeleteOpen,
     setShowNewModal,

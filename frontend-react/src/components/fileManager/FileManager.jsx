@@ -9,6 +9,17 @@ import RenameFileModal from './RenameFileModal';
 import { basename } from './fileManagerUtils';
 import { useFileManagerController } from './useFileManagerController';
 
+function buildDeleteMessage(target) {
+  if (!target) return '';
+  if (target.kind === 'folder') {
+    if (target.fileCount === 0) {
+      return `Delete folder ${target.item.name}?`;
+    }
+    return `Delete folder ${target.item.name} and ${target.fileCount} file${target.fileCount === 1 ? '' : 's'} inside? This cannot be undone.`;
+  }
+  return `Delete ${target.item.name}?`;
+}
+
 const FileManager = forwardRef(function FileManager({
   adapter,
   capabilities,
@@ -43,6 +54,9 @@ const FileManager = forwardRef(function FileManager({
   }), [controller.flushEdits, controller.updateContent]);
 
   const creatableExtensions = capabilities.allowedExtensions.filter(ext => ext !== '.so');
+  const newModalExistingNames = controller.newModalMode === 'folder'
+    ? controller.rootFolderNames
+    : controller.siblingNames;
 
   if (adapter.error) {
     return (
@@ -71,14 +85,23 @@ const FileManager = forwardRef(function FileManager({
           checkedFiles={controller.effectiveCheckedFiles}
           onCheck={controller.effectiveOnCheck}
           foldersEnabled={capabilities.canFolders}
+          capabilities={capabilities}
+          expandedFolders={controller.expandedFolders}
+          onToggleFolder={controller.handleToggleFolder}
+          rowMenuHandlers={{
+            onDownload: controller.handleDownload,
+            onCopyContent: controller.handleCopyContent,
+            onRename: controller.openRenameModal,
+            onDelete: controller.requestDelete,
+            onNewFileInFolder: controller.handleNewFileInFolder,
+            onUploadToFolder: controller.handleUploadToFolder,
+          }}
         />
         <FileSidebarActions
           capabilities={capabilities}
-          selectedFile={controller.selectedFile}
-          onNew={() => controller.setShowNewModal(true)}
+          onNewFile={() => controller.openNewFileModal('')}
+          onNewFolder={controller.openNewFolderModal}
           onUpload={controller.handleUpload}
-          onRename={() => controller.setShowRenameModal(true)}
-          onDelete={() => controller.setConfirmDeleteOpen(true)}
         />
       </div>
       <div className="flex-1 min-w-0 min-h-0 bg-[var(--surface-base)] flex flex-col">
@@ -105,24 +128,27 @@ const FileManager = forwardRef(function FileManager({
       <NewFileModal
         isOpen={controller.showNewModal}
         onClose={() => controller.setShowNewModal(false)}
-        onCreate={controller.handleCreate}
+        onCreate={controller.handleCreateFromModal}
+        mode={controller.newModalMode}
         allowedExtensions={creatableExtensions.length ? creatableExtensions : capabilities.allowedExtensions}
-        existingNames={controller.siblingNames}
+        existingNames={newModalExistingNames}
+        reservedNames={capabilities.reservedFolderNames || []}
       />
       <RenameFileModal
         isOpen={controller.showRenameModal}
-        onClose={() => controller.setShowRenameModal(false)}
+        onClose={() => { controller.setShowRenameModal(false); }}
         onRename={controller.handleRename}
-        currentName={basename(controller.selectedFile?.path || '')}
-        allowedExtensions={capabilities.allowedExtensions}
-        existingNames={controller.siblingNames}
+        currentName={basename(controller.renameTarget?.path || '')}
+        allowedExtensions={controller.renameTarget?.kind === 'folder' ? [] : capabilities.allowedExtensions}
+        existingNames={controller.renameTargetSiblings}
+        reservedNames={controller.renameTarget?.kind === 'folder' ? (capabilities.reservedFolderNames || []) : []}
       />
       <ConfirmationModal
         isOpen={controller.confirmDeleteOpen}
         onClose={() => controller.setConfirmDeleteOpen(false)}
         onConfirm={controller.handleDelete}
-        title="Delete file"
-        message={`Delete ${controller.selectedFile?.name || 'this file'}?`}
+        title={controller.deleteTarget?.kind === 'folder' ? 'Delete folder' : 'Delete file'}
+        message={buildDeleteMessage(controller.deleteTarget)}
         confirmButtonText="Delete"
         confirmButtonVariant="danger"
         zIndexClass="z-[70]"

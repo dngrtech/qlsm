@@ -7,16 +7,20 @@ function getExtension(name) {
   return dotIndex === -1 ? '' : name.slice(dotIndex).toLowerCase();
 }
 
+const FOLDER_NAME_RE = /^[A-Za-z0-9._-]+$/;
+
 export default function RenameFileModal({
   isOpen,
   onClose,
   onRename,
   currentName,
-  allowedExtensions,
+  allowedExtensions = [],
   existingNames = [],
+  reservedNames = [],
 }) {
   const [name, setName] = useState(currentName || '');
   const [error, setError] = useState(null);
+  const isFolder = !allowedExtensions || allowedExtensions.length === 0;
 
   useEffect(() => {
     if (isOpen) {
@@ -39,17 +43,34 @@ export default function RenameFileModal({
       setError('Invalid name');
       return;
     }
-    const ext = getExtension(trimmed);
-    if (!allowedExtensions.includes(ext)) {
-      setError(`Allowed extensions: ${allowedExtensions.join(', ')}`);
-      return;
+    if (isFolder) {
+      if (!FOLDER_NAME_RE.test(trimmed)) {
+        setError('Letters, numbers, dot, dash, underscore only');
+        return;
+      }
+      if (trimmed.length > 64) {
+        setError('Folder name too long (max 64)');
+        return;
+      }
+      if (reservedNames.map(n => n.toLowerCase()).includes(trimmed.toLowerCase())) {
+        setError(`Reserved folder name: ${trimmed}`);
+        return;
+      }
+    } else {
+      const ext = getExtension(trimmed);
+      if (!allowedExtensions.includes(ext)) {
+        setError(`Allowed extensions: ${allowedExtensions.join(', ')}`);
+        return;
+      }
     }
     if (existingNames.filter(existing => existing !== currentName).includes(trimmed)) {
-      setError('File already exists');
+      setError(isFolder ? 'Folder already exists' : 'File already exists');
       return;
     }
     onRename(trimmed);
   };
+
+  const title = isFolder ? 'Rename Folder' : 'Rename File';
 
   return (
     <Dialog open={isOpen} as="div" className="relative z-[60]" onClose={onClose}>
@@ -58,7 +79,7 @@ export default function RenameFileModal({
           <div className="flex min-h-full items-center justify-center p-4">
               <Dialog.Panel transition className="modal-panel w-full max-w-md p-6 transition data-[enter]:ease-out data-[enter]:duration-200 data-[leave]:ease-in data-[leave]:duration-150 data-[closed]:opacity-0 data-[closed]:scale-95">
                 <Dialog.Title className="text-lg font-display font-semibold uppercase tracking-wider text-[var(--text-primary)] mb-4 flex items-center justify-between">
-                  Rename File
+                  {title}
                   <button type="button" onClick={onClose} className="logs-modal-close-btn">
                     <X size={16} />
                   </button>

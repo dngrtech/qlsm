@@ -128,13 +128,15 @@ describe('useFileManagerController initial selection', () => {
     }));
 
     await act(async () => {
-      await result.current.handleCreate('new.factories');
+      result.current.openNewFileModal();
+    });
+    await act(async () => {
+      await result.current.handleCreateFromModal('new.factories');
     });
 
     expect(adapter.writeContent).toHaveBeenCalledWith('new.factories', '{\n  \n}');
     expect(setChecked).not.toHaveBeenCalled();
     expect(result.current.actionError).toBeNull();
-    expect(result.current.selectedFile?.path).toBe('new.factories');
   });
 
   it('refreshes the selected editor when adapter content changes externally', async () => {

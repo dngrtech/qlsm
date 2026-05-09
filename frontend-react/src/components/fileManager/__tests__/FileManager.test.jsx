@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PLUGIN_CAPS } from '../capabilities';
@@ -15,14 +15,18 @@ const BINARY_FILE = {
 
 const mocks = vi.hoisted(() => ({
   editorProps: null,
+  rowMenuHandlers: null,
 }));
 
 vi.mock('../FileTree', () => ({
-  default: ({ onSelectFile }) => (
-    <button type="button" onClick={() => onSelectFile(BINARY_FILE)}>
-      Select File
-    </button>
-  ),
+  default: ({ onSelectFile, rowMenuHandlers }) => {
+    mocks.rowMenuHandlers = rowMenuHandlers;
+    return (
+      <button type="button" onClick={() => onSelectFile(BINARY_FILE)}>
+        Select File
+      </button>
+    );
+  },
 }));
 
 vi.mock('../FileEditorPanel', () => ({
@@ -53,13 +57,7 @@ vi.mock('../FileEditorPanel', () => ({
 }));
 
 vi.mock('../FileSidebarActions', () => ({
-  default: ({ selectedFile, onDelete }) => (
-    selectedFile ? (
-      <button type="button" onClick={onDelete}>
-        Delete Binary
-      </button>
-    ) : null
-  ),
+  default: () => null,
 }));
 
 vi.mock('../NewFileModal', () => ({
@@ -108,6 +106,7 @@ describe('FileManager binary file handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.editorProps = null;
+    mocks.rowMenuHandlers = null;
   });
 
   it('does not delete the selected file when replacement uploads to the same path', async () => {
@@ -183,8 +182,13 @@ describe('FileManager binary file handling', () => {
       expect(screen.getByTestId('binary-description')).toHaveTextContent('Temporary hook');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /delete binary/i }));
-    fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }));
+    // Trigger delete via the row menu handler (exposed through FileTree mock)
+    await waitFor(() => expect(mocks.rowMenuHandlers?.onDelete).toBeDefined());
+    act(() => {
+      mocks.rowMenuHandlers.onDelete(BINARY_FILE);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: /confirm delete/i }));
 
     await waitFor(() => expect(deleteFile).toHaveBeenCalledWith('plugins/foo.so'));
     expect(screen.getByText(/select a file to view or edit/i)).toBeInTheDocument();
