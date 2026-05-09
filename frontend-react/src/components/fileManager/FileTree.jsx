@@ -106,7 +106,7 @@ function TreeItem({
       >
         <button
           type="button"
-          className="flex flex-1 items-center gap-2 min-w-0"
+          className="flex flex-1 items-center gap-2 min-w-0 text-left"
           onClick={handleClick}
         >
           {showCheckbox && (

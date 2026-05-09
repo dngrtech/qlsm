@@ -249,13 +249,14 @@ export function useFileManagerController({
         await onCheck(path, true);
       }
       if (targetDir) expandFolder(targetDir);
+      pendingLocalPathsRef.current.add(path);
+      await selectPath(path, { path, name, type: 'file' });
       setShowNewModal(false);
       setActionError(null);
-      pendingLocalPathsRef.current.add(path);
     } catch (err) {
       setActionError(getErrorMessage(err, 'Create failed'));
     }
-  }, [adapter, capabilities, checkable, expandFolder, newModalMode, newModalTargetDir, onCheck, selectedFile]);
+  }, [adapter, capabilities, checkable, expandFolder, newModalMode, newModalTargetDir, onCheck, selectPath, selectedFile]);
 
   const handleUpload = useCallback(async (file, targetDir = null) => {
     try {
