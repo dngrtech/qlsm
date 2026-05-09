@@ -6,6 +6,7 @@
 !.gitignore
 !.env.example
 !.dockerignore
+!setup-worktree.sh
 !qlsm-install.sh
 !vultr-startup.sh
 !.github/
