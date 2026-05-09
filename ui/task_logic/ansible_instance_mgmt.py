@@ -450,7 +450,7 @@ def start_instance_logic(instance_id):
         return f"Error during instance {instance_id} start: {e}"
 
 
-def apply_instance_config_logic(instance_id, restart=True):
+def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_network=False):
     """
     Logic for applying configuration to a QL instance via Ansible.
     This involves syncing config files and optionally restarting the service.
@@ -492,6 +492,8 @@ def apply_instance_config_logic(instance_id, restart=True):
             'id': instance.id,             # Keep id
             'qlds_args': qlds_args_string, # Pass constructed args for service re-templating
             'cpu_affinity': cpu_affinity,
+            'lan_rate_enabled': instance.lan_rate_enabled,
+            'reconcile_lan_rate_network': reconcile_lan_rate_network,
             'restart_service': restart     # Pass restart flag
         }
         apply_config_extravars = with_self_host_network_extravars(instance, apply_config_extravars)

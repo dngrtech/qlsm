@@ -866,7 +866,15 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
 
             restart = data.get('restart', True)
-            job = enqueue_task(apply_instance_config, instance.id, restart=restart, lock_token=lock_token, on_failure=instance_job_failure_handler)
+            reconcile_lan_rate_network = 'lan_rate_enabled' in data
+            job = enqueue_task(
+                apply_instance_config,
+                instance.id,
+                restart=restart,
+                reconcile_lan_rate_network=reconcile_lan_rate_network,
+                lock_token=lock_token,
+                on_failure=instance_job_failure_handler,
+            )
             if job:
                 lock_transferred = True
                 current_app.logger.info(f"Enqueued job {job.id} for apply_instance_config for instance {instance.id}")

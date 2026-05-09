@@ -28,6 +28,7 @@ def _make_mock_instance(instance_id=12, status=InstanceStatus.RUNNING):
     mock_instance.status = status
     mock_instance.host = mock_host
     mock_instance.config = '+set sv_hostname "Test Server"'
+    mock_instance.lan_rate_enabled = False
     return mock_instance
 
 
@@ -84,6 +85,53 @@ def test_apply_instance_config_passes_cpu_affinity(
     mock_ensure_affinity.assert_called_once_with(mock_instance)
     extravars = mock_run_playbook.call_args.kwargs['extravars']
     assert extravars['cpu_affinity'] == 1
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_apply_instance_config_passes_lan_rate_state(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance(status=InstanceStatus.RUNNING)
+    mock_instance.lan_rate_enabled = True
+    mock_session.get.return_value = mock_instance
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, 'ok', ''), None)
+
+    apply_instance_config(12)
+
+    extravars = mock_run_playbook.call_args.kwargs['extravars']
+    assert extravars['lan_rate_enabled'] is True
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_apply_instance_config_passes_lan_rate_reconcile_flag(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance(status=InstanceStatus.RUNNING)
+    mock_session.get.return_value = mock_instance
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, 'ok', ''), None)
+
+    apply_instance_config(12, reconcile_lan_rate_network=True)
+
+    extravars = mock_run_playbook.call_args.kwargs['extravars']
+    assert extravars['reconcile_lan_rate_network'] is True
 
 
 @patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
