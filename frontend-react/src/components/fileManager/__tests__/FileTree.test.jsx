@@ -4,10 +4,33 @@ import { describe, expect, it, vi } from 'vitest';
 
 import FileTree from '../FileTree';
 
+function rowTexts(tree) {
+  return within(tree).getAllByRole('button')
+    .map(b => b.textContent.trim())
+    .filter(t => t.length > 0);
+}
+
+function FolderHarness({ files, ...props }) {
+  const [expanded, setExpanded] = useState(new Set());
+  return (
+    <FileTree
+      files={files}
+      onSelectFile={vi.fn()}
+      expandedFolders={expanded}
+      onToggleFolder={(path) => setExpanded(prev => {
+        const next = new Set(prev);
+        next.has(path) ? next.delete(path) : next.add(path);
+        return next;
+      })}
+      {...props}
+    />
+  );
+}
+
 describe('FileTree', () => {
   it('renders folders collapsed by default', () => {
     render(
-      <FileTree
+      <FolderHarness
         files={[
           {
             name: 'extras',
@@ -18,7 +41,6 @@ describe('FileTree', () => {
             ],
           },
         ]}
-        onSelectFile={vi.fn()}
         foldersEnabled
       />,
     );
@@ -47,21 +69,18 @@ describe('FileTree', () => {
     );
 
     const tree = screen.getByPlaceholderText(/search files/i).closest('.flex-col');
-    const rows = within(tree).getAllByRole('button').map(button => button.textContent);
-
-    expect(rows).toEqual(['alpha.py', 'bravo.py', 'charlie.py', 'zeta.py']);
+    expect(rowTexts(tree)).toEqual(['alpha.py', 'bravo.py', 'charlie.py', 'zeta.py']);
   });
 
   it('keeps folders before checked and unchecked files in plugin trees', () => {
     render(
-      <FileTree
+      <FolderHarness
         files={[
           { name: 'zeta.py', path: 'zeta.py', type: 'file' },
           { name: 'extras', path: 'extras', type: 'folder', children: [] },
           { name: 'alpha.py', path: 'alpha.py', type: 'file' },
           { name: 'bravo.py', path: 'bravo.py', type: 'file' },
         ]}
-        onSelectFile={vi.fn()}
         checkable
         checkedFiles={new Set(['bravo.py', 'alpha.py'])}
         foldersEnabled
@@ -69,9 +88,7 @@ describe('FileTree', () => {
     );
 
     const tree = screen.getByPlaceholderText(/search files/i).closest('.flex-col');
-    const rows = within(tree).getAllByRole('button').map(button => button.textContent);
-
-    expect(rows).toEqual(['extras', 'alpha.py', 'bravo.py', 'zeta.py']);
+    expect(rowTexts(tree)).toEqual(['extras', 'alpha.py', 'bravo.py', 'zeta.py']);
   });
 
   it('does not move a file when the user checks it mid-session', () => {
@@ -104,12 +121,10 @@ describe('FileTree', () => {
     render(<TreeHarness />);
 
     const tree = screen.getByPlaceholderText(/search files/i).closest('.flex-col');
-    const rowsBefore = within(tree).getAllByRole('button').map(button => button.textContent);
-    expect(rowsBefore).toEqual(['alpha.py', 'bravo.py', 'zeta.py']);
+    expect(rowTexts(tree)).toEqual(['alpha.py', 'bravo.py', 'zeta.py']);
 
     fireEvent.click(within(tree).getAllByRole('checkbox')[2]);
 
-    const rowsAfter = within(tree).getAllByRole('button').map(button => button.textContent);
-    expect(rowsAfter).toEqual(['alpha.py', 'bravo.py', 'zeta.py']);
+    expect(rowTexts(tree)).toEqual(['alpha.py', 'bravo.py', 'zeta.py']);
   });
 });

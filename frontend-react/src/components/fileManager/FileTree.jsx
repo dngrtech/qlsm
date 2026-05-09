@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Box, Code, FileText, Folder, FolderOpen, Lock, Search } from 'lucide-react';
 
+import FileTreeRowMenu from './FileTreeRowMenu';
 import { sortFileTree } from './fileManagerUtils';
 
 const FILE_TYPE_ICONS = {
@@ -44,8 +45,12 @@ function TreeItem({
   checkedFiles,
   onCheck,
   foldersEnabled,
+  capabilities,
+  expandedFolders,
+  onToggleFolder,
+  rowMenuHandlers,
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const expanded = item.type === 'folder' ? expandedFolders.has(item.path) : false;
   const isFolder = item.type === 'folder';
   const isSelected = !isFolder && item.path === selectedPath;
   const fileType = item.file_type || getFileType(item.name);
@@ -71,6 +76,10 @@ function TreeItem({
             checkedFiles={checkedFiles}
             onCheck={onCheck}
             foldersEnabled={foldersEnabled}
+            capabilities={capabilities}
+            expandedFolders={expandedFolders}
+            onToggleFolder={onToggleFolder}
+            rowMenuHandlers={rowMenuHandlers}
           />
         ))}
       </>
@@ -79,7 +88,7 @@ function TreeItem({
 
   const handleClick = () => {
     if (isFolder) {
-      setExpanded(current => !current);
+      onToggleFolder(item.path);
       return;
     }
     onSelectFile(item);
@@ -87,34 +96,49 @@ function TreeItem({
 
   return (
     <>
-      <button
-        type="button"
-        className={`flex w-full items-center gap-2 px-2 py-1 rounded text-sm text-left ${
+      <div
+        className={`group flex w-full items-center gap-2 px-2 py-1 rounded text-sm text-left ${
           isSelected
             ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)]'
             : 'text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]/50'
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        onClick={handleClick}
       >
-        {showCheckbox && (
-          <input
-            type="checkbox"
-            checked={checkedFiles?.has(item.path) || false}
-            onChange={(e) => {
-              e.stopPropagation();
-              onCheck(item.path, e.target.checked);
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className="h-3.5 w-3.5 rounded border-gray-500 text-blue-500 focus:ring-blue-500 flex-shrink-0"
-          />
-        )}
-        <Icon className={`w-4 h-4 flex-shrink-0 ${iconColor}`} />
-        <span className="truncate flex-1 min-w-0">{item.name}</span>
-        {item.protected && (
-          <Lock className="w-3 h-3 flex-shrink-0 text-[var(--text-muted)]" />
-        )}
-      </button>
+        <button
+          type="button"
+          className="flex flex-1 items-center gap-2 min-w-0"
+          onClick={handleClick}
+        >
+          {showCheckbox && (
+            <input
+              type="checkbox"
+              checked={checkedFiles?.has(item.path) || false}
+              onChange={(e) => {
+                e.stopPropagation();
+                onCheck(item.path, e.target.checked);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="h-3.5 w-3.5 rounded border-gray-500 text-blue-500 focus:ring-blue-500 flex-shrink-0"
+            />
+          )}
+          <Icon className={`w-4 h-4 flex-shrink-0 ${iconColor}`} />
+          <span className="truncate flex-1 min-w-0">{item.name}</span>
+          {item.protected && (
+            <Lock className="w-3 h-3 flex-shrink-0 text-[var(--text-muted)]" />
+          )}
+        </button>
+        <FileTreeRowMenu
+          itemType={item.type}
+          isProtected={!!item.protected}
+          capabilities={capabilities}
+          onDownload={() => rowMenuHandlers.onDownload(item)}
+          onCopyContent={() => rowMenuHandlers.onCopyContent(item)}
+          onRename={() => rowMenuHandlers.onRename(item)}
+          onDelete={() => rowMenuHandlers.onDelete(item)}
+          onNewFileInFolder={() => rowMenuHandlers.onNewFileInFolder(item)}
+          onUploadToFolder={(file) => rowMenuHandlers.onUploadToFolder(item, file)}
+        />
+      </div>
       {isFolder && foldersEnabled && expanded && item.children?.map(child => (
         <TreeItem
           key={child.path}
@@ -126,6 +150,10 @@ function TreeItem({
           checkedFiles={checkedFiles}
           onCheck={onCheck}
           foldersEnabled={foldersEnabled}
+          capabilities={capabilities}
+          expandedFolders={expandedFolders}
+          onToggleFolder={onToggleFolder}
+          rowMenuHandlers={rowMenuHandlers}
         />
       ))}
     </>
@@ -140,6 +168,10 @@ export default function FileTree({
   checkedFiles = new Set(),
   onCheck = () => {},
   foldersEnabled = false,
+  capabilities = {},
+  expandedFolders = new Set(),
+  onToggleFolder = () => {},
+  rowMenuHandlers = {},
 }) {
   const [search, setSearch] = useState('');
   const filesSignature = useMemo(() => getTreeSignature(files || []), [files]);
@@ -167,7 +199,9 @@ export default function FileTree({
       return items.reduce((acc, item) => {
         if (item.type === 'folder') {
           const children = filterTree(item.children || []);
-          if (children.length) acc.push({ ...item, children });
+          if (children.length || item.name.toLowerCase().includes(term)) {
+            acc.push({ ...item, children });
+          }
         } else if (item.name.toLowerCase().includes(term)) {
           acc.push(item);
         }
@@ -213,6 +247,10 @@ export default function FileTree({
             checkedFiles={checkedFiles}
             onCheck={handleCheck}
             foldersEnabled={foldersEnabled}
+            capabilities={capabilities}
+            expandedFolders={expandedFolders}
+            onToggleFolder={onToggleFolder}
+            rowMenuHandlers={rowMenuHandlers}
           />
         ))}
       </div>
