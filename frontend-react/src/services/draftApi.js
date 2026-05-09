@@ -85,3 +85,22 @@ export const saveBinaryMeta = async (draftId, path, description, contextType, co
   });
   return response.data.data;
 };
+
+export const createDraftFolder = async (draftId, path) => {
+  const response = await apiClient.post(`/drafts/${draftId}/folders`, { path });
+  return response.data.data;
+};
+
+export const deleteDraftFolder = async (draftId, path) => {
+  const params = new URLSearchParams({ path });
+  const response = await apiClient.delete(`/drafts/${draftId}/folders?${params}`);
+  return response.data.data;
+};
+
+export const renameDraftFolder = async (draftId, oldPath, newPath) => {
+  const response = await apiClient.patch(`/drafts/${draftId}/folders`, {
+    old_path: oldPath,
+    new_path: newPath,
+  });
+  return response.data.data;
+};

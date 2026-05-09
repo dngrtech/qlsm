@@ -10,6 +10,9 @@ import {
   deleteDraftFile,
   renameDraftFile,
   commitDraft,
+  createDraftFolder,
+  deleteDraftFolder,
+  renameDraftFolder,
 } from '../services/draftApi';
 
 const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000;
@@ -131,6 +134,27 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
     await refreshTree();
   }, [draftId, refreshTree]);
 
+  const createFolder = useCallback(async (path) => {
+    if (!draftId) return;
+    await createDraftFolder(draftId, path);
+    setMutationCount(count => count + 1);
+    await refreshTree();
+  }, [draftId, refreshTree]);
+
+  const deleteFolder = useCallback(async (path) => {
+    if (!draftId) return;
+    await deleteDraftFolder(draftId, path);
+    setMutationCount(count => count + 1);
+    await refreshTree();
+  }, [draftId, refreshTree]);
+
+  const renameFolder = useCallback(async (oldPath, newPath) => {
+    if (!draftId) return;
+    await renameDraftFolder(draftId, oldPath, newPath);
+    setMutationCount(count => count + 1);
+    await refreshTree();
+  }, [draftId, refreshTree]);
+
   const commit = useCallback(async (target) => {
     if (!draftId) return;
     await commitDraft(draftId, target);
@@ -161,6 +185,7 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
   return {
     draftId, tree, loading, error,
     refreshTree, readContent, writeContent, upload, deleteFile, renameFile,
+    createFolder, deleteFolder, renameFolder,
     hasChanges: mutationCount > 0,
     commit, discard, consume,
   };
