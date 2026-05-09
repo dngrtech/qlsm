@@ -121,6 +121,10 @@
         state: started
       when: firewall_mode_effective == 'helper'
 
+    - name: Reconcile LAN rate network rules
+      ansible.builtin.import_tasks: tasks/reconcile_lan_rate_network.yml
+      when: reconcile_lan_rate_network | default(false)
+
     - name: Restart QLDS service
       ansible.builtin.systemd:
         name: "qlds@{{ game_port }}"

@@ -179,10 +179,14 @@ def start_instance(instance_id, lock_token=None):
 
 @rq.job(timeout=300)
 @with_app_context
-def apply_instance_config(instance_id, restart=True, lock_token=None):
+def apply_instance_config(instance_id, restart=True, reconcile_lan_rate_network=False, lock_token=None):
     """RQ task entry point for applying configuration to a QL instance."""
     try:
-        return apply_instance_config_logic(instance_id, restart=restart)
+        return apply_instance_config_logic(
+            instance_id,
+            restart=restart,
+            reconcile_lan_rate_network=reconcile_lan_rate_network,
+        )
     finally:
         if lock_token:
             from ui.task_lock import release_lock

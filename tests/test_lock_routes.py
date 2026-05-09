@@ -295,4 +295,5 @@ def test_manage_instance_config_updates_lan_rate_and_queues_single_apply_task(
     assert args[0].__name__ == 'apply_instance_config'
     assert args[1] == 1
     assert kwargs['restart'] is True
+    assert kwargs['reconcile_lan_rate_network'] is True
     assert 'lock_token' in kwargs
