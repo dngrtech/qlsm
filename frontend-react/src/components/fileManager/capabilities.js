@@ -1,16 +1,3 @@
-const NEW_SCRIPT_TEMPLATE = `"""
-minqlx plugin
-"""
-
-import minqlx
-
-
-class MyPlugin(minqlx.Plugin):
-    def __init__(self):
-        super().__init__()
-        # Add hooks and commands here
-`;
-
 export const CONFIG_CAPS = {
   canCreate: true,
   canUpload: true,
@@ -36,7 +23,7 @@ export const PLUGIN_CAPS = {
   canCheckEnable: true,
   canValidate: true,
   allowedExtensions: ['.py', '.txt', '.so'],
-  newFileTemplate: (filename) => (filename.endsWith('.py') ? NEW_SCRIPT_TEMPLATE : ''),
+  newFileTemplate: () => '',
   protectedFiles: [],
   reservedFolderNames: [],
 };
