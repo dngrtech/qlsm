@@ -166,13 +166,12 @@ def _build_draft_tree(path, base_path=None):
 
         if os.path.isdir(full_path):
             children = _build_draft_tree(full_path, base_path)
-            if children:
-                items.append({
-                    'name': entry,
-                    'type': 'folder',
-                    'path': relative_path,
-                    'children': children
-                })
+            items.append({
+                'name': entry,
+                'type': 'folder',
+                'path': relative_path,
+                'children': children
+            })
         elif os.path.isfile(full_path):
             ext = os.path.splitext(entry)[1].lower()
             if ext in ALLOWED_EXTENSIONS:
@@ -657,3 +656,100 @@ def commit_draft(draft_id):
     current_app.logger.info(f"Committed draft {draft_id} to {target_path}")
 
     return jsonify({"data": {"message": "Draft committed"}}), 200
+
+
+# --- Draft folder endpoints ---
+
+import re as _re
+
+_DRAFT_FOLDER_SEGMENT_RE = _re.compile(r'^[A-Za-z0-9._-]+$')
+
+
+def _normalize_draft_folder_path(rel_path):
+    """Validate and normalize a draft folder path.
+
+    Returns the normalized relative path (forward-slash separated) or None if invalid.
+    Rules: non-empty, no leading/trailing slash, each segment matches [A-Za-z0-9._-]+
+    and is ≤64 chars, reject '.' and '..' segments, reject segments starting with '.'.
+    """
+    if not isinstance(rel_path, str):
+        return None
+    rel_path = rel_path.strip()
+    if not rel_path or rel_path.startswith('/') or rel_path.endswith('/'):
+        return None
+    segments = rel_path.split('/')
+    for seg in segments:
+        if not seg or seg in ('.', '..') or seg.startswith('.'):
+            return None
+        if len(seg) > 64 or not _DRAFT_FOLDER_SEGMENT_RE.match(seg):
+            return None
+    return '/'.join(segments)
+
+
+@draft_api_bp.route('/<draft_id>/folders', methods=['POST'])
+@jwt_required()
+def create_draft_folder(draft_id):
+    """Create a new folder inside the draft scripts directory."""
+    if not _validate_draft_id(draft_id):
+        return jsonify({"error": {"message": "Invalid draft_id"}}), 400
+    scripts_path = _get_draft_scripts_path(draft_id)
+    if not os.path.isdir(scripts_path):
+        return jsonify({"error": {"message": "Draft not found"}}), 404
+    data = request.get_json() or {}
+    rel_path = _normalize_draft_folder_path(data.get('path'))
+    if rel_path is None:
+        return jsonify({"error": {"message": "Invalid path"}}), 400
+    if not _is_safe_draft_path(scripts_path, rel_path):
+        return jsonify({"error": {"message": "Invalid path"}}), 400
+    target = os.path.join(scripts_path, rel_path)
+    if os.path.exists(target):
+        return jsonify({"error": {"message": "Folder already exists"}}), 409
+    os.makedirs(target, exist_ok=False)
+    return jsonify({"data": {"path": rel_path}}), 201
+
+
+@draft_api_bp.route('/<draft_id>/folders', methods=['DELETE'])
+@jwt_required()
+def delete_draft_folder(draft_id):
+    """Delete a folder (recursive) inside the draft scripts directory."""
+    if not _validate_draft_id(draft_id):
+        return jsonify({"error": {"message": "Invalid draft_id"}}), 400
+    scripts_path = _get_draft_scripts_path(draft_id)
+    if not os.path.isdir(scripts_path):
+        return jsonify({"error": {"message": "Draft not found"}}), 404
+    rel_path = _normalize_draft_folder_path(request.args.get('path'))
+    if rel_path is None:
+        return jsonify({"error": {"message": "Invalid path"}}), 400
+    if not _is_safe_draft_path(scripts_path, rel_path):
+        return jsonify({"error": {"message": "Invalid path"}}), 400
+    target = os.path.join(scripts_path, rel_path)
+    if not os.path.isdir(target):
+        return jsonify({"error": {"message": "Folder not found"}}), 404
+    shutil.rmtree(target)
+    return jsonify({"data": {"path": rel_path}}), 200
+
+
+@draft_api_bp.route('/<draft_id>/folders', methods=['PATCH'])
+@jwt_required()
+def rename_draft_folder(draft_id):
+    """Rename a folder inside the draft scripts directory."""
+    if not _validate_draft_id(draft_id):
+        return jsonify({"error": {"message": "Invalid draft_id"}}), 400
+    scripts_path = _get_draft_scripts_path(draft_id)
+    if not os.path.isdir(scripts_path):
+        return jsonify({"error": {"message": "Draft not found"}}), 404
+    data = request.get_json() or {}
+    old_path = _normalize_draft_folder_path(data.get('old_path'))
+    new_path = _normalize_draft_folder_path(data.get('new_path'))
+    if old_path is None or new_path is None:
+        return jsonify({"error": {"message": "Invalid path"}}), 400
+    if not (_is_safe_draft_path(scripts_path, old_path) and _is_safe_draft_path(scripts_path, new_path)):
+        return jsonify({"error": {"message": "Invalid path"}}), 400
+    src = os.path.join(scripts_path, old_path)
+    dst = os.path.join(scripts_path, new_path)
+    if not os.path.isdir(src):
+        return jsonify({"error": {"message": "Source folder not found"}}), 404
+    if os.path.exists(dst):
+        return jsonify({"error": {"message": "Target already exists"}}), 409
+    os.rename(src, dst)
+    return jsonify({"data": {"old_path": old_path, "new_path": new_path}}), 200
