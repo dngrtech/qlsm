@@ -259,8 +259,10 @@ Example success response:
     "mappool.txt": "...",
     "access.txt": "...",
     "workshop.txt": "",
-    "custom.cfg": "..."
+    "custom.cfg": "...",
+    "custom_entities/items.ent": "..."
   },
+  "config_folders": ["custom_entities"],
   "checked_plugins": ["balance", "server_status"],
   "draft_id": "79e69985-8998-4881-a8ce-1f4fba712fe9",
   "factories": {
@@ -269,7 +271,9 @@ Example success response:
 }
 ```
 
-`configs` is a filename-to-content map. Filenames must be flat `.cfg` or `.txt` names. The protected files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` are always required by update flows; create fills any missing protected file from the default preset. Custom config files are allowed.
+`configs` is a filename-to-content map. Flat filenames use `.cfg` or `.txt` extensions. Nested paths (one level deep, e.g. `custom_entities/items.ent`) use the `.ent` extension and are written inside the corresponding subfolder. The protected files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` are always required by update flows; create fills any missing protected file from the default preset. Custom config files are allowed.
+
+`config_folders` is an optional list of top-level subfolder names to create alongside the `configs` map. Folder names must not collide with the reserved names `scripts` and `factories`, must be at most one path segment, and may not start with `.`. If omitted by an older client, existing folders on disk are left untouched. Invalid `config_folders` are rejected with 400 before any database write occurs.
 
 `checked_plugins` is a list of plugin names used to build the instance `qlx_plugins` value. `draft_id` is optional and commits a plugin draft workspace into the instance. The legacy `scripts` payload is no longer accepted on create. `factories` is optional; when omitted, QLSM copies default factories for legacy compatibility. When present, QLSM deploys exactly the provided flat `.factories` map.
 
@@ -332,6 +336,8 @@ Example success response:
     "access.txt": "",
     "workshop.txt": "",
     "custom.cfg": "...",
+    "custom_entities/items.ent": "...",
+    "config_folders": ["custom_entities", "empty_dir"],
     "factories": {
       "duel.factories": "{...}"
     }
@@ -339,7 +345,9 @@ Example success response:
 }
 ```
 
-`PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `factories`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed.
+`config_folders` is returned alongside the flat `configs` map. It lists every top-level subfolder present in the instance config directory (excluding the reserved `scripts` and `factories` folders).
+
+`PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles top-level subfolders: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed.
 
 ## Server Status
 
