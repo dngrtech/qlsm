@@ -124,32 +124,103 @@ def _should_sync_configs(configs_data):
     return has_custom_file or PROTECTED_CONFIG_FILES.issubset(received)
 
 
+def _validate_config_folders(folders):
+    """Validate config_folders array. Returns (error_message, status_code) or (None, None)."""
+    if folders is None:
+        return None, None
+    if not isinstance(folders, list):
+        return "config_folders must be a list", 400
+    for name in folders:
+        if not isinstance(name, str):
+            return "config_folders entries must be strings", 400
+        err = _validate_path_segment(name, None)
+        if err:
+            return err, 400
+        if name.lower() in RESERVED_CONFIG_FOLDER_NAMES:
+            return f"Reserved folder name: {name}", 400
+    return None, None
+
+
 def _write_configs_to_disk(instance_dir, configs_data):
-    """Write only the config files present in the map."""
+    """Write only the config files present in the map (creates parent dirs)."""
     os.makedirs(instance_dir, exist_ok=True)
-    for filename, content in configs_data.items():
-        with open(os.path.join(instance_dir, filename), 'w') as f:
+    for rel_path, content in configs_data.items():
+        full_path = os.path.join(instance_dir, rel_path)
+        os.makedirs(os.path.dirname(full_path) or instance_dir, exist_ok=True)
+        with open(full_path, 'w') as f:
             f.write(content if content is not None else '')
 
 
-def _sync_configs_to_disk(instance_dir, configs_data):
-    """Write configs and remove unprotected managed config files absent from the map."""
+def _list_managed_files_recursive(instance_dir):
+    """Yield relative paths of managed files (cfg/txt/ent) under instance_dir,
+    excluding reserved subdirs (scripts/, factories/)."""
+    for root, dirs, files in os.walk(instance_dir):
+        if root == instance_dir:
+            dirs[:] = [d for d in dirs if d.lower() not in RESERVED_CONFIG_FOLDER_NAMES]
+        for fname in files:
+            if os.path.splitext(fname)[1].lower() in ALLOWED_CONFIG_EXTENSIONS:
+                full = os.path.join(root, fname)
+                yield os.path.relpath(full, instance_dir).replace(os.sep, '/')
+
+
+def _list_managed_folders(instance_dir):
+    """Return top-level managed folders (excluding reserved subdirs)."""
+    if not os.path.isdir(instance_dir):
+        return []
+    return [
+        name for name in os.listdir(instance_dir)
+        if os.path.isdir(os.path.join(instance_dir, name))
+        and name.lower() not in RESERVED_CONFIG_FOLDER_NAMES
+    ]
+
+
+def _sync_configs_to_disk(instance_dir, configs_data, config_folders=None):
+    """Write configs (nested supported), create empty folders, and remove orphans.
+
+    config_folders semantics:
+      - None         → caller did not supply the field. Preserve all existing
+                       top-level folders (legacy/partial-client safety).
+      - list (incl []) → caller explicitly listed the folders that must exist
+                         after sync. Prune any other top-level folder not in
+                         this list (or implied by a nested file path), but only
+                         via os.rmdir (empty-only); folders that still contain
+                         unmanaged content are left alone.
+    """
     os.makedirs(instance_dir, exist_ok=True)
-    existing = {
-        filename for filename in os.listdir(instance_dir)
-        if os.path.isfile(os.path.join(instance_dir, filename))
-        and os.path.splitext(filename)[1].lower() in ALLOWED_CONFIG_EXTENSIONS
-    }
-    received = set(configs_data.keys())
+    folder_pruning_requested = config_folders is not None
+    config_folders = list(config_folders or [])
+
+    desired_folders = set(config_folders)
+    for rel_path in configs_data.keys():
+        if '/' in rel_path:
+            desired_folders.add(rel_path.split('/', 1)[0])
 
     _write_configs_to_disk(instance_dir, configs_data)
 
-    for filename in existing - received:
-        if filename not in PROTECTED_CONFIG_FILES:
+    for folder in desired_folders:
+        os.makedirs(os.path.join(instance_dir, folder), exist_ok=True)
+
+    received_paths = set(configs_data.keys())
+    for rel_path in list(_list_managed_files_recursive(instance_dir)):
+        if rel_path in PROTECTED_CONFIG_FILES:
+            continue
+        if rel_path not in received_paths:
             try:
-                os.remove(os.path.join(instance_dir, filename))
+                os.remove(os.path.join(instance_dir, rel_path))
             except OSError as e:
-                current_app.logger.error(f"Error removing config file {filename}: {e}")
+                current_app.logger.error(f"Error removing config file {rel_path}: {e}")
+
+    if folder_pruning_requested:
+        for name in _list_managed_folders(instance_dir):
+            if name in desired_folders:
+                continue
+            folder_path = os.path.join(instance_dir, name)
+            try:
+                os.rmdir(folder_path)
+            except OSError as e:
+                current_app.logger.warning(
+                    f"Skipping non-empty orphan folder {folder_path}: {e}"
+                )
 
 
 def _sync_factories_to_disk(factories_dir, factories_data):
@@ -830,6 +901,13 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
             if err:
                 return jsonify({"error": {"message": err}}), code
 
+        config_folders_present = 'config_folders' in data
+        config_folders_value = data.get('config_folders') if config_folders_present else None
+        if config_folders_present:
+            err, code = _validate_config_folders(config_folders_value)
+            if err:
+                return jsonify({"error": {"message": err}}), code
+
         draft_id = data.get('draft_id')
         scripts_to_save = data.get('scripts', {})
         if draft_id:
@@ -870,8 +948,15 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 update_kwargs['qlx_plugins'] = validated_plugins
 
             if configs_present:
-                _sync_configs_to_disk(instance_config_dir, configs_to_save)
-                current_app.logger.info(f"Synced {len(configs_to_save)} config files for instance {instance.id}")
+                _sync_configs_to_disk(
+                    instance_config_dir,
+                    configs_to_save,
+                    config_folders_value if config_folders_present else None,
+                )
+                current_app.logger.info(
+                    f"Synced {len(configs_to_save)} config files and "
+                    f"{len(config_folders_value or [])} folders for instance {instance.id}"
+                )
 
             # Handle scripts via draft or legacy
             if draft_id:
@@ -944,22 +1029,20 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
     # GET request
     current_configs = {}
     if os.path.isdir(instance_config_dir):
-        for filename in os.listdir(instance_config_dir):
-            filepath = os.path.join(instance_config_dir, filename)
-            if not os.path.isfile(filepath):
-                continue
-            if os.path.splitext(filename)[1].lower() not in ALLOWED_CONFIG_EXTENSIONS:
-                continue
+        for rel_path in _list_managed_files_recursive(instance_config_dir):
+            full_path = os.path.join(instance_config_dir, rel_path)
             try:
-                with open(filepath, 'r') as f:
-                    current_configs[filename] = f.read()
+                with open(full_path, 'r') as f:
+                    current_configs[rel_path] = f.read()
             except OSError as e:
-                current_app.logger.error(f"Error reading config file {filename}: {e}")
+                current_app.logger.error(f"Error reading config file {rel_path}: {e}")
 
     for filename in PROTECTED_CONFIG_FILES:
         if filename not in current_configs:
             current_configs[filename] = _read_default_config(filename)
-    
+
+    current_configs['config_folders'] = _list_managed_folders(instance_config_dir)
+
     # Read factories
     instance_factories_dir = os.path.join('configs', host_name, str(instance.id), 'factories')
     factories_content = {}
@@ -972,9 +1055,9 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                         factories_content[filename] = f.read()
                 except Exception as e:
                     current_app.logger.error(f"Error reading factory {filename}: {e}")
-    
+
     current_configs['factories'] = factories_content
-    
+
     return jsonify({"data": current_configs})
 
 @instance_api_bp.route('/check-name', methods=['GET'])
