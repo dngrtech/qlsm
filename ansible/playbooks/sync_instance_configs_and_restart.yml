@@ -17,22 +17,24 @@
     qlds_dir: "/home/ql/qlds-{{ game_port }}"
 
   tasks:
-    - name: Sync instance-specific configs from UI server
+    - name: Sync instance configs (cfg/txt/ent + folders) to baseq3
       ansible.builtin.synchronize:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        archive: yes # Efficiently syncs
-        recursive: yes # Though individual files, good for consistency
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/"
+        dest: "{{ qlds_dir }}/baseq3/"
+        archive: yes
+        recursive: yes
         rsync_path: "sudo -u ql rsync"
-        # Ensure delete is false (default) so other files in dest are not removed
-      loop:
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/server.cfg",  dest: "{{ qlds_dir }}/baseq3/server.cfg" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/mappool.txt", dest: "{{ qlds_dir }}/baseq3/mappool.txt" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/access.txt",  dest: "{{ qlds_dir }}/baseq3/access.txt" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/workshop.txt", dest: "{{ qlds_dir }}/baseq3/workshop.txt" }
-
-
-      delegate_to: localhost # synchronize runs from the control node (qlds-ui server)
+        delete: yes
+        rsync_opts:
+          - "--include=*/"
+          - "--include=*.cfg"
+          - "--include=*.txt"
+          - "--include=*.ent"
+          - "--exclude=scripts/***"
+          - "--exclude=factories/***"
+          - "--exclude=*"
+          - "--prune-empty-dirs"
+      delegate_to: localhost
       become: false
 
     - name: Sync instance-specific scripts (minqlx plugins) from UI server
@@ -80,17 +82,14 @@
         recurse: yes
         state: directory
 
-    - name: Ensure correct ownership of synced configs
-      ansible.builtin.file:
-        path: "{{ qlds_dir }}/baseq3/{{ item }}"
-        owner: ql
-        group: ql
-        mode: '0644' # Or appropriate permissions
-      loop:
-        - server.cfg
-        - mappool.txt
-        - access.txt
-        - workshop.txt
+    - name: Ensure correct ownership of synced configs (recursive)
+      ansible.builtin.shell: |
+        find {{ qlds_dir }}/baseq3 \
+          -path "{{ qlds_dir }}/baseq3/scripts" -prune -o \
+          -path "{{ qlds_dir }}/baseq3/factories" -prune -o \
+          -type f \( -name '*.cfg' -o -name '*.txt' -o -name '*.ent' \) -print0 \
+          | xargs -0 -r chown ql:ql
+      changed_when: false
 
 
     

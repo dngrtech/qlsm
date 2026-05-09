@@ -162,23 +162,24 @@
   #######################################################################
   # 3. Sync Instance-Specific Configs
   #######################################################################
-    - name: Sync instance-specific configs from UI server
-      synchronize:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
+    - name: Sync instance configs (cfg/txt/ent + folders) to baseq3
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/"
+        dest: "{{ qlds_dir }}/baseq3/"
         archive: yes
         recursive: yes
-        rsync_path: "sudo -u ql rsync" 
-        # Note: src paths are relative to the playbook file location on control node
-      loop:
-        # Sync instance-specific configs from the directory created by the UI
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/server.cfg",  dest: "{{ qlds_dir }}/baseq3/server.cfg" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/mappool.txt", dest: "{{ qlds_dir }}/baseq3/mappool.txt" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/access.txt",  dest: "{{ qlds_dir }}/baseq3/access.txt" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/workshop.txt", dest: "{{ qlds_dir }}/baseq3/workshop.txt" }
-        - { src: "../../configs/{{ host_name }}/{{ qlds_id }}/workshop.txt", dest: "{{ qlds_dir }}/baseq3/workshop.txt" }
-
-      delegate_to: localhost # Synchronize runs from the control node perspective
+        rsync_path: "sudo -u ql rsync"
+        delete: yes
+        rsync_opts:
+          - "--include=*/"
+          - "--include=*.cfg"
+          - "--include=*.txt"
+          - "--include=*.ent"
+          - "--exclude=scripts/***"
+          - "--exclude=factories/***"
+          - "--exclude=*"
+          - "--prune-empty-dirs"
+      delegate_to: localhost
       become: false
 
     - name: Sync instance-specific scripts (minqlx plugins) from UI server
