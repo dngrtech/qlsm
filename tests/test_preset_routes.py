@@ -21,6 +21,7 @@ def _create_preset_folder(app, name, files=None, factories=None):
     with app.app_context():
         os.makedirs(preset_path, exist_ok=True)
         for filename, content in (files or {}).items():
+            os.makedirs(os.path.dirname(os.path.join(preset_path, filename)), exist_ok=True)
             with open(os.path.join(preset_path, filename), 'w') as f:
                 f.write(content)
         if factories is not None:
@@ -198,12 +199,12 @@ def test_create_preset_with_generic_configs_writes_custom_file(client, app):
 
 
 @pytest.mark.parametrize('filename', [
-    'nested/custom.cfg',
     '../custom.cfg',
     'custom.py',
+    'nested/deep/custom.cfg',
 ])
 def test_create_preset_rejects_invalid_generic_config_filename(client, app, filename):
-    """Generic config map filenames must be flat .cfg/.txt files."""
+    """Generic config map filenames must be safe managed config paths."""
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post('/api/presets/', headers=headers, json={
         'name': 'badconfig',
@@ -214,6 +215,26 @@ def test_create_preset_rejects_invalid_generic_config_filename(client, app, file
     assert response.status_code == 400
     assert 'Invalid config' in response.get_json()['error']['message']
     assert not os.path.exists(os.path.join('configs', 'presets', 'badconfig'))
+
+
+def test_create_preset_accepts_nested_configs_and_folders(client, app):
+    """POST accepts one-level nested config paths and returns config_folders."""
+    headers = auth_headers(app, DEFAULT_USER)
+    configs = {**BASE_CONFIG_MAP, 'test/test.cfg': 'set g_gametype 0\n'}
+
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'nestedpreset',
+        'description': '',
+        'configs': configs,
+        'config_folders': ['test'],
+    })
+
+    assert response.status_code == 201, response.get_json()
+    data = response.get_json()['data']
+    assert data['configs']['test/test.cfg'] == 'set g_gametype 0\n'
+    assert data['config_folders'] == ['test']
+    with open(os.path.join('configs', 'presets', 'nestedpreset', 'test', 'test.cfg')) as f:
+        assert f.read() == 'set g_gametype 0\n'
 
 
 def test_create_preset_unauthenticated(client, app):
@@ -589,6 +610,44 @@ def test_update_preset_rejects_null_configs(client, app, tmp_path, monkeypatch):
 
     assert response.status_code == 400
     assert "'configs' must be a dict" in response.get_json()['error']['message']
+
+
+def test_update_preset_accepts_nested_config_filename(client, app, tmp_path, monkeypatch):
+    """PUT accepts a one-level nested config path from the config folder UI."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, preset_path = _create_preset_folder(app, 'nestedupdate', BASE_CONFIG_MAP)
+    configs = {**BASE_CONFIG_MAP, 'test/test.cfg': 'set sv_mapPoolFile "test"\n'}
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'configs': configs,
+        'config_folders': ['test'],
+    })
+
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()['data']
+    assert data['configs']['test/test.cfg'] == 'set sv_mapPoolFile "test"\n'
+    assert data['config_folders'] == ['test']
+    with open(os.path.join(preset_path, 'test', 'test.cfg')) as f:
+        assert f.read() == 'set sv_mapPoolFile "test"\n'
+
+
+def test_get_preset_returns_nested_configs_and_folders(client, app, tmp_path, monkeypatch):
+    """GET includes nested config files and top-level config folders."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, _ = _create_preset_folder(
+        app,
+        'nestedget',
+        {**BASE_CONFIG_MAP, 'test/test.cfg': 'nested'},
+    )
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['configs']['test/test.cfg'] == 'nested'
+    assert data['config_folders'] == ['test']
 
 
 def test_update_preset_syncs_deleted_factory_file(client, app, tmp_path, monkeypatch):

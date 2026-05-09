@@ -362,6 +362,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     await waitFor(() => expect(mocks.savePreset).toHaveBeenCalledTimes(1));
     expect(mocks.savePreset).toHaveBeenCalledWith(
       expect.objectContaining({
+        config_folders: [],
         factories: { 'ca.factories': '{"factory": true}' },
         checked_factories: ['ca.factories'],
       }),

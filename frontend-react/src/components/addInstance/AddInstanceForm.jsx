@@ -539,9 +539,9 @@ function AddInstanceForm({
         }
       }
 
-      syncConfigState(newConfigs, { resetAdapter: true, markInitial: true });
       const newFolders = Array.isArray(presetData.config_folders) ? presetData.config_folders : [];
-      if (newFolders.length > 0) resetConfigs(newConfigs, newFolders);
+      syncConfigState(newConfigs, { markInitial: true });
+      resetConfigs(newConfigs, newFolders);
       initialConfigContentsRef.current = newConfigs;
 
       // Track which preset was loaded (for update feature)
@@ -588,10 +588,12 @@ function AddInstanceForm({
     try {
       // Map internal config keys to API keys
       const { files: serializedFactories } = serializeFactories();
+      const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
         name,
         description: description || null,
-        configs: serializeConfigs().files,
+        configs: cfgFiles,
+        config_folders: cfgFolders,
         factories: serializedFactories,
         checked_factories: Object.keys(serializedFactories),
       };
@@ -639,9 +641,11 @@ function AddInstanceForm({
     setIsUpdatingPreset(true);
     try {
       const { files: serializedFactoriesUpdate } = serializeFactories();
+      const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
         description: description,
-        configs: serializeConfigs().files,
+        configs: cfgFiles,
+        config_folders: cfgFolders,
         factories: serializedFactoriesUpdate,
         checked_factories: Object.keys(serializedFactoriesUpdate),
       };

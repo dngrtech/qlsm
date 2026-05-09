@@ -25,9 +25,11 @@ CONFIG_FILE_MAP = {
 
 # Reverse mapping for writing files from API request
 API_TO_FILE_MAP = {v: k for k, v in CONFIG_FILE_MAP.items()}
-ALLOWED_PRESET_CONFIG_EXTENSIONS = {'.cfg', '.txt'}
+ALLOWED_PRESET_CONFIG_EXTENSIONS = {'.cfg', '.txt', '.ent'}
 ALLOWED_PRESET_FACTORY_EXTENSIONS = {'.factories'}
 PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
+RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories'}
+MAX_CONFIG_PATH_DEPTH = 2
 
 
 def _validate_flat_filename(filename, allowed_extensions, label):
@@ -41,6 +43,51 @@ def _validate_flat_filename(filename, allowed_extensions, label):
     if os.path.splitext(filename)[1].lower() not in allowed_extensions:
         allowed = ', '.join(sorted(allowed_extensions))
         raise ValueError(f"Invalid {label} extension for {filename}. Allowed: {allowed}")
+
+
+def _validate_path_segment(name, allowed_extensions=None, label='config'):
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"Invalid {label} filename: {name}")
+    if '/' in name or '\\' in name or '..' in name or name.startswith('.'):
+        raise ValueError(f"Invalid {label} filename: {name}")
+    if not all(char.isalnum() or char in '._-' for char in name):
+        raise ValueError(f"Invalid {label} filename: {name}")
+    if len(name) > 64:
+        raise ValueError(f"Invalid {label} filename: {name}")
+    if allowed_extensions is not None and os.path.splitext(name)[1].lower() not in allowed_extensions:
+        allowed = ', '.join(sorted(allowed_extensions))
+        raise ValueError(f"Invalid {label} extension for {name}. Allowed: {allowed}")
+
+
+def _validate_relative_config_path(path):
+    if not isinstance(path, str) or not path or path.startswith('/') or path.endswith('/'):
+        raise ValueError(f"Invalid config filename: {path}")
+    segments = path.split('/')
+    if len(segments) > MAX_CONFIG_PATH_DEPTH:
+        raise ValueError(f"Invalid config filename: {path}")
+    for i, segment in enumerate(segments):
+        is_file = i == len(segments) - 1
+        _validate_path_segment(
+            segment,
+            ALLOWED_PRESET_CONFIG_EXTENSIONS if is_file else None,
+            'config',
+        )
+    if len(segments) > 1 and segments[0].lower() in RESERVED_CONFIG_FOLDER_NAMES:
+        raise ValueError(f"Reserved folder name: {segments[0]}")
+
+
+def _normalize_config_folders(folders):
+    if folders is None:
+        return []
+    if not isinstance(folders, list):
+        raise ValueError("config_folders must be a list")
+    normalized = []
+    for name in folders:
+        _validate_path_segment(name, None, 'config')
+        if name.lower() in RESERVED_CONFIG_FOLDER_NAMES:
+            raise ValueError(f"Reserved folder name: {name}")
+        normalized.append(name)
+    return normalized
 
 
 def _normalize_text_content(content, label, filename):
@@ -60,9 +107,7 @@ def _normalize_preset_config_files(config_data):
 
         config_files = {}
         for filename, content in generic.items():
-            _validate_flat_filename(
-                filename, ALLOWED_PRESET_CONFIG_EXTENSIONS, 'config'
-            )
+            _validate_relative_config_path(filename)
             config_files[filename] = _normalize_text_content(
                 content, 'Config', filename
             )
@@ -101,6 +146,8 @@ def _normalize_preset_factory_files(factories_data):
 def _validate_preset_write_payload(data, has_config_updates=True):
     if has_config_updates:
         _normalize_preset_config_files(data)
+    if 'config_folders' in data:
+        _normalize_config_folders(data['config_folders'])
     if 'factories' in data:
         _normalize_preset_factory_files(data['factories'])
 
@@ -134,23 +181,19 @@ def _validation_error_response(error):
 
 
 def _read_preset_configs(preset_path):
-    """Read all .cfg/.txt files from a preset folder."""
+    """Read all managed config files from a preset folder."""
     configs_map = {}
     legacy = {}
 
     if os.path.isdir(preset_path):
-        for filename in sorted(os.listdir(preset_path)):
-            filepath = os.path.join(preset_path, filename)
-            if not os.path.isfile(filepath):
-                continue
-            if os.path.splitext(filename)[1].lower() not in ALLOWED_PRESET_CONFIG_EXTENSIONS:
-                continue
+        for rel_path in _list_preset_config_files(preset_path):
+            filepath = os.path.join(preset_path, rel_path)
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     content = f.read()
-                configs_map[filename] = content
-                if filename in CONFIG_FILE_MAP:
-                    legacy[CONFIG_FILE_MAP[filename]] = content
+                configs_map[rel_path] = content
+                if rel_path in CONFIG_FILE_MAP:
+                    legacy[CONFIG_FILE_MAP[rel_path]] = content
             except Exception as e:
                 current_app.logger.error(f"Error reading preset config file {filepath}: {e}")
 
@@ -158,7 +201,11 @@ def _read_preset_configs(preset_path):
         legacy.setdefault(api_key, '')
         configs_map.setdefault(filename, legacy[api_key])
 
-    return {**legacy, 'configs': configs_map}
+    return {
+        **legacy,
+        'configs': configs_map,
+        'config_folders': _list_preset_config_folders(preset_path),
+    }
 
 
 def _read_preset_scripts(preset_path):
@@ -340,17 +387,50 @@ def _write_preset_checked_factories(preset_path, checked_factories):
         current_app.logger.error(f"Error writing checked_factories.json to {filepath}: {e}")
 
 
+def _list_preset_config_files(preset_path):
+    """Yield relative managed config paths, excluding reserved preset subdirs."""
+    if not os.path.isdir(preset_path):
+        return
+    for root, dirs, files in os.walk(preset_path):
+        if root == preset_path:
+            dirs[:] = [
+                d for d in dirs
+                if d.lower() not in RESERVED_CONFIG_FOLDER_NAMES
+            ]
+        for filename in sorted(files):
+            if os.path.splitext(filename)[1].lower() not in ALLOWED_PRESET_CONFIG_EXTENSIONS:
+                continue
+            full_path = os.path.join(root, filename)
+            yield os.path.relpath(full_path, preset_path).replace(os.sep, '/')
+
+
+def _list_preset_config_folders(preset_path):
+    """Return top-level managed config folder names for a preset."""
+    if not os.path.isdir(preset_path):
+        return []
+    return sorted(
+        name for name in os.listdir(preset_path)
+        if os.path.isdir(os.path.join(preset_path, name))
+        and name.lower() not in RESERVED_CONFIG_FOLDER_NAMES
+    )
+
+
 def _write_preset_configs(preset_path, config_data):
     """Write preset config files.
 
     Legacy API keys are partial writes. The generic configs map is a sync
-    payload and removes unprotected .cfg/.txt files absent from the map.
+    payload and removes managed config files absent from the map.
     """
     config_files, should_sync = _normalize_preset_config_files(config_data)
+    config_folders_present = 'config_folders' in config_data
+    config_folders = _normalize_config_folders(
+        config_data.get('config_folders')
+    ) if config_folders_present else None
     os.makedirs(preset_path, exist_ok=True)
 
-    for filename, content in config_files.items():
-        filepath = os.path.join(preset_path, filename)
+    for rel_path, content in config_files.items():
+        filepath = os.path.join(preset_path, rel_path)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         current_app.logger.info(f"Wrote preset config file: {filepath}")
@@ -358,20 +438,40 @@ def _write_preset_configs(preset_path, config_data):
     if not should_sync:
         return
 
-    existing = {
-        filename for filename in os.listdir(preset_path)
-        if os.path.isfile(os.path.join(preset_path, filename)) and
-        os.path.splitext(filename)[1].lower() in ALLOWED_PRESET_CONFIG_EXTENSIONS
-    }
-    for filename in sorted(existing - set(config_files.keys())):
-        if filename in PROTECTED_CONFIG_FILES:
+    desired_folders = set(config_folders or [])
+    for rel_path in config_files:
+        if '/' in rel_path:
+            desired_folders.add(rel_path.split('/', 1)[0])
+
+    for folder in sorted(desired_folders):
+        os.makedirs(os.path.join(preset_path, folder), exist_ok=True)
+
+    for rel_path in _list_preset_config_files(preset_path):
+        if rel_path in PROTECTED_CONFIG_FILES:
             continue
-        filepath = os.path.join(preset_path, filename)
+        if rel_path in config_files:
+            continue
+        filepath = os.path.join(preset_path, rel_path)
         try:
             os.remove(filepath)
             current_app.logger.info(f"Removed preset config file: {filepath}")
         except OSError as e:
             current_app.logger.error(f"Error removing preset config file {filepath}: {e}")
+
+    if not config_folders_present:
+        return
+
+    for folder in _list_preset_config_folders(preset_path):
+        if folder in desired_folders:
+            continue
+        folder_path = os.path.join(preset_path, folder)
+        try:
+            os.rmdir(folder_path)
+            current_app.logger.info(f"Removed empty preset config folder: {folder_path}")
+        except OSError as e:
+            current_app.logger.warning(
+                f"Skipping non-empty preset config folder {folder_path}: {e}"
+            )
 
 
 def _validation_status(reason):
