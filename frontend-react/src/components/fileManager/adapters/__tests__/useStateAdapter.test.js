@@ -86,7 +86,7 @@ describe('useStateAdapter', () => {
       allowedExtensions: ['.cfg'],
     }));
 
-    expect(result.current.serialize()).toEqual({ 'a.cfg': '1', 'b.cfg': '2' });
+    expect(result.current.serialize().files).toEqual({ 'a.cfg': '1', 'b.cfg': '2' });
   });
 
   it('upload adds a new file', async () => {
@@ -121,13 +121,13 @@ describe('useStateAdapter', () => {
     });
 
     expect(readServerContent).toHaveBeenCalledWith('ca.factories');
-    expect(result.current.serialize()).toEqual({ 'ca.factories': '{"factory": true}' });
+    expect(result.current.serialize().files).toEqual({ 'ca.factories': '{"factory": true}' });
     expect(result.current.checkedFiles.has('ca.factories')).toBe(true);
 
     await act(async () => {
       await result.current.setChecked('ca.factories', false);
     });
 
-    expect(result.current.serialize()).toEqual({});
+    expect(result.current.serialize().files).toEqual({});
   });
 });

@@ -64,3 +64,21 @@ export function isCheckablePath(path = '') {
 export function getErrorMessage(error, fallback) {
   return error?.response?.data?.error?.message || error?.message || fallback;
 }
+
+export function mergeFoldersIntoTree(items = [], folders = new Set()) {
+  const existing = new Set(items.filter(i => i.type === 'folder').map(i => i.name));
+  const extras = [];
+  for (const name of folders) {
+    if (existing.has(name)) continue;
+    extras.push({ name, path: name, type: 'folder', children: [] });
+  }
+  return [...items, ...extras];
+}
+
+export function rewritePathPrefix(path, oldPrefix, newPrefix) {
+  if (path === oldPrefix) return newPrefix;
+  if (path.startsWith(oldPrefix + '/')) {
+    return newPrefix + path.slice(oldPrefix.length);
+  }
+  return null;
+}

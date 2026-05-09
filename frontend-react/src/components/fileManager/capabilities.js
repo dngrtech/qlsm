@@ -16,12 +16,14 @@ export const CONFIG_CAPS = {
   canUpload: true,
   canDelete: true,
   canRename: true,
-  canFolders: false,
+  canFolders: true,
+  canCreateFolder: true,
   canCheckEnable: false,
   canValidate: false,
-  allowedExtensions: ['.cfg', '.txt'],
+  allowedExtensions: ['.cfg', '.txt', '.ent'],
   newFileTemplate: () => '',
   protectedFiles: ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'],
+  reservedFolderNames: ['scripts', 'factories'],
 };
 
 export const PLUGIN_CAPS = {
@@ -30,11 +32,13 @@ export const PLUGIN_CAPS = {
   canDelete: true,
   canRename: true,
   canFolders: true,
+  canCreateFolder: true,
   canCheckEnable: true,
   canValidate: true,
   allowedExtensions: ['.py', '.txt', '.so'],
   newFileTemplate: (filename) => (filename.endsWith('.py') ? NEW_SCRIPT_TEMPLATE : ''),
   protectedFiles: [],
+  reservedFolderNames: [],
 };
 
 export const FACTORY_CAPS = {
@@ -43,9 +47,11 @@ export const FACTORY_CAPS = {
   canDelete: true,
   canRename: true,
   canFolders: false,
+  canCreateFolder: false,
   canCheckEnable: true,
   canValidate: false,
   allowedExtensions: ['.factories'],
   newFileTemplate: () => '{\n  \n}',
   protectedFiles: [],
+  reservedFolderNames: [],
 };
