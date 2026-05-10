@@ -18,14 +18,22 @@ const mocks = vi.hoisted(() => ({
   updateInstance: vi.fn(),
   updateInstanceConfig: vi.fn(),
   fileManagerProps: [],
+  qlentLanguage: { name: 'qlent' },
+  qlentLinter: vi.fn(),
   useDraftWorkspace: vi.fn(),
 }));
 
 vi.mock('@headlessui/react', () => {
   const Dialog = ({ children }) => <div>{children}</div>;
-  Dialog.Panel = ({ children, transition: _transition, ...props }) => <div {...props}>{children}</div>;
+  Dialog.Panel = ({ children, transition: _transition, ...props }) => {
+    void _transition;
+    return <div {...props}>{children}</div>;
+  };
   Dialog.Title = ({ children, ...props }) => <div {...props}>{children}</div>;
-  const DialogBackdrop = ({ children, transition: _transition, ...props }) => <div {...props}>{children}</div>;
+  const DialogBackdrop = ({ children, transition: _transition, ...props }) => {
+    void _transition;
+    return <div {...props}>{children}</div>;
+  };
 
   const Transition = ({ show, children }) => (show ? <>{children}</> : null);
   Transition.Child = ({ children }) => <>{children}</>;
@@ -88,7 +96,7 @@ vi.mock('../../common/InfoTooltip', () => ({
 
 vi.mock('../../fileManager', () => ({
   CONFIG_CAPS: {
-    allowedExtensions: ['.cfg', '.txt'],
+    allowedExtensions: ['.cfg', '.txt', '.ent'],
     protectedFiles: ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'],
   },
   PLUGIN_CAPS: {
@@ -149,6 +157,11 @@ vi.mock('../../../codemirror-lang-qlaccess', () => ({
 
 vi.mock('../../../codemirror-lang-qlworkshop', () => ({
   qlworkshopLanguage: {},
+}));
+
+vi.mock('../../../codemirror-lang-qlent', () => ({
+  qlentLanguage: mocks.qlentLanguage,
+  qlentLinter: mocks.qlentLinter,
 }));
 
 describe('EditInstanceConfigModal preset saving', () => {
@@ -366,6 +379,33 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(pluginManagerProps.getLanguageForFile('balance.py')).toBeTruthy();
     expect(pluginManagerProps.getLanguageForFile('readme.txt')).toBeNull();
     expect(pluginManagerProps.onExpandEditor).toEqual(expect.any(Function));
+  });
+
+  it('uses entity highlighting and linting for .ent config files', async () => {
+    mocks.getInstanceConfig.mockResolvedValue({
+      'server.cfg': 'set sv_hostname "Test123"',
+      'mappool.txt': '',
+      'access.txt': '',
+      'workshop.txt': '',
+      'custom_entities/items.ent': '{\n"classname" "worldspawn"\n}',
+      factories: {},
+    });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeInTheDocument());
+    const configManagerProps = mocks.fileManagerProps.find(props => props.defaultSelectedPath === 'server.cfg');
+
+    expect(configManagerProps.getLanguageForFile('custom_entities/items.ent')).toBe(mocks.qlentLanguage);
+    expect(configManagerProps.getLinterSourceForFile('custom_entities/items.ent')).toBe(mocks.qlentLinter);
   });
 
   it('uses JSON highlighting and linting for factory files', async () => {

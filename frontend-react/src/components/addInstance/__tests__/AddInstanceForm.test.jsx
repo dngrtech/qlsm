@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   getFactoryTree: vi.fn(),
   getPresetById: vi.fn(),
   fileManagerProps: [],
+  qlentLanguage: { name: 'qlent' },
+  qlentLinter: vi.fn(),
   savePreset: vi.fn(),
   saveBinaryMeta: vi.fn(),
   updatePreset: vi.fn(),
@@ -37,7 +39,7 @@ vi.mock('../../../services/draftApi', () => ({
 
 vi.mock('../../fileManager', () => ({
   CONFIG_CAPS: {
-    allowedExtensions: ['.cfg', '.txt'],
+    allowedExtensions: ['.cfg', '.txt', '.ent'],
     protectedFiles: ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'],
   },
   PLUGIN_CAPS: {
@@ -152,6 +154,11 @@ vi.mock('../../../codemirror-lang-qlaccess', () => ({
 
 vi.mock('../../../codemirror-lang-qlworkshop', () => ({
   qlworkshopLanguage: {},
+}));
+
+vi.mock('../../../codemirror-lang-qlent', () => ({
+  qlentLanguage: mocks.qlentLanguage,
+  qlentLinter: mocks.qlentLinter,
 }));
 
 describe('AddInstanceForm draft lifecycle', () => {
@@ -397,6 +404,37 @@ describe('AddInstanceForm draft lifecycle', () => {
 
     expect(configManagerProps.getLanguageForFile('custom.cfg')).toEqual({});
     expect(configManagerProps.getLinterSourceForFile('custom.cfg')).toEqual(expect.any(Function));
+  });
+
+  it('uses entity highlighting and linting for .ent config files', async () => {
+    render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+            'custom_entities/items.ent': '{\n"classname" "worldspawn"\n}',
+          },
+        }}
+        initialHostId={null}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(mocks.fileManagerProps.length).toBeGreaterThan(0));
+    const configManagerProps = mocks.fileManagerProps.find(props => props.defaultSelectedPath === 'server.cfg');
+
+    expect(configManagerProps.getLanguageForFile('custom_entities/items.ent')).toBe(mocks.qlentLanguage);
+    expect(configManagerProps.getLinterSourceForFile('custom_entities/items.ent')).toBe(mocks.qlentLinter);
   });
 
   it('uses python highlighting for plugin .py files', async () => {
