@@ -752,7 +752,7 @@ body {
 .server-grid {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.6fr) minmax(0, 0.95fr) minmax(0, 1fr) 70px 60px 70px 140px 60px 90px;
+  grid-template-columns: 56px minmax(0, 1.6fr) minmax(calc(12ch + 1.25rem), 0.75fr) minmax(0, 1.2fr) 70px 60px 70px 140px 60px 90px;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
@@ -1206,7 +1206,7 @@ body {
   .server-grid,
   .instance-row-overlay {
     column-gap: 10px;
-    grid-template-columns: 42px minmax(160px, 1.6fr) minmax(78px, 0.8fr) minmax(92px, 1fr) 64px 46px 54px 112px 38px 34px;
+    grid-template-columns: 42px minmax(160px, 1.6fr) minmax(78px, 0.65fr) minmax(92px, 1.15fr) 64px 46px 54px 112px 38px 34px;
     padding-left: 16px;
     padding-right: 16px;
   }
