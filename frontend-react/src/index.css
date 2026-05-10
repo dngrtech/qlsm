@@ -1109,7 +1109,7 @@ body {
   .server-grid,
   .server-grid.host-row,
   .instance-row-overlay {
-    grid-template-columns: 28px minmax(160px, 1.6fr) minmax(124px, 1.05fr) minmax(88px, 0.75fr) 112px 28px 28px;
+    grid-template-columns: 28px minmax(104px, 0.65fr) minmax(140px, 1fr) minmax(150px, 1.25fr) 112px 28px 28px;
     gap: 6px 10px;
   }
 
