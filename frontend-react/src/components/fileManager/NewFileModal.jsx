@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { FilePlus, FolderPlus, X } from 'lucide-react';
 
@@ -20,12 +20,18 @@ export default function NewFileModal({
 }) {
   const [name, setName] = useState('');
   const [error, setError] = useState(null);
+  const inputId = useId();
+  const nameInputRef = useRef(null);
   const isFolder = mode === 'folder';
 
   useEffect(() => {
     if (isOpen) {
       setName('');
       setError(null);
+      const focusTimer = window.setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 0);
+      return () => window.clearTimeout(focusTimer);
     }
   }, [isOpen]);
 
@@ -72,7 +78,7 @@ export default function NewFileModal({
   const Icon = isFolder ? FolderPlus : FilePlus;
 
   return (
-    <Dialog open={isOpen} as="div" className="relative z-[60]" onClose={onClose}>
+    <Dialog open={isOpen} as="div" className="relative z-[60]" onClose={onClose} initialFocus={nameInputRef}>
       <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-200 data-[leave]:ease-in data-[leave]:duration-150 data-[closed]:opacity-0" />
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
@@ -85,8 +91,10 @@ export default function NewFileModal({
                 </Dialog.Title>
                 <div className="space-y-3">
                   <div>
-                    <label className="label-tech mb-1.5 block">{label}</label>
+                    <label htmlFor={inputId} className="label-tech mb-1.5 block">{label}</label>
                     <input
+                      ref={nameInputRef}
+                      id={inputId}
                       type="text"
                       value={name}
                       onChange={(e) => {
