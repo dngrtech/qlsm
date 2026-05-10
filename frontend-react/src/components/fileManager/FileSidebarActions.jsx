@@ -22,7 +22,7 @@ export default function FileSidebarActions({
       <div className="grid grid-cols-2 gap-2">
         {canCreate && (
           <Menu as="div" className="relative">
-            <Menu.Button className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-[var(--surface-elevated)] hover:bg-[var(--surface-elevated)]/80 text-[var(--text-secondary)] rounded text-xs">
+            <Menu.Button className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-[var(--surface-elevated)] hover:bg-[var(--surface-elevated)]/80 text-[var(--text-secondary)] rounded text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--surface-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-base)]">
               <Plus className="w-3.5 h-3.5" /> New
               <ChevronDown className="w-3 h-3" />
             </Menu.Button>
