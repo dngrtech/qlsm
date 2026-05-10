@@ -967,7 +967,7 @@ body {
   border-top-color: var(--surface-border-strong);
 }
 
-@media (min-width: 640px) and (max-width: 900px) {
+@media (min-width: 640px) and (max-width: 859px) {
   .host-header-row,
   .instances-header-row {
     display: none;
@@ -1105,7 +1105,7 @@ body {
   }
 }
 
-@media (min-width: 740px) and (max-width: 900px) {
+@media (min-width: 740px) and (max-width: 859px) {
   .server-grid,
   .server-grid.host-row,
   .instance-row-overlay {
@@ -1197,7 +1197,7 @@ body {
   }
 }
 
-@media (min-width: 901px) and (max-width: 1180px) {
+@media (min-width: 860px) and (max-width: 1180px) {
   .servers-page-shell {
     padding-left: 20px;
     padding-right: 20px;
