@@ -139,7 +139,10 @@ const getExtensions = (currentLanguage, currentLinterSource, onChangeCallback, i
     ])),
     ...(isDark ? [oneDark, darkEditorTheme] : [lightEditorTheme]),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged && !isReadOnly) {
+      const isProgrammaticValueSync = update.transactions.some(transaction =>
+        transaction.isUserEvent('setValue')
+      );
+      if (update.docChanged && !isReadOnly && !isProgrammaticValueSync) {
         onChangeCallback(update.state.doc.toString());
       }
     }),
