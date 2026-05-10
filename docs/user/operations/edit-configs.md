@@ -11,6 +11,8 @@ The **Config** tab uses the file manager. These protected baseline files are alw
 
 Protected files can be edited, but they cannot be renamed or deleted. You can also add custom flat `.cfg` and `.txt` files with **New** or **Upload**. Custom config files can be renamed or deleted.
 
+You can also create **subfolders** (one level deep) to hold `.ent` entity override files. Use the **New** dropdown and choose **New Folder** to create a subfolder, then add `.ent` files inside it. Subfolders and the `.ent` files within them can be renamed or deleted via the row context menu (⋮).
+
 ![](../images/instance-edit-config.png)
 
 

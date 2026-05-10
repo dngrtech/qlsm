@@ -42,7 +42,7 @@ Reference: [Instance Actions Menu](../operations/instance-actions-menu.md)
 
 Config editing details live here: [Edit Configs, Plugins, And Factories](../operations/edit-configs.md)
 
-The deploy form uses the same file manager as **Edit Config**. Before creating the instance you can add custom `.cfg` or `.txt` config files, stage plugin file changes, choose checked plugins, and select the `.factories` files that should be deployed.
+The deploy form uses the same file manager as **Edit Config**. Before creating the instance you can add custom `.cfg` or `.txt` config files, create subfolders with `.ent` entity override files, stage plugin file changes, choose checked plugins, and select the `.factories` files that should be deployed.
 
 ## Create Instance
 

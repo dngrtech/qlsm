@@ -70,7 +70,7 @@ graph TD
     * **ConfigPreset Model:** Stores reusable configuration preset metadata. Config, plugin, and factory file contents are stored on the filesystem; the model holds a `path` pointer. Rows include an `is_builtin` flag; built-in presets live under `configs/presets/_builtin/<name>/` and are read-only — the API blocks renames, content updates, and deletes on them. Built-in presets are seeded from the Docker image on container start via `flask sync-builtin-presets` (run automatically by the entrypoint).
     * **ApiKey Model:** Stores API keys for external service authentication (Bearer token auth for `/api/v1/` endpoints).
     * **AppSetting Model:** Generic key-value store for application settings (e.g., rate limit configuration).
-*   **FileSystem (Managed Files):** Instance-specific files are stored under `configs/<host_name>/<instance_id>/`. Preset files are stored under `configs/presets/<name>/` or `configs/presets/_builtin/<name>/`. The top-level instance or preset directory contains `.cfg` and `.txt` config files. Plugin drafts and saved plugin files live in `scripts/`; factory files live in `factories/`. Selection metadata is stored in `checked_plugins.json` and `checked_factories.json` for presets.
+*   **FileSystem (Managed Files):** Instance-specific files are stored under `configs/<host_name>/<instance_id>/`. Preset files are stored under `configs/presets/<name>/` or `configs/presets/_builtin/<name>/`. The top-level instance directory contains `.cfg` and `.txt` config files, plus optional user-managed one-level-deep subfolders that hold `.ent` entity override files (tracked via the `config_folders` field in create/update payloads). Preset directories contain only `.cfg` and `.txt` config files. Plugin drafts and saved plugin files live in `scripts/`; factory files live in `factories/`. Selection metadata is stored in `checked_plugins.json` and `checked_factories.json` for presets.
 *   **Redis:** An in-memory data store used as the message broker for the RQ task queue.
 *   **RQ Worker:** A separate process that listens to the Redis queue for tasks defined in `ui/tasks.py`. It dequeues tasks for host provisioning/setup and instance management.
 *   **Automation Runner:** Represents the logic within the RQ worker responsible for executing the automation tools, now refactored into the `ui/task_logic/` package:
@@ -179,6 +179,8 @@ qlsm/
 │   │       ├── access.txt       # Access control
 │   │       ├── workshop.txt     # Workshop items
 │   │       ├── *.cfg, *.txt     # Additional user-managed config files
+│   │       ├── <subfolder>/     # User-managed subfolders (one level deep)
+│   │       │   └── *.ent        # Entity override files (.ent extension)
 │   │       ├── scripts/         # Instance minqlx plugins (.py, .txt, .so)
 │   │       └── factories/       # Instance factory files (.factories)
 │   └── presets/                 # Preset config bundles
