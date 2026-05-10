@@ -28,10 +28,6 @@ export default function NewFileModal({
     if (isOpen) {
       setName('');
       setError(null);
-      const focusTimer = window.setTimeout(() => {
-        nameInputRef.current?.focus();
-      }, 0);
-      return () => window.clearTimeout(focusTimer);
     }
   }, [isOpen]);
 
@@ -104,7 +100,6 @@ export default function NewFileModal({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleCreate();
                       }}
-                      autoFocus
                       placeholder={placeholder}
                       className="input-base"
                     />
