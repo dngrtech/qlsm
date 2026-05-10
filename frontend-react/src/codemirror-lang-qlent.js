@@ -69,7 +69,16 @@ export const qlentLinter = (view) => {
     }
 
     if (OPEN_ENTITY.test(text)) {
-      entityDepth += 1;
+      if (entityDepth > 0) {
+        diagnostics.push({
+          from: line.from + text.indexOf('{'),
+          to: line.from + text.indexOf('{') + 1,
+          severity: 'error',
+          message: 'Nested entity blocks are not allowed.',
+        });
+      } else {
+        entityDepth += 1;
+      }
       continue;
     }
 

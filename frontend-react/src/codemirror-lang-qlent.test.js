@@ -56,4 +56,24 @@ classname worldspawn
       }),
     ]);
   });
+
+  it('reports nested entity blocks', () => {
+    const diagnostics = lint(`{
+"classname" "worldspawn"
+{
+"message" "nested"
+}
+}`);
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        message: 'Nested entity blocks are not allowed.',
+      }),
+      expect.objectContaining({
+        severity: 'error',
+        message: 'Closing brace has no matching opening brace.',
+      }),
+    ]);
+  });
 });
