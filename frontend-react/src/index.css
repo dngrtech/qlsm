@@ -752,7 +752,7 @@ body {
 .server-grid {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.45fr) max-content minmax(14rem, 1.75fr) 70px 60px 70px 140px 60px 90px;
+  grid-template-columns: 56px minmax(0, 1.6fr) minmax(112px, 0.75fr) minmax(190px, 1.35fr) 64px 54px 64px 124px 52px 82px;
   align-items: center;
   padding-left: 20px;
   padding-right: 20px;
@@ -890,7 +890,7 @@ body {
 .instance-row-overlay {
   display: grid;
   column-gap: 12px;
-  grid-template-columns: 56px minmax(0, 1.6fr) minmax(0, 0.95fr) minmax(0, 1fr) 70px 60px 70px 140px 60px 90px;
+  grid-template-columns: 56px minmax(0, 1.6fr) minmax(112px, 0.75fr) minmax(190px, 1.35fr) 64px 54px 64px 124px 52px 82px;
   align-items: center;
   padding: 14px 20px;
   background: var(--surface-raised);
@@ -1206,7 +1206,7 @@ body {
   .server-grid,
   .instance-row-overlay {
     column-gap: 10px;
-    grid-template-columns: 42px minmax(132px, 1.35fr) max-content minmax(170px, 1.65fr) 64px 46px 54px 112px 38px 34px;
+    grid-template-columns: 42px minmax(0, 1.5fr) minmax(86px, 0.7fr) minmax(138px, 1.25fr) 60px 44px 52px 108px 36px 32px;
     padding-left: 16px;
     padding-right: 16px;
   }
