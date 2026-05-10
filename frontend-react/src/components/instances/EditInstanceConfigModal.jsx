@@ -16,6 +16,7 @@ import { qlcfgLanguage, createQlCfgLinter, stripManagedCvars } from '../../codem
 import { qlmappoolLanguage } from '../../codemirror-lang-qlmappool';
 import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
+import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import {
   canEnableLanRate,
   getLanRateUnsupportedReason,
@@ -31,6 +32,7 @@ const LANGUAGE_MAP = {
 };
 const getLanguageForFile = (fileName) => {
   if (fileName?.toLowerCase().endsWith('.cfg')) return qlcfgLanguage;
+  if (fileName?.toLowerCase().endsWith('.ent')) return qlentLanguage;
   return LANGUAGE_MAP[fileName] || null;
 };
 const FACTORY_LANGUAGE = json();
@@ -205,9 +207,12 @@ function EditInstanceConfigModal({
 
   // Linter for server.cfg — no port validation in edit mode, but shows managed-cvar info tooltips
   const qlCfgLinterSource = useCallback(() => createQlCfgLinter([], () => {}), []);
-  const getLinterSource = (fileName) => (
-    fileName?.toLowerCase().endsWith('.cfg') ? qlCfgLinterSource : null
-  );
+  const getLinterSource = (fileName) => {
+    const lowerName = fileName?.toLowerCase() || '';
+    if (lowerName.endsWith('.cfg')) return qlCfgLinterSource;
+    if (lowerName.endsWith('.ent')) return qlentLinter;
+    return null;
+  };
 
   // Configure plugins based on checkboxes
   const togglePluginSelection = useCallback((filename, checked = undefined) => {

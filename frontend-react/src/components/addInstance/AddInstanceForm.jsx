@@ -25,6 +25,7 @@ import {
 import { qlmappoolLanguage } from '../../codemirror-lang-qlmappool';
 import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
+import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import {
   getLanRateUnsupportedReason,
   isLanRateSupported,
@@ -87,6 +88,7 @@ function extractPresetConfigs(presetData) {
 
 function getConfigLanguage(fileName) {
   if (fileName?.toLowerCase().endsWith('.cfg')) return qlcfgLanguage;
+  if (fileName?.toLowerCase().endsWith('.ent')) return qlentLanguage;
   return CONFIG_LANGUAGE_MAP[fileName] || undefined;
 }
 
@@ -579,7 +581,7 @@ function AddInstanceForm({
     } finally {
       setIsLoadingPreset(false);
     }
-  }, [checkedPlugins, resetFactories, syncConfigState]);
+  }, [checkedPlugins, resetConfigs, resetFactories, syncConfigState]);
 
 
   // Handle saving current config as a preset
@@ -707,7 +709,12 @@ function AddInstanceForm({
   const handleInternalServerCfgLint = useCallback((hasErrors) => { setServerCfgHasLintErrors(hasErrors); if (onServerCfgLintStatusChange) onServerCfgLintStatusChange(hasErrors); }, [onServerCfgLintStatusChange]);
   const qlCfgLinterSource = useCallback(() => (createQlCfgLinter(availablePorts, handleInternalServerCfgLint)), [availablePorts, handleInternalServerCfgLint]);
   const getLinterSourceForFile = useCallback(
-    (fileName) => (fileName?.toLowerCase().endsWith('.cfg') ? qlCfgLinterSource : null),
+    (fileName) => {
+      const lowerName = fileName?.toLowerCase() || '';
+      if (lowerName.endsWith('.cfg')) return qlCfgLinterSource;
+      if (lowerName.endsWith('.ent')) return qlentLinter;
+      return null;
+    },
     [qlCfgLinterSource],
   );
   const handleExpandEditor = useCallback((selectedFile, content = '') => {
