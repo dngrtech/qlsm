@@ -24,14 +24,16 @@
         archive: yes
         recursive: yes
         rsync_path: "sudo -u ql rsync"
-        delete: no
+        # QLSM owns cfg/txt/ent config state under baseq3; keep reserved dirs
+        # excluded below and do not pass --delete-excluded.
+        delete: yes
         rsync_opts:
+          - "--exclude=scripts/***"
+          - "--exclude=factories/***"
           - "--include=*/"
           - "--include=*.cfg"
           - "--include=*.txt"
           - "--include=*.ent"
-          - "--exclude=scripts/***"
-          - "--exclude=factories/***"
           - "--exclude=*"
           - "--prune-empty-dirs"
       delegate_to: localhost
