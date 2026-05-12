@@ -59,6 +59,7 @@
         group: ql
         mode: preserve
         remote_src: yes
+        force: no
 
     - name: Remove existing factory files before syncing (ensures only selected factories remain)
       ansible.builtin.shell: |
