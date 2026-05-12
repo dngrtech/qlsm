@@ -195,15 +195,17 @@
       delegate_to: localhost
       become: false
 
-    - name: Copy common minqlx-plugins to instance directory
-      ansible.builtin.copy:
-        src: "{{ common_assets_dir }}/minqlx-plugins/"
-        dest: "{{ qlds_dir }}/minqlx-plugins/"
-        owner: ql
-        group: ql
-        mode: preserve
-        remote_src: yes
-        force: no
+    - name: Backfill common minqlx-plugins to instance directory
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - -a
+          - --ignore-existing
+          - --itemize-changes
+          - "{{ common_assets_dir }}/minqlx-plugins/"
+          - "{{ qlds_dir }}/minqlx-plugins/"
+      register: common_minqlx_backfill
+      changed_when: common_minqlx_backfill.stdout != ""
 
     - name: Remove existing factory files before syncing (ensures only selected factories remain)
       ansible.builtin.shell: |
