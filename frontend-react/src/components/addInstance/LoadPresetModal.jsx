@@ -55,13 +55,13 @@ function LoadPresetModal({
   };
 
   const handleDeleteClick = () => {
-    if (!selectedPreset) return;
+    if (!selectedPreset || selectedPreset.is_builtin) return;
     setDeleteError(null);
     setShowDeleteConfirmation(true);
   };
 
   const handleConfirmDelete = async () => {
-    if (!selectedPreset) return;
+    if (!selectedPreset || selectedPreset.is_builtin) return;
     setIsDeleting(true);
     setDeleteError(null);
     try {
@@ -340,8 +340,8 @@ function LoadPresetModal({
                       type="button"
                       className="btn btn-danger"
                       onClick={handleDeleteClick}
-                      disabled={!selectedPreset || selectedPreset.name === 'default'}
-                      title={selectedPreset?.name === 'default' ? 'Cannot delete the default preset' : 'Delete selected preset'}
+                      disabled={!selectedPreset || selectedPreset.is_builtin}
+                      title={selectedPreset?.is_builtin ? 'Cannot delete a built-in preset' : 'Delete selected preset'}
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
                       Delete

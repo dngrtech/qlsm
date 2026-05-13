@@ -64,18 +64,26 @@ function PresetsPage() {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">{preset.name}</h2>
               <p className="text-gray-700 dark:text-gray-300 mb-4">{preset.description || 'No description.'}</p>
               <div className="flex justify-end space-x-2">
-                <button
-                  onClick={() => navigate(`/presets/edit/${preset.id}`)}
-                  className="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-1 px-3 rounded"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDeletePreset(preset.id, preset.name)}
-                  className="text-sm bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded"
-                >
-                  Delete
-                </button>
+                {preset.is_builtin ? (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Built-in
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => navigate(`/presets/edit/${preset.id}`)}
+                      className="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-1 px-3 rounded"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeletePreset(preset.id, preset.name)}
+                      className="text-sm bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded"
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
