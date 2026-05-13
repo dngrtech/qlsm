@@ -1,0 +1,42 @@
+[
+  {
+    "cvars": {
+      "g_startingWeapons": "33",
+      "g_suddenDeathRespawn": "0",
+      "g_dropCmds": "1",
+      "timelimit": "15",
+      "dmflags": "28",
+      "g_allowKill": "1",
+      "g_infiniteAmmo": "1",
+      "g_vampiricDamage": "1",
+      "g_startingArmor": "0",
+      "g_startingHealth": "100",
+      "g_knockback": "0",
+      "g_knockback_lg": "0.00000000000000001",
+      "g_overtime": "0",
+      "g_spawnItemPowerup": "0",
+      "g_spawnItemAmmo": "0",
+      "g_spawnItemArmor": "0",
+      "g_spawnItemHoldable": "0",
+      "g_spawnItemHealth": "0",
+      "g_startingHealthBonus": "100",
+      "g_lagHaxMs": "240",
+      "g_lagHaxHistory": "12",
+      "g_spawnItemWeapons": "0",
+      "g_pmoveDoubleJump": "1",
+      "pmove_CrouchSlide": "1",
+      "pmove_CrouchSlideFriction": "0",
+      "pmove_CrouchSlideJump": "1",
+      "pmove_ChainJump": "1",
+      "g_respawndelay_min": "0",
+      "g_respawndelay_max": "0",
+      "pmove_AirControl": "0",
+      "pmove_DoubleJump": "1"
+    },
+    "author": "id Software",
+    "description": "Rage Vampiric LG No Knockback FFA Config",
+    "basegt": "ffa",
+    "id": "ffavamp",
+    "title": "Vampiric LG No Knockback"
+  }
+]
