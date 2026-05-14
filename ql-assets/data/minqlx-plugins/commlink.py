@@ -41,21 +41,33 @@
 """
 
 import minqlx
-import threading
 import asyncio
 import random
-import time
 import re
+import threading
+import urllib.error
 import urllib.request
 
 TEAM_BASED_GAMETYPES = ("ca", "ctf", "ft", "tdm", "ictf", "wipeout", "dom", "ad", "1f", "har")
 
+IRC_CONNECT_TIMEOUT = 10
+PUBLIC_IP_TIMEOUT = 3
+BACKOFF_BASE_SECONDS = 30
+BACKOFF_MAX_SECONDS = 300
+IRC_USERNAME_MAX_LENGTH = 10
+COMMLINK_UNAVAILABLE_MSG = "^3CommLink^7 unavailable."
+EXPECTED_TRANSPORT_ERRORS = (OSError, asyncio.TimeoutError)
+
 
 class commlink(minqlx.Plugin):
     def __init__(self):
-        if not self.get_cvar("qlx_commlinkIdentity"):
-            self.msg("^1Error: ^7Please set your ^4qlx_commlinkIdentity^7 cvar in your server.cfg.")
-            minqlx.unload_plugin("commlink")
+        self.plugin_version = "1.5.pew"
+        self.status_request = False
+        self.server_ip = ""
+        self.irc = None
+
+        identity = self.get_cvar("qlx_commlinkIdentity")
+        if not identity:
             return
                      
         self.add_hook("unload", self.handle_unload)
@@ -68,7 +80,7 @@ class commlink(minqlx.Plugin):
         self.set_cvar_once("qlx_enableCommlinkMessages", "1")
 
         self.server = "irc.quakenet.org"
-        self.identity = ("#" + self.get_cvar("qlx_commlinkIdentity"))
+        self.identity = ("#" + identity)
         self.clientName = self.get_cvar("qlx_commlinkServerName")
 
         self.add_command(("world", "say_world"), self.send_commlink_message, priority=minqlx.PRI_LOWEST, usage="<message>")
@@ -79,21 +91,37 @@ class commlink(minqlx.Plugin):
         
         self.irc = SimpleAsyncIrc(self.server, self.clientName, self.handle_msg, self.handle_perform, self.handle_raw)
         self.irc.start()
-        self.logger.info("Connecting to {}...".format(self.server))
-        self.msg("Connecting to ^3CommLink^7 server...")
 
-        self.plugin_version = "1.5.pew"
-        self.status_request = False
-        self.server_ip = ""
         self.server_port = self.get_cvar("net_port")
         self.set_ip()
 
     @minqlx.delay(0.5)
     def set_ip(self):
-        res = urllib.request.urlopen("http://checkip.amazonaws.com/").read()
-        ip = "{}".format(res)
-        ip = re.sub("[b']", "", ip)
-        self.server_ip = ip[0:-2]
+        try:
+            res = urllib.request.urlopen(
+                "http://checkip.amazonaws.com/",
+                timeout=PUBLIC_IP_TIMEOUT,
+            ).read()
+        except (urllib.error.URLError, TimeoutError, OSError):
+            self.server_ip = ""
+            return
+
+        self.server_ip = res.decode("utf-8", errors="ignore").strip()
+
+    def commlink_available(self):
+        irc = getattr(self, "irc", None)
+        return bool(irc and irc.is_ready())
+
+    def tell_commlink_unavailable(self, player):
+        player.tell(COMMLINK_UNAVAILABLE_MSG)
+
+    def send_irc_message(self, recipient, text):
+        if not self.commlink_available():
+            return False
+        try:
+            return self.irc.msg(recipient, text)
+        except EXPECTED_TRANSPORT_ERRORS:
+            return False
 
     def game_countdown(self):
         if self.game.type_short == "duel":
@@ -115,18 +143,21 @@ class commlink(minqlx.Plugin):
             self.irc.stop()
 
     def handle_player_connect(self, player):
-        if self.irc and self.get_cvar("qlx_enableConnectDisconnectMessages", bool):
-            if str(player.steam_id)[0] == "9":
-                return
-            self.irc.msg(self.identity, self.translate_colors("{} connected.".format(player.name)))
+        if not self.get_cvar("qlx_enableConnectDisconnectMessages", bool):
+            return
+        if str(player.steam_id).startswith("9"):
+            return
+        self.send_irc_message(self.identity, self.translate_colors("{} connected.".format(player.name)))
 
     def handle_player_disconnect(self, player, reason):
         if reason and reason[-1] not in ("?", "!", "."):
             reason = reason + "."
         
-        if self.irc and self.get_cvar("qlx_enableConnectDisconnectMessages", bool):
-            if str(player.steam_id)[0] == "9": return
-            self.irc.msg(self.identity, self.translate_colors("{} {}".format(player.name, reason)))
+        if not self.get_cvar("qlx_enableConnectDisconnectMessages", bool):
+            return
+        if str(player.steam_id).startswith("9"):
+            return
+        self.send_irc_message(self.identity, self.translate_colors("{} {}".format(player.name, reason)))
         
     def handle_msg(self, irc, user, channel, msg):
         def broadcast_commlink(pm):
@@ -157,22 +188,26 @@ class commlink(minqlx.Plugin):
             return
         if msg[0] == 'request_status':
             status = self.get_status_msg()
-            self.irc.msg(self.identity, "{} {}:{}".format(status, self.server_ip, self.server_port))
+            self.send_irc_message(self.identity, "{} {}:{}".format(status, self.server_ip, self.server_port))
         else:
             broadcast_commlink(msg)
 
     def handle_perform(self, irc):
-        self.logger.info("Connected to CommLink!".format(self.server))
-        self.msg("Connected to ^3CommLink^7.")
         irc.join(self.identity)
 
     def send_commlink_message(self, player, msg, channel):
         if len(msg) < 2:
             return minqlx.RET_USAGE
+        if not self.commlink_available():
+            self.tell_commlink_unavailable(player)
+            return minqlx.RET_STOP_ALL
         
         text = "^7<{}> ^3{} ".format(player.name, " ".join(msg[1:]))
-        self.irc.msg(self.identity, self.translate_colors(text))
-        player.tell("Message sent via ^3CommLink^7.")
+        if self.send_irc_message(self.identity, self.translate_colors(text)):
+            player.tell("Message sent via ^3CommLink^7.")
+        else:
+            self.tell_commlink_unavailable(player)
+        return minqlx.RET_STOP_ALL
 
     def get_status_msg(self):
         teams = self.teams()
@@ -189,7 +224,11 @@ class commlink(minqlx.Plugin):
         return status
 
     def server_status(self, player, msg, channel):
+        if not self.commlink_available():
+            self.tell_commlink_unavailable(player)
+            return minqlx.RET_STOP_ALL
         self.query_status()
+        return minqlx.RET_STOP_ALL
 
     @minqlx.thread
     def query_status(self):
@@ -202,7 +241,7 @@ class commlink(minqlx.Plugin):
             if self.db.get_flag(p, "commlink:enabled", default=(self.get_cvar("qlx_enableCommlinkMessages", bool))):
                 p.tell("[CommLink] ^4{}^7: {}".format(self.clientName, status))
         self.status_request = True
-        self.irc.msg(self.identity, "request_status")
+        self.send_irc_message(self.identity, "request_status")
 
     @minqlx.delay(1.5)
     def unset_server_status(self):
@@ -217,10 +256,23 @@ class commlink(minqlx.Plugin):
                 return minqlx.RET_STOP_ALL
         else:
             needed = 1
-        player.tell("^6Sent player request to other servers")
+        if not self.commlink_available():
+            self.tell_commlink_unavailable(player)
+            return minqlx.RET_STOP_ALL
+
         status = self.get_status_msg()
-        self.irc.msg(self.identity, "Need {} player{} here: {} /connect {}:{}"
-                     .format(needed, "s" if needed > 1 else "", status, self.server_ip, self.server_port))
+        text = "Need {} player{} here: {} /connect {}:{}".format(
+            needed,
+            "s" if needed > 1 else "",
+            status,
+            self.server_ip,
+            self.server_port,
+        )
+        if self.send_irc_message(self.identity, text):
+            player.tell("^6Sent player request to other servers")
+        else:
+            self.tell_commlink_unavailable(player)
+        return minqlx.RET_STOP_ALL
          
     def handle_raw(self, irc, msg):
         split_msg = msg.split()
@@ -251,7 +303,7 @@ class IrcChannel(minqlx.AbstractChannel):
 
     def reply(self, msg):
         for line in msg.split("\n"):
-            self.irc.msg(self.recipient, irc.translate_colors(line))
+            self.irc.msg(self.recipient, commlink.translate_colors(line))
 
 # ====================================================================
 #                        SIMPLE ASYNC IRC
@@ -261,76 +313,139 @@ re_msg = re.compile(r"^:([^ ]+) PRIVMSG ([^ ]+) :(.*)$")
 re_user = re.compile(r"^(.+)!(.+)@(.+)$")
 
 class SimpleAsyncIrc(threading.Thread):
-    def __init__(self, address, nickname, msg_handler, perform_handler, raw_handler=None, stop_event=threading.Event()):
+    def __init__(self, address, nickname, msg_handler, perform_handler, raw_handler=None, stop_event=None):
         split_addr = address.split(":")
         self.host = split_addr[0]
         self.port = int(split_addr[1]) if len(split_addr) > 1 else 6667
         self.nickname = nickname
+        self.username = self._username_from_nickname(nickname)
         self.msg_handler = msg_handler
         self.perform_handler = perform_handler
         self.raw_handler = raw_handler
-        self.stop_event = stop_event
+        self.stop_event = stop_event or threading.Event()
         self.reader = None
         self.writer = None
         self.server_options = {}
         super().__init__()
 
         self._lock = threading.Lock()
+        self._ready = False
         self._old_nickname = self.nickname
 
     def run(self):
         loop = asyncio.new_event_loop()
-        logger = minqlx.get_logger("irc")
         asyncio.set_event_loop(loop)
-        while not self.stop_event.is_set():
-            try:
-                loop.run_until_complete(self.connect())
-            except Exception:
-                minqlx.log_exception()
-            
-            # Disconnected. Try reconnecting in 30 seconds.
-            logger.info("Disconnected from CommLink. Reconnecting in 30 seconds...")
-            minqlx.CHAT_CHANNEL.reply("Disconnected from ^3CommLink^7. Reconnecting in 30 seconds...")
-            time.sleep(30)
-        loop.close()
+        backoff = BACKOFF_BASE_SECONDS
+        try:
+            while not self.stop_event.is_set():
+                ready_seen = False
+                try:
+                    ready_seen = loop.run_until_complete(self.connect())
+                except Exception:
+                    minqlx.log_exception()
+                finally:
+                    self.set_offline()
+
+                if self.stop_event.is_set():
+                    break
+                if ready_seen:
+                    backoff = BACKOFF_BASE_SECONDS
+                self.stop_event.wait(backoff)
+                if not ready_seen:
+                    backoff = min(backoff * 2, BACKOFF_MAX_SECONDS)
+        finally:
+            loop.close()
 
     def stop(self):
         self.stop_event.set()
 
+    @staticmethod
+    def _username_from_nickname(nickname):
+        username = re.sub(r"[^a-z0-9]", "", nickname.lower())
+        if not username or not username[0].isalpha():
+            username = "ql" + username
+        return username[:IRC_USERNAME_MAX_LENGTH]
+
+    def is_ready(self):
+        with self._lock:
+            return self._ready
+
+    def set_ready(self):
+        with self._lock:
+            self._ready = True
+
+    def set_offline(self):
+        with self._lock:
+            self._ready = False
+
     def write(self, msg):
-        if self.writer:
-            with self._lock:
-                self.writer.write(msg.encode(errors="ignore"))
+        with self._lock:
+            writer = self.writer
+            is_closing = getattr(writer, "is_closing", None)
+            if not writer or (is_closing and is_closing()):
+                self._ready = False
+                return False
+            try:
+                writer.write(msg.encode(errors="ignore"))
+            except EXPECTED_TRANSPORT_ERRORS:
+                self._ready = False
+                return False
+        return True
 
     async def connect(self):
-        self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
-        self.write("NICK {0}\r\nUSER {0} 0 * :{0}\r\n".format(self.nickname))
-        
-        while not self.stop_event.is_set():
-            line = await self.reader.readline()
-            if not line:
-                break
-            line = line.decode("utf-8", errors="ignore").rstrip()
-            if line:
-                await self.parse_data(line)
+        ready_seen = False
+        self.set_offline()
+        try:
+            self.reader, self.writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.port),
+                timeout=IRC_CONNECT_TIMEOUT,
+            )
+            self.write("NICK {0}\r\nUSER {1} 0 * :{0}\r\n".format(self.nickname, self.username))
 
-        self.write("QUIT Quit by user.\r\n")
-        self.writer.close()
+            while not self.stop_event.is_set():
+                line = await self.reader.readline()
+                if not line:
+                    break
+                line = line.decode("utf-8", errors="ignore").rstrip()
+                if line:
+                    await self.parse_data(line)
+                    ready_seen = ready_seen or self.is_ready()
+        except EXPECTED_TRANSPORT_ERRORS:
+            return ready_seen
+        finally:
+            writer = self.writer
+            if writer:
+                self.quit("Quit by user.")
+                try:
+                    writer.close()
+                    wait_closed = getattr(writer, "wait_closed", None)
+                    if wait_closed:
+                        await wait_closed()
+                except EXPECTED_TRANSPORT_ERRORS:
+                    pass
+            self.reader = None
+            self.writer = None
+        return ready_seen
 
     async def parse_data(self, msg):
         split_msg = msg.split()
+        if not split_msg:
+            return
         if len(split_msg) > 1 and split_msg[0] == "PING":
             self.pong(split_msg[1].lstrip(":"))
         elif len(split_msg) > 3 and split_msg[1] == "PRIVMSG":
             r = re_msg.match(msg)
-            user = re_user.match(r.group(1)).groups()
-            channel = user[0] if self.nickname == r.group(2) else r.group(2)
-            self.msg_handler(self, user, channel, r.group(3).split())
+            if r:
+                user_match = re_user.match(r.group(1))
+                if user_match:
+                    user = user_match.groups()
+                    channel = user[0] if self.nickname == r.group(2) else r.group(2)
+                    self.msg_handler(self, user, channel, r.group(3).split())
         elif len(split_msg) > 2 and split_msg[1] == "NICK":
             user = re_user.match(split_msg[0][1:])
             if user and user.group(1) == self.nickname:
                 self.nickname = split_msg[2][1:]
-        elif split_msg[1] == "005":
+        elif len(split_msg) > 1 and split_msg[1] == "005":
             for option in split_msg[3:-1]:
                 opt_pair = option.split("=", 1)
                 if len(opt_pair) == 1:
@@ -341,6 +456,7 @@ class SimpleAsyncIrc(threading.Thread):
             self.nickname = self._old_nickname
         # Stuff to do after we get the MOTD.
         elif re.match(r":[^ ]+ (376|422) .+", msg):
+            self.set_ready()
             self.perform_handler(self)
 
         # If we have a raw handler, let it do its stuff now.
@@ -348,28 +464,28 @@ class SimpleAsyncIrc(threading.Thread):
             self.raw_handler(self, msg)
 
     def msg(self, recipient, msg):
-        self.write("PRIVMSG {} :{}\r\n".format(recipient, msg))
+        return self.write("PRIVMSG {} :{}\r\n".format(recipient, msg))
 
     def nick(self, nick):
         with self._lock:
             self._old_nickname = self.nickname
             self.nickname = nick
-        self.write("NICK {}\r\n".format(nick))
+        return self.write("NICK {}\r\n".format(nick))
 
     def join(self, channels):
-        self.write("JOIN {}\r\n".format(channels))
+        return self.write("JOIN {}\r\n".format(channels))
 
     def part(self, channels):
-        self.write("PART {}\r\n".format(channels))
+        return self.write("PART {}\r\n".format(channels))
 
     def mode(self, what, mode):
-        self.write("MODE {} {}\r\n".format(what, mode))
+        return self.write("MODE {} {}\r\n".format(what, mode))
 
     def kick(self, channel, nick, reason):
-        self.write("KICK {} {}:{}\r\n".format(channel, nick, reason))
+        return self.write("KICK {} {}:{}\r\n".format(channel, nick, reason))
 
     def quit(self, reason):
-        self.write("QUIT :{}\r\n".format(reason))
+        return self.write("QUIT :{}\r\n".format(reason))
 
     def pong(self, n):
-        self.write("PONG :{}\r\n".format(n))
+        return self.write("PONG :{}\r\n".format(n))
