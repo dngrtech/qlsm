@@ -19,6 +19,12 @@ class FakePlugin:
     def clean_text(cls, text):
         return text
 
+    def get_cvar(self, name, cast=None):
+        return ""
+
+    def msg(self, text):
+        raise AssertionError("plugin must not print chat while disabling itself")
+
 
 def _load_commlink_module(monkeypatch):
     fake_minqlx = types.SimpleNamespace(
@@ -37,7 +43,9 @@ def _load_commlink_module(monkeypatch):
         ),
         log_exception=lambda *args, **kwargs: None,
         thread=_identity_decorator,
-        unload_plugin=lambda name: None,
+        unload_plugin=lambda name: (_ for _ in ()).throw(
+            AssertionError("plugin must not unload itself during __init__")
+        ),
     )
     monkeypatch.setitem(sys.modules, "minqlx", fake_minqlx)
 
@@ -53,6 +61,14 @@ def _load_commlink_module(monkeypatch):
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def test_missing_identity_disables_without_unload_or_chat(monkeypatch):
+    module = _load_commlink_module(monkeypatch)
+
+    plugin = module.commlink()
+
+    assert plugin.irc is None
 
 
 def test_world_command_reports_unavailable_to_caller(monkeypatch):

@@ -60,9 +60,13 @@ EXPECTED_TRANSPORT_ERRORS = (OSError, asyncio.TimeoutError)
 
 class commlink(minqlx.Plugin):
     def __init__(self):
-        if not self.get_cvar("qlx_commlinkIdentity"):
-            self.msg("^1Error: ^7Please set your ^4qlx_commlinkIdentity^7 cvar in your server.cfg.")
-            minqlx.unload_plugin("commlink")
+        self.plugin_version = "1.5.pew"
+        self.status_request = False
+        self.server_ip = ""
+        self.irc = None
+
+        identity = self.get_cvar("qlx_commlinkIdentity")
+        if not identity:
             return
                      
         self.add_hook("unload", self.handle_unload)
@@ -75,7 +79,7 @@ class commlink(minqlx.Plugin):
         self.set_cvar_once("qlx_enableCommlinkMessages", "1")
 
         self.server = "irc.quakenet.org"
-        self.identity = ("#" + self.get_cvar("qlx_commlinkIdentity"))
+        self.identity = ("#" + identity)
         self.clientName = self.get_cvar("qlx_commlinkServerName")
 
         self.add_command(("world", "say_world"), self.send_commlink_message, priority=minqlx.PRI_LOWEST, usage="<message>")
@@ -87,9 +91,6 @@ class commlink(minqlx.Plugin):
         self.irc = SimpleAsyncIrc(self.server, self.clientName, self.handle_msg, self.handle_perform, self.handle_raw)
         self.irc.start()
 
-        self.plugin_version = "1.5.pew"
-        self.status_request = False
-        self.server_ip = ""
         self.server_port = self.get_cvar("net_port")
         self.set_ip()
 
