@@ -87,6 +87,7 @@ def _build_qlds_args_string(instance):
 
     redis_db_index = instance.port - 27959
     parts += [
+        '+set net_ip ""',
         '+set net_strict 1',
         f'+set net_port {instance.port}',
         f'+set sv_hostname "{instance.hostname}"',

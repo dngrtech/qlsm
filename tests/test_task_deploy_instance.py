@@ -324,3 +324,13 @@ def test_build_qlds_args_self_host_escapes_redis_password(test_app, monkeypatch)
         result = _build_qlds_args_string(inst)
 
         assert '+set qlx_redisPassword "shared\\\\secret\\"quoted"' in result
+
+
+def test_build_qlds_args_always_injects_empty_net_ip(test_app):
+    """net_ip must always be injected as empty string so QLDS binds to
+    0.0.0.0, which is required for 99k LAN rate DNAT to work."""
+    with test_app.app_context():
+        for lan_rate in (True, False):
+            inst = _make_instance_for_args(lan_rate_enabled=lan_rate)
+            result = _build_qlds_args_string(inst)
+            assert '+set net_ip ""' in result
