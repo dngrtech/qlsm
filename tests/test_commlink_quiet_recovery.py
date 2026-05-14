@@ -129,6 +129,19 @@ def test_irc_channel_reply_uses_commlink_translation(monkeypatch):
     assert sent == [("#test", "^1hello")]
 
 
+def test_irc_username_is_sanitized_from_server_name(monkeypatch):
+    module = _load_commlink_module(monkeypatch)
+
+    irc = module.SimpleAsyncIrc(
+        "irc.example.test",
+        "lg-nj-1-99k",
+        lambda *args: None,
+        lambda *args: None,
+    )
+
+    assert irc.username == "lgnj199k"
+
+
 class ResettingWriter:
     def is_closing(self):
         return False

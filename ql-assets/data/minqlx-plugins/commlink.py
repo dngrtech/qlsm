@@ -54,6 +54,7 @@ IRC_CONNECT_TIMEOUT = 10
 PUBLIC_IP_TIMEOUT = 3
 BACKOFF_BASE_SECONDS = 30
 BACKOFF_MAX_SECONDS = 300
+IRC_USERNAME_MAX_LENGTH = 10
 COMMLINK_UNAVAILABLE_MSG = "^3CommLink^7 unavailable."
 EXPECTED_TRANSPORT_ERRORS = (OSError, asyncio.TimeoutError)
 
@@ -317,6 +318,7 @@ class SimpleAsyncIrc(threading.Thread):
         self.host = split_addr[0]
         self.port = int(split_addr[1]) if len(split_addr) > 1 else 6667
         self.nickname = nickname
+        self.username = self._username_from_nickname(nickname)
         self.msg_handler = msg_handler
         self.perform_handler = perform_handler
         self.raw_handler = raw_handler
@@ -357,6 +359,13 @@ class SimpleAsyncIrc(threading.Thread):
     def stop(self):
         self.stop_event.set()
 
+    @staticmethod
+    def _username_from_nickname(nickname):
+        username = re.sub(r"[^a-z0-9]", "", nickname.lower())
+        if not username or not username[0].isalpha():
+            username = "ql" + username
+        return username[:IRC_USERNAME_MAX_LENGTH]
+
     def is_ready(self):
         with self._lock:
             return self._ready
@@ -391,7 +400,7 @@ class SimpleAsyncIrc(threading.Thread):
                 asyncio.open_connection(self.host, self.port),
                 timeout=IRC_CONNECT_TIMEOUT,
             )
-            self.write("NICK {0}\r\nUSER {0} 0 * :{0}\r\n".format(self.nickname))
+            self.write("NICK {0}\r\nUSER {1} 0 * :{0}\r\n".format(self.nickname, self.username))
 
             while not self.stop_event.is_set():
                 line = await self.reader.readline()
