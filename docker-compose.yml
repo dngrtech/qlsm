@@ -138,7 +138,7 @@ services:
       # dedicated host SSH bridge as the web service.
       - ${HOME}/.qlsm-ssh:/host-ssh
     deploy:
-      replicas: 2
+      replicas: ${WORKER_REPLICAS:-2}
 
   # ── RCON Service (WebSocket game server chat) ───────────────────────────────
   rcon:
