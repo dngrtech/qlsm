@@ -342,16 +342,16 @@
         mkdir -p {{ steam_dir }} {{ qlds_base_dir }}
         chown -R ql:ql {{ steam_dir }} {{ qlds_base_dir }}
 
-        # Run commands as ql user via su
-        su - ql -c "cd {{ steam_dir }} && \
+        # Run commands as ql user via su with timeout to handle CDN stalls
+        su - ql -c "timeout 20m bash -c 'cd {{ steam_dir }} && \
         ([ -f steamcmd.sh ] || { wget -qO steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz && tar xf steamcmd_linux.tar.gz && rm steamcmd_linux.tar.gz; }) && \
-        {{ steam_dir }}/steamcmd.sh +force_install_dir {{ qlds_base_dir }} +login anonymous +app_update 349090 validate +quit"
+        {{ steam_dir }}/steamcmd.sh +force_install_dir {{ qlds_base_dir }} +login anonymous +app_update 349090 validate +quit'"
       args:
         executable: /bin/bash
         creates: "{{ qlds_base_dir }}/run_server_x64.sh" # Avoid re-running if base exists
       register: steamcmd_result
       retries: 2
-      delay: 5
+      delay: 30
       until: steamcmd_result.rc == 0
 
   #######################################################################
