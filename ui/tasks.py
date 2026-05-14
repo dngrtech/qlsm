@@ -214,7 +214,7 @@ def reconfigure_instance_lan_rate(instance_id, lock_token=None):
             from ui.task_lock import release_lock
             release_lock('instance', instance_id, lock_token)
 
-@rq.job(timeout=1200)
+@rq.job(timeout=3600)
 @with_app_context
 def setup_host_ansible(host_id, lock_token=None):
     """RQ task entry point for setting up a host via Ansible after provisioning."""
