@@ -350,7 +350,7 @@
         executable: /bin/bash
         creates: "{{ qlds_base_dir }}/run_server_x64.sh" # Avoid re-running if base exists
       register: steamcmd_result
-      retries: 2
+      retries: 1
       delay: 30
       until: steamcmd_result.rc == 0
 
