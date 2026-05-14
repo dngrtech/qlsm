@@ -116,7 +116,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   useEffect(() => {
     if (!isOpen || !providerOptionsReady || provider !== 'self') return;
     setSshUser(selfHostDefaults?.ssh_user || 'root');
-    setIpAddress(selfHostDefaults?.host_ip || '');
+    setIpAddress(selfHostDefaults?.host_ip || window.location.hostname || '');
   }, [isOpen, provider, providerOptionsReady, selfHostDefaults]);
 
   const resetForm = () => {
