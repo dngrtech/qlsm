@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { EditorState, StateEffect, Prec } from '@codemirror/state';
-import { search, searchKeymap } from '@codemirror/search';
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import {
   EditorView,
   keymap,
@@ -131,6 +131,7 @@ const getExtensions = (currentLanguage, currentLinterSource, onChangeCallback, i
     rectangularSelection(),
     crosshairCursor(),
     highlightActiveLine(),
+    highlightSelectionMatches(),
     search(),
     Prec.highest(keymap.of([
       ...searchKeymap,
