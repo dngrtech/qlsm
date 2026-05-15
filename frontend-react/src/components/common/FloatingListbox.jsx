@@ -13,6 +13,47 @@ function OptionBadge({ children }) {
   );
 }
 
+const PERF_CHIP_STYLES = {
+  'Hi-Perf': {
+    color: 'var(--accent-primary)',
+    border: '1px solid var(--accent-primary)',
+    background: 'var(--surface-elevated)',
+  },
+  'Low-Perf': {
+    color: '#f59e0b',
+    border: '1px solid rgba(245,158,11,0.4)',
+    background: 'rgba(245,158,11,0.08)',
+  },
+};
+
+const QL_CHIP_STYLE = {
+  color: '#3b82f6',
+  border: '1px solid rgba(59,130,246,0.35)',
+  background: 'rgba(59,130,246,0.08)',
+};
+
+const CHIP_BASE = 'shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase';
+
+function PerfChip({ label }) {
+  if (!label) return null;
+  return (
+    <span className={CHIP_BASE} style={PERF_CHIP_STYLES[label] ?? PERF_CHIP_STYLES['Hi-Perf']}>
+      {label}
+    </span>
+  );
+}
+
+function QLChip({ count, plural = 'servers' }) {
+  if (!count) return null;
+  const noun = count === 1 ? plural.replace(/s$/, '') : plural;
+  return (
+    <span className={CHIP_BASE} style={QL_CHIP_STYLE}>
+      {count} QL {noun}
+    </span>
+  );
+}
+
+
 function FloatingListbox({
   value,
   onChange,
@@ -23,6 +64,7 @@ function FloatingListbox({
   getOptionValue = null,
   getOptionDisplay = (option) => option.name,
   getOptionBadge = null,
+  getOptionBadges = null,
   getSelectedDisplay = (selectedValue, opts) => {
     if (!selectedValue) return `Select ${label.toLowerCase()}`;
     const actualOptionValueFn = getOptionValue || getOptionKey;
@@ -35,6 +77,7 @@ function FloatingListbox({
   const optionValueFn = getOptionValue || getOptionKey;
   const selectedOption = options.find(opt => optionValueFn(opt) === value);
   const selectedBadge = selectedOption && getOptionBadge?.(selectedOption);
+  const selectedBadges = selectedOption && getOptionBadges?.(selectedOption);
   const selectedDisplay = getSelectedDisplay(value, options) || placeholder;
 
   const { x, y, strategy, refs } = useFloating({
@@ -59,7 +102,12 @@ function FloatingListbox({
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span className="block min-w-0 flex-1 truncate">{selectedDisplay}</span>
-                {selectedBadge && (
+                {selectedBadges?.perfLabel && (
+                  <span className="shrink-0 mr-[74px]">
+                    <PerfChip label={selectedBadges.perfLabel} />
+                  </span>
+                )}
+                {!selectedBadges && selectedBadge && (
                   <span className="shrink-0 mr-[74px]">
                     <OptionBadge>{selectedBadge}</OptionBadge>
                   </span>
@@ -104,6 +152,7 @@ function FloatingListbox({
                         const displayValue = getOptionDisplay(option);
                         const valueForOption = optionValueFn(option);
                         const badge = getOptionBadge?.(option);
+                        const badges = getOptionBadges?.(option);
 
                         return (
                           <Listbox.Option
@@ -115,22 +164,38 @@ function FloatingListbox({
                             }
                           >
                             {({ selected }) => (
-                              <div className="flex w-full min-w-0 items-center gap-2">
-                                <span className={`block min-w-0 flex-1 truncate ${selected ? 'font-semibold' : 'font-normal'}`}>
-                                  {displayValue}
-                                </span>
-                                {(badge || selected) && (
-                                  <span className="grid w-40 shrink-0 grid-cols-[1fr_auto] items-center gap-2">
-                                    <span className="justify-self-start">
-                                      <OptionBadge>{badge}</OptionBadge>
-                                    </span>
-                                    {selected && (
-                                      <Check className="h-4 w-4" style={{ color: 'var(--accent-primary)' }} aria-hidden="true" />
-                                    )}
-                                    {!selected && <span className="h-4 w-4" aria-hidden="true" />}
+                              getOptionBadges ? (
+                                <div className="flex w-full min-w-0 items-center gap-2">
+                                  <span className={`block min-w-0 flex-1 truncate ${selected ? 'font-semibold' : 'font-normal'}`}>
+                                    {displayValue}
                                   </span>
-                                )}
-                              </div>
+                                  <span className="flex shrink-0 items-center gap-1.5">
+                                    <PerfChip label={badges?.perfLabel} />
+                                    <QLChip count={badges?.qlCount} />
+                                  </span>
+                                  {selected
+                                    ? <Check className="h-4 w-4 shrink-0" style={{ color: 'var(--accent-primary)' }} aria-hidden="true" />
+                                    : <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                  }
+                                </div>
+                              ) : (
+                                <div className="flex w-full min-w-0 items-center gap-2">
+                                  <span className={`block min-w-0 flex-1 truncate ${selected ? 'font-semibold' : 'font-normal'}`}>
+                                    {displayValue}
+                                  </span>
+                                  {(badge || selected) && (
+                                    <span className="grid w-40 shrink-0 grid-cols-[1fr_auto] items-center gap-2">
+                                      <span className="justify-self-start">
+                                        <OptionBadge>{badge}</OptionBadge>
+                                      </span>
+                                      {selected && (
+                                        <Check className="h-4 w-4" style={{ color: 'var(--accent-primary)' }} aria-hidden="true" />
+                                      )}
+                                      {!selected && <span className="h-4 w-4" aria-hidden="true" />}
+                                    </span>
+                                  )}
+                                </div>
+                              )
                             )}
                           </Listbox.Option>
                         );

@@ -9,9 +9,11 @@ that both catalogs list the same plan IDs.
 # Per-plan region availability buckets, sourced from Vultr /v2/plans.
 # vc2 / vhf share the same regional footprint (no hnl, no mxp).
 # vhp-amd is offered in mxp but not hnl. vhp-intel is offered in hnl but not mxp.
-_LOC_VC2_VHF = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
-_LOC_VHP_AMD = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','mxp','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
-_LOC_VHP_INTEL = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','hnl','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+# voc-c-amd is offered in both hnl and mxp (superset of vhp-amd and vhp-intel).
+_LOC_VC2_VHF  = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+_LOC_VHP_AMD  = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','mxp','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+_LOC_VHP_INTEL= ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','hnl','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
+_LOC_VOC_C    = ('ams','atl','blr','bom','cdg','del','dfw','ewr','fra','hnl','icn','itm','jnb','lax','lhr','mad','man','mel','mex','mia','mxp','nrt','ord','sao','scl','sea','sgp','sjc','sto','syd','tlv','waw','yto')
 
 
 def _locations(plan_id):
@@ -21,6 +23,8 @@ def _locations(plan_id):
         return _LOC_VHP_AMD
     if plan_id.startswith("vhp-") and plan_id.endswith("-intel"):
         return _LOC_VHP_INTEL
+    if plan_id.startswith("voc-c-") and plan_id.endswith("-amd"):
+        return _LOC_VOC_C
     return ()
 
 
@@ -44,6 +48,7 @@ _FAMILY_LABELS = {
     "vhf":       "High Frequency",
     "vhp-amd":   "High Performance (AMD)",
     "vhp-intel": "High Performance (Intel)",
+    "voc-c-amd": "Dedicated CPU (AMD)",
 }
 
 
@@ -101,11 +106,13 @@ VULTR_PLANS = [
     _plan("vhp-4c-8gb-intel", 4, 8192, 180, 6144, 48.00),
     # _plan("vhp-4c-12gb-intel", 4, 12288, 260, 7168, 72.00),
 
-    # voc: Optimized Cloud (omitted - designed for storage/DB workloads, overkill for QL)
-    # _plan("voc-c-1c-2gb-25s-amd", 1, 2048, 25, 4096, 28.00),
+    # voc-c: Dedicated CPU (AMD) — one physical core per instance, ideal for QL workloads
+    _plan("voc-c-1c-2gb-25s-amd", 1, 2048, 25, 4096, 28.00),
+    _plan("voc-c-2c-4gb-50s-amd", 2, 4096, 50, 5120, 40.00),
+    _plan("voc-c-4c-8gb-75s-amd", 4, 8192, 75, 6144, 80.00),
+    # Other voc-* subfamilies (general-purpose, memory, storage) omitted — overkill for QL.
     # _plan("voc-g-1c-4gb-30s-amd", 1, 4096, 30, 4096, 30.00),
     # _plan("voc-m-1c-8gb-50s-amd", 1, 8192, 50, 5120, 40.00),
-    # _plan("voc-c-2c-4gb-50s-amd", 2, 4096, 50, 5120, 40.00),
     # _plan("voc-g-2c-8gb-50s-amd", 2, 8192, 50, 5120, 60.00),
     # _plan("voc-c-2c-4gb-75s-amd", 2, 4096, 75, 5120, 45.00),
     # _plan("voc-c-4c-8gb-75s-amd", 4, 8192, 75, 6144, 80.00),
