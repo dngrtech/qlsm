@@ -7,9 +7,28 @@ import { useNotification } from '../NotificationProvider';
 import StatusIndicator from '../StatusIndicator';
 import { formatDateTime } from '../../utils/uiUtils';
 import { formatVultrRegion, formatVultrPlan } from '../../utils/formatters';
+import { getPlan } from '../../utils/providerData';
 import { HostStatus, QLFILTER_STATUS } from '../../utils/statusEnums';
 import { copyToClipboard } from '../../utils/clipboard';
 import { validateHostName, HOST_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
+
+const CHIP_BASE = 'shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase';
+const PERF_CHIP_STYLES = {
+  'Hi-Perf':  { color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', background: 'var(--surface-elevated)' },
+  'Low-Perf': { color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)' },
+};
+const QL_CHIP_STYLE = { color: '#3b82f6', border: '1px solid rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.08)' };
+
+function PerfChip({ label }) {
+  if (!label) return null;
+  return <span className={CHIP_BASE} style={PERF_CHIP_STYLES[label] ?? PERF_CHIP_STYLES['Hi-Perf']}>{label}</span>;
+}
+
+function QLChip({ count, plural = 'servers' }) {
+  if (!count) return null;
+  const noun = count === 1 ? plural.replace(/s$/, '') : plural;
+  return <span className={CHIP_BASE} style={QL_CHIP_STYLE}>{count} QL {noun}</span>;
+}
 
 const OS_TYPE_LABELS = {
   debian: 'Debian',
@@ -245,11 +264,31 @@ export default function HostDetailDrawer({
                             <Field label="OS Type">
                               {OS_TYPE_LABELS[internalHost.os_type] || internalHost.os_type || 'Unknown'}
                             </Field>
+                            {internalHost.cpu_count > 0 && (
+                              <Field label="Capacity">
+                                <QLChip count={internalHost.cpu_count} plural="instances" />
+                              </Field>
+                            )}
                           </>
                         ) : (
                           <>
                             <Field label="Region">{formatVultrRegion(internalHost.region)}</Field>
-                            <Field label="Size">{formatVultrPlan(internalHost.machine_size)}</Field>
+                            <Field label="Plan">
+                              {(() => {
+                                const plan = getPlan('vultr', internalHost.machine_size);
+                                return (
+                                  <div className="flex flex-col gap-1.5">
+                                    <span>{formatVultrPlan(internalHost.machine_size)}</span>
+                                    {(plan?.perfLabel || plan?.qlCount) && (
+                                      <span className="flex flex-wrap gap-1.5">
+                                        <PerfChip label={plan.perfLabel} />
+                                        <QLChip count={plan.qlCount} />
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </Field>
                           </>
                         )}
                         <Field label="IP Address">

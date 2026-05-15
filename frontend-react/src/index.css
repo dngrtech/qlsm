@@ -1588,6 +1588,7 @@ body {
   color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+  text-align: right;
 }
 
 .drawer-field dd {
