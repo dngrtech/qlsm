@@ -47,6 +47,7 @@ function AddHostFormFields({
   connectionTestStatus,
   connectionTestMessage,
   onTestConnection,
+  onSwitchToSelfHost,
   osInfo,
 }) {
   const isStandalone = provider === 'standalone';
@@ -270,6 +271,7 @@ function AddHostFormFields({
             connectionTestStatus={connectionTestStatus}
             connectionTestMessage={connectionTestMessage}
             onTestConnection={onTestConnection}
+            onSwitchToSelfHost={onSwitchToSelfHost}
           />
         </>
       )}

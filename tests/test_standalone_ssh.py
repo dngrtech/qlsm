@@ -30,6 +30,21 @@ def _ssh_client(stdout_data=b"", stderr_data=b"", exit_status=0):
     return client
 
 
+def _ssh_client_multi(*responses):
+    """Mock SSH client where exec_command returns successive (stdout, exit_status) responses."""
+    client = MagicMock()
+    sides = []
+    for stdout_data, exit_status in responses:
+        stdout = MagicMock()
+        stdout.channel.recv_exit_status.return_value = exit_status
+        stdout.read.return_value = stdout_data
+        stderr = MagicMock()
+        stderr.read.return_value = b""
+        sides.append((MagicMock(), stdout, stderr))
+    client.exec_command.side_effect = sides
+    return client
+
+
 def test_load_managed_public_key_reads_sidecar(tmp_path):
     key_path = tmp_path / "host_id_rsa"
     pub_path = Path(f"{key_path}.pub")
@@ -176,14 +191,16 @@ def test_audited_auto_add_policy_logs_sha256_fingerprint(caplog):
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")
 def test_detect_remote_os_maps_supported_release(mock_client_cls):
-    client = _ssh_client(
-        stdout_data=(
+    client = _ssh_client_multi(
+        (
             b'NAME="Ubuntu"\n'
             b'VERSION="24.04.2 LTS (Noble Numbat)"\n'
             b'ID=ubuntu\n'
             b'VERSION_ID="24.04"\n'
-            b'PRETTY_NAME="Ubuntu 24.04.2 LTS"\n'
+            b'PRETTY_NAME="Ubuntu 24.04.2 LTS"\n',
+            0,
         ),
+        (b"", 0),
     )
     mock_client_cls.return_value = client
 
@@ -199,17 +216,20 @@ def test_detect_remote_os_maps_supported_release(mock_client_cls):
         "version_id": "24.04",
         "pretty_name": "Ubuntu 24.04.2 LTS",
         "os_type": "ubuntu",
+        "qlsm_detected": False,
     }
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")
 def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
-    client = _ssh_client(
-        stdout_data=(
+    client = _ssh_client_multi(
+        (
             b'ID=ubuntu\n'
             b'VERSION_ID="18.04"\n'
-            b'PRETTY_NAME="Ubuntu 18.04.6 LTS"\n'
+            b'PRETTY_NAME="Ubuntu 18.04.6 LTS"\n',
+            0,
         ),
+        (b"", 0),
     )
     mock_client_cls.return_value = client
 
@@ -222,6 +242,81 @@ def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
 
     assert detected["pretty_name"] == "Ubuntu 18.04.6 LTS"
     assert detected["os_type"] == "ubuntu"
+    assert detected["qlsm_detected"] is False
+
+
+@patch("ui.standalone_ssh.paramiko.SSHClient")
+def test_detect_remote_os_marks_qlsm_when_image_running(mock_client_cls):
+    client = _ssh_client_multi(
+        (
+            b'ID=debian\n'
+            b'VERSION_ID="12"\n'
+            b'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n',
+            0,
+        ),
+        (b"ghcr.io/dngrtech/qlsm:latest\nredis:7-alpine\n", 0),
+    )
+    mock_client_cls.return_value = client
+
+    detected = detect_remote_os(
+        host="203.0.113.12",
+        port=22,
+        username="root",
+        password="secret",
+    )
+
+    assert detected["qlsm_detected"] is True
+
+
+@patch("ui.standalone_ssh.paramiko.SSHClient")
+def test_detect_remote_os_marks_no_qlsm_when_no_matching_image(mock_client_cls):
+    client = _ssh_client_multi(
+        (
+            b'ID=debian\n'
+            b'VERSION_ID="12"\n'
+            b'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n',
+            0,
+        ),
+        (b"nginx:latest\nredis:7-alpine\n", 0),
+    )
+    mock_client_cls.return_value = client
+
+    detected = detect_remote_os(
+        host="203.0.113.13",
+        port=22,
+        username="root",
+        password="secret",
+    )
+
+    assert detected["qlsm_detected"] is False
+
+
+@patch("ui.standalone_ssh.paramiko.SSHClient")
+def test_detect_remote_os_marks_no_qlsm_when_docker_unavailable(mock_client_cls):
+    """If `docker ps` exits non-zero (docker missing, no permission), treat as no QLSM.
+
+    The stdout is intentionally non-empty (contains the image name substring) to
+    prove that the exit-status gate fires and the substring check is never reached.
+    """
+    client = _ssh_client_multi(
+        (
+            b'ID=debian\n'
+            b'VERSION_ID="12"\n'
+            b'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n',
+            0,
+        ),
+        (b"dngrtech/qlsm:latest\n", 127),
+    )
+    mock_client_cls.return_value = client
+
+    detected = detect_remote_os(
+        host="203.0.113.14",
+        port=22,
+        username="root",
+        password="secret",
+    )
+
+    assert detected["qlsm_detected"] is False
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")
