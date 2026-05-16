@@ -154,8 +154,29 @@ def _run_checked_command(client, command):
     return stdout_text, stderr_text
 
 
+def _check_qlsm_running(client):
+    """Best-effort detection of QLSM containers on a connected SSH client.
+
+    Returns False if docker is missing, the invoking user lacks permission, or
+    no QLSM-tagged container is running. The exit status of docker ps is
+    inspected: a non-zero exit is treated as "not detected" regardless of stdout
+    content. SSH-session failures (exec_command raising) propagate to detect_remote_os
+    and surface as StandaloneSSHError — they are not swallowed here.
+    """
+    _, stdout, _ = client.exec_command("docker ps --format '{{.Image}}' 2>/dev/null")
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status != 0:
+        return False
+    output = _decode_stream(stdout)
+    return "dngrtech/qlsm" in output
+
+
 def detect_remote_os(*, host, port, username, timeout=30, password=None, key_filename=None):
-    """Read /etc/os-release over SSH and map it onto QLSM's supported standalone OS types."""
+    """Read /etc/os-release over SSH and map it onto QLSM's supported standalone OS types.
+
+    Also runs `docker ps` in the same SSH session to detect whether the host is
+    already running QLSM containers (so the UI can offer a self-host redirect).
+    """
     try:
         with _ssh_session(
             host=host,
@@ -167,6 +188,7 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
             audit_new_host_keys=password is not None,
         ) as client:
             stdout_text, _ = _run_checked_command(client, "cat /etc/os-release")
+            qlsm_detected = _check_qlsm_running(client)
     except (paramiko.AuthenticationException, paramiko.SSHException, OSError, StandaloneSSHError) as exc:
         raise StandaloneSSHError(f"Unable to detect remote OS: {exc}") from exc
 
@@ -180,6 +202,7 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
         "version_id": os_release_values.get("VERSION_ID", "").strip() or None,
         "pretty_name": detected_name,
         "os_type": _detect_supported_os_type(os_release_values),
+        "qlsm_detected": qlsm_detected,
     }
 
 
