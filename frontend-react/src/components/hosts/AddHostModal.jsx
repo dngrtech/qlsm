@@ -46,7 +46,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   // Standalone-specific state
   const [ipAddress, setIpAddress] = useState('');
   const [sshPort, setSshPort] = useState(22);
-  const [sshUser, setSshUser] = useState('root');
+  const [sshUser, setSshUser] = useState('');
   const [sshKey, setSshKey] = useState('');
   const [sshPassword, setSshPassword] = useState('');
   const [standaloneAuthMethod, setStandaloneAuthMethod] = useState('key');
@@ -115,10 +115,12 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
 
   useEffect(() => {
     if (!isOpen || !providerOptionsReady || provider !== 'self') return;
-    setSshUser(selfHostDefaults?.ssh_user || 'root');
     const guessedHostname = window.location.hostname;
     const guessedIp = (guessedHostname && guessedHostname !== 'localhost' && guessedHostname !== '127.0.0.1') ? guessedHostname : '';
-    setIpAddress(selfHostDefaults?.host_ip || guessedIp);
+    // Only seed defaults when fields are empty — on a redirect from standalone the
+    // user's typed values must be preserved.
+    if (!ipAddress) setIpAddress(selfHostDefaults?.host_ip || guessedIp);
+    if (!sshUser) setSshUser(selfHostDefaults?.ssh_user || 'root');
   }, [isOpen, provider, providerOptionsReady, selfHostDefaults]);
 
   const resetForm = () => {
@@ -132,7 +134,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setLoading(false);
     setIpAddress('');
     setSshPort(22);
-    setSshUser('root');
+    setSshUser('');
     setSshKey('');
     setSshPassword('');
     setStandaloneAuthMethod('key');
@@ -175,17 +177,36 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setConnectionTestMessage('');
     try {
       const result = await testHostConnection(buildStandaloneConnectionData());
-      if (result.success) {
-        setConnectionTestStatus('success');
-        setConnectionTestMessage(result.message || 'Connection successful');
-      } else {
+      if (!result.success) {
         setConnectionTestStatus('failed');
         setConnectionTestMessage(result.message || 'Connection failed');
+        return;
       }
+      if (result.qlsm_detected) {
+        if (selfHostExists) {
+          setConnectionTestStatus('qlsm_blocked');
+          setConnectionTestMessage('This server is your QLSM host and is already registered as a self-host.');
+        } else {
+          setConnectionTestStatus('qlsm_redirect');
+          setConnectionTestMessage('This server is running QLSM. Add it as your self-host instead?');
+        }
+        return;
+      }
+      setConnectionTestStatus('success');
+      setConnectionTestMessage(result.message || 'Connection successful');
     } catch (err) {
       setConnectionTestStatus('failed');
       setConnectionTestMessage(err.error?.message || err.message || 'Connection test failed');
     }
+  };
+
+  const handleSwitchToSelfHost = () => {
+    setProvider('self');
+    setSshKey('');
+    setSshPassword('');
+    setSshPort(22);
+    setStandaloneAuthMethod('key');
+    resetConnectionTest();
   };
 
   const handleNameBlur = () => {
@@ -400,6 +421,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         connectionTestStatus={connectionTestStatus}
                         connectionTestMessage={connectionTestMessage}
                         onTestConnection={handleTestConnection}
+                        onSwitchToSelfHost={handleSwitchToSelfHost}
                         osInfo={selfHostOsInfo}
                       />
                     ) : (

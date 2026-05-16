@@ -56,6 +56,7 @@ vi.mock('../AddHostFormFields', () => ({
       <div data-testid="connection-status">{props.connectionTestStatus}</div>
       <div data-testid="connection-message">{props.connectionTestMessage}</div>
       <button type="button" onClick={props.onTestConnection}>Test connection</button>
+      <button type="button" onClick={() => props.onSwitchToSelfHost?.()}>Switch to self-host</button>
     </div>
   ),
 }));
@@ -186,5 +187,112 @@ describe('AddHostModal self provider', () => {
 
     fireEvent.submit(screen.getByRole('button', { name: /add host/i }).closest('form'));
     expect(mocks.createHost).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddHostModal — QLSM-detected redirect', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getHosts.mockResolvedValue([]);
+    mocks.getSelfHostDefaults.mockResolvedValue({
+      ssh_user: 'rage',
+      host_ip: '203.0.113.10',
+      provider_capabilities: { vultr: { configured: true } },
+    });
+  });
+
+  it('enters qlsm_redirect state when test detects QLSM and no self exists', async () => {
+    mocks.testHostConnection.mockResolvedValue({
+      success: true,
+      message: 'Connection successful',
+      qlsm_detected: true,
+    });
+
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+    const standaloneBtn = await screen.findByRole('button', { name: /choose standalone/i });
+    fireEvent.click(standaloneBtn);
+    fireEvent.change(screen.getByLabelText('Server address'), { target: { value: '203.0.113.50' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), { target: { value: 'fake-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('connection-status')).toHaveTextContent('qlsm_redirect')
+    );
+    expect(screen.getByTestId('connection-message')).toHaveTextContent(
+      /add it as your self-host instead/i
+    );
+  });
+
+  it('enters qlsm_blocked state when test detects QLSM and self already exists', async () => {
+    mocks.getHosts.mockResolvedValue([
+      { id: 1, name: 'self-host', provider: 'self', ip_address: '203.0.113.10' },
+    ]);
+    mocks.testHostConnection.mockResolvedValue({
+      success: true,
+      message: 'Connection successful',
+      qlsm_detected: true,
+    });
+
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('provider-value')).toHaveTextContent('standalone')
+    );
+    const ipField = screen.getByLabelText('Server address');
+    fireEvent.change(ipField, { target: { value: '203.0.113.10' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), { target: { value: 'fake-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('connection-status')).toHaveTextContent('qlsm_blocked')
+    );
+    expect(screen.getByTestId('connection-message')).toHaveTextContent(
+      /already registered as a self-host/i
+    );
+  });
+
+  it('flips provider to self and clears standalone-only fields when switch button is clicked', async () => {
+    mocks.testHostConnection.mockResolvedValue({
+      success: true,
+      message: 'Connection successful',
+      qlsm_detected: true,
+    });
+
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+    const standaloneBtn = await screen.findByRole('button', { name: /choose standalone/i });
+    fireEvent.click(standaloneBtn);
+    fireEvent.change(screen.getByLabelText('Server address'), { target: { value: '203.0.113.50' } });
+    fireEvent.change(screen.getByLabelText('SSH User'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), { target: { value: 'fake-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId('connection-status')).toHaveTextContent('qlsm_redirect')
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /switch to self-host/i }));
+
+    await waitFor(() => expect(screen.getByTestId('provider-value')).toHaveTextContent('self'));
+    expect(screen.getByLabelText('Server address')).toHaveValue('203.0.113.50');
+    expect(screen.getByLabelText('SSH User')).toHaveValue('admin');
+    expect(screen.getByLabelText('SSH Private Key')).toHaveValue('');
+    expect(screen.getByTestId('connection-status')).toHaveTextContent('idle');
+  });
+
+  it('keeps existing flow when qlsm_detected is false', async () => {
+    mocks.testHostConnection.mockResolvedValue({
+      success: true,
+      message: 'Connection successful. Detected OS: Debian 12.',
+      qlsm_detected: false,
+    });
+
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+    const standaloneBtn = await screen.findByRole('button', { name: /choose standalone/i });
+    fireEvent.click(standaloneBtn);
+    fireEvent.change(screen.getByLabelText('Server address'), { target: { value: '203.0.113.60' } });
+    fireEvent.change(screen.getByLabelText('SSH Private Key'), { target: { value: 'fake-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('connection-status')).toHaveTextContent('success')
+    );
   });
 });
