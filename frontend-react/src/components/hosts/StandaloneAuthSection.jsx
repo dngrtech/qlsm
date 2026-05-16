@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { CheckCircle, Loader2, Upload, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Loader2, Upload, XCircle } from 'lucide-react';
 
 const inputClass = 'mt-1 block w-full px-3 py-2 rounded-lg text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none focus:ring-1 transition-colors';
 const inputFocusRing = 'focus:ring-[var(--accent-primary)] focus:border-[var(--accent-primary)]';
@@ -44,6 +44,7 @@ function StandaloneAuthSection({
   connectionTestStatus,
   connectionTestMessage,
   onTestConnection,
+  onSwitchToSelfHost,
 }) {
   const fileInputRef = useRef(null);
   const isPasswordAuth = authMethod === 'password';
@@ -216,6 +217,44 @@ function StandaloneAuthSection({
 
         {connectionTestMessage && connectionTestStatus === 'failed' && (
           <p className="mt-2 text-xs" style={{ color: 'var(--accent-danger)' }}>{connectionTestMessage}</p>
+        )}
+
+        {connectionTestStatus === 'qlsm_redirect' && (
+          <div
+            className="mt-2 flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm"
+            style={{
+              background: 'rgba(255, 184, 0, 0.08)',
+              border: '1px solid rgba(255, 184, 0, 0.2)',
+              color: 'var(--accent-warning, #ffb800)',
+            }}
+          >
+            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p>{connectionTestMessage}</p>
+              <button
+                type="button"
+                onClick={onSwitchToSelfHost}
+                className="mt-2 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold transition-all text-white dark:text-[#0A0E14]"
+                style={{ background: 'var(--accent-warning, #ffb800)' }}
+              >
+                Continue as self-host
+              </button>
+            </div>
+          </div>
+        )}
+
+        {connectionTestStatus === 'qlsm_blocked' && (
+          <div
+            className="mt-2 flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm"
+            style={{
+              background: 'rgba(255, 51, 102, 0.08)',
+              border: '1px solid rgba(255, 51, 102, 0.2)',
+              color: 'var(--accent-danger)',
+            }}
+          >
+            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+            <span>{connectionTestMessage}</span>
+          </div>
         )}
 
         {successMessage && connectionTestStatus === 'success' && (
