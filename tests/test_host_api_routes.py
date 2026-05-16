@@ -683,6 +683,115 @@ def test_test_connection_password_success(mock_test, mock_detect_os, client, app
 
 
 @patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+    'qlsm_detected': True,
+})
+@patch('ui.routes.host_routes.subprocess.run')
+def test_test_connection_key_returns_qlsm_detected_true(mock_run, mock_detect_os, client, app):
+    """Key-mode test surfaces qlsm_detected=True when detect_remote_os reports it."""
+    mock_run.return_value = MagicMock(returncode=0, stdout='pong', stderr='')
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.30',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'key',
+        'ssh_key': '-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----',
+    })
+
+    assert response.status_code == 200
+    body = response.get_json()['data']
+    assert body['success'] is True
+    assert body['qlsm_detected'] is True
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+    'qlsm_detected': True,
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_returns_qlsm_detected_true(mock_test, mock_detect_os, client, app):
+    """Password-mode test surfaces qlsm_detected=True when detect_remote_os reports it."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.31',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    body = response.get_json()['data']
+    assert body['success'] is True
+    assert body['qlsm_detected'] is True
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'debian',
+    'version_id': '12',
+    'pretty_name': 'Debian GNU/Linux 12 (bookworm)',
+    'os_type': 'debian',
+    'qlsm_detected': False,
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_password_returns_qlsm_detected_false(mock_test, mock_detect_os, client, app):
+    """Connection succeeds, no QLSM containers detected — qlsm_detected is False."""
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.32',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    body = response.get_json()['data']
+    assert body['success'] is True
+    assert body['qlsm_detected'] is False
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
+    'id': 'ubuntu',
+    'version_id': '18.04',
+    'pretty_name': 'Ubuntu 18.04.6 LTS',
+    'os_type': None,
+    'qlsm_detected': True,
+})
+@patch('ui.routes.host_routes.test_password_connection', return_value=(True, 'Connection successful'))
+def test_test_connection_qlsm_detected_false_when_os_unsupported(mock_test, mock_detect_os, client, app):
+    """When OS is unsupported (success=False), qlsm_detected must be False in the response.
+
+    Even though detect_remote_os returned qlsm_detected=True, the route must suppress
+    it when success=False — one issue at a time (spec edge-case row 9).
+    """
+    headers = auth_headers(app, DEFAULT_USER)
+
+    response = client.post('/api/hosts/test-connection', headers=headers, json={
+        'ip_address': '203.0.113.33',
+        'ssh_port': 22,
+        'ssh_user': 'root',
+        'ssh_auth_method': 'password',
+        'ssh_password': 'secret',
+    })
+
+    assert response.status_code == 200
+    body = response.get_json()['data']
+    assert body['success'] is False
+    assert body['qlsm_detected'] is False
+
+
+@patch('ui.routes.host_routes.detect_remote_os', return_value={
     'id': 'ubuntu',
     'version_id': '24.04',
     'pretty_name': 'Ubuntu 24.04.2 LTS',

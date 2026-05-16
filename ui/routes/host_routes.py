@@ -365,14 +365,15 @@ def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_k
 
         if result.returncode == 0:
             current_app.logger.info(f"Connection test successful for {validated_ip}")
-            success, message, _ = _detect_and_validate_remote_os(
+            success, message, detected_os = _detect_and_validate_remote_os(
                 host=validated_ip,
                 port=ssh_port,
                 username=ssh_user,
                 timeout=15,
                 key_filename=temp_key_path,
             )
-            return jsonify({"data": {"success": success, "message": message}}), 200
+            qlsm_detected = bool(success and detected_os and detected_os.get("qlsm_detected"))
+            return jsonify({"data": {"success": success, "message": message, "qlsm_detected": qlsm_detected}}), 200
 
         error_output = result.stderr or result.stdout or "Unknown error"
         current_app.logger.warning(f"Connection test failed for {validated_ip}: {error_output}")
@@ -1219,15 +1220,17 @@ def test_connection_api():
             ssh_user,
             credential,
         )
+        detected_os = None
         if success:
-            success, message, _ = _detect_and_validate_remote_os(
+            success, message, detected_os = _detect_and_validate_remote_os(
                 host=validated_ip,
                 port=ssh_port,
                 username=ssh_user,
                 timeout=15,
                 password=credential,
             )
-        return jsonify({"data": {"success": success, "message": message}}), 200
+        qlsm_detected = bool(success and detected_os and detected_os.get("qlsm_detected"))
+        return jsonify({"data": {"success": success, "message": message, "qlsm_detected": qlsm_detected}}), 200
 
     return _test_standalone_connection_with_key(
         validated_ip,
