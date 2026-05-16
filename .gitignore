@@ -81,6 +81,10 @@ terraform/vultr-root/*
 !tests/
 !tests/**
 
+# ── Custom minqlx plugins ─────────────────────────────────────────────────────
+!qlsm_plugins/
+!qlsm_plugins/*.py
+
 # ── RCON ──────────────────────────────────────────────────────────────────────
 !rcon_service/
 !rcon_service/**
