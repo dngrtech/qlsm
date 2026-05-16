@@ -157,14 +157,15 @@ def _run_checked_command(client, command):
 def _check_qlsm_running(client):
     """Best-effort detection of QLSM containers on a connected SSH client.
 
-    Returns False if docker is missing, the invoking user lacks permission, or
-    no QLSM-tagged container is running. The exit status of docker ps is
-    inspected: a non-zero exit is treated as "not detected" regardless of stdout
-    content. SSH-session failures (exec_command raising) propagate to detect_remote_os
-    and surface as StandaloneSSHError — they are not swallowed here.
+    Returns False if docker is missing, the invoking user lacks permission,
+    no QLSM-tagged container is running, or the SSH transport fails mid-session.
+    Never raises — callers should treat a False return as "not detected".
     """
-    _, stdout, _ = client.exec_command("docker ps --format '{{.Image}}' 2>/dev/null")
-    exit_status = stdout.channel.recv_exit_status()
+    try:
+        _, stdout, _ = client.exec_command("docker ps --format '{{.Image}}' 2>/dev/null")
+        exit_status = stdout.channel.recv_exit_status()
+    except (paramiko.SSHException, OSError):
+        return False
     if exit_status != 0:
         return False
     output = _decode_stream(stdout)
