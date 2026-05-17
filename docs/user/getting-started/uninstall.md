@@ -26,20 +26,23 @@ curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.s
 
 ## Vultr / system install (`/opt/qlsm`)
 
-The [Vultr startup script](../../../vultr-startup.sh) installs to `/opt/qlsm` as root. Use `sudo` and set `INSTALL_DIR`:
+The [Vultr startup script](https://github.com/dngrtech/qlsm/blob/main/vultr-startup.sh) installs to `/opt/qlsm` as root. Some VPS environments don't support process substitution (`<(...)`), so download the script first:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh -o /tmp/qlsm-uninstall.sh
+
 # Data preserved
-sudo INSTALL_DIR=/opt/qlsm bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh)
+sudo INSTALL_DIR=/opt/qlsm bash /tmp/qlsm-uninstall.sh
 
 # Full removal
-sudo INSTALL_DIR=/opt/qlsm bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh) --purge --yes
+sudo INSTALL_DIR=/opt/qlsm bash /tmp/qlsm-uninstall.sh --purge --yes
 ```
 
 ## Custom install directory
 
 ```bash
-INSTALL_DIR=/path/to/qlsm bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh) --purge
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh -o /tmp/qlsm-uninstall.sh
+INSTALL_DIR=/path/to/qlsm bash /tmp/qlsm-uninstall.sh --purge
 ```
 
 ## What gets removed
