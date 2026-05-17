@@ -4,7 +4,7 @@ The uninstall script reverses what the install script did.
 
 ## Default (data preserved)
 
-Stops containers, removes the QLSM sshd config (`/etc/ssh/sshd_config.d/qlsm.conf`), and deletes `~/.qlsm-ssh/`. Your install directory (`~/qlsm/`) and all data inside it are left untouched.
+Stops containers, removes the QLSM sshd config (`/etc/ssh/sshd_config.d/qlsm.conf`), and deletes `~/.qlsm-ssh/`. Your install directory and all data inside it are left untouched.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash
@@ -18,28 +18,12 @@ Also removes named Docker volumes (Redis data, Caddy TLS certificates, Loki/Graf
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge
 ```
 
-Skip confirmation prompts (for scripted use):
+## Non-default install directory
+
+If QLSM was installed somewhere other than `~/qlsm` (e.g. the Vultr startup script uses `/opt/qlsm`), set `INSTALL_DIR` and use `sudo` if needed:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge --yes
-```
-
-## Vultr / system install (`/opt/qlsm`)
-
-The [Vultr startup script](https://github.com/dngrtech/qlsm/blob/main/vultr-startup.sh) installs to `/opt/qlsm` as root:
-
-```bash
-# Data preserved
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | sudo INSTALL_DIR=/opt/qlsm bash
-
-# Full removal
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | sudo INSTALL_DIR=/opt/qlsm bash -s -- --purge --yes
-```
-
-## Custom install directory
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | INSTALL_DIR=/path/to/qlsm bash -s -- --purge
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | sudo INSTALL_DIR=/opt/qlsm bash -s -- --purge
 ```
 
 ## What gets removed
