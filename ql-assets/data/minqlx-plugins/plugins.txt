@@ -4,6 +4,7 @@ commands.py
 commlink.py
 getmap.py
 iouonegirl.py
+kickban.py
 kills.py
 listmaps.py
 myFun.py

@@ -58,7 +58,7 @@ sys.modules["minqlx"] = minqlx_mock
 
 # ── Import plugin after mock is in place ────────────────────────────────────
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "qlsm_plugins"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ql-assets", "data", "minqlx-plugins"))
 from kickban import kickban, PLAYER_KEY, TIME_FORMAT  # noqa: E402
 
 
