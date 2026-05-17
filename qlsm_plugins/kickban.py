@@ -127,7 +127,10 @@ class kickban(minqlx.Plugin):
         threshold = self._threshold()
         window = self._window()
         duration = self._duration()
-        remaining = threshold - count
+        remaining = max(0, threshold - count)
+
+        if remaining == 0:
+            return
 
         self.msg(
             "^3{}^7 has been kicked ^1{}^7 time(s) in the last ^3{}^7 min — "
@@ -161,9 +164,9 @@ class kickban(minqlx.Plugin):
 
         pipe = self.db.pipeline()
         pipe.zadd(base_key, {ban_id: time.time() + duration * 60})
-        pipe.hmset(
+        pipe.hset(
             base_key + ":{}".format(ban_id),
-            {
+            mapping={
                 "expires": expires_str,
                 "reason": "Auto-banned: kicked {} times within {} minutes".format(count, window),
                 "issued": now_str,
@@ -216,4 +219,5 @@ class kickban(minqlx.Plugin):
             return
 
         self.db.delete(self._kicks_key(steam_id))
+        self.msg("^6{}^7 cleared kick history for ^6{}^7.".format(player.clean_name, name))
         channel.reply("^6{}^7's kick history cleared.".format(name))

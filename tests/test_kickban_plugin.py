@@ -159,8 +159,10 @@ class TestIssueBan(unittest.TestCase):
         with patch.object(self.plugin, "msg"):
             self.plugin._issue_ban(12345, "TestPlayer", 3)
 
-        self.pipeline.hmset.assert_called_once()
-        key, data = self.pipeline.hmset.call_args[0]
+        self.pipeline.hset.assert_called_once()
+        call_kwargs = self.pipeline.hset.call_args
+        key = call_kwargs[0][0]
+        data = call_kwargs[1]["mapping"]
         self.assertEqual(key, "minqlx:players:12345:bans:0")
         self.assertIn("expires", data)
         self.assertIn("reason", data)
@@ -228,6 +230,12 @@ class TestPlayerLoadedWarning(unittest.TestCase):
         self.assertIn("2", text)
         self.assertIn("15", text)
         self.assertIn("60", text)
+
+    def test_no_broadcast_when_remaining_zero(self):
+        self.plugin.db.zcard.return_value = 3  # count == threshold → remaining = 0
+        with patch.object(self.plugin, "msg") as mock_msg:
+            self.plugin.handle_player_loaded(self.player)
+        mock_msg.assert_not_called()
 
     def test_nonexistent_player_handled(self):
         self.player.update = MagicMock(side_effect=minqlx_mock.NonexistentPlayerError)
