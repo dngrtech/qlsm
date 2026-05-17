@@ -196,16 +196,17 @@ class commlink_secured(minqlx.Plugin):
 
     @minqlx.delay(0.5)
     def set_ip(self):
+        import ipaddress
         try:
             res = urllib.request.urlopen(
                 "https://checkip.amazonaws.com/",
                 timeout=PUBLIC_IP_TIMEOUT,
             ).read()
-        except (urllib.error.URLError, TimeoutError, OSError):
+            candidate = res.decode("utf-8", errors="ignore").strip()
+            ipaddress.ip_address(candidate)
+            self.server_ip = candidate
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
             self.server_ip = ""
-            return
-
-        self.server_ip = res.decode("utf-8", errors="ignore").strip()
 
     def _check_and_update_cooldown(self, player):
         now = time.time()
@@ -361,7 +362,8 @@ class commlink_secured(minqlx.Plugin):
         )
 
     def handle_player_disconnect(self, player, reason):
-        if reason and reason[-1] not in ("?", "!", "."):
+        reason = reason or "disconnected."
+        if reason[-1] not in ("?", "!", "."):
             reason = reason + "."
 
         if not self.get_cvar("qlx_enableConnectDisconnectMessages", bool):
@@ -553,6 +555,7 @@ class SimpleAsyncIrc(threading.Thread):
         self.writer = None
         self.server_options = {}
         super().__init__()
+        self.daemon = True
 
         self._lock = threading.Lock()
         self._ready = False
