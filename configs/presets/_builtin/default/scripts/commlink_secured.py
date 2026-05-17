@@ -61,6 +61,13 @@ COMMLINK_UNAVAILABLE_MSG = "^3CommLink^7 unavailable."
 EXPECTED_TRANSPORT_ERRORS = (OSError, asyncio.TimeoutError)
 AUTH_MESSAGE_PREFIX = "CLS1:"
 DEFAULT_MAX_AGE_SECONDS = 300
+COMMLINK_MASTER_FLAG = "commlink:enabled"
+COMMLINK_CHAT_FLAG = "commlink:chat_enabled"
+COMMLINK_EVENTS_FLAG = "commlink:events_enabled"
+MESSAGE_KIND_CHAT = "chat"
+MESSAGE_KIND_EVENT = "event"
+MESSAGE_KIND_NOTICE = "notice"
+MESSAGE_KIND_CONTROL = "control"
 CONTROL_CHARS = {
     ord("\r"): None,
     ord("\n"): None,
@@ -89,7 +96,7 @@ def _signature(secret, payload):
     return hmac.new(secret.encode("utf-8"), _canonical_json(payload), hashlib.sha256).hexdigest()
 
 
-def sign_message(secret, text, now=None):
+def sign_message(secret, text, now=None, kind=MESSAGE_KIND_CHAT):
     if not secret:
         return sanitize_irc_text(text)
 
@@ -98,6 +105,7 @@ def sign_message(secret, text, now=None):
         "ts": int(now if now is not None else time.time()),
         "n": secrets.token_urlsafe(12),
         "t": sanitize_irc_text(text),
+        "k": sanitize_irc_text(kind) or MESSAGE_KIND_CHAT,
     }
     payload["sig"] = _signature(secret, payload)
     return AUTH_MESSAGE_PREFIX + _b64encode(_canonical_json(payload))
@@ -125,12 +133,15 @@ def verify_message(secret, wire_text, max_age=DEFAULT_MAX_AGE_SECONDS, now=None)
     ts = payload.get("ts")
     nonce = payload.get("n")
     text = payload.get("t")
+    kind = payload.get("k", MESSAGE_KIND_CHAT)
     if not isinstance(ts, int) or not isinstance(nonce, str) or not isinstance(text, str):
+        return None
+    if not isinstance(kind, str):
         return None
     current_time = int(now if now is not None else time.time())
     if abs(current_time - ts) > max_age:
         return None
-    return {"text": sanitize_irc_text(text), "nonce": nonce, "ts": ts}
+    return {"text": sanitize_irc_text(text), "kind": sanitize_irc_text(kind), "nonce": nonce, "ts": ts}
 
 
 re_msg = re.compile(r"^:([^ ]+) PRIVMSG ([^ ]+) :(.*)$")
@@ -166,6 +177,8 @@ class commlink_secured(minqlx.Plugin):
         self.add_command(("world", "say_world"), self.send_commlink_message, priority=minqlx.PRI_LOWEST, usage="<message>")
         self.add_command("tomtec_versions", self.cmd_showversion)
         self.add_command("commlink", self.cmd_toggle_commlink)
+        self.add_command("commlinkchat", self.cmd_toggle_commlink_chat)
+        self.add_command("commlinkevents", self.cmd_toggle_commlink_events)
         self.add_command("status", self.server_status)
         self.add_command("need", self.need_player, usage="<number>")
 
@@ -198,12 +211,12 @@ class commlink_secured(minqlx.Plugin):
     def get_auth_secret(self):
         return (self.get_cvar("qlx_commlinkAuthSecret") or "").strip()
 
-    def encode_outbound_message(self, text):
+    def encode_outbound_message(self, text, kind=MESSAGE_KIND_CHAT):
         text = sanitize_irc_text(text)
         secret = self.get_auth_secret()
         if not secret:
             return text
-        return sign_message(secret, text)
+        return sign_message(secret, text, kind=kind)
 
     def decode_inbound_message(self, msg):
         wire_text = sanitize_irc_text(" ".join(msg)).strip()
@@ -212,10 +225,35 @@ class commlink_secured(minqlx.Plugin):
             verified = verify_message(secret, wire_text)
             if not verified or self.is_replayed_auth_message(verified):
                 return None
-            return verified["text"]
+            return verified
         if wire_text.startswith(AUTH_MESSAGE_PREFIX):
             return None
-        return wire_text
+        return {"text": wire_text, "kind": self.classify_plaintext_message(wire_text)}
+
+    def classify_plaintext_message(self, text):
+        words = text.split()
+        if not words:
+            return MESSAGE_KIND_CHAT
+        if words[0] == "request_status":
+            return MESSAGE_KIND_CONTROL
+        if words[0] == "Need":
+            return MESSAGE_KIND_NOTICE
+        if (
+            len(words) >= 3 and
+            (words[0].startswith("Duel-") or words[0].startswith("Free-")) and
+            words[1].startswith("Spec-")
+        ):
+            return MESSAGE_KIND_NOTICE
+        if (
+            len(words) >= 4 and
+            words[0].startswith("Red-") and
+            words[1].startswith("Blue-") and
+            words[2].startswith("Spec-")
+        ):
+            return MESSAGE_KIND_NOTICE
+        if text.endswith(" connected."):
+            return MESSAGE_KIND_EVENT
+        return MESSAGE_KIND_CHAT
 
     def is_replayed_auth_message(self, verified):
         seen = getattr(self, "auth_seen_nonces", None)
@@ -235,10 +273,10 @@ class commlink_secured(minqlx.Plugin):
         seen[nonce] = current_ts
         return False
 
-    def send_irc_message(self, recipient, text):
+    def send_irc_message(self, recipient, text, kind=MESSAGE_KIND_CHAT):
         if not self.commlink_available():
             return False
-        encoded = self.encode_outbound_message(text)
+        encoded = self.encode_outbound_message(text, kind=kind)
         if encoded is None:
             return False
         try:
@@ -251,14 +289,44 @@ class commlink_secured(minqlx.Plugin):
             self.msg("^3CommLink^7 message reception has been disabled during your Duel.")
 
     def cmd_toggle_commlink(self, player, msg, channel):
-        flag = self.db.get_flag(player, "commlink:enabled", default=(self.get_cvar("qlx_enableCommlinkMessages", bool)))
-        self.db.set_flag(player, "commlink:enabled", not flag)
+        flag = self.db.get_flag(player, COMMLINK_MASTER_FLAG, default=(self.get_cvar("qlx_enableCommlinkMessages", bool)))
+        self.db.set_flag(player, COMMLINK_MASTER_FLAG, not flag)
         if flag:
             word = "disabled"
         else:
             word = "enabled"
         player.tell("^3CommLink^7 notices have been ^4{}^7.".format(word))
         return minqlx.RET_STOP_ALL
+
+    def cmd_toggle_commlink_chat(self, player, msg, channel):
+        return self.toggle_commlink_subcategory(
+            player,
+            COMMLINK_CHAT_FLAG,
+            "^3CommLink^7 chat messages have been ^4{}^7.",
+        )
+
+    def cmd_toggle_commlink_events(self, player, msg, channel):
+        return self.toggle_commlink_subcategory(
+            player,
+            COMMLINK_EVENTS_FLAG,
+            "^3CommLink^7 connect/disconnect notices have been ^4{}^7.",
+        )
+
+    def toggle_commlink_subcategory(self, player, flag_name, message):
+        flag = self.db.get_flag(player, flag_name, default=True)
+        self.db.set_flag(player, flag_name, not flag)
+        word = "disabled" if flag else "enabled"
+        player.tell(message.format(word))
+        return minqlx.RET_STOP_ALL
+
+    def player_receives_commlink(self, player, kind):
+        if not self.db.get_flag(player, COMMLINK_MASTER_FLAG, default=(self.get_cvar("qlx_enableCommlinkMessages", bool))):
+            return False
+        if kind == MESSAGE_KIND_CHAT:
+            return self.db.get_flag(player, COMMLINK_CHAT_FLAG, default=True)
+        if kind == MESSAGE_KIND_EVENT:
+            return self.db.get_flag(player, COMMLINK_EVENTS_FLAG, default=True)
+        return True
 
     def handle_unload(self, plugin):
         if plugin == self.__class__.__name__ and self.irc and self.irc.is_alive():
@@ -270,7 +338,11 @@ class commlink_secured(minqlx.Plugin):
             return
         if str(player.steam_id).startswith("9"):
             return
-        self.send_irc_message(self.identity, self.translate_colors("{} connected.".format(player.name)))
+        self.send_irc_message(
+            self.identity,
+            self.translate_colors("{} connected.".format(player.name)),
+            kind=MESSAGE_KIND_EVENT,
+        )
 
     def handle_player_disconnect(self, player, reason):
         if reason and reason[-1] not in ("?", "!", "."):
@@ -280,10 +352,14 @@ class commlink_secured(minqlx.Plugin):
             return
         if str(player.steam_id).startswith("9"):
             return
-        self.send_irc_message(self.identity, self.translate_colors("{} {}".format(player.name, reason)))
+        self.send_irc_message(
+            self.identity,
+            self.translate_colors("{} {}".format(player.name, reason)),
+            kind=MESSAGE_KIND_EVENT,
+        )
 
     def handle_msg(self, irc, user, channel, msg):
-        def broadcast_commlink(pm):
+        def broadcast_commlink(pm, kind):
             is_free_status = (
                 len(pm) >= 3 and
                 (pm[0].startswith("Duel-") or pm[0].startswith("Free-")) and
@@ -315,7 +391,7 @@ class commlink_secured(minqlx.Plugin):
             for p in self.players():
                 if self.game.type_short == "duel" and p in duelers and self.game.state != "warmup":
                     continue
-                if self.db.get_flag(p, "commlink:enabled", default=(self.get_cvar("qlx_enableCommlinkMessages", bool))):
+                if self.player_receives_commlink(p, kind):
                     p.tell("[CommLink] ^4{}^7:^3 {}".format(user[0], " ".join(pm)))
 
         if not msg:
@@ -325,14 +401,18 @@ class commlink_secured(minqlx.Plugin):
         decoded = self.decode_inbound_message(msg)
         if not decoded:
             return
-        msg = decoded.split()
+        msg = decoded["text"].split()
         if not msg:
             return
         if msg[0] == 'request_status':
             status = self.get_status_msg()
-            self.send_irc_message(self.identity, "{} {}:{}".format(status, self.server_ip, self.server_port))
+            self.send_irc_message(
+                self.identity,
+                "{} {}:{}".format(status, self.server_ip, self.server_port),
+                kind=MESSAGE_KIND_NOTICE,
+            )
         else:
-            broadcast_commlink(msg)
+            broadcast_commlink(msg, decoded["kind"])
 
     def handle_perform(self, irc):
         irc.join(self.identity)
@@ -345,7 +425,7 @@ class commlink_secured(minqlx.Plugin):
             return minqlx.RET_STOP_ALL
 
         text = "^7<{}> ^3{} ".format(player.name, " ".join(msg[1:]))
-        if self.send_irc_message(self.identity, self.translate_colors(text)):
+        if self.send_irc_message(self.identity, self.translate_colors(text), kind=MESSAGE_KIND_CHAT):
             player.tell("Message sent via ^3CommLink^7.")
         else:
             self.tell_commlink_unavailable(player)
@@ -380,10 +460,10 @@ class commlink_secured(minqlx.Plugin):
         for p in self.players():
             if self.game.type_short == "duel" and p in free and self.game.state != "warmup":
                 continue
-            if self.db.get_flag(p, "commlink:enabled", default=(self.get_cvar("qlx_enableCommlinkMessages", bool))):
+            if self.player_receives_commlink(p, MESSAGE_KIND_NOTICE):
                 p.tell("[CommLink] ^4{}^7: {}".format(self.clientName, status))
         self.status_request = True
-        self.send_irc_message(self.identity, "request_status")
+        self.send_irc_message(self.identity, "request_status", kind=MESSAGE_KIND_CONTROL)
 
     @minqlx.delay(1.5)
     def unset_server_status(self):
@@ -410,7 +490,7 @@ class commlink_secured(minqlx.Plugin):
             self.server_ip,
             self.server_port,
         )
-        if self.send_irc_message(self.identity, text):
+        if self.send_irc_message(self.identity, text, kind=MESSAGE_KIND_NOTICE):
             player.tell("^6Sent player request to other servers")
         else:
             self.tell_commlink_unavailable(player)

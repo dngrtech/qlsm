@@ -175,8 +175,18 @@ def test_auth_signature_round_trips_and_rejects_wrong_secret(monkeypatch):
     assert wire_text.startswith(module.AUTH_MESSAGE_PREFIX)
     verified = module.verify_message("secret-one", wire_text, now=1000)
     assert verified["text"] == "helloworld"
+    assert verified["kind"] == module.MESSAGE_KIND_CHAT
     assert module.verify_message("secret-two", wire_text, now=1000) is None
     assert module.verify_message("secret-one", wire_text, now=2000) is None
+
+    event_wire_text = module.sign_message(
+        "secret-one",
+        "Alice connected.",
+        now=1000,
+        kind=module.MESSAGE_KIND_EVENT,
+    )
+    event_verified = module.verify_message("secret-one", event_wire_text, now=1000)
+    assert event_verified["kind"] == module.MESSAGE_KIND_EVENT
 
 
 def test_authenticated_outbound_messages_are_signed(monkeypatch):
@@ -198,6 +208,32 @@ def test_authenticated_outbound_messages_are_signed(monkeypatch):
     assert wire_text.startswith(module.AUTH_MESSAGE_PREFIX)
     verified = module.verify_message("shared-secret", wire_text)
     assert verified["text"] == "hello"
+    assert verified["kind"] == module.MESSAGE_KIND_CHAT
+
+
+def test_authenticated_connect_events_are_signed_as_events(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    sent = []
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.irc = types.SimpleNamespace(
+        is_ready=lambda: True,
+        msg=lambda recipient, msg: sent.append((recipient, msg)) or True,
+    )
+    plugin.identity = "#test"
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret"
+        if name == "qlx_commlinkAuthSecret"
+        else True
+    )
+    plugin.translate_colors = lambda text: text
+    player = types.SimpleNamespace(name="Alice", steam_id=123)
+
+    plugin.handle_player_connect(player)
+
+    _, wire_text = sent[0]
+    verified = module.verify_message("shared-secret", wire_text)
+    assert verified["text"] == "Alice connected."
+    assert verified["kind"] == module.MESSAGE_KIND_EVENT
 
 
 def test_authenticated_inbound_drops_plaintext(monkeypatch):
@@ -234,6 +270,120 @@ def test_authenticated_inbound_accepts_signed_message(monkeypatch):
     plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
 
     assert tells == ["[CommLink] ^4Remote^7:^3 hello world"]
+
+
+def test_authenticated_inbound_respects_chat_toggle(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    tells = []
+    player = types.SimpleNamespace(tell=tells.append)
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.status_request = False
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else True
+    )
+    plugin.db = types.SimpleNamespace(
+        get_flag=lambda player, key, default=True: (
+            False if key == module.COMMLINK_CHAT_FLAG else default
+        )
+    )
+    plugin.game = types.SimpleNamespace(type_short="ca", state="warmup")
+    plugin.players = lambda: [player]
+    plugin.teams = lambda: {"free": []}
+    plugin.auth_seen_nonces = {}
+    wire_text = module.sign_message("shared-secret", "hello world")
+
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
+
+    assert tells == []
+
+
+def test_authenticated_inbound_respects_event_toggle(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    tells = []
+    player = types.SimpleNamespace(tell=tells.append)
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.status_request = False
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else True
+    )
+    plugin.db = types.SimpleNamespace(
+        get_flag=lambda player, key, default=True: (
+            False if key == module.COMMLINK_EVENTS_FLAG else default
+        )
+    )
+    plugin.game = types.SimpleNamespace(type_short="ca", state="warmup")
+    plugin.players = lambda: [player]
+    plugin.teams = lambda: {"free": []}
+    plugin.auth_seen_nonces = {}
+    wire_text = module.sign_message(
+        "shared-secret",
+        "Alice connected.",
+        kind=module.MESSAGE_KIND_EVENT,
+    )
+
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
+
+    assert tells == []
+
+
+def test_authenticated_need_notice_ignores_chat_and_event_toggles(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    tells = []
+    player = types.SimpleNamespace(tell=tells.append)
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.status_request = False
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else True
+    )
+    plugin.db = types.SimpleNamespace(
+        get_flag=lambda player, key, default=True: (
+            False
+            if key in (module.COMMLINK_CHAT_FLAG, module.COMMLINK_EVENTS_FLAG)
+            else default
+        )
+    )
+    plugin.game = types.SimpleNamespace(type_short="ca", state="warmup")
+    plugin.players = lambda: [player]
+    plugin.teams = lambda: {"free": []}
+    plugin.auth_seen_nonces = {}
+    wire_text = module.sign_message(
+        "shared-secret",
+        "Need 1 player here: Free-3, Spec-1 /connect 127.0.0.1:27960",
+        kind=module.MESSAGE_KIND_NOTICE,
+    )
+
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
+
+    assert tells == [
+        "[CommLink] ^4Remote^7:^3 Need 1 player here: Free-3, Spec-1 /connect 127.0.0.1:27960"
+    ]
+
+
+def test_commlink_subcategory_commands_toggle_per_player_flags(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    flags = {}
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.db = types.SimpleNamespace(
+        get_flag=lambda player, key, default=True: flags.get(key, default),
+        set_flag=lambda player, key, value: flags.__setitem__(key, value),
+    )
+    player = types.SimpleNamespace(tells=[])
+    player.tell = player.tells.append
+
+    assert plugin.cmd_toggle_commlink_chat(player, ["commlinkchat"], None) == module.minqlx.RET_STOP_ALL
+    assert plugin.cmd_toggle_commlink_events(player, ["commlinkevents"], None) == module.minqlx.RET_STOP_ALL
+
+    assert flags == {
+        module.COMMLINK_CHAT_FLAG: False,
+        module.COMMLINK_EVENTS_FLAG: False,
+    }
+    assert player.tells == [
+        "^3CommLink^7 chat messages have been ^4disabled^7.",
+        "^3CommLink^7 connect/disconnect notices have been ^4disabled^7.",
+    ]
 
 
 def test_authenticated_inbound_rejects_replayed_message(monkeypatch):
