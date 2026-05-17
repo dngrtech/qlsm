@@ -123,23 +123,11 @@ sudo bash -c '(crontab -l 2>/dev/null | grep -v "qlsm-install.sh"; echo "0 9 * *
 
 ## Uninstall
 
-Stop containers and clean up SSH config (data is preserved):
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash
 ```
 
-Remove everything including Docker volumes and the install directory:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge
-```
-
-Non-interactive (no prompts):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge --yes
-```
+Full uninstall guide (Vultr installs, purge options, what gets removed): [docs/user/getting-started/uninstall.md](https://dngrtech.github.io/qlsm/getting-started/uninstall/)
 
 ---
 

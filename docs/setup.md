@@ -77,17 +77,11 @@ Downloads the latest `docker-compose.yml`, pulls the new image, and restarts. Yo
 
 ## Uninstall
 
-Stop containers and clean up SSH config (data is preserved):
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash
 ```
 
-Remove everything including Docker volumes and the install directory:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge --yes
-```
+See [docs/user/getting-started/uninstall.md](https://dngrtech.github.io/qlsm/getting-started/uninstall/) for purge options, Vultr installs, and a table of what gets removed.
 
 ## Services
 

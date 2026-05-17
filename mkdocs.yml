@@ -53,6 +53,7 @@ nav:
   - Getting Started:
     - What Is QLSM?: getting-started/introduction.md
     - Installation: getting-started/installation.md
+    - Uninstall: getting-started/uninstall.md
     - Add A Host: getting-started/add-host.md
     - Deploy A New Instance: getting-started/deploy-new-instance.md
     - Presets And Default Config: presets/overview.md

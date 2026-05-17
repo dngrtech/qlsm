@@ -151,35 +151,8 @@ GRAFANA_PASSWORD=yourpassword docker compose --profile logging up -d
 Grafana listens on **port 3000** of the server. Because this port is typically not exposed to the internet, access it through a secure tunnel (VSCode port forwardingm Tailscale VPN, etc.) rather than opening it in a firewall.
 
 
-## Uninstall
-
-The uninstall script reverses what the install script did.
-
-**Default** — stops containers, removes the QLSM sshd config, and deletes `~/.qlsm-ssh/`. Your data (`~/qlsm/`) is preserved:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash
-```
-
-**`--purge`** — also removes named Docker volumes (Redis data, Caddy TLS certificates, Loki/Grafana data) and the install directory. Each destructive step prompts for confirmation:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge
-```
-
-**Non-interactive** — skip all confirmation prompts (useful in scripts):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge --yes
-```
-
-Custom install directory:
-
-```bash
-INSTALL_DIR=/opt/qlsm bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh) --purge
-```
-
 ## Next Steps
 
 - [Add A Host (Cloud Or Standalone)](add-host.md)
 - [Deploy A New Instance](deploy-new-instance.md)
+- [Uninstall QLSM](uninstall.md)
