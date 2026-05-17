@@ -8,6 +8,7 @@
 !.dockerignore
 !setup-worktree.sh
 !qlsm-install.sh
+!qlsm-uninstall.sh
 !vultr-startup.sh
 !.github/
 !.github/**

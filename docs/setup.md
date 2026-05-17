@@ -75,6 +75,20 @@ curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh 
 
 Downloads the latest `docker-compose.yml`, pulls the new image, and restarts. Your `.env` and data are untouched.
 
+## Uninstall
+
+Stop containers and clean up SSH config (data is preserved):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash
+```
+
+Remove everything including Docker volumes and the install directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-uninstall.sh | bash -s -- --purge --yes
+```
+
 ## Services
 
 The Docker Compose stack runs the following containers:
