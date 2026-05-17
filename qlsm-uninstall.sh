@@ -77,31 +77,29 @@ else
     COMPOSE=""
 fi
 
-# ── 1. Stop and remove containers ─────────────────────────────────────────────
+# ── 1. Stop containers (+ named volumes if --purge confirmed) ─────────────────
 if [[ -n "$COMPOSE" ]]; then
     if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+        DOWN_FLAGS="--remove-orphans"
+        if [[ $PURGE -eq 1 ]]; then
+            echo ""
+            warn "This will permanently delete all QLSM Docker volumes:"
+            warn "  Redis data, Caddy TLS certificates and config, Loki/Grafana data."
+            if confirm "Remove Docker volumes?"; then
+                DOWN_FLAGS="--remove-orphans --volumes"
+            else
+                info "Skipping volume removal."
+            fi
+        fi
         info "Stopping QLSM containers..."
-        (cd "${INSTALL_DIR}" && ${COMPOSE} down --remove-orphans) \
-            && success "Containers stopped and removed" \
+        DOWN_MSG="Containers stopped and removed"
+        [[ "$DOWN_FLAGS" == *"--volumes"* ]] && DOWN_MSG="Containers and volumes removed"
+        # shellcheck disable=SC2086
+        (cd "${INSTALL_DIR}" && ${COMPOSE} down ${DOWN_FLAGS}) \
+            && success "$DOWN_MSG" \
             || warn "docker compose down reported an error (containers may already be stopped)"
     else
         warn "No docker-compose.yml found in ${INSTALL_DIR} — skipping container teardown."
-    fi
-fi
-
-# ── 2. Remove named Docker volumes (--purge only) ─────────────────────────────
-if [[ $PURGE -eq 1 ]]; then
-    if [[ -n "$COMPOSE" ]] && [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
-        echo ""
-        warn "This will permanently delete all QLSM Docker volumes:"
-        warn "  Redis data, Caddy TLS certificates and config, Loki/Grafana data."
-        if confirm "Remove Docker volumes?"; then
-            (cd "${INSTALL_DIR}" && ${COMPOSE} down --volumes) \
-                && success "Docker volumes removed" \
-                || warn "Volume removal reported an error (may already be gone)"
-        else
-            info "Skipping volume removal."
-        fi
     fi
 fi
 
