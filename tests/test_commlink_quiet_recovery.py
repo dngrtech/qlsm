@@ -26,7 +26,7 @@ class FakePlugin:
         raise AssertionError("plugin must not print chat while disabling itself")
 
 
-def _load_commlink_module(monkeypatch):
+def _load_commlink_module(monkeypatch, filename="commlink.py"):
     fake_minqlx = types.SimpleNamespace(
         AbstractChannel=object,
         CHAT_CHANNEL=types.SimpleNamespace(reply=lambda msg: None),
@@ -54,9 +54,11 @@ def _load_commlink_module(monkeypatch):
         / "ql-assets"
         / "data"
         / "minqlx-plugins"
-        / "commlink.py"
+        / filename
     )
-    spec = importlib.util.spec_from_file_location("commlink_under_test", module_path)
+    monkeypatch.syspath_prepend(str(module_path.parent))
+    module_name = filename.replace(".py", "_under_test")
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -163,3 +165,153 @@ def test_write_failure_marks_transport_offline(monkeypatch):
 
     assert irc.write("PRIVMSG #test :hello\r\n") is False
     assert irc.is_ready() is False
+
+
+def test_auth_signature_round_trips_and_rejects_wrong_secret(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+
+    wire_text = module.sign_message("secret-one", "hello\r\nworld\x00", now=1000)
+
+    assert wire_text.startswith(module.AUTH_MESSAGE_PREFIX)
+    verified = module.verify_message("secret-one", wire_text, now=1000)
+    assert verified["text"] == "helloworld"
+    assert module.verify_message("secret-two", wire_text, now=1000) is None
+    assert module.verify_message("secret-one", wire_text, now=2000) is None
+
+
+def test_authenticated_outbound_messages_are_signed(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    sent = []
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.irc = types.SimpleNamespace(
+        is_ready=lambda: True,
+        msg=lambda recipient, msg: sent.append((recipient, msg)) or True,
+    )
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else ""
+    )
+
+    assert plugin.send_irc_message("#test", "hello") is True
+
+    recipient, wire_text = sent[0]
+    assert recipient == "#test"
+    assert wire_text.startswith(module.AUTH_MESSAGE_PREFIX)
+    verified = module.verify_message("shared-secret", wire_text)
+    assert verified["text"] == "hello"
+
+
+def test_authenticated_inbound_drops_plaintext(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else ""
+    )
+    plugin.players = lambda: (_ for _ in ()).throw(
+        AssertionError("plaintext must be dropped")
+    )
+
+    plugin.handle_msg(None, ("nick", "user", "host"), "#test", ["hello"])
+
+
+def test_authenticated_inbound_accepts_signed_message(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    tells = []
+    player = types.SimpleNamespace(tell=tells.append)
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.status_request = False
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else True
+    )
+    plugin.db = types.SimpleNamespace(get_flag=lambda *args, **kwargs: True)
+    plugin.game = types.SimpleNamespace(type_short="ca", state="warmup")
+    plugin.players = lambda: [player]
+    plugin.teams = lambda: {"free": []}
+    plugin.auth_seen_nonces = {}
+    wire_text = module.sign_message("shared-secret", "hello world")
+
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
+
+    assert tells == ["[CommLink] ^4Remote^7:^3 hello world"]
+
+
+def test_authenticated_inbound_rejects_replayed_message(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    tells = []
+    player = types.SimpleNamespace(tell=tells.append)
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.status_request = False
+    plugin.get_cvar = lambda name, cast=None: (
+        "shared-secret" if name == "qlx_commlinkAuthSecret" else True
+    )
+    plugin.db = types.SimpleNamespace(get_flag=lambda *args, **kwargs: True)
+    plugin.game = types.SimpleNamespace(type_short="ca", state="warmup")
+    plugin.players = lambda: [player]
+    plugin.teams = lambda: {"free": []}
+    plugin.auth_seen_nonces = {}
+    wire_text = module.sign_message("shared-secret", "hello world")
+
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", [wire_text])
+
+    assert tells == ["[CommLink] ^4Remote^7:^3 hello world"]
+
+
+def test_commlink_ignores_messages_from_other_channels(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.get_cvar = lambda name, cast=None: ""
+    plugin.players = lambda: (_ for _ in ()).throw(
+        AssertionError("wrong channel must be dropped")
+    )
+
+    plugin.handle_msg(None, ("nick", "user", "host"), "#other", ["hello"])
+
+
+def test_short_status_like_message_does_not_raise(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    tells = []
+    player = types.SimpleNamespace(tell=tells.append)
+    plugin = module.commlink_secured.__new__(module.commlink_secured)
+    plugin.identity = "#test"
+    plugin.status_request = True
+    plugin.get_cvar = lambda name, cast=None: ""
+    plugin.db = types.SimpleNamespace(get_flag=lambda *args, **kwargs: True)
+    plugin.game = types.SimpleNamespace(type_short="ca", state="warmup")
+    plugin.players = lambda: [player]
+    plugin.teams = lambda: {"free": []}
+
+    plugin.handle_msg(None, ("Remote", "user", "host"), "#test", ["Red-"])
+
+    assert tells == ["[CommLink] ^4Remote^7:^3 Red-"]
+
+
+class CapturingWriter:
+    def __init__(self):
+        self.writes = []
+
+    def is_closing(self):
+        return False
+
+    def write(self, data):
+        self.writes.append(data)
+
+
+def test_irc_write_strips_control_characters(monkeypatch):
+    module = _load_commlink_module(monkeypatch, "commlink_secured.py")
+    irc = module.SimpleAsyncIrc(
+        "irc.example.test",
+        "nick",
+        lambda *args: None,
+        lambda *args: None,
+    )
+    writer = CapturingWriter()
+    irc.writer = writer
+    irc.set_ready()
+
+    assert irc.msg("#test\r\nJOIN #evil", "hello\r\nPONG :x\x00") is True
+
+    assert writer.writes == [b"PRIVMSG #testJOIN #evil :helloPONG :x\r\n"]
