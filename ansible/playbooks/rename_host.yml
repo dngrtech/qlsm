@@ -41,6 +41,16 @@
         group: root
         mode: '0644'
 
+    - name: Disable cloud-init hostname and hosts management to prevent drift on reboot
+      copy:
+        dest: /etc/cloud/cloud.cfg.d/99_disable_hostname.cfg
+        content: |
+          preserve_hostname: true
+          manage_etc_hosts: false
+        owner: root
+        group: root
+        mode: '0644'
+
     - name: Verify new hostname is set
       command: hostname
       register: verify_hostname
