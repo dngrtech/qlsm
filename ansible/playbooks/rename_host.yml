@@ -29,6 +29,7 @@
     - name: Unlock /etc/hosts before modification
       command: chattr -i /etc/hosts
       ignore_errors: yes
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Update /etc/hosts - replace old hostname with new
       lineinfile:
@@ -39,6 +40,7 @@
 
     - name: Lock /etc/hosts to prevent Vultr vendor-data overwriting it on reboot
       command: chattr +i /etc/hosts
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Update /etc/hostname file
       copy:
