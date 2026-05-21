@@ -81,6 +81,48 @@
         mode: '0644'
       when: ansible_facts['os_family'] == 'Debian' and not is_standalone
 
+    - name: Disable cloud-init hostname and hosts management
+      copy:
+        dest: /etc/cloud/cloud.cfg.d/99_disable_hostname.cfg
+        content: |
+          preserve_hostname: true
+          manage_etc_hosts: false
+        owner: root
+        group: root
+        mode: '0644'
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Set /etc/hostname to QLSM inventory name
+      copy:
+        content: "{{ inventory_hostname }}\n"
+        dest: /etc/hostname
+        owner: root
+        group: root
+        mode: '0644'
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Apply hostname immediately
+      hostname:
+        name: "{{ inventory_hostname }}"
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Unlock /etc/hosts before modification
+      command: chattr -i /etc/hosts
+      ignore_errors: yes
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Ensure 127.0.1.1 in /etc/hosts points to QLSM hostname
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        state: present
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Lock /etc/hosts to prevent Vultr vendor-data overwriting it on reboot
+      command: chattr +i /etc/hosts
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
   #######################################################################
   # 1. Base packages & ssh hardening
   #######################################################################

@@ -26,12 +26,21 @@
       hostname:
         name: "{{ new_hostname }}"
 
+    - name: Unlock /etc/hosts before modification
+      command: chattr -i /etc/hosts
+      ignore_errors: yes
+      when: ansible_facts['os_family'] == 'Debian'
+
     - name: Update /etc/hosts - replace old hostname with new
       lineinfile:
         path: /etc/hosts
         regexp: '^127\.0\.1\.1'
         line: "127.0.1.1 {{ new_hostname }}"
         state: present
+
+    - name: Lock /etc/hosts to prevent Vultr vendor-data overwriting it on reboot
+      command: chattr +i /etc/hosts
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Update /etc/hostname file
       copy:
@@ -40,6 +49,17 @@
         owner: root
         group: root
         mode: '0644'
+
+    - name: Disable cloud-init hostname and hosts management to prevent drift on reboot
+      copy:
+        dest: /etc/cloud/cloud.cfg.d/99_disable_hostname.cfg
+        content: |
+          preserve_hostname: true
+          manage_etc_hosts: false
+        owner: root
+        group: root
+        mode: '0644'
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Verify new hostname is set
       command: hostname
