@@ -26,12 +26,19 @@
       hostname:
         name: "{{ new_hostname }}"
 
+    - name: Unlock /etc/hosts before modification
+      command: chattr -i /etc/hosts
+      ignore_errors: yes
+
     - name: Update /etc/hosts - replace old hostname with new
       lineinfile:
         path: /etc/hosts
         regexp: '^127\.0\.1\.1'
         line: "127.0.1.1 {{ new_hostname }}"
         state: present
+
+    - name: Lock /etc/hosts to prevent Vultr vendor-data overwriting it on reboot
+      command: chattr +i /etc/hosts
 
     - name: Update /etc/hostname file
       copy:

@@ -106,12 +106,21 @@
         name: "{{ inventory_hostname }}"
       when: ansible_facts['os_family'] == 'Debian' and not is_standalone
 
+    - name: Unlock /etc/hosts before modification
+      command: chattr -i /etc/hosts
+      ignore_errors: yes
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
     - name: Ensure 127.0.1.1 in /etc/hosts points to QLSM hostname
       lineinfile:
         path: /etc/hosts
         regexp: '^127\.0\.1\.1'
         line: "127.0.1.1 {{ inventory_hostname }}"
         state: present
+      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+
+    - name: Lock /etc/hosts to prevent Vultr vendor-data overwriting it on reboot
+      command: chattr +i /etc/hosts
       when: ansible_facts['os_family'] == 'Debian' and not is_standalone
 
   #######################################################################
