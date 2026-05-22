@@ -55,18 +55,31 @@ def _prepare_instance_zmq(instance):
         db.session.commit()
 
 
-def _self_host_redis_args(instance):
-    if not is_self_host(getattr(instance, "host", None)):
-        return []
+REDIS_UNIX_SOCKET_PATH = '/var/run/redis/redis.sock'
 
-    redis_password = (os.environ.get("REDIS_PASSWORD") or "").strip()
-    if not redis_password:
-        raise ValueError("Self-host instance Redis password is not configured.")
 
-    return [
-        '+set qlx_redisAddress "127.0.0.1:6379"',
-        f'+set qlx_redisPassword "{_escape_qlds_quoted_value(redis_password)}"',
-    ]
+def _redis_args(instance):
+    host = getattr(instance, 'host', None)
+    is_self = is_self_host(host)
+
+    if is_self:
+        # Self-host always uses TCP — its Redis runs in the QLSM Docker
+        # container and a Unix socket cannot cross that boundary.
+        redis_password = (os.environ.get('REDIS_PASSWORD') or '').strip()
+        if not redis_password:
+            raise ValueError("Self-host instance Redis password is not configured.")
+        return [
+            '+set qlx_redisAddress "127.0.0.1:6379"',
+            f'+set qlx_redisPassword "{_escape_qlds_quoted_value(redis_password)}"',
+        ]
+
+    if host and getattr(host, 'redis_unix_socket', False):
+        return [
+            f'+set qlx_redisAddress "{REDIS_UNIX_SOCKET_PATH}"',
+            '+set qlx_redisUnixSocket 1',
+        ]
+
+    return []
 
 
 def _escape_qlds_quoted_value(value):
@@ -92,7 +105,7 @@ def _build_qlds_args_string(instance):
         f'+set net_port {instance.port}',
         f'+set sv_hostname "{instance.hostname}"',
     ]
-    parts += _self_host_redis_args(instance)
+    parts += _redis_args(instance)
     parts += [
         f'+set qlx_redisDatabase {redis_db_index}',
         f'+set fs_homepath {homepath}',
