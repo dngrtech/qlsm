@@ -478,6 +478,34 @@
         executable: pip3
         extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
 
+  #######################################################################
+  # 6a. Configure Redis Unix Socket
+  #######################################################################
+    - name: Configure Redis Unix socket path
+      lineinfile:
+        path: /etc/redis/redis.conf
+        regexp: '^#?\s*unixsocket\s'
+        line: 'unixsocket /var/run/redis/redis.sock'
+        state: present
+      when: use_host_redis | bool
+      notify: restart redis
+
+    - name: Configure Redis Unix socket permissions
+      lineinfile:
+        path: /etc/redis/redis.conf
+        regexp: '^#?\s*unixsocketperm\s'
+        line: 'unixsocketperm 770'
+        state: present
+      when: use_host_redis | bool
+      notify: restart redis
+
+    - name: Add ql user to redis group for socket access
+      user:
+        name: ql
+        groups: redis
+        append: true
+      when: use_host_redis | bool
+
     # Optional: Check for a common requirements file for plugins
     # - name: Check if common requirements.txt exists
     #   stat:
@@ -555,6 +583,10 @@
         - "{{ qlds_base_dir }}/steamapps" # Specifically ensure steamapps ownership
 
   handlers:
+    - name: restart redis
+      service:
+        name: redis-server
+        state: restarted
     - name: restart networking
       service: { name: networking, state: restarted }
       when: not is_standalone
