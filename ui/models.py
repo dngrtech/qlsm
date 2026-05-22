@@ -57,6 +57,7 @@ class Host(db.Model):
     is_standalone = db.Column(db.Boolean, default=False, nullable=False) # True for user-provided servers
     timezone = db.Column(db.String(50), nullable=True) # IANA timezone name (e.g., 'America/New_York')
     cpu_count = db.Column(db.Integer, nullable=True) # Detected/inferred Linux CPU count for affinity assignment
+    redis_unix_socket = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True) # New field for QLFilter
     auto_restart_schedule = db.Column(db.String(100), nullable=True) # Cron expression for auto-restart
@@ -91,6 +92,7 @@ class Host(db.Model):
             'is_standalone': self.is_standalone,
             'timezone': self.timezone,
             'cpu_count': self.cpu_count,
+            'redis_unix_socket': bool(self.redis_unix_socket),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,

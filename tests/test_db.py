@@ -320,3 +320,16 @@ def test_delete_preset(app_context):
 
     deleted = get_preset(preset_id)
     assert deleted is None
+
+
+def test_host_has_redis_unix_socket_field(app_context):
+    host = create_host(
+        name='sock-test',
+        provider='vultr',
+        region='ewr',
+        machine_size='vhf-2c-2gb',
+        status=HostStatus.ACTIVE,
+    )
+    assert host.redis_unix_socket is False
+    assert 'redis_unix_socket' in host.to_dict()
+    assert host.to_dict()['redis_unix_socket'] is False
