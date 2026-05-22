@@ -26,9 +26,10 @@ def _extract_inventory_mismatch_detail(stdout_content="", stderr_content=""):
     return None
 
 
-def setup_standalone_host_logic(host_id):
+def setup_standalone_host_logic(host_id, rerun=False):
     """
     Task logic to set up a standalone host via Ansible (no Terraform provisioning).
+    When rerun=True, also accepts CONFIGURING status (set by rerun-setup route).
     """
     job = get_current_job()
     log.info(f"Starting task setup_standalone_host for host_id: {host_id} (Job ID: {job.id})")
@@ -41,9 +42,13 @@ def setup_standalone_host_logic(host_id):
             return f"Error: Host {host_id} not found."
 
         # Verify host is in the expected state
-        if host.status != HostStatus.PROVISIONED_PENDING_SETUP:
-            log.warning(f"Host {host_id} is not in PROVISIONED_PENDING_SETUP state (current: {host.status.value}).")
-            append_log(host, f"Task skipped: Host status is {host.status.value}, expected PROVISIONED_PENDING_SETUP.")
+        allowed = {HostStatus.PROVISIONED_PENDING_SETUP}
+        if rerun:
+            allowed.add(HostStatus.CONFIGURING)
+        if host.status not in allowed:
+            allowed_names = '/'.join(s.value for s in allowed)
+            log.warning(f"Host {host_id} is not in an allowed state (current: {host.status.value}, allowed: {allowed_names}).")
+            append_log(host, f"Task skipped: Host status is {host.status.value}, expected one of: {allowed_names}.")
             db.session.commit()
             return f"Task skipped: Host {host_id} status is {host.status.value}."
 

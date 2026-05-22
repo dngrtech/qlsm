@@ -11,9 +11,10 @@ from .common import append_log # Import from the common module
 
 log = logging.getLogger(__name__)
 
-def setup_host_ansible_logic(host_id):
+def setup_host_ansible_logic(host_id, rerun=False):
     """
     Task logic to perform initial host setup using Ansible after Terraform provisioning.
+    When rerun=True, also accepts CONFIGURING status (set by rerun-setup route).
     """
     job = get_current_job()
     log.info(f"Starting task setup_host_ansible for host_id: {host_id} (Job ID: {job.id})")
@@ -27,9 +28,13 @@ def setup_host_ansible_logic(host_id):
             return f"Error: Host {host_id} not found."
 
         # Verify host is in the expected state
-        if host.status != HostStatus.PROVISIONED_PENDING_SETUP:
-            log.warning(f"Host {host_id} is not in PROVISIONED_PENDING_SETUP state (current: {host.status.value}). Skipping Ansible setup.")
-            append_log(host, f"Task skipped: Host status is {host.status.value}, expected PROVISIONED_PENDING_SETUP.")
+        allowed = {HostStatus.PROVISIONED_PENDING_SETUP}
+        if rerun:
+            allowed.add(HostStatus.CONFIGURING)
+        if host.status not in allowed:
+            allowed_names = '/'.join(s.value for s in allowed)
+            log.warning(f"Host {host_id} is not in an allowed state (current: {host.status.value}, allowed: {allowed_names}). Skipping Ansible setup.")
+            append_log(host, f"Task skipped: Host status is {host.status.value}, expected one of: {allowed_names}.")
             # Commit log? Or just return? Let's commit the log.
             db.session.commit()
             return f"Task skipped: Host {host_id} status is {host.status.value}."

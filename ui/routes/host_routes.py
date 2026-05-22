@@ -97,6 +97,7 @@ from ui.tasks import provision_host, destroy_host, \
     setup_standalone_host_ansible, remove_standalone_host, \
     force_update_workshop_task, configure_host_auto_restart_task, \
     resize_host_task, \
+    rerun_host_setup_ansible, rerun_standalone_host_setup, \
     enqueue_task
 from ui.task_logic.job_failure_handlers import host_job_failure_handler
 from ui.routes.self_host_helpers import (
@@ -1072,6 +1073,43 @@ def resize_host_api(host_id):
         "message": f"Host resize task queued: {current_plan} -> {new_plan}.",
         "data": {"new_plan": new_plan, "current_plan": current_plan},
     }), 202
+
+@host_api_bp.route('/<int:host_id>/rerun-setup', methods=['POST'], endpoint='rerun_setup_api')
+@jwt_required()
+def rerun_setup_api(host_id):
+    """Re-run Ansible host setup on an already-ACTIVE host."""
+    host = get_host(host_id)
+    if not host:
+        return jsonify({"error": {"message": "Host not found."}}), 404
+
+    if host.status != HostStatus.ACTIVE:
+        return jsonify({"error": {"message": f"Host must be ACTIVE to re-run setup. Current status: {host.status.value}"}}), 409
+
+    lock_token = str(uuid.uuid4())
+    if not acquire_lock('host', host.id, lock_token, ttl=1260):
+        return jsonify({"error": {"message": "Host is currently locked by another operation."}}), 409
+
+    try:
+        update_host(host.id, status=HostStatus.CONFIGURING)
+
+        if host.is_standalone or host.provider == 'self':
+            task_fn = rerun_standalone_host_setup
+        else:
+            task_fn = rerun_host_setup_ansible
+
+        enqueue_task(task_fn, host.id, lock_token=lock_token,
+                     on_failure=host_job_failure_handler)
+    except Exception as e:
+        try:
+            update_host(host.id, status=HostStatus.ACTIVE)
+        except Exception:
+            current_app.logger.error(f"Failed to revert host {host.id} status after enqueue failure", exc_info=True)
+        release_lock('host', host.id, lock_token)
+        current_app.logger.error(f"Error queuing rerun-setup for host {host.id}: {e}", exc_info=True)
+        return jsonify({"error": {"message": f"Failed to queue re-run setup: {str(e)}"}}), 500
+
+    return jsonify({"data": {"status": "configuring"}, "message": "Host re-setup queued."}), 200
+
 
 @host_api_bp.route('/<int:host_id>/update-workshop', methods=['POST'], endpoint='force_update_workshop_api')
 @jwt_required()

@@ -332,5 +332,29 @@ def remove_standalone_host(host_id, lock_token=None):
             release_lock('host', host_id, lock_token)
 
 
+@rq.job(timeout=3600)
+@with_app_context
+def rerun_host_setup_ansible(host_id, lock_token=None):
+    """RQ task entry point for re-running Ansible host setup on a cloud host."""
+    try:
+        return setup_host_ansible_logic(host_id, rerun=True)
+    finally:
+        if lock_token:
+            from ui.task_lock import release_lock
+            release_lock('host', host_id, lock_token)
+
+
+@rq.job(timeout=1200)
+@with_app_context
+def rerun_standalone_host_setup(host_id, lock_token=None):
+    """RQ task entry point for re-running Ansible host setup on a standalone host."""
+    try:
+        return setup_standalone_host_logic(host_id, rerun=True)
+    finally:
+        if lock_token:
+            from ui.task_lock import release_lock
+            release_lock('host', host_id, lock_token)
+
+
 # Note: The app context for database access is now provided by the with_app_context
 # decorator, which creates a Flask application context for each task execution.
