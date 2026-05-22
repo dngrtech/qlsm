@@ -99,6 +99,8 @@ def setup_standalone_host_logic(host_id):
 
         # Success
         host.status = HostStatus.ACTIVE
+        if host.provider != 'self':
+            host.redis_unix_socket = True
         append_log(host, "Task finished successfully. Host is ACTIVE.")
         db.session.commit()
         log.info(f"Finished task setup_standalone_host for host_id: {host_id}. Status: ACTIVE")

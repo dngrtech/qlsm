@@ -164,6 +164,7 @@ def setup_host_ansible_logic(host_id):
             # --- Final Success ---
             host.status = HostStatus.ACTIVE
             host.qlfilter_status = QLFilterStatus.NOT_INSTALLED
+            host.redis_unix_socket = True
             append_log(host, f"Task finished successfully. Host is ACTIVE.")
             db.session.commit()
             log.info(f"Finished task setup_host_ansible for host_id: {host_id}. Status: ACTIVE")
