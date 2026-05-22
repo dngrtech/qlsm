@@ -217,7 +217,7 @@ class ban(minqlx.Plugin):
             db.zadd(base_key, {ban_id: time.time() + td.total_seconds()})
             issued_by = str(player.steam_id) if player.steam_id is not None else "0"
             ban = {"expires": expires, "reason": reason, "issued": now, "issued_by": issued_by}
-            db.hmset(base_key + ":{}".format(ban_id), ban)
+            db.hset(base_key + ":{}".format(ban_id), mapping=ban)
             db.execute()
             
             try:
