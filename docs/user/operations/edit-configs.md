@@ -53,7 +53,6 @@ These cvars are ignored by QLSM regardless of whether they are present in `serve
 | `sv_serverType` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `2`. |
 | `sv_lanForceRate` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `0`. |
 | `net_strict` | Forced by QLSM. | Ignored. QLSM always injects `1`. |
-| `qlx_serverBrandName` | Derived from the instance hostname. | Ignored. QLSM overwrites it to match `sv_hostname`. |
 | `qlx_redisAddress` | Forced by QLSM. | Ignored. QLSM injects the local Redis address. |
 | `qlx_redisPassword` | Forced by QLSM. | Ignored. QLSM injects the backend Redis password. |
 | `qlx_redisDatabase` | Derived from the instance port. | Ignored. QLSM injects `port - 27959`. |
@@ -79,7 +78,6 @@ QLSM assembles all managed cvars into a single argument string that is passed to
   +set net_strict 1
   +set net_port $port
   +set sv_hostname "$hostname"
-  +set qlx_serverBrandName "$hostname"
   +set qlx_redisAddress "127.0.0.1:6379"
   +set qlx_redisPassword "$redis_password"
   +set qlx_redisDatabase $redis_db_index

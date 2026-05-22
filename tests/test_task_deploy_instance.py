@@ -275,6 +275,16 @@ def test_build_qlds_args_serverchecker_not_duplicated(test_app):
         assert '+set qlx_plugins "serverchecker, balance"' in result
 
 
+def test_build_qlds_args_does_not_inject_server_brand_name(test_app):
+    """qlx_serverBrandName is configured by server.cfg when branding.py is used."""
+    with test_app.app_context():
+        inst = _make_instance_for_args(hostname='Test Server')
+
+        result = _build_qlds_args_string(inst)
+
+        assert 'qlx_serverBrandName' not in result
+
+
 def test_build_qlds_args_self_host_includes_shared_redis_runtime(test_app, monkeypatch):
     with test_app.app_context():
         monkeypatch.setenv("REDIS_PASSWORD", "shared-secret")

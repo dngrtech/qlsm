@@ -91,7 +91,6 @@ def _build_qlds_args_string(instance):
         '+set net_strict 1',
         f'+set net_port {instance.port}',
         f'+set sv_hostname "{instance.hostname}"',
-        f'+set qlx_serverBrandName "{instance.hostname}"',
     ]
     parts += _self_host_redis_args(instance)
     parts += [
