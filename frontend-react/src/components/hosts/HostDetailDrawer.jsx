@@ -302,6 +302,23 @@ export default function HostDetailDrawer({
                           </span>
                         </Field>
                         <Field label="Status"><StatusIndicator status={internalHost.status} /></Field>
+                        <Field label="Redis">
+                          {internalHost.redis_unix_socket ? (
+                            <span
+                              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15"
+                              title="Low-latency local IPC via Unix socket"
+                            >
+                              Unix Socket
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-theme-muted bg-black/5 dark:bg-white/5"
+                              title="TCP — upgrade via Re-run Host Setup"
+                            >
+                              TCP
+                            </span>
+                          )}
+                        </Field>
                         <Field label="Created">{formatDateTime(internalHost.created_at)}</Field>
                       </div>
 
