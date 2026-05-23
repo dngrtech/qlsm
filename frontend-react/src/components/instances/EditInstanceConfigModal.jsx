@@ -889,9 +889,11 @@ function EditInstanceConfigModal({
                               getLinterSourceForFile={getFactoryLinterSource}
                             />
                           </div>
-                          <div className={activeMainTab === 'hooks' ? 'flex-1 min-h-0' : 'hidden'}>
-                            <HooksTab instanceId={instanceId} draftId={pluginDraftId} onApplied={handleHooksApplied} />
-                          </div>
+                          {activeMainTab === 'hooks' && (
+                            <div className="flex-1 min-h-0">
+                              <HooksTab instanceId={instanceId} draftId={pluginDraftId} onApplied={handleHooksApplied} />
+                            </div>
+                          )}
                         </div>
 
                         {activeMainTab !== 'hooks' && (
