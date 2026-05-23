@@ -1,7 +1,7 @@
 import React, { Fragment, useState, useEffect, useCallback, useRef } from 'react';
 import { getInstanceById, restartInstance, stopInstance, startInstance, deleteInstance, updateInstanceLanRate, updateInstance } from '../../services/api';
 import { Transition } from '@headlessui/react';
-import { X, RefreshCw, Trash2, Edit3, Play, Square, Copy, Check, Pencil, LoaderCircle, Users } from 'lucide-react';
+import { X, RefreshCw, Trash2, Edit3, Play, Square, Copy, Check, Pencil, LoaderCircle, Users, Webhook } from 'lucide-react';
 import ConfirmationModal from '../ConfirmationModal';
 import { useNotification } from '../NotificationProvider';
 import { formatDateTime } from '../../utils/uiUtils';
@@ -351,6 +351,38 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                               </span>
                             </div>
                           </div>
+                        </Field>
+                        <Field label="LD_PRELOAD Hooks">
+                          {(() => {
+                            const hooks = instance.ld_preload_hooks
+                              ?.split(',').map(h => h.trim()).filter(Boolean) ?? [];
+                            return hooks.length > 0 ? (
+                              <span className="flex items-center gap-2 flex-wrap">
+                                <span className="flex items-center gap-1 font-mono text-xs text-theme-secondary">
+                                  <Webhook size={12} className="shrink-0" />
+                                  {hooks.join(', ')}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => { onOpenEditConfig(instance, 'hooks'); onClose(); }}
+                                  className="text-[11px] text-[var(--accent-primary)] hover:underline"
+                                >
+                                  Manage
+                                </button>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-2">
+                                <span className="text-theme-muted">None</span>
+                                <button
+                                  type="button"
+                                  onClick={() => { onOpenEditConfig(instance, 'hooks'); onClose(); }}
+                                  className="text-[11px] text-[var(--accent-primary)] hover:underline"
+                                >
+                                  Manage
+                                </button>
+                              </span>
+                            );
+                          })()}
                         </Field>
                         <Field label="Created">{formatDateTime(instance.created_at)}</Field>
                         {instance.updated_at && <Field label="Updated">{formatDateTime(instance.updated_at)}</Field>}

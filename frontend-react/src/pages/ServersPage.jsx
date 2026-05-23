@@ -141,7 +141,6 @@ export default function ServersPage() {
         setEditConfigInitialTab(initialTab);
         setIsEditConfigOpen(true);
     };
-    const handleOpenInstanceHooks = (instance) => handleOpenEditConfig(instance, 'hooks');
     const handleOpenLiveStatus = (instanceId) => {
         const host = serversData.find(h => h.instances.some(i => i.id === instanceId));
         if (host) {
@@ -326,7 +325,6 @@ export default function ServersPage() {
                                                 onStart={requestStart}
                                                 onToggleLanRate={requestToggleLanRate}
                                                 onEditConfig={handleOpenEditConfig}
-                                                onOpenHooks={handleOpenInstanceHooks}
                                                 onViewLogs={handleViewLogs}
                                                 onViewChatLogs={handleViewChatLogs}
                                                 onOpenRcon={handleOpenRconConsole}

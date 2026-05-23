@@ -1,4 +1,4 @@
-import { Webhook, Zap, Users } from 'lucide-react';
+import { Zap, Users } from 'lucide-react';
 import StatusIndicator from '../StatusIndicator';
 import InstanceActionsMenu from '../InstanceActionsMenu';
 
@@ -15,16 +15,10 @@ export default function InstanceRowContent({
     onStart,
     onToggleLanRate,
     onEditConfig,
-    onOpenHooks,
     onViewLogs,
     onViewChatLogs,
     onOpenRcon,
 }) {
-    const hookCount = inst.ld_preload_hooks
-        ?.split(',')
-        .map((name) => name.trim())
-        .filter(Boolean).length || 0;
-
     return (
         <>
             <button
@@ -75,18 +69,6 @@ export default function InstanceRowContent({
                     status={inst.status}
                     pollableStatuses={pollableStatuses}
                 />
-                {hookCount > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => onOpenHooks(inst)}
-                        className="inline-flex items-center gap-1 rounded border border-theme-strong bg-theme-elevated px-1.5 py-0.5 text-[10px] font-semibold text-theme-secondary hover:text-theme-primary"
-                        title="LD_PRELOAD hooks enabled"
-                        aria-label="Open LD_PRELOAD hooks"
-                    >
-                        <Webhook size={12} />
-                        {hookCount}
-                    </button>
-                )}
                 {['running', 'updated'].includes(
                     inst.status?.toLowerCase()
                 ) &&
