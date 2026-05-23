@@ -605,6 +605,8 @@ def _get_commit_target_path(data):
             return None
         if not _is_safe_name(host) or not _is_safe_name(str(instance_id)):
             return None
+        if not str(instance_id).isdigit():
+            return None
         if host == PRESETS_DIR:
             return None
         allowed_root = os.path.join(base, host)
@@ -643,8 +645,9 @@ def commit_draft(draft_id):
         return jsonify({"error": {"message": "Invalid target. Provide host + instance_id or preset name."}}), 400
 
     draft_scripts_path = _get_draft_scripts_path(draft_id)
-    from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES
-    if os.path.isdir(draft_scripts_path):
+
+    if data.get("target") == "instance" and os.path.isdir(draft_scripts_path):
+        from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES
         for name in os.listdir(draft_scripts_path):
             if name in RESERVED_HOOK_FILENAMES:
                 return jsonify({

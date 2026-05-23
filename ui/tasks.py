@@ -218,7 +218,6 @@ def reconfigure_instance_lan_rate(instance_id, lock_token=None):
 @rq.job(timeout=300)
 @with_app_context
 def apply_instance_hooks(instance_id, restart_service=True, lock_token=None):
-    """RQ task entry point for applying LD_PRELOAD hook changes."""
     try:
         return apply_instance_hooks_logic(instance_id, restart_service=restart_service)
     finally:

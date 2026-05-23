@@ -7,7 +7,7 @@ from flask_jwt_extended import jwt_required
 from ui import db
 from ui.models import BinaryMetadata, InstanceStatus, QLInstance
 from ui.task_lock import acquire_lock, release_lock
-from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES
+from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES, _SYSTEM_HOOKS
 
 
 CONFIGS_BASE = "configs"
@@ -63,6 +63,8 @@ def _validate_filename(name):
         return "filename must end in .so"
     if "/" in name or "\\" in name or ".." in name:
         return "filename contains forbidden characters"
+    if any(c in name for c in ('\n', '\r', '\x00')):
+        return "filename contains forbidden control characters"
     if name in RESERVED_HOOK_FILENAMES:
         return "filename is reserved for a system hook"
     return None
@@ -113,10 +115,14 @@ def get_instance_hooks(instance_id):
             "description": descriptions.get(filename, ""),
         })
 
+    system_hooks_active = [
+        filename for filename, predicate, _subdir in _SYSTEM_HOOKS if predicate(instance)
+    ]
+
     return jsonify({
         "data": {
             "available": available,
-            "system_hooks_active": [],
+            "system_hooks_active": system_hooks_active,
         },
     }), 200
 
