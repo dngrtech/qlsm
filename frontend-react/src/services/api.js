@@ -377,11 +377,13 @@ export const fetchInstanceHooks = async (instanceId, draftId) => {
   }
 };
 
-export const saveInstanceHooks = async (instanceId, enabledFilenames) => {
+export const saveInstanceHooks = async (instanceId, enabledFilenames, draftId) => {
   try {
+    const body = { enabled: enabledFilenames };
+    if (draftId) body.draft_id = draftId;
     const response = await apiClient.put(
       `/instances/${instanceId}/hooks`,
-      { enabled: enabledFilenames },
+      body,
     );
     return response.data.data;
   } catch (error) {

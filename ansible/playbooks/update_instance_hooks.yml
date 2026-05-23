@@ -8,6 +8,15 @@
     game_port: "{{ port }}"
 
   tasks:
+    - name: Sync .so hooks from UI server to instance minqlx-plugins
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ instance_id }}/scripts/"
+        dest: "/home/ql/qlds-{{ game_port }}/minqlx-plugins/"
+        rsync_opts:
+          - "--include=*.so"
+          - "--exclude=*"
+      when: host_name is defined and instance_id is defined
+
     - name: Render QLDS systemd service file with updated LD_PRELOAD
       ansible.builtin.template:
         src: ../templates/qlds@.service.j2

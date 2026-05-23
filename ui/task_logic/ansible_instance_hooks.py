@@ -64,6 +64,7 @@ def apply_instance_hooks_logic(instance_id, restart_service=True):
     extravars = {
         "port": instance.port,
         "host_name": instance.host.name,
+        "instance_id": instance.id,
         "qlds_args": _build_qlds_args_string(instance),
         "ld_preload_paths": _build_ld_preload_paths(instance),
         "cpu_affinity": cpu_affinity,

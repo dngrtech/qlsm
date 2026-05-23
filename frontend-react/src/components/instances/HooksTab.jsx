@@ -92,7 +92,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     setApplying(true);
     setError(null);
     try {
-      await saveInstanceHooks(instanceId, enabledOrder);
+      await saveInstanceHooks(instanceId, enabledOrder, draftId);
       setInitialEnabled(enabledOrder);
       onApplied?.();
     } catch (err) {

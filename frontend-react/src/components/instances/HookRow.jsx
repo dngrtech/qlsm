@@ -32,16 +32,11 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
         type="checkbox"
         checked={hook.enabled}
         onChange={() => onToggle(hook.filename)}
-        disabled={hook.committed === false}
-        className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+        className="h-4 w-4 cursor-pointer"
         aria-label={`Enable ${hook.filename}`}
-        title={hook.committed === false ? 'Save your configuration first to enable this file' : undefined}
       />
-      <span className={`min-w-0 flex-1 truncate font-mono text-sm ${hook.committed === false ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+      <span className="min-w-0 flex-1 truncate font-mono text-sm text-[var(--text-primary)]">
         {hook.filename}
-        {hook.committed === false && (
-          <span className="ml-2 font-sans text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">unsaved</span>
-        )}
       </span>
       <span className="w-20 text-right font-mono text-xs text-[var(--text-muted)]">
         {formatSize(hook.size)}
