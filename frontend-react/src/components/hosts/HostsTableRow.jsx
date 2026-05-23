@@ -38,16 +38,14 @@ function HostsTableRow({
           <span>{host.provider}</span>
           {host.redis_unix_socket ? (
             <span
-              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-emerald-400"
-              style={{ background: 'rgba(34,217,127,0.12)' }}
+              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15"
               title="Redis Unix Socket — low-latency local IPC"
             >
               Redis: Socket
             </span>
           ) : (
             <span
-              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded"
-              style={{ color: 'var(--text-muted)', background: 'rgba(128,128,128,0.10)' }}
+              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-theme-muted bg-black/5 dark:bg-white/5"
               title="Redis TCP — upgrade via Re-run Host Setup"
             >
               Redis: TCP

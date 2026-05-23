@@ -24,7 +24,7 @@ def test_rerun_setup_cloud_host_success(mock_lock, mock_enqueue, client, app):
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post(f'/api/hosts/{host_id}/rerun-setup', headers=headers)
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     data = response.get_json()
     assert data['data']['status'] == 'configuring'
     mock_enqueue.assert_called_once()
@@ -45,7 +45,7 @@ def test_rerun_setup_standalone_host_success(mock_lock, mock_enqueue, client, ap
     headers = auth_headers(app, DEFAULT_USER)
     response = client.post(f'/api/hosts/{host_id}/rerun-setup', headers=headers)
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     mock_enqueue.assert_called_once()
 
 

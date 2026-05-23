@@ -1108,7 +1108,7 @@ def rerun_setup_api(host_id):
         current_app.logger.error(f"Error queuing rerun-setup for host {host.id}: {e}", exc_info=True)
         return jsonify({"error": {"message": f"Failed to queue re-run setup: {str(e)}"}}), 500
 
-    return jsonify({"data": {"status": "configuring"}, "message": "Host re-setup queued."}), 200
+    return jsonify({"data": {"status": "configuring"}, "message": "Host re-setup queued."}), 202
 
 
 @host_api_bp.route('/<int:host_id>/update-workshop', methods=['POST'], endpoint='force_update_workshop_api')
