@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { WheelPicker, WheelPickerWrapper } from '@ncdai/react-wheel-picker';
 import '../../ncdai-wheel-picker.css';
 
+const MotionDiv = motion.div;
+
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => {
@@ -199,7 +201,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                         <div className="overflow-hidden">
                                             <AnimatePresence mode="popLayout" initial={false}>
                                                 {scheduleMode !== 'none' && (
-                                                    <motion.div
+                                                    <MotionDiv
                                                         key={`mode-${scheduleMode}`}
                                                         variants={contentVariants}
                                                         initial="initial"
@@ -297,11 +299,11 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                                                 </span>
                                                             </p>
                                                         </div>
-                                                    </motion.div>
+                                                    </MotionDiv>
                                                 )}
 
                                                 {scheduleMode === 'none' && (
-                                                    <motion.div
+                                                    <MotionDiv
                                                         key="none"
                                                         variants={contentVariants}
                                                         initial="initial"
@@ -312,7 +314,7 @@ function HostAutoRestartScheduleModal({ isOpen, onClose, onSubmit, host }) {
                                                         <p className="text-sm text-[var(--text-muted)] text-center">
                                                             Auto-restart is disabled. Select a schedule type above to configure.
                                                         </p>
-                                                    </motion.div>
+                                                    </MotionDiv>
                                                 )}
                                             </AnimatePresence>
                                         </div>

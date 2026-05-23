@@ -21,6 +21,13 @@ from .zmq_utils import ensure_zmq_rcon_setup
 
 SYSTEM_PLUGINS = ['serverchecker']
 
+# Built-in LD_PRELOAD hooks. Always prepended ahead of user hooks.
+# Each tuple is (filename, predicate(instance) -> bool, subdir under /home/ql/qlds-<port>/).
+_SYSTEM_HOOKS = []
+
+# Reserved so users cannot upload files that shadow future built-in hooks.
+RESERVED_HOOK_FILENAMES = {"force_rate.so"}
+
 
 # Validates and sanitizes input to prevent injection or malformed args
 def _validate_instance_fields(instance):
@@ -126,6 +133,18 @@ def _build_qlds_args_string(instance):
     return ' '.join(parts)
 
 
+def _build_ld_preload_paths(instance):
+    """Return a colon-joined LD_PRELOAD value, or an empty string."""
+    paths = []
+    for filename, predicate, subdir in _SYSTEM_HOOKS:
+        if predicate(instance):
+            paths.append(f"/home/ql/qlds-{instance.port}/{subdir}/{filename}")
+    if instance.ld_preload_hooks:
+        hooks = (h.strip() for h in instance.ld_preload_hooks.split(',') if h.strip())
+        paths.extend(f"/home/ql/qlds-{instance.port}/minqlx-plugins/{fn}" for fn in hooks)
+    return ":".join(paths)
+
+
 log = logging.getLogger(__name__)
 
 
@@ -174,11 +193,13 @@ def deploy_instance_logic(instance_id):
         
         # Prepare extravars specific to deployment (now safe to access instance.host.name)
         qlds_args_string = _build_qlds_args_string(instance)
+        ld_preload_paths = _build_ld_preload_paths(instance)
 
         deploy_extravars = {
             'port': instance.port,
             'host_name': instance.host.name, # Pass the host name (used for config path)
             'qlds_args': qlds_args_string, # Pass the constructed args for the service
+            'ld_preload_paths': ld_preload_paths,
             'cpu_affinity': cpu_affinity,
             'lan_rate_enabled': instance.lan_rate_enabled # Pass for conditional iptables/sysctl
         }
@@ -280,6 +301,7 @@ def restart_instance_logic(instance_id):
         
         # Construct qlds_args
         qlds_args_string = _build_qlds_args_string(instance)
+        ld_preload_paths = _build_ld_preload_paths(instance)
 
         # Prepare extravars for sync_instance_configs_and_restart.yml
         # We use this playbook because it re-templates the service file with new args AND restarts
@@ -288,6 +310,7 @@ def restart_instance_logic(instance_id):
             'port': instance.port,
             'id': instance.id,
             'qlds_args': qlds_args_string,
+            'ld_preload_paths': ld_preload_paths,
             'cpu_affinity': cpu_affinity
         }
         restart_extravars = with_self_host_network_extravars(instance, restart_extravars)
@@ -497,6 +520,7 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
         cpu_affinity = ensure_instance_cpu_affinity(instance)
         
         qlds_args_string = _build_qlds_args_string(instance)
+        ld_preload_paths = _build_ld_preload_paths(instance)
 
         # Prepare extravars
         apply_config_extravars = {
@@ -504,6 +528,7 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
             'port': instance.port,         # Add port to target correct service name for restart
             'id': instance.id,             # Keep id
             'qlds_args': qlds_args_string, # Pass constructed args for service re-templating
+            'ld_preload_paths': ld_preload_paths,
             'cpu_affinity': cpu_affinity,
             'lan_rate_enabled': instance.lan_rate_enabled,
             'reconcile_lan_rate_network': reconcile_lan_rate_network,
@@ -734,11 +759,13 @@ def reconfigure_instance_lan_rate_logic(instance_id):
         cpu_affinity = ensure_instance_cpu_affinity(instance)
         
         qlds_args_string = _build_qlds_args_string(instance)
+        ld_preload_paths = _build_ld_preload_paths(instance)
 
         reconfigure_extravars = {
             'port': instance.port,
             'host_name': instance.host.name,
             'qlds_args': qlds_args_string,
+            'ld_preload_paths': ld_preload_paths,
             'cpu_affinity': cpu_affinity,
             'lan_rate_enabled': instance.lan_rate_enabled
         }

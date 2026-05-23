@@ -19,7 +19,7 @@ export const qlmappoolLanguage = StreamLanguage.define({
     }
 
     switch (state.stage) {
-      case "init":
+      case "init": {
         // Check for lines starting with a space that are not entirely spaces
         if (stream.sol() && stream.peek() === " ") {
           const lineContent = stream.string.slice(stream.pos);
@@ -64,6 +64,7 @@ export const qlmappoolLanguage = StreamLanguage.define({
         state.stage = "line_error";
         stream.next(); // Consume one char
         return "error"; // Use string token
+      }
 
       case "expecting_pipe":
         stream.eatSpace(); // Allow spaces between map name and pipe
@@ -82,7 +83,7 @@ export const qlmappoolLanguage = StreamLanguage.define({
         stream.next();
         return "error"; // Use string token
 
-      case "after_pipe":
+      case "after_pipe": {
         stream.eatSpace(); // Allow spaces between pipe and factory
         if (stream.peek() === "#") {
             stream.skipToEnd();
@@ -103,6 +104,7 @@ export const qlmappoolLanguage = StreamLanguage.define({
         state.stage = "line_error";
         stream.next();
         return "error"; // Use string token
+      }
         
       case "after_factory":
         stream.eatSpace(); // Consume spaces after factory ID

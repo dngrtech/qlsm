@@ -26,7 +26,7 @@ export const qlaccessLanguage = StreamLanguage.define({
     }
 
     switch (state.stage) {
-      case "init":
+      case "init": {
         if (stream.sol() && stream.peek() === " ") {
           const lineContent = stream.string.slice(stream.pos);
           if (lineContent.trim() !== "" && lineContent[0] === " ") {
@@ -64,6 +64,7 @@ export const qlaccessLanguage = StreamLanguage.define({
         state.stage = "line_error";
         stream.next();
         return "invalid";
+      }
 
       case "expecting_pipe":
         stream.eatSpace();
@@ -81,7 +82,7 @@ export const qlaccessLanguage = StreamLanguage.define({
         stream.next();
         return "invalid";
 
-      case "after_pipe":
+      case "after_pipe": {
         stream.eatSpace();
         if (stream.match("#")) {
             stream.skipToEnd();
@@ -110,6 +111,7 @@ export const qlaccessLanguage = StreamLanguage.define({
         state.stage = "line_error";
         stream.next();
         return "invalid";
+      }
         
       case "after_level":
         stream.eatSpace();

@@ -12,6 +12,7 @@ export function useHostAutoRestart(showSuccess, showError, onSuccess) {
 
     const closeAutoRestartModal = useCallback(() => {
         setIsAutoRestartModalOpen(false);
+        setHostForAutoRestart(null);
     }, []);
 
     const handleAutoRestartSubmit = useCallback(async (hostId, scheduleStr) => {

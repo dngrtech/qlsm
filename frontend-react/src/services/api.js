@@ -364,6 +364,29 @@ export const updateInstanceLanRate = async (instanceId, lanRateEnabled) => {
   }
 };
 
+export const fetchInstanceHooks = async (instanceId) => {
+  try {
+    const response = await apiClient.get(`/instances/${instanceId}/hooks`);
+    return response.data.data;
+  } catch (error) {
+    console.error(`Failed to fetch hooks for instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to fetch hooks for instance ${instanceId}`);
+  }
+};
+
+export const saveInstanceHooks = async (instanceId, enabledFilenames) => {
+  try {
+    const response = await apiClient.put(
+      `/instances/${instanceId}/hooks`,
+      { enabled: enabledFilenames },
+    );
+    return response.data.data;
+  } catch (error) {
+    console.error(`Failed to save hooks for instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to save hooks for instance ${instanceId}`);
+  }
+};
+
 export const fetchInstanceRemoteLogs = async (instanceId, options = {}) => {
   try {
     const { filterMode = 'lines', since = '1 hour ago', lines = 500 } = options;

@@ -1,6 +1,6 @@
-import React, { Fragment, useState, useEffect, useRef } from 'react';
+import React, { Fragment, useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, Transition, Listbox } from '@headlessui/react';
-import { X, RefreshCw, Download, Search, Settings, ChevronDown, Check, FileText, Terminal, AlertCircle } from 'lucide-react';
+import { X, RefreshCw, ChevronDown, Check, FileText, Terminal, AlertCircle } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import { chatLogLanguage } from '../../utils/chatLogLanguage';
 import { fetchInstanceChatLogs, listInstanceChatLogs } from '../../services/api';
@@ -19,18 +19,12 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Filter state
     const [lineCount, setLineCount] = useState(500);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [searchMatches, setSearchMatches] = useState([]);
-    const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
 
     // Archived logs state
     const [availableFiles, setAvailableFiles] = useState(['chat.log']);
     const [selectedFile, setSelectedFile] = useState('chat.log');
     const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-
-    const editorRef = useRef(null);
 
     // Fetch logs when modal opens or filter changes
     const fetchLogs = async () => {
@@ -101,9 +95,6 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
         if (isOpen && instance?.id) {
             setLogs('');
             setError(null);
-            setSearchTerm('');
-            setSearchMatches([]);
-            setCurrentMatchIndex(-1);
             fetchLogFiles();
         } else {
             // Reset state when modal closes

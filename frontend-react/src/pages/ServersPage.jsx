@@ -60,6 +60,7 @@ export default function ServersPage() {
     const [isInstanceDetailsOpen, setIsInstanceDetailsOpen] = useState(false);
     const [isEditConfigOpen, setIsEditConfigOpen] = useState(false);
     const [selectedInstanceForConfig, setSelectedInstanceForConfig] = useState(null);
+    const [editConfigInitialTab, setEditConfigInitialTab] = useState('config');
     const [copiedIp, setCopiedIp] = useState(null);
     const [isLiveStatusOpen, setIsLiveStatusOpen] = useState(false);
     const [selectedLiveStatusInstance, setSelectedLiveStatusInstance] = useState(null);
@@ -135,7 +136,12 @@ export default function ServersPage() {
 
     const handleOpenHostDrawer = (hostId) => { setIsInstanceDetailsOpen(false); setSelectedInstanceId(null); setSelectedHostId(hostId); setIsHostDrawerOpen(true); };
     const handleOpenInstanceDetails = (instanceId) => { setIsHostDrawerOpen(false); setSelectedHostId(null); setSelectedInstanceId(instanceId); setIsInstanceDetailsOpen(true); };
-    const handleOpenEditConfig = (instance) => { setSelectedInstanceForConfig(instance); setIsEditConfigOpen(true); };
+    const handleOpenEditConfig = (instance, initialTab = 'config') => {
+        setSelectedInstanceForConfig(instance);
+        setEditConfigInitialTab(initialTab);
+        setIsEditConfigOpen(true);
+    };
+    const handleOpenInstanceHooks = (instance) => handleOpenEditConfig(instance, 'hooks');
     const handleOpenLiveStatus = (instanceId) => {
         const host = serversData.find(h => h.instances.some(i => i.id === instanceId));
         if (host) {
@@ -320,6 +326,7 @@ export default function ServersPage() {
                                                 onStart={requestStart}
                                                 onToggleLanRate={requestToggleLanRate}
                                                 onEditConfig={handleOpenEditConfig}
+                                                onOpenHooks={handleOpenInstanceHooks}
                                                 onViewLogs={handleViewLogs}
                                                 onViewChatLogs={handleViewChatLogs}
                                                 onOpenRcon={handleOpenRconConsole}
@@ -357,7 +364,7 @@ export default function ServersPage() {
             <AddInstanceModal isOpen={isAddInstanceModalOpen} onClose={() => { setIsAddInstanceModalOpen(false); setAddInstanceModalHostId(null); }} onInstanceAdded={() => { setAddInstanceModalHostId(null); refreshData(false); }} initialHostId={addInstanceModalHostId} />
             <HostDetailDrawer host={currentHostForDrawer || selectedHostId} open={isHostDrawerOpen} onClose={() => setIsHostDrawerOpen(false)} onHostUpdated={() => refreshData(false)} onHostDeleted={() => refreshData(false)} onDeleteHost={(host) => requestDeleteHost({ id: host.id, name: host.name })} onRequestRestart={handleRequestHostRestart} onQlfilterAction={handleQlfilterAction} onSwitchToInstanceDrawer={(instanceId) => { setIsHostDrawerOpen(false); handleOpenInstanceDetails(instanceId); }} />
             <InstanceDetailsModal isOpen={isInstanceDetailsOpen} onClose={() => setIsInstanceDetailsOpen(false)} instanceId={selectedInstanceId} onInstanceDeleted={() => refreshData(false)} onInstanceUpdated={() => refreshData(false)} onOpenEditConfig={handleOpenEditConfig} onOpenHostDrawer={(hostId) => { setIsInstanceDetailsOpen(false); handleOpenHostDrawer(hostId); }} serverStatus={selectedInstanceId ? serverStatusMap[String(selectedInstanceId)] : null} />
-            <EditInstanceConfigModal isOpen={isEditConfigOpen} onClose={() => { setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); }} instanceId={selectedInstanceForConfig?.id} instanceName={selectedInstanceForConfig?.name} onConfigSaved={() => { refreshData(false); setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); }} />
+            <EditInstanceConfigModal isOpen={isEditConfigOpen} onClose={() => { setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); setEditConfigInitialTab('config'); }} instanceId={selectedInstanceForConfig?.id} instanceName={selectedInstanceForConfig?.name} initialTab={editConfigInitialTab} onConfigSaved={() => { refreshData(false); setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); setEditConfigInitialTab('config'); }} />
             <ConfirmationModal isOpen={isHostRestartModalOpen} onClose={closeHostRestartModal} onConfirm={confirmHostRestart} title={`Restart Host "${hostForRestart?.name}"`} message={`Are you sure you want to restart host "${hostForRestart?.name}"? This will temporarily make the host and its instances unavailable.`} confirmButtonText="Restart" confirmButtonVariant="warning" />
             <ViewLogsModal isOpen={isViewLogsModalOpen} onClose={closeViewLogsModal} instance={selectedInstanceForLogs} />
             <ViewChatLogsModal isOpen={isViewChatLogsModalOpen} onClose={closeViewChatLogsModal} instance={selectedInstanceForChatLogs} />

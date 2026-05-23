@@ -92,7 +92,7 @@ function FileUploadButton({
         {label && <span className="ml-2">{label}</span>} {/* Conditionally add margin if label exists */}
       </button>
       {/* Display error message directly below the button if needed, or parent can handle it */}
-      {/* {error && <p className="text-xs text-red-500 mt-1">{error}</p>} */}
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
     </>
   );
 }

@@ -1,39 +1,28 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServersPage from '../ServersPage';
 
 const mocks = vi.hoisted(() => ({
   addNotification: vi.fn(),
+  EditConfigModal: vi.fn(() => null),
   showSuccess: vi.fn(),
   showError: vi.fn(),
   toggleExpand: vi.fn(),
   noop: vi.fn(),
   NullComponent: () => null,
   RconConsole: vi.fn(() => null),
+  serversData: [],
+  stats: { totalHosts: 1, totalInstances: 0, runningInstances: 0 },
 }));
 
 vi.mock('../../hooks/useServers', () => ({
   POLLABLE_HOST_STATUSES: ['provisioning', 'configuring'],
   POLLABLE_INSTANCE_STATUSES: ['deploying'],
   useServers: () => ({
-    serversData: [
-      {
-        id: 1,
-        name: 'Arena Host',
-        provider: 'standalone',
-        region: null,
-        ip_address: '203.0.113.10',
-        status: 'active',
-        qlfilter_status: 'active',
-        timezone: 'UTC',
-        is_standalone: true,
-        expanded: false,
-        instances: [],
-      },
-    ],
-    stats: { totalHosts: 1, totalInstances: 0, runningInstances: 0 },
+    serversData: mocks.serversData,
+    stats: mocks.stats,
     loading: false,
     error: null,
     toggleExpand: mocks.toggleExpand,
@@ -59,6 +48,16 @@ vi.mock('../../components/hosts/SortableHostList', () => ({
         <div key={host.id}>
           {renderHostCard(host, { attributes: {}, listeners: {} })}
         </div>
+      ))}
+    </div>
+  ),
+}));
+
+vi.mock('../../components/instances/SortableInstanceList', () => ({
+  default: ({ instances, renderInstanceContent }) => (
+    <div>
+      {instances.map((instance) => (
+        <div key={instance.id}>{renderInstanceContent(instance)}</div>
       ))}
     </div>
   ),
@@ -176,7 +175,12 @@ vi.mock('../../components/hosts/HostDetailDrawer', () => ({ default: mocks.NullC
 vi.mock('../../components/hosts/AddHostModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/instances/AddInstanceModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/instances/InstanceDetailsModal', () => ({ default: mocks.NullComponent }));
-vi.mock('../../components/instances/EditInstanceConfigModal', () => ({ default: mocks.NullComponent }));
+vi.mock('../../components/instances/EditInstanceConfigModal', () => ({
+  default: (props) => {
+    mocks.EditConfigModal(props);
+    return props.isOpen ? <div>edit-config-modal</div> : null;
+  },
+}));
 vi.mock('../../components/instances/ViewLogsModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/instances/ViewChatLogsModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/RconConsoleModal', () => ({ default: mocks.RconConsole }));
@@ -187,6 +191,22 @@ vi.mock('../../components/hosts/HostAutoRestartScheduleModal', () => ({ default:
 describe('ServersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.serversData = [
+      {
+        id: 1,
+        name: 'Arena Host',
+        provider: 'standalone',
+        region: null,
+        ip_address: '203.0.113.10',
+        status: 'active',
+        qlfilter_status: 'active',
+        timezone: 'UTC',
+        is_standalone: true,
+        expanded: false,
+        instances: [],
+      },
+    ];
+    mocks.stats = { totalHosts: 1, totalInstances: 0, runningInstances: 0 };
   });
 
   it('renders the QLFilter column in the active host-card layout', () => {
@@ -211,5 +231,51 @@ describe('ServersPage', () => {
     );
 
     expect(mocks.RconConsole).not.toHaveBeenCalled();
+  });
+
+  it('opens the edit modal on the Hooks tab from the hook badge', () => {
+    mocks.serversData = [
+      {
+        id: 1,
+        name: 'Arena Host',
+        provider: 'standalone',
+        region: null,
+        ip_address: '203.0.113.10',
+        status: 'active',
+        qlfilter_status: 'active',
+        timezone: 'UTC',
+        is_standalone: true,
+        expanded: true,
+        instances: [
+          {
+            id: 22,
+            name: 'Arena 22',
+            hostname: 'Arena Hostname',
+            port: 27960,
+            status: 'running',
+            lan_rate_enabled: false,
+            ld_preload_hooks: 'a.so,b.so',
+          },
+        ],
+      },
+    ];
+    mocks.stats = { totalHosts: 1, totalInstances: 1, runningInstances: 1 };
+
+    render(
+      <MemoryRouter>
+        <ServersPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /open ld_preload hooks/i }));
+
+    expect(mocks.EditConfigModal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        isOpen: true,
+        initialTab: 'hooks',
+        instanceId: 22,
+        instanceName: 'Arena 22',
+      })
+    );
   });
 });

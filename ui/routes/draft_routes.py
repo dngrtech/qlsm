@@ -643,6 +643,15 @@ def commit_draft(draft_id):
         return jsonify({"error": {"message": "Invalid target. Provide host + instance_id or preset name."}}), 400
 
     draft_scripts_path = _get_draft_scripts_path(draft_id)
+    from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES
+    if os.path.isdir(draft_scripts_path):
+        for name in os.listdir(draft_scripts_path):
+            if name in RESERVED_HOOK_FILENAMES:
+                return jsonify({
+                    "error": {
+                        "message": f"Filename '{name}' is reserved for a system hook",
+                    },
+                }), 400
 
     try:
         if os.path.exists(target_path):
@@ -651,6 +660,29 @@ def commit_draft(draft_id):
     except OSError as e:
         current_app.logger.error(f"Failed to commit draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to commit draft"}}), 500
+
+    if data.get("target") == "instance":
+        from ui.models import QLInstance
+        from ui.task_logic.common import append_log
+
+        instance = db.session.get(QLInstance, int(data["instance_id"]))
+        if instance and instance.ld_preload_hooks:
+            on_disk = (
+                {name for name in os.listdir(target_path) if name.endswith(".so")}
+                if os.path.isdir(target_path)
+                else set()
+            )
+            current_hooks = [
+                item.strip()
+                for item in instance.ld_preload_hooks.split(",")
+                if item.strip()
+            ]
+            kept_hooks = [name for name in current_hooks if name in on_disk]
+            if kept_hooks != current_hooks:
+                removed = sorted(set(current_hooks) - set(kept_hooks))
+                instance.ld_preload_hooks = ",".join(kept_hooks) if kept_hooks else None
+                append_log(instance, f"Removed deleted hooks from LD_PRELOAD: {removed}")
+                db.session.commit()
 
     shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
     current_app.logger.info(f"Committed draft {draft_id} to {target_path}")

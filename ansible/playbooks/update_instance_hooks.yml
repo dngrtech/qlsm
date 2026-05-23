@@ -1,0 +1,33 @@
+---
+- name: Update QLDS Instance LD_PRELOAD Hooks
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    game_port: "{{ port }}"
+
+  tasks:
+    - name: Render QLDS systemd service file with updated LD_PRELOAD
+      ansible.builtin.template:
+        src: ../templates/qlds@.service.j2
+        dest: /etc/systemd/system/qlds@{{ game_port }}.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload systemd daemon
+
+    - name: Flush handlers so daemon-reload runs before restart
+      ansible.builtin.meta: flush_handlers
+
+    - name: Restart QLDS service
+      ansible.builtin.systemd:
+        name: qlds@{{ game_port }}
+        state: restarted
+        enabled: yes
+      when: restart_service | default(true) | bool
+
+  handlers:
+    - name: reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes

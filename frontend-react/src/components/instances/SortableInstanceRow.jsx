@@ -3,6 +3,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
 import { GripVertical } from 'lucide-react';
 
+const MotionDiv = motion.div;
+
 export default function SortableInstanceRow({ id, children }) {
     const {
         attributes,
@@ -19,7 +21,7 @@ export default function SortableInstanceRow({ id, children }) {
     };
 
     return (
-        <motion.div
+        <MotionDiv
             ref={setNodeRef}
             style={style}
             layout
@@ -36,7 +38,7 @@ export default function SortableInstanceRow({ id, children }) {
                 </div>
                 {children}
             </div>
-        </motion.div>
+        </MotionDiv>
     );
 }
 

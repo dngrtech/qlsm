@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   saveBinaryMeta: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
+  hooksTabProps: [],
   updateInstance: vi.fn(),
   updateInstanceConfig: vi.fn(),
   fileManagerProps: [],
@@ -94,6 +95,20 @@ vi.mock('../../common/InfoTooltip', () => ({
   default: ({ text }) => <span data-testid="info-tooltip">{text}</span>,
 }));
 
+vi.mock('../HooksTab', () => ({
+  default: (props) => {
+    mocks.hooksTabProps.push(props);
+    return (
+      <div>
+        <div>hooks-tab</div>
+        <button type="button" onClick={() => props.onApplied?.()}>
+          Mock Apply Hooks
+        </button>
+      </div>
+    );
+  },
+}));
+
 vi.mock('../../fileManager', () => ({
   CONFIG_CAPS: {
     allowedExtensions: ['.cfg', '.txt', '.ent'],
@@ -170,6 +185,7 @@ describe('EditInstanceConfigModal preset saving', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mocks.fileManagerProps = [];
+    mocks.hooksTabProps = [];
     if (!EditInstanceConfigModal) {
       ({ default: EditInstanceConfigModal } = await import('../EditInstanceConfigModal'));
     }
@@ -436,5 +452,31 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(factoryManagerProps.getLanguageForFile('readme.txt')).toBeNull();
     expect(factoryManagerProps.getLinterSourceForFile('readme.txt')).toBeNull();
     expect(factoryManagerProps.onExpandEditor).toEqual(expect.any(Function));
+  });
+
+  it('opens on the hooks tab and closes after hook apply', async () => {
+    const onClose = vi.fn();
+    const onConfigSaved = vi.fn();
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={onClose}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={onConfigSaved}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^hooks$/i })).toHaveClass('text-[var(--accent-primary)]');
+
+    fireEvent.click(screen.getByRole('button', { name: /mock apply hooks/i }));
+
+    expect(mocks.showSuccess).toHaveBeenCalledWith('LD_PRELOAD hooks saved. Apply task queued.');
+    expect(onConfigSaved).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+    expect(mocks.hooksTabProps.at(-1).instanceId).toBe(1);
   });
 });

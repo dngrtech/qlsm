@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
-import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw } from 'lucide-react';
+import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
@@ -17,6 +17,7 @@ import { qlmappoolLanguage } from '../../codemirror-lang-qlmappool';
 import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
 import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
+import HooksTab from './HooksTab';
 import {
   canEnableLanRate,
   getLanRateUnsupportedReason,
@@ -64,6 +65,7 @@ function EditInstanceConfigModal({
   instanceId,
   instanceName: initialInstanceName, // Rename prop to avoid conflict
   onConfigSaved,
+  initialTab = 'config',
 }) {
   const [currentInstanceName, setCurrentInstanceName] = useState(initialInstanceName || '');
   const [originalInstanceName, setOriginalInstanceName] = useState(initialInstanceName || '');
@@ -118,7 +120,7 @@ function EditInstanceConfigModal({
   const [isSavingPreset, setIsSavingPreset] = useState(false);
 
   // Scripts tab state
-  const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
+  const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
   const [checkedPlugins, setCheckedPlugins] = useState(new Set());
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
@@ -253,7 +255,7 @@ function EditInstanceConfigModal({
         setSaveError(null);
         setSelectedPresetId(''); // Reset preset selection
         // Reset scripts state
-        setActiveMainTab('config');
+        setActiveMainTab(initialTab);
         setScriptHostName(null);
         setDraftPreset(null);
         pluginsSyncedRef.current = false;
@@ -327,7 +329,7 @@ function EditInstanceConfigModal({
       };
       fetchInitialData();
     }
-  }, [isOpen, instanceId, initialInstanceName, resetConfigs, resetFactories]);
+  }, [isOpen, instanceId, initialInstanceName, initialTab, resetConfigs, resetFactories]);
 
   // Sync effect: Update serverHostname when server.cfg changes (unless it's an internal update)
   useEffect(() => {
@@ -565,6 +567,13 @@ function EditInstanceConfigModal({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleHooksApplied = () => {
+    showSuccess('LD_PRELOAD hooks saved. Apply task queued.');
+    onConfigSaved?.();
+    setIsDirty(false);
+    onClose();
   };
 
   const handleExpandEditor = (selectedFile, content = '') => {
@@ -821,6 +830,7 @@ function EditInstanceConfigModal({
                             { key: 'config', icon: Settings, label: 'Configuration Files' },
                             { key: 'scripts', icon: Code2, label: 'Plugins' },
                             { key: 'factories', icon: LayoutGrid, label: 'Factories' },
+                            { key: 'hooks', icon: Webhook, label: 'Hooks' },
                           ].map((tab) => (
                             <button
                               key={tab.key}
@@ -879,8 +889,12 @@ function EditInstanceConfigModal({
                               getLinterSourceForFile={getFactoryLinterSource}
                             />
                           </div>
+                          <div className={activeMainTab === 'hooks' ? 'flex-1 min-h-0' : 'hidden'}>
+                            <HooksTab instanceId={instanceId} onApplied={handleHooksApplied} />
+                          </div>
                         </div>
 
+                        {activeMainTab !== 'hooks' && (
                         <div className="mt-4 flex justify-between items-center flex-shrink-0">
                           {/* Left side - Preset management buttons */}
                           <div className="flex gap-2">
@@ -917,6 +931,7 @@ function EditInstanceConfigModal({
                             </button>
                           </div>
                         </div>
+                        )}
                       </form>
                     )}
                   </div>

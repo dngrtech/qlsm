@@ -4,6 +4,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
 import { GripVertical } from 'lucide-react';
 
+const MotionDiv = motion.div;
+
 export default function SortableHostCard({ id, children }) {
     const {
         attributes,
@@ -20,7 +22,7 @@ export default function SortableHostCard({ id, children }) {
     };
 
     return (
-        <motion.div
+        <MotionDiv
             ref={setNodeRef}
             style={style}
             layout={!isDragging}
@@ -28,7 +30,7 @@ export default function SortableHostCard({ id, children }) {
             className={isDragging ? 'host-card-dragging' : ''}
         >
             {children({ dragHandleProps: { attributes, listeners } })}
-        </motion.div>
+        </MotionDiv>
     );
 }
 

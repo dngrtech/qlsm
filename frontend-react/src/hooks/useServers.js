@@ -17,8 +17,6 @@ export function useServers() {
         isDeleteModalOpen: isHostDeleteModalOpen,
         selectedHost,
         closeDeleteModal: closeHostDeleteModal,
-        // Host specific actions
-        handleDeleteRequest: requestDeleteHostAction,
     } = useHosts();
 
     const {

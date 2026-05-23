@@ -240,6 +240,8 @@ Example success response:
 | `/instances/<id>/stop` | POST | Stop instance service |
 | `/instances/<id>/config` | GET | Get instance config files |
 | `/instances/<id>/config` | PUT | Update config and apply (triggers Ansible sync) |
+| `/instances/<id>/hooks` | GET | List available LD_PRELOAD hook shared objects |
+| `/instances/<id>/hooks` | PUT | Replace enabled LD_PRELOAD hook list and queue apply |
 | `/instances/<id>/lan-rate` | PUT | Toggle 99k LAN rate mode |
 | `/instances/<id>/logs` | GET | Get instance task logs |
 | `/instances/<id>/remote-logs` | GET | Fetch live logs via Ansible (`?filter_mode=`, `?since=`, `?lines=`) |
@@ -314,6 +316,7 @@ Example success response:
     "hostname": "My Duel Server",
     "lan_rate_enabled": false,
     "qlx_plugins": "plugin1,plugin2",
+    "ld_preload_hooks": "highfps_hook.so,timer_hook.so",
     "zmq_rcon_port": 27961,
     "zmq_rcon_password": "...",
     "zmq_stats_port": 27962,
@@ -348,6 +351,65 @@ Example success response:
 `config_folders` is returned alongside the flat `configs` map. It lists every top-level subfolder present in the instance config directory (excluding the reserved `scripts` and `factories` folders).
 
 `PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles top-level subfolders: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed.
+
+### LD_PRELOAD Hooks
+
+```
+GET /api/instances/<id>/hooks
+```
+
+Returns `.so` files in the instance `scripts/` directory with enabled state,
+order, file metadata, BinaryMetadata description, and active system hooks.
+
+```json
+{
+  "data": {
+    "available": [
+      {
+        "filename": "highfps_hook.so",
+        "size": 16384,
+        "modified": 1716300000,
+        "enabled": true,
+        "order": 1,
+        "description": "High FPS timing hook"
+      }
+    ],
+    "system_hooks_active": []
+  }
+}
+```
+
+```
+PUT /api/instances/<id>/hooks
+```
+
+Replaces the ordered LD_PRELOAD hook list. Files in `scripts/` that are absent
+from `enabled` are disabled.
+
+```json
+{
+  "enabled": ["highfps_hook.so", "timer_hook.so"]
+}
+```
+
+Validation requires each filename to be a unique `.so` basename with no path
+separators, no `..`, not reserved for a system hook, present under `scripts/`,
+and an ELF file. Validation failures return `400`; held instance locks return
+`409`.
+
+Success returns `202 Accepted` and queues `apply_instance_hooks`.
+
+```json
+{
+  "data": {
+    "task_id": "rq-job-id"
+  }
+}
+```
+
+Running instances restart after the unit is re-rendered with
+`Environment=LD_PRELOAD=...`; stopped instances update the unit and remain
+stopped.
 
 ## Server Status
 

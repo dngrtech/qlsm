@@ -39,7 +39,7 @@ const TIMESTAMP_RE = /\[[\d:]+\s*[AP]M\]/g;
 const COMMAND_LINE_RE = /^(\[[\d:]+\s*[AP]M\]\s*)(> .+)$/;
 const STEAMID_RE = /\b(7656\d{13,})\b/g;
 const IP_PORT_RE = /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)\b/g;
-const SEPARATOR_RE = /^(\[[\d:]+\s*[AP]M\]\s*)(---[\s\-]+.*)$/;
+const SEPARATOR_RE = /^(\[[\d:]+\s*[AP]M\]\s*)(---[\s-]+.*)$/;
 const QUAKE_CODE_RE = /\^([0-9])/g;
 
 /**

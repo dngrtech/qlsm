@@ -14,6 +14,7 @@ from ui.task_logic.ansible_instance_mgmt import (
     delete_instance_logic,
     reconfigure_instance_lan_rate_logic
 )
+from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
 from ui.task_logic.ansible_host_setup import setup_host_ansible_logic
 from ui.task_logic.ansible_host_restart import restart_host_ansible_logic
 from ui.task_logic.ansible_host_rename import rename_host_logic
@@ -209,6 +210,17 @@ def reconfigure_instance_lan_rate(instance_id, lock_token=None):
     """RQ task entry point for reconfiguring LAN rate settings for a QL instance."""
     try:
         return reconfigure_instance_lan_rate_logic(instance_id)
+    finally:
+        if lock_token:
+            from ui.task_lock import release_lock
+            release_lock('instance', instance_id, lock_token)
+
+@rq.job(timeout=300)
+@with_app_context
+def apply_instance_hooks(instance_id, restart_service=True, lock_token=None):
+    """RQ task entry point for applying LD_PRELOAD hook changes."""
+    try:
+        return apply_instance_hooks_logic(instance_id, restart_service=restart_service)
     finally:
         if lock_token:
             from ui.task_lock import release_lock

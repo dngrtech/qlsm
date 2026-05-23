@@ -30,7 +30,7 @@ function ForceUpdateWorkshopModal({ isOpen, onClose, onSubmit, host }) {
 
         // Get list of instance IDs that were toggled on
         const restartInstanceIds = Object.entries(selectedInstances)
-            .filter(([_, isSelected]) => isSelected)
+            .filter(([, isSelected]) => isSelected)
             .map(([id]) => parseInt(id, 10));
 
         onSubmit(workshopId.trim(), restartInstanceIds);

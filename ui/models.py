@@ -114,6 +114,7 @@ class QLInstance(db.Model):
     lan_rate_enabled = db.Column(db.Boolean, default=False, nullable=False) # 99k LAN rate mode
     config = db.Column(db.Text, nullable=True)  # JSON stored as text
     qlx_plugins = db.Column(db.String(1000), nullable=True) # Selected plugins as comma-separated string
+    ld_preload_hooks = db.Column(db.Text, nullable=True) # Comma-separated .so filenames in preload order
     cpu_affinity = db.Column(db.Integer, nullable=True) # Optional Linux CPU index assigned to this service
     status = db.Column(db.Enum(InstanceStatus), default=InstanceStatus.IDLE, nullable=False) # Status of the QL instance itself
     logs = db.Column(db.Text, nullable=True) # Stores logs from background tasks (e.g., Ansible)
@@ -149,6 +150,7 @@ class QLInstance(db.Model):
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode
             'config': self.config,
             'qlx_plugins': self.qlx_plugins,
+            'ld_preload_hooks': self.ld_preload_hooks,
             'cpu_affinity': self.cpu_affinity,
             'status': self.status.value if self.status else None,
             'logs': self.logs, # Include logs

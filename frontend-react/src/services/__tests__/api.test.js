@@ -23,7 +23,13 @@ vi.mock('axios', () => ({
   },
 }));
 
-import { getSelfHostDefaults, resizeHost, updateInstanceConfig } from '../api';
+import {
+  fetchInstanceHooks,
+  getSelfHostDefaults,
+  resizeHost,
+  saveInstanceHooks,
+  updateInstanceConfig,
+} from '../api';
 
 describe('getSelfHostDefaults', () => {
   beforeEach(() => {
@@ -126,5 +132,31 @@ describe('resizeHost', () => {
 
     await expect(resizeHost(4, 'vc2-2c-4gb')).resolves.toEqual({ message: 'queued' });
     expect(mocks.post).toHaveBeenCalledWith('/hosts/4/resize', { new_plan: 'vc2-2c-4gb' });
+  });
+});
+
+describe('instance hook API helpers', () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+    mocks.put.mockReset();
+  });
+
+  it('fetchInstanceHooks uses the shared api client', async () => {
+    mocks.get.mockResolvedValueOnce({
+      data: { data: { available: [], system_hooks_active: [] } },
+    });
+
+    await expect(fetchInstanceHooks(12)).resolves.toEqual({
+      available: [],
+      system_hooks_active: [],
+    });
+    expect(mocks.get).toHaveBeenCalledWith('/instances/12/hooks');
+  });
+
+  it('saveInstanceHooks uses the shared api client for PUT', async () => {
+    mocks.put.mockResolvedValueOnce({ data: { data: { task_id: 'job-1' } } });
+
+    await expect(saveInstanceHooks(12, ['a.so'])).resolves.toEqual({ task_id: 'job-1' });
+    expect(mocks.put).toHaveBeenCalledWith('/instances/12/hooks', { enabled: ['a.so'] });
   });
 });
