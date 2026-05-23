@@ -107,10 +107,17 @@ def get_instance_hooks(instance_id):
         return jsonify({"error": {"message": "Instance not found"}}), 404
 
     draft_id = request.args.get('draft_id', '').strip()
-    if draft_id and _DRAFT_ID_RE.match(draft_id):
+    use_draft = bool(draft_id and _DRAFT_ID_RE.match(draft_id))
+    if use_draft:
         scripts_dir = _draft_scripts_dir(draft_id)
+        committed_scripts = _scripts_dir(instance)
+        committed_names = (
+            {n for n in os.listdir(committed_scripts) if n.endswith(".so")}
+            if os.path.isdir(committed_scripts) else set()
+        )
     else:
         scripts_dir = _scripts_dir(instance)
+        committed_names = None
 
     on_disk = _list_so_files(scripts_dir)
     on_disk_names = {item["filename"] for item in on_disk}
@@ -122,11 +129,13 @@ def get_instance_hooks(instance_id):
     for item in on_disk:
         filename = item["filename"]
         is_enabled = filename in order_map
+        committed = (filename in committed_names) if use_draft else True
         available.append({
             **item,
             "enabled": is_enabled,
             "order": order_map[filename] if is_enabled else None,
             "description": descriptions.get(filename, ""),
+            "committed": committed,
         })
 
     system_hooks_active = [
