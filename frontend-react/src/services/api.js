@@ -147,6 +147,16 @@ export const resizeHost = async (hostId, newPlan) => {
   }
 };
 
+export const rerunHostSetup = async (hostId) => {
+  try {
+    const response = await apiClient.post(`/hosts/${hostId}/rerun-setup`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to rerun setup for host ${hostId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to rerun setup for host ${hostId}`);
+  }
+};
+
 export const updateWorkshopItem = async (hostId, data) => {
   try {
     const response = await apiClient.post(`/hosts/${hostId}/update-workshop`, data);

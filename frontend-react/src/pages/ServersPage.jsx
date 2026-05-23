@@ -34,6 +34,7 @@ import SortableHostList from '../components/hosts/SortableHostList';
 import { useWorkshopUpdate } from '../hooks/useWorkshopUpdate';
 import { useHostAutoRestart } from '../hooks/useHostAutoRestart';
 import { useHostResize } from '../hooks/useHostResize';
+import { rerunHostSetup } from '../services/api';
 import ForceUpdateWorkshopModal from '../components/hosts/ForceUpdateWorkshopModal';
 import HostAutoRestartScheduleModal from '../components/hosts/HostAutoRestartScheduleModal';
 import ResizeHostModal from '../components/hosts/ResizeHostModal';
@@ -73,6 +74,16 @@ export default function ServersPage() {
     const { isAutoRestartModalOpen, hostForAutoRestart, openAutoRestartModal, closeAutoRestartModal, handleAutoRestartSubmit } = useHostAutoRestart(showSuccess, showError, () => refreshData(false));
     const { isResizeModalOpen, isResizeSubmitting, resizeError, hostForResize, openResizeModal, closeResizeModal, handleResizeSubmit } = useHostResize(showSuccess, showError, () => refreshData(false));
     const serverStatusMap = useServerStatus();
+
+    const handleRerunSetup = async (hostId) => {
+      try {
+        await rerunHostSetup(hostId);
+        showSuccess('Host re-setup queued. Redis socket will be configured.');
+        refreshData(false);
+      } catch (err) {
+        showError(err?.error?.message || 'Failed to queue re-run setup.');
+      }
+    };
 
     // RCON Console state — store ID + host_id, re-derive from live data
     const [rconKey, setRconKey] = useState(null); // { instanceId, hostId }
@@ -272,7 +283,7 @@ export default function ServersPage() {
                                     <QLFilterIndicator qlfilterStatus={host.qlfilter_status} />
                                 </div>
                                 <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
-                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenAutoRestart={openAutoRestartModal} onOpenResize={openResizeModal} />
+                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenAutoRestart={openAutoRestartModal} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} />
                                 </div>
                             </div>
 

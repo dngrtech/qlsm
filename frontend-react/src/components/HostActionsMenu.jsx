@@ -1,7 +1,7 @@
 import React, { Fragment, useState } from 'react';
 import { Menu, Transition, Portal } from '@headlessui/react';
 import { useFloating, shift, offset, autoUpdate, flip } from '@floating-ui/react-dom';
-import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon, ArrowUpCircle } from 'lucide-react';
+import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon, ArrowUpCircle, RotateCcw } from 'lucide-react';
 import { HostStatus, QLFILTER_STATUS } from '../utils/statusEnums';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -14,10 +14,12 @@ function HostActionsMenu({
   onRequestRestart,
   onOpenUpdateWorkshop,
   onOpenAutoRestart,
-  onOpenResize
+  onOpenResize,
+  onRerunSetup
 }) {
   const [isInstallQlFilterModalOpen, setIsInstallQlFilterModalOpen] = useState(false);
   const [isUninstallQlFilterModalOpen, setIsUninstallQlFilterModalOpen] = useState(false);
+  const [isRerunSetupModalOpen, setIsRerunSetupModalOpen] = useState(false);
 
   const { x, y, refs, strategy } = useFloating({
     placement: 'bottom-end',
@@ -55,6 +57,18 @@ function HostActionsMenu({
       message="Uninstalling QLFilter will remove packet filtering from this host and reconfigure it. Any running instances will be temporarily unavailable during the process."
       confirmButtonText="Uninstall"
       confirmButtonVariant="danger"
+    />
+    <ConfirmationModal
+      isOpen={isRerunSetupModalOpen}
+      onClose={() => setIsRerunSetupModalOpen(false)}
+      onConfirm={() => {
+        if (typeof onRerunSetup === 'function') onRerunSetup(host.id);
+        setIsRerunSetupModalOpen(false);
+      }}
+      title="Re-run Host Setup"
+      message="This will re-apply host configuration. Redis will briefly restart — running instances may lose their Redis connection momentarily but will reconnect automatically."
+      confirmButtonText="Re-run Setup"
+      confirmButtonVariant="primary"
     />
     <Menu as="div" className="relative inline-block text-left ml-2">
       {({ open, close: closeMenu }) => (
@@ -158,6 +172,20 @@ function HostActionsMenu({
                       >
                         <RefreshCw size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
                         Update Workshop Item
+                      </button>
+                    )}
+                  </Menu.Item>
+
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        onClick={() => { closeMenu(); setIsRerunSetupModalOpen(true); }}
+                        disabled={!isHostActive || isQlFilterBusy || isHostBusy}
+                        className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}
+                      >
+                        <RotateCcw size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
+                        Re-run Host Setup
                       </button>
                     )}
                   </Menu.Item>
