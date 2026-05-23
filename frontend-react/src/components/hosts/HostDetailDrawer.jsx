@@ -8,6 +8,7 @@ import StatusIndicator from '../StatusIndicator';
 import { formatDateTime } from '../../utils/uiUtils';
 import { formatVultrRegion, formatVultrPlan } from '../../utils/formatters';
 import { getPlan } from '../../utils/providerData';
+import InfoTooltip from '../common/InfoTooltip';
 import { HostStatus, QLFILTER_STATUS } from '../../utils/statusEnums';
 import { copyToClipboard } from '../../utils/clipboard';
 import { validateHostName, HOST_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
@@ -303,21 +304,29 @@ export default function HostDetailDrawer({
                         </Field>
                         <Field label="Status"><StatusIndicator status={internalHost.status} /></Field>
                         <Field label="Redis">
-                          {internalHost.redis_unix_socket ? (
-                            <span
-                              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15"
-                              title="Low-latency local IPC via Unix socket"
-                            >
-                              Unix Socket
-                            </span>
-                          ) : (
-                            <span
-                              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-theme-muted bg-black/5 dark:bg-white/5"
-                              title="TCP — upgrade via Re-run Host Setup"
-                            >
-                              TCP
-                            </span>
-                          )}
+                          <div className="inline-flex items-center gap-1">
+                            {internalHost.redis_unix_socket ? (
+                              <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-500/10 dark:bg-emerald-500/15">
+                                Unix Socket
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded text-theme-muted bg-black/5 dark:bg-white/5">
+                                TCP
+                              </span>
+                            )}
+                            {internalHost.redis_unix_socket ? (
+                              <InfoTooltip
+                                text="Redis is connected via Unix socket — plugin commands bypass the network stack for lower latency. Enabled automatically during host setup."
+                                placement="top"
+                              />
+                            ) : (
+                              <InfoTooltip
+                                text="Redis is connected over TCP (127.0.0.1:6379). Use Re-run Host Setup to upgrade this host to Unix socket IPC."
+                                placement="top"
+                                variant="warning"
+                              />
+                            )}
+                          </div>
                         </Field>
                         <Field label="Created">{formatDateTime(internalHost.created_at)}</Field>
                       </div>
