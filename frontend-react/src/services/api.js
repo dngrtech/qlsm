@@ -364,9 +364,12 @@ export const updateInstanceLanRate = async (instanceId, lanRateEnabled) => {
   }
 };
 
-export const fetchInstanceHooks = async (instanceId) => {
+export const fetchInstanceHooks = async (instanceId, draftId) => {
   try {
-    const response = await apiClient.get(`/instances/${instanceId}/hooks`);
+    const url = draftId
+      ? `/instances/${instanceId}/hooks?draft_id=${encodeURIComponent(draftId)}`
+      : `/instances/${instanceId}/hooks`;
+    const response = await apiClient.get(url);
     return response.data.data;
   } catch (error) {
     console.error(`Failed to fetch hooks for instance ${instanceId}:`, error.response ? error.response.data : error.message);

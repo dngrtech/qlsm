@@ -1,4 +1,6 @@
 import os
+import re
+import tempfile
 import uuid
 
 from flask import Blueprint, jsonify, request
@@ -12,12 +14,18 @@ from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES, _SYSTEM
 
 CONFIGS_BASE = "configs"
 ELF_MAGIC = b"\x7fELF"
+_DRAFT_ID_RE = re.compile(r'^[0-9a-f-]{36}$')
 
 instance_hooks_bp = Blueprint("instance_hooks_api", __name__)
 
 
 def _scripts_dir(instance):
     return os.path.join(CONFIGS_BASE, instance.host.name, str(instance.id), "scripts")
+
+
+def _draft_scripts_dir(draft_id):
+    base = os.environ.get('QLDS_DRAFTS_DIR') or os.path.join(tempfile.gettempdir(), 'qlds-drafts')
+    return os.path.join(base, draft_id, 'scripts')
 
 
 def _enabled_list(instance):
@@ -98,7 +106,13 @@ def get_instance_hooks(instance_id):
     if not instance:
         return jsonify({"error": {"message": "Instance not found"}}), 404
 
-    on_disk = _list_so_files(_scripts_dir(instance))
+    draft_id = request.args.get('draft_id', '').strip()
+    if draft_id and _DRAFT_ID_RE.match(draft_id):
+        scripts_dir = _draft_scripts_dir(draft_id)
+    else:
+        scripts_dir = _scripts_dir(instance)
+
+    on_disk = _list_so_files(scripts_dir)
     on_disk_names = {item["filename"] for item in on_disk}
     enabled = [name for name in _enabled_list(instance) if name in on_disk_names]
     order_map = {name: idx + 1 for idx, name in enumerate(enabled)}

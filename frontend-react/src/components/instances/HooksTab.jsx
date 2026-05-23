@@ -8,7 +8,7 @@ function errorMessage(error, fallback) {
   return error?.error?.message || error?.message || fallback;
 }
 
-export default function HooksTab({ instanceId, onApplied }) {
+export default function HooksTab({ instanceId, draftId, onApplied }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [available, setAvailable] = useState([]);
@@ -21,7 +21,7 @@ export default function HooksTab({ instanceId, onApplied }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchInstanceHooks(instanceId)
+    fetchInstanceHooks(instanceId, draftId)
       .then((data) => {
         if (cancelled) return;
         const enabled = [...(data.available || [])]
@@ -42,7 +42,7 @@ export default function HooksTab({ instanceId, onApplied }) {
     return () => {
       cancelled = true;
     };
-  }, [instanceId]);
+  }, [instanceId, draftId]);
 
   const enabledSet = useMemo(() => new Set(enabledOrder), [enabledOrder]);
   const enabledRows = useMemo(
