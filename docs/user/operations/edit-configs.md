@@ -53,8 +53,9 @@ These cvars are ignored by QLSM regardless of whether they are present in `serve
 | `sv_serverType` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `2`. |
 | `sv_lanForceRate` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `0`. |
 | `net_strict` | Forced by QLSM. | Ignored. QLSM always injects `1`. |
-| `qlx_redisAddress` | Forced by QLSM. | Ignored. QLSM injects the local Redis address. |
-| `qlx_redisPassword` | Forced by QLSM. | Ignored. QLSM injects the backend Redis password. |
+| `qlx_redisAddress` | Forced by QLSM. | Ignored. TCP hosts: `127.0.0.1:6379`. Socket-enabled hosts: `/var/run/redis/redis.sock`. |
+| `qlx_redisUnixSocket` | Forced by QLSM. | Ignored. Set to `1` on socket-enabled hosts; omitted on TCP hosts. |
+| `qlx_redisPassword` | Forced by QLSM. | Ignored. QLSM injects the backend Redis password (self-host only). |
 | `qlx_redisDatabase` | Derived from the instance port. | Ignored. QLSM injects `port - 27959`. |
 | `fs_homepath` | Derived from the instance port. | Ignored. QLSM injects `/home/ql/qlds-<port>`. |
 | `qlx_pluginsPath` | Derived from `fs_homepath`. | Ignored. QLSM injects the instance minqlx plugin path. |
@@ -89,6 +90,14 @@ QLSM assembles all managed cvars into a single argument string that is passed to
   +set zmq_stats_port $zmq_stats_port
   +set zmq_stats_password "$zmq_stats_password"
   +set qlx_plugins "names of plugins from the Plugins tab selection"
+```
+
+**Socket-enabled host — Redis-specific args only** (cloud or standalone after Re-run Host Setup). All other managed cvars are the same as the example above; only the Redis lines differ:
+
+```
++set qlx_redisAddress "/var/run/redis/redis.sock"
++set qlx_redisUnixSocket 1
++set qlx_redisDatabase $redis_db_index
 ```
 
 ## Plugins
