@@ -11,6 +11,7 @@ COPY frontend-react/package.json frontend-react/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Build
+COPY VERSION /VERSION
 COPY frontend-react/ .
 # Resolve the public/docs symlink (-> ../../docs/user) at its expected absolute path
 COPY docs/user/ /docs/user/

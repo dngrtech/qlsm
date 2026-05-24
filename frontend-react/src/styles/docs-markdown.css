@@ -156,6 +156,12 @@
   text-align: left;
 }
 
+.docs-markdown th:nth-child(2),
+.docs-markdown td:nth-child(2) {
+  min-width: 7.5rem;
+  white-space: nowrap;
+}
+
 .docs-markdown tr:last-child td {
   border-bottom: none;
 }

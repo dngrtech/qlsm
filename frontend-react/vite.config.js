@@ -1,12 +1,30 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import fs from 'node:fs'
+import path from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function readAppVersion() {
+  try {
+    return fs.readFileSync(path.resolve(__dirname, '../VERSION'), 'utf8').trim() || '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
+const appVersion = readAppVersion()
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: '/',
+  define: {
+    'import.meta.env.VITE_QLSM_VERSION': JSON.stringify(appVersion),
+  },
   test: {
     environment: 'jsdom',
     globals: true,

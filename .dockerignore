@@ -8,6 +8,7 @@
 !terraform/
 !migrations/
 !requirements.txt
+!VERSION
 !entrypoint.sh
 !gunicorn.conf.py
 !rcon_service/
