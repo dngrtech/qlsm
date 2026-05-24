@@ -4,6 +4,12 @@ QLSM uses `v<major>.<minor>.<patch>` tags. The `v1.0.0` baseline is the project 
 
 Unmerged or superseded pull requests are not listed.
 
+## v1.9 Versioning And Release Notes
+
+| Version | Date | PR | Changes |
+| --- | --- | --- | --- |
+| `v1.9.0` | 2026-05-24 | [#87](https://github.com/dngrtech/qlsm/pull/87) | Added the app version footer, update-available link, latest-version manifest, and full release notes history. |
+
 ## v1.8 Runtime And Plugin Hardening
 
 | Version | Date | PR | Changes |
