@@ -222,6 +222,12 @@
   white-space: nowrap;
 }
 
+.md-typeset table:not([class]) th:nth-child(2),
+.md-typeset table:not([class]) td:nth-child(2) {
+  min-width: 7.5rem;
+  white-space: nowrap;
+}
+
 .md-typeset table:not([class]) th {
   font-family: 'Rajdhani', system-ui, sans-serif;
   letter-spacing: 0.03em;
