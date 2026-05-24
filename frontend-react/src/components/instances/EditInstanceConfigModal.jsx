@@ -896,21 +896,24 @@ function EditInstanceConfigModal({
                           )}
                         </div>
 
-                        {activeMainTab !== 'hooks' && (
                         <div className="mt-4 flex justify-between items-center flex-shrink-0">
-                          {/* Left side - Preset management buttons */}
+                          {/* Left side - Preset management buttons (non-hooks tabs only) */}
                           <div className="flex gap-2">
-                            <button type="button" onClick={() => setIsLoadPresetModalOpen(true)} className="btn btn-secondary">
-                              <FolderOpen className="w-4 h-4 mr-2" />
-                              Load Preset
-                            </button>
-                            <button type="button" onClick={() => setIsSavePresetModalOpen(true)} className="btn btn-secondary">
-                              <Save className="w-4 h-4 mr-2" />
-                              Save Preset
-                            </button>
+                            {activeMainTab !== 'hooks' && (
+                              <>
+                                <button type="button" onClick={() => setIsLoadPresetModalOpen(true)} className="btn btn-secondary">
+                                  <FolderOpen className="w-4 h-4 mr-2" />
+                                  Load Preset
+                                </button>
+                                <button type="button" onClick={() => setIsSavePresetModalOpen(true)} className="btn btn-secondary">
+                                  <Save className="w-4 h-4 mr-2" />
+                                  Save Preset
+                                </button>
+                              </>
+                            )}
                           </div>
 
-                          {/* Right side - Esc hint + Cancel/Save */}
+                          {/* Right side - Esc hint + Cancel + Save (Save hidden on hooks tab) */}
                           <div className="flex items-center gap-3">
                             <span className="font-mono text-xs text-[var(--text-muted)] tracking-wide hidden sm:inline-flex items-center gap-1.5">
                               <kbd className="px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--surface-border)] text-[10px] font-bold">Esc</kbd>
@@ -919,21 +922,22 @@ function EditInstanceConfigModal({
                             <button type="button" onClick={handleAttemptClose} className="btn btn-secondary">
                               Cancel
                             </button>
-                            <button
-                              type="submit"
-                              disabled={saving || loading}
-                              className="btn btn-primary"
-                            >
-                              {saving ? (
-                                <span className="flex items-center">
-                                  <LoaderCircle size={16} className="animate-spin mr-2" />
-                                  Saving...
-                                </span>
-                              ) : 'Save Configuration'}
-                            </button>
+                            {activeMainTab !== 'hooks' && (
+                              <button
+                                type="submit"
+                                disabled={saving || loading}
+                                className="btn btn-primary"
+                              >
+                                {saving ? (
+                                  <span className="flex items-center">
+                                    <LoaderCircle size={16} className="animate-spin mr-2" />
+                                    Saving...
+                                  </span>
+                                ) : 'Save Configuration'}
+                              </button>
+                            )}
                           </div>
                         </div>
-                        )}
                       </form>
                     )}
                   </div>

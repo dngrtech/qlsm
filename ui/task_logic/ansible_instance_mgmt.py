@@ -25,8 +25,7 @@ SYSTEM_PLUGINS = ['serverchecker']
 # Each tuple is (filename, predicate(instance) -> bool, subdir under /home/ql/qlds-<port>/).
 _SYSTEM_HOOKS = []
 
-# Reserved so users cannot upload files that shadow future built-in hooks.
-RESERVED_HOOK_FILENAMES = {"force_rate.so"}
+RESERVED_HOOK_FILENAMES = {filename for filename, _, _ in _SYSTEM_HOOKS}
 
 
 # Validates and sanitizes input to prevent injection or malformed args
