@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CURRENT_VERSION,
@@ -48,15 +48,9 @@ function AppFooter() {
     };
   }, []);
 
-  const updateInfo = useMemo(() => {
-    if (!latestInfo || !isNewerVersion(latestInfo.latest, CURRENT_VERSION)) {
-      return null;
-    }
-
-    return latestInfo;
-  }, [latestInfo]);
-
-  const releaseNotesUrl = updateInfo?.releaseNotesUrl || DEFAULT_RELEASE_NOTES_URL;
+  const updateInfo = latestInfo && isNewerVersion(latestInfo.latest, CURRENT_VERSION)
+    ? latestInfo
+    : null;
 
   return (
     <footer className="app-footer">
@@ -68,7 +62,7 @@ function AppFooter() {
       {updateInfo ? (
         <>
           <span className="app-footer-divider" aria-hidden="true" />
-          <ReleaseNotesLink href={releaseNotesUrl} className="app-footer-update">
+          <ReleaseNotesLink href={updateInfo.releaseNotesUrl || DEFAULT_RELEASE_NOTES_URL} className="app-footer-update">
             v{updateInfo.latest} available
           </ReleaseNotesLink>
         </>

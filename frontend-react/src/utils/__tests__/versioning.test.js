@@ -53,6 +53,6 @@ describe('versioning', () => {
       latest: '1.9.0',
       releaseNotesUrl: '/docs/releases',
     });
-    expect(fetchImpl).toHaveBeenCalledWith('/version.json', { cache: 'no-store' });
+    expect(fetchImpl).toHaveBeenCalledWith('/version.json', { cache: 'no-cache' });
   });
 });

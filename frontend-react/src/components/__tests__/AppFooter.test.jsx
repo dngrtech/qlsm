@@ -14,7 +14,7 @@ describe('AppFooter', () => {
       ok: true,
       json: async () => ({
         latest: '1.8.5',
-        releaseNotesUrl: '/docs/releases',
+        releaseNotesUrl: 'https://example.test/not-used',
       }),
     })));
 

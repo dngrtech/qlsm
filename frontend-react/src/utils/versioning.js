@@ -56,7 +56,7 @@ export async function fetchLatestVersionInfo({
   fetchImpl = fetch,
   manifestUrl = DEFAULT_VERSION_MANIFEST_URL,
 } = {}) {
-  const response = await fetchImpl(manifestUrl, { cache: 'no-store' });
+  const response = await fetchImpl(manifestUrl, { cache: 'no-cache' });
   if (!response.ok) {
     throw new Error(`Version manifest request failed (${response.status})`);
   }

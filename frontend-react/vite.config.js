@@ -7,7 +7,16 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const appVersion = fs.readFileSync(path.resolve(__dirname, '../VERSION'), 'utf8').trim()
+
+function readAppVersion() {
+  try {
+    return fs.readFileSync(path.resolve(__dirname, '../VERSION'), 'utf8').trim() || '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
+const appVersion = readAppVersion()
 
 // https://vite.dev/config/
 export default defineConfig({
