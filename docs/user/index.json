@@ -100,6 +100,16 @@
     ]
   },
   {
+    "category": "Release Notes",
+    "articles": [
+      {
+        "id": "releases",
+        "title": "Release Notes",
+        "path": "/docs/releases.md"
+      }
+    ]
+  },
+  {
     "category": "Help",
     "articles": [
       {

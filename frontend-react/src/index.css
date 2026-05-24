@@ -105,6 +105,60 @@ body {
   overflow-x: clip;
 }
 
+.app-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: var(--footer-height);
+  padding: 0 16px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.app-footer-title {
+  color: var(--text-primary);
+}
+
+.app-footer-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--surface-border);
+}
+
+.app-footer-version,
+.app-footer-update {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.app-footer-version:hover,
+.app-footer-update:hover {
+  color: var(--accent-primary);
+}
+
+.app-footer-update {
+  color: var(--accent-primary);
+}
+
+@media (max-width: 420px) {
+  .app-footer {
+    gap: 8px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+}
+
 /* ============================================
    Main Content Grid Background
    ============================================ */

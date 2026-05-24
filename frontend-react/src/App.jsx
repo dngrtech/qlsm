@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import AppFooter from './components/AppFooter';
 import Navbar from './components/Navbar';
 import { NotificationProvider } from './components/NotificationProvider';
 import { LoadingProvider } from './contexts/LoadingContext';
@@ -38,14 +39,7 @@ function App() {
                 </Route>
               </Routes>
             </main>
-            <footer
-              className="sticky bottom-0 z-50 bg-theme-raised border-t border-theme flex items-center justify-center text-sm text-theme-secondary shrink-0"
-              style={{ height: 'var(--footer-height)' }}
-            >
-              <span className="font-mono text-xs tracking-wide">
-                QLSM — Quake Live Server Management
-              </span>
-            </footer>
+            <AppFooter />
           </div>
         </NotificationProvider>
       </LoadingProvider>

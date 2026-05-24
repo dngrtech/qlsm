@@ -72,5 +72,6 @@ nav:
     - 99k LAN Rate: features/99k-lan-rate.md
   - Administration:
     - User Management & API Keys: administration/user-management.md
+  - Release Notes: releases.md
   - Help:
     - Deployment Troubleshooting: help/deployment-troubleshooting.md
