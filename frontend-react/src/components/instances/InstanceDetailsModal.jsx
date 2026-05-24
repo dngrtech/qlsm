@@ -357,15 +357,18 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                             const hooks = instance.ld_preload_hooks
                               ?.split(',').map(h => h.trim()).filter(Boolean) ?? [];
                             return hooks.length > 0 ? (
-                              <span className="flex items-center gap-2 flex-wrap">
-                                <span className="flex items-center gap-1 font-mono text-xs text-theme-secondary">
-                                  <Webhook size={12} className="shrink-0" />
-                                  {hooks.join(', ')}
-                                </span>
+                              <span className="flex flex-col gap-1">
+                                {hooks.map((hook, i) => (
+                                  <span key={hook} className="flex items-center gap-1.5 font-mono text-xs text-theme-secondary">
+                                    <span className="text-[var(--text-muted)] w-4 text-right shrink-0">{i + 1}.</span>
+                                    <Webhook size={12} className="shrink-0" />
+                                    {hook}
+                                  </span>
+                                ))}
                                 <button
                                   type="button"
                                   onClick={() => { onOpenEditConfig(instance, 'hooks'); onClose(); }}
-                                  className="text-[11px] text-[var(--accent-primary)] hover:underline"
+                                  className="text-[11px] text-[var(--accent-primary)] hover:underline self-start mt-0.5"
                                 >
                                   Manage
                                 </button>
