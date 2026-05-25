@@ -4,9 +4,9 @@
 
 ## Background: The 25k Rate Limit
 
-Quake Live internet servers (`sv_serverType 2`) are capped at 25k rate per client. This cap was designed for internet connections of an earlier era. On modern connections it creates bandwidth bottlenecks: sound choking under load, inconsistent weapon registration, and the familiar "laggy even though ping is fine" feeling.
+Quake Live internet servers are capped at 25k rate per client. This cap was designed for the internet connections of an earlier era. On modern connections it creates bandwidth bottlenecks: sound choking under load, inconsistent weapon registration, and the familiar "laggy even though ping is fine" feeling.
 
-LAN servers run at 99k rate because they are assumed to be on local network. The 99k LAN rate feature exploits this: NAT rules make the server believe all player traffic is arriving from `127.0.0.1`, which puts it on the LAN rate path even though players are connecting over the internet.
+LAN servers run at 99k rate because they are assumed to be on local network. The 99k LAN rate feature loads a tiny LD_PRELOAD library (`force_rate.so`) into the qlds process. The library patches the server's LAN-detection function to always return true, so the engine treats every connecting client as a LAN client and forces `rate=99999` for all of them.
 
 ## When It Makes A Real Difference
 
@@ -18,20 +18,16 @@ The improvement is most noticeable when:
 
 On small servers (2–4 players, low-intensity gametypes) there is effectively no practical difference.
 
-## OS Requirement
+## OS Support
 
-99k LAN rate requires **Debian 12**. It will not work on Ubuntu.
-
-QLSM enforces this: the toggle is disabled for hosts where the detected OS is not Debian. If you try to enable it on an Ubuntu host, the request is rejected.
-
-See [Add A Host](../getting-started/add-host.md) for how OS detection works during host setup.
+99k LAN rate works on any supported host OS — the LD_PRELOAD library is OS-independent.
 
 ## How To Enable
 
 ### At deploy time
 
 1. Open [Deploy New Instance](../getting-started/deploy-new-instance.md).
-2. In the Basic Info block, check **99k LAN Rate**  <img src="../../images/99k-lan-rate-toggle.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
+2. In the Basic Info block, check **99k LAN Rate**
 3. Deploy as normal.
 
 ### On an existing instance
@@ -40,9 +36,7 @@ See [Add A Host](../getting-started/add-host.md) for how OS detection works duri
 2. Click **99k LAN Rate**.
 3. Wait for the reconfigure/restart cycle to complete.
 
-![](../images/instance-actions-menu-99k-lan-rate.png)   
-
-Changing LAN rate on an existing instance triggers a full reconfigure and restart. The server will be briefly unavailable. If it does not come back, see [Deployment Troubleshooting](../help/deployment-troubleshooting.md).
+Changing 99k LAN Rate on an existing instance triggers a hooks reconfigure and service restart. The server will be briefly unavailable. If it does not come back, see [Deployment Troubleshooting](../help/deployment-troubleshooting.md).
 
 ## How To Disable
 
@@ -50,18 +44,24 @@ Follow the same steps and toggle the setting off. The server reverts to standard
 
 ## Technical Details
 
-When enabled, QLSM configures:
+When enabled, QLSM:
 
-- `sv_serverType 1` and `sv_lanForceRate 1` in the server args
-- iptables NAT rules (PREROUTING DNAT + POSTROUTING SNAT) per instance port
-- `net.ipv4.conf.all.route_localnet=1` kernel parameter (host-wide, harmless when set)
+- Adds `+set sv_lanForceRate 1` and `+set sv_serverType 1` to the qlds startup arguments
+- Loads `force_rate.so` via `LD_PRELOAD`. The library patches `Sys_IsLANAddress` inside qzeroded.x64 so the engine treats every client as a LAN client, which (in combination with `sv_lanForceRate 1`) forces `rate=99999` for all clients.
 
-The kernel parameter is host-wide. Once any instance on a host has LAN rate enabled it stays set — disabling it when an instance still needs it would break that instance. QLSM manages this automatically.
+The hook binary lives on each instance host at `/home/ql/qlds-<port>/system-hooks/force_rate.so`, synced from QLSM's `ql-assets/data/system-hooks/`.
+
+## Migration From Older QLSM Hosts
+
+If your host was set up before this implementation shipped, the toggle may still be restricted to Debian and may use the older iptables-based mechanism. To migrate the host in place:
+
+1. Open the host's Actions menu.
+2. Click **Re-run Host Setup**.
+3. After the run completes, the toggle works on any OS, and any instance that already had 99k LAN Rate enabled is restarted with the new hook automatically.
 
 ## Related Pages
 
 - [Deploy A New Instance](../getting-started/deploy-new-instance.md)
 - [Instance Actions Menu](../operations/instance-actions-menu.md)
 - [Add A Host (Cloud Or Standalone)](../getting-started/add-host.md)
-- [Presets And Default Config](../presets/overview.md)
 - [Deployment Troubleshooting](../help/deployment-troubleshooting.md)
