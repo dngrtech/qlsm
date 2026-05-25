@@ -174,3 +174,118 @@ def test_manage_instance_config_rejects_enabling_lan_rate_on_ubuntu(
     assert response.status_code == 400
     assert "99k LAN Rate currently requires Debian on this host" in response.get_json()['error']['message']
     mock_lock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Migrated-host tests (lan_rate_uses_hook=True bypasses OS restriction)
+# ---------------------------------------------------------------------------
+
+@patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-m1'))
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+def test_add_instance_allows_lan_rate_on_migrated_ubuntu_host(
+    mock_lock, mock_enqueue, client, app, tmp_path, monkeypatch
+):
+    """Migrated Ubuntu host: POST /api/instances/ with lan_rate_enabled=True should succeed."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        host = create_host(
+            name='migrated-ubuntu-add',
+            provider='standalone',
+            status=HostStatus.ACTIVE,
+            os_type='ubuntu',
+            lan_rate_uses_hook=True,
+        )
+        host_id = host.id
+
+    response = client.post(
+        '/api/instances/',
+        json=_instance_payload(host_id, True),
+        headers=auth_headers(app, 'testuser'),
+    )
+
+    assert response.status_code == 201, response.get_json()
+    assert response.get_json()['data']['lan_rate_enabled'] is True
+    mock_lock.assert_called_once()
+    mock_enqueue.assert_called_once()
+
+
+@patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-m2'))
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+def test_toggle_lan_rate_allowed_on_migrated_ubuntu_host(
+    mock_lock, mock_enqueue, client, app
+):
+    """Migrated Ubuntu host: PUT /api/instances/<id>/lan-rate enable should succeed."""
+    with app.app_context():
+        host = create_host(
+            name='migrated-ubuntu-toggle',
+            provider='standalone',
+            status=HostStatus.ACTIVE,
+            os_type='ubuntu',
+            lan_rate_uses_hook=True,
+        )
+        instance = create_instance(
+            name='migrated-toggle-inst',
+            host_id=host.id,
+            port=27964,
+            hostname='migrated-toggle.host',
+            lan_rate_enabled=False,
+        )
+        instance.status = InstanceStatus.RUNNING
+        db.session.commit()
+        instance_id = instance.id
+
+    response = client.put(
+        f'/api/instances/{instance_id}/lan-rate',
+        json={'lan_rate_enabled': True},
+        headers=auth_headers(app, 'testuser'),
+    )
+
+    assert response.status_code == 202, response.get_json()
+    assert response.get_json()['data']['lan_rate_enabled'] is True
+    mock_lock.assert_called_once()
+    mock_enqueue.assert_called_once()
+
+
+@patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-m3'))
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+def test_manage_config_allows_lan_rate_on_migrated_ubuntu_host(
+    mock_lock, mock_enqueue, client, app, tmp_path, monkeypatch
+):
+    """Migrated Ubuntu host: PUT /api/instances/<id>/config enabling lan_rate should succeed."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        host = create_host(
+            name='migrated-ubuntu-config',
+            provider='standalone',
+            status=HostStatus.ACTIVE,
+            os_type='ubuntu',
+            lan_rate_uses_hook=True,
+        )
+        instance = create_instance(
+            name='migrated-config-inst',
+            host_id=host.id,
+            port=27965,
+            hostname='migrated-config.host',
+            lan_rate_enabled=False,
+        )
+        db.session.commit()
+        instance_id = instance.id
+
+    response = client.put(
+        f'/api/instances/{instance_id}/config',
+        json={
+            'configs': {
+                'server.cfg': 'updated',
+                'mappool.txt': '',
+                'access.txt': '',
+                'workshop.txt': '',
+            },
+            'lan_rate_enabled': True,
+            'restart': True,
+        },
+        headers=auth_headers(app, 'testuser'),
+    )
+
+    assert response.status_code in (200, 202), response.get_json()
+    mock_lock.assert_called_once()
+    mock_enqueue.assert_called_once()
