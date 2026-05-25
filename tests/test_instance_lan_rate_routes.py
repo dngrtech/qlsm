@@ -43,7 +43,7 @@ def test_add_instance_rejects_ubuntu_lan_rate_enable(
     )
 
     assert response.status_code == 400
-    assert response.get_json()['error']['message'] == '99k LAN rate is not compatible with Ubuntu.'
+    assert "99k LAN Rate currently requires Debian on this host" in response.get_json()['error']['message']
     mock_enqueue.assert_not_called()
 
     with app.app_context():
@@ -104,7 +104,7 @@ def test_update_instance_lan_rate_rejects_enabling_on_ubuntu(mock_lock, client, 
     )
 
     assert response.status_code == 400
-    assert response.get_json()['error']['message'] == '99k LAN rate is not compatible with Ubuntu.'
+    assert "99k LAN Rate currently requires Debian on this host" in response.get_json()['error']['message']
     mock_lock.assert_not_called()
 
 
@@ -172,5 +172,5 @@ def test_manage_instance_config_rejects_enabling_lan_rate_on_ubuntu(
     )
 
     assert response.status_code == 400
-    assert response.get_json()['error']['message'] == '99k LAN rate is not compatible with Ubuntu.'
+    assert "99k LAN Rate currently requires Debian on this host" in response.get_json()['error']['message']
     mock_lock.assert_not_called()

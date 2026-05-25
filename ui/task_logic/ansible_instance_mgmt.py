@@ -755,6 +755,12 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             db.session.commit()
             return f"Error during instance {instance.id} LAN rate reconfiguration: Host not found"
 
+        # Migrated host: delegate to the hooks pipeline.
+        if instance.host and instance.host.lan_rate_uses_hook:
+            from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
+            return apply_instance_hooks_logic(instance.id, restart_service=True)
+        # Legacy path (unchanged below) ...
+
         append_log(instance, f"Task started: reconfigure_instance_lan_rate (Job ID: {job.id})")
         instance.status = InstanceStatus.CONFIGURING
         db.session.commit()
