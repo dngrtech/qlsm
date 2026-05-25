@@ -1,29 +1,59 @@
 export const SUPPORTED_LAN_RATE_OS_TYPES = new Set(['debian']);
-export const UBUNTU_99K_LAN_RATE_MESSAGE = '99k LAN rate is not compatible with Ubuntu.';
-export const UNKNOWN_99K_LAN_RATE_MESSAGE = '99k LAN rate is only supported on Debian hosts.';
 
-const OS_TYPE_ALIASES = {
+const OS_ALIASES = {
   debian12: 'debian',
 };
 
-function normalizeOsType(osType) {
-  if (typeof osType !== 'string') return null;
-  const normalized = osType.trim().toLowerCase();
-  if (!normalized) return null;
-  return OS_TYPE_ALIASES[normalized] || normalized;
+function normalizeOs(osType) {
+  const lower = (osType || '').toLowerCase();
+  return OS_ALIASES[lower] || lower;
 }
 
-export function isLanRateSupported(osType) {
-  return SUPPORTED_LAN_RATE_OS_TYPES.has(normalizeOsType(osType));
+/**
+ * Migration-aware: returns true if the host has been migrated to the
+ * LD_PRELOAD hook mechanism, regardless of OS. Legacy hosts fall back
+ * to the Debian-only OS check.
+ *
+ * @param {Object} host — { os_type, lan_rate_uses_hook }
+ *   For instance-scoped components, pass
+ *   { os_type: instance.host_os_type, lan_rate_uses_hook: instance.host_lan_rate_uses_hook }
+ */
+export function isLanRateSupported(host) {
+  if (host && host.lan_rate_uses_hook === true) {
+    return true;
+  }
+  return SUPPORTED_LAN_RATE_OS_TYPES.has(normalizeOs(host && host.os_type));
 }
 
-export function getLanRateUnsupportedReason(osType) {
-  const normalized = normalizeOsType(osType);
-  if (isLanRateSupported(normalized)) return null;
-  return normalized === 'ubuntu' ? UBUNTU_99K_LAN_RATE_MESSAGE : UNKNOWN_99K_LAN_RATE_MESSAGE;
+/**
+ * Migration-aware: empty string when supported; actionable migration
+ * hint for legacy hosts on unsupported OSes.
+ */
+export function getLanRateUnsupportedMessage(host) {
+  if (!host || host.lan_rate_uses_hook === true) {
+    return '';
+  }
+  if (SUPPORTED_LAN_RATE_OS_TYPES.has(normalizeOs(host.os_type))) {
+    return '';
+  }
+  return (
+    "99k LAN Rate currently requires Debian on this host. To enable it on " +
+    "Ubuntu (and other OSes), run 'Re-run Host Setup' from the host actions " +
+    "menu — this migrates the host to the new LD_PRELOAD hook mechanism " +
+    "that works on any OS."
+  );
 }
 
-export function canEnableLanRate({ osType, currentEnabled }) {
-  if (isLanRateSupported(osType)) return true;
-  return currentEnabled === true;
+/**
+ * Migration-aware wrapper compatible with the deleted canEnableLanRate API.
+ * Returns true if enabling is permitted.
+ */
+export function canEnableLanRate({ host, currentEnabled, requestedEnabled = true }) {
+  if (currentEnabled === requestedEnabled) {
+    return true;
+  }
+  if (!requestedEnabled) {
+    return true;
+  }
+  return isLanRateSupported(host);
 }
