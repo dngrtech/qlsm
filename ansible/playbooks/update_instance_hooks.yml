@@ -28,9 +28,12 @@
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ instance_id }}/scripts/"
         dest: "/home/ql/qlds-{{ game_port }}/minqlx-plugins/"
+        rsync_path: "sudo -u ql rsync"
         rsync_opts:
           - "--include=*.so"
           - "--exclude=*"
+      delegate_to: localhost
+      become: false
       when: host_name is defined and instance_id is defined
 
     - name: Render QLDS systemd service file with updated LD_PRELOAD
@@ -44,6 +47,57 @@
 
     - name: Flush handlers so daemon-reload runs before restart
       ansible.builtin.meta: flush_handlers
+
+    ###########################################################################
+    # Remove stale legacy iptables NAT rules left over from before hook migration
+    ###########################################################################
+    - name: Check if INPUT SNAT legacy rule exists
+      command: iptables -t nat -C INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      register: legacy_input_snat_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_uses_hook | default(false) | bool
+
+    - name: Remove INPUT SNAT legacy rule
+      command: iptables -t nat -D INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_uses_hook | default(false) | bool
+        - legacy_input_snat_check.rc | default(1) == 0
+
+    - name: Check if PREROUTING DNAT legacy rule exists
+      command: iptables -t nat -C PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      register: legacy_prerouting_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_uses_hook | default(false) | bool
+
+    - name: Remove PREROUTING DNAT legacy rule
+      command: iptables -t nat -D PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      when:
+        - lan_rate_uses_hook | default(false) | bool
+        - legacy_prerouting_check.rc | default(1) == 0
+
+    - name: Check if POSTROUTING SNAT legacy rule exists
+      command: iptables -t nat -C POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      register: legacy_postrouting_check
+      failed_when: false
+      changed_when: false
+      when: lan_rate_uses_hook | default(false) | bool
+
+    - name: Remove POSTROUTING SNAT legacy rule
+      command: iptables -t nat -D POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      when:
+        - lan_rate_uses_hook | default(false) | bool
+        - legacy_postrouting_check.rc | default(1) == 0
+
+    - name: Persist iptables after legacy rule cleanup
+      shell: iptables-save > /etc/iptables/rules.v4
+      when: >-
+        (lan_rate_uses_hook | default(false) | bool) and (
+          (legacy_input_snat_check.rc | default(1) == 0) or
+          (legacy_prerouting_check.rc | default(1) == 0) or
+          (legacy_postrouting_check.rc | default(1) == 0)
+        )
 
     - name: Restart QLDS service
       ansible.builtin.systemd:
