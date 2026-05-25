@@ -42,10 +42,11 @@ def test_whitespace_stripped_and_empty_entries_skipped():
     )
 
 
-def test_no_system_hooks_by_default():
+def test_force_rate_is_the_only_system_hook():
     from ui.task_logic import ansible_instance_mgmt
 
-    assert ansible_instance_mgmt._SYSTEM_HOOKS == []
+    filenames = [name for name, _, _ in ansible_instance_mgmt._SYSTEM_HOOKS]
+    assert filenames == ["force_rate.so"]
 
 
 def test_system_hook_prepended_when_predicate_true(monkeypatch):
