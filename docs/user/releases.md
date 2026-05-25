@@ -1,30 +1,16 @@
 # Release Notes
 
-QLSM uses `v<major>.<minor>.<patch>` tags. The `v1.0.0` baseline is the project state before tracked pull requests. Each release family below is a major product milestone, and every merged pull request is listed as an individual patch-level release entry.
-
-Unmerged or superseded pull requests are not listed.
-
-## v1.9 Versioning And Release Notes
+QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed as an individual release entry.
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
 | `v1.9.0` | 2026-05-24 | [#87](https://github.com/dngrtech/qlsm/pull/87) | Added the app version footer, update-available link, latest-version manifest, and full release notes history. |
-
-## v1.8 Runtime And Plugin Hardening
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.8.5` | 2026-05-24 | [#86](https://github.com/dngrtech/qlsm/pull/86) | Bug fixes and performance improvements. |
 | `v1.8.4` | 2026-05-24 | [#85](https://github.com/dngrtech/qlsm/pull/85) | Added per-instance LD_PRELOAD hook management with UI, API, and apply flow. |
 | `v1.8.3` | 2026-05-23 | [#84](https://github.com/dngrtech/qlsm/pull/84) | Added Redis Unix socket support and a re-run host setup action. |
 | `v1.8.2` | 2026-05-22 | [#83](https://github.com/dngrtech/qlsm/pull/83) | Restored operator control of `qlx_serverBrandName`. |
 | `v1.8.1` | 2026-05-21 | [#82](https://github.com/dngrtech/qlsm/pull/82) | Bug fixes and performance improvements. |
 | `v1.8.0` | 2026-05-17 | [#81](https://github.com/dngrtech/qlsm/pull/81) | Added secured CommLink plugin hardening and player command cooldowns. |
-
-## v1.7 Host And Admin Quality Of Life
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.7.7` | 2026-05-17 | [#79](https://github.com/dngrtech/qlsm/pull/79) | Added `qlsm-uninstall.sh` for clean uninstall and optional purge. |
 | `v1.7.6` | 2026-05-17 | [#78](https://github.com/dngrtech/qlsm/pull/78) | Added the first-party `kickban` minqlx plugin. |
 | `v1.7.5` | 2026-05-16 | [#77](https://github.com/dngrtech/qlsm/pull/77) | Added QLSM self-host detection during standalone host setup. |
@@ -33,11 +19,6 @@ Unmerged or superseded pull requests are not listed.
 | `v1.7.2` | 2026-05-14 | [#74](https://github.com/dngrtech/qlsm/pull/74) | Added `WORKER_REPLICAS` for configurable background worker count. |
 | `v1.7.1` | 2026-05-14 | [#73](https://github.com/dngrtech/qlsm/pull/73) | Added self-host IP autofill from the browser hostname. |
 | `v1.7.0` | 2026-05-14 | [#72](https://github.com/dngrtech/qlsm/pull/72) | Improved host setup recovery for slow SteamCMD/CDN downloads. |
-
-## v1.6 Config Workspace Upgrade
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.6.6` | 2026-05-14 | [#71](https://github.com/dngrtech/qlsm/pull/71) | Added the LG-ANTILAG built-in preset. |
 | `v1.6.5` | 2026-05-12 | [#70](https://github.com/dngrtech/qlsm/pull/70) | Bug fixes and performance improvements. |
 | `v1.6.4` | 2026-05-11 | [#69](https://github.com/dngrtech/qlsm/pull/69) | Bug fixes and performance improvements. |
@@ -45,11 +26,6 @@ Unmerged or superseded pull requests are not listed.
 | `v1.6.2` | 2026-05-10 | [#67](https://github.com/dngrtech/qlsm/pull/67) | Bug fixes and performance improvements. |
 | `v1.6.1` | 2026-05-09 | [#66](https://github.com/dngrtech/qlsm/pull/66) | Bug fixes and performance improvements. |
 | `v1.6.0` | 2026-05-10 | [#65](https://github.com/dngrtech/qlsm/pull/65) | Added config folders, nested `.ent` files, folder CRUD, and row actions. |
-
-## v1.5 File Management And Runtime Reliability
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.5.19` | 2026-05-08 | [#64](https://github.com/dngrtech/qlsm/pull/64) | Bug fixes and performance improvements. |
 | `v1.5.18` | 2026-05-08 | [#63](https://github.com/dngrtech/qlsm/pull/63) | Bug fixes and performance improvements. |
 | `v1.5.17` | 2026-05-08 | [#62](https://github.com/dngrtech/qlsm/pull/62) | Bug fixes and performance improvements. |
@@ -70,11 +46,6 @@ Unmerged or superseded pull requests are not listed.
 | `v1.5.2` | 2026-04-29 | [#47](https://github.com/dngrtech/qlsm/pull/47) | Added expanded server log viewing. |
 | `v1.5.1` | 2026-04-29 | [#46](https://github.com/dngrtech/qlsm/pull/46) | Bug fixes and performance improvements. |
 | `v1.5.0` | 2026-04-28 | [#45](https://github.com/dngrtech/qlsm/pull/45) | Added editable descriptions for `.so` plugin binaries. |
-
-## v1.4 QLFilter, Layout, And Host Compatibility
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.4.13` | 2026-04-28 | [#44](https://github.com/dngrtech/qlsm/pull/44) | Deployment and maintenance improvements. |
 | `v1.4.12` | 2026-04-28 | [#43](https://github.com/dngrtech/qlsm/pull/43) | Bug fixes and performance improvements. |
 | `v1.4.11` | 2026-04-28 | [#42](https://github.com/dngrtech/qlsm/pull/42) | Bug fixes and performance improvements. |
@@ -89,11 +60,6 @@ Unmerged or superseded pull requests are not listed.
 | `v1.4.2` | 2026-04-27 | [#33](https://github.com/dngrtech/qlsm/pull/33) | Bug fixes and performance improvements. |
 | `v1.4.1` | 2026-04-27 | [#32](https://github.com/dngrtech/qlsm/pull/32) | Bug fixes and performance improvements. |
 | `v1.4.0` | 2026-04-27 | [#31](https://github.com/dngrtech/qlsm/pull/31) | Bug fixes and performance improvements. |
-
-## v1.3 Host Safeguards, Docs, And Built-In Presets
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.3.8` | 2026-04-25 | [#30](https://github.com/dngrtech/qlsm/pull/30) | Added immutable built-in default config presets. |
 | `v1.3.7` | 2026-04-23 | [#29](https://github.com/dngrtech/qlsm/pull/29) | Improved GitHub Pages docs design and content. |
 | `v1.3.6` | 2026-04-23 | [#28](https://github.com/dngrtech/qlsm/pull/28) | Published user documentation through GitHub Pages. |
@@ -103,11 +69,6 @@ Unmerged or superseded pull requests are not listed.
 | `v1.3.2` | 2026-04-19 | [#23](https://github.com/dngrtech/qlsm/pull/23) | Bug fixes and performance improvements. |
 | `v1.3.1` | 2026-04-19 | [#22](https://github.com/dngrtech/qlsm/pull/22) | Added self-host OS auto-detection with Ubuntu LAN-rate warnings. |
 | `v1.3.0` | 2026-04-19 | [#21](https://github.com/dngrtech/qlsm/pull/21) | Bug fixes and performance improvements. |
-
-## v1.2 Editor And Drawer Polish
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.2.9` | 2026-04-19 | [#20](https://github.com/dngrtech/qlsm/pull/20) | Development and maintenance improvements. |
 | `v1.2.8` | 2026-04-17 | [#19](https://github.com/dngrtech/qlsm/pull/19) | Bug fixes and performance improvements. |
 | `v1.2.7` | 2026-04-17 | [#18](https://github.com/dngrtech/qlsm/pull/18) | Bug fixes and performance improvements. |
@@ -118,11 +79,6 @@ Unmerged or superseded pull requests are not listed.
 | `v1.2.2` | 2026-04-17 | [#13](https://github.com/dngrtech/qlsm/pull/13) | Bug fixes and performance improvements. |
 | `v1.2.1` | 2026-04-17 | [#12](https://github.com/dngrtech/qlsm/pull/12) | Bug fixes and performance improvements. |
 | `v1.2.0` | 2026-04-17 | [#11](https://github.com/dngrtech/qlsm/pull/11) | Added expanded editor support for plugin files and fixed editor theme consistency. |
-
-## v1.1 Assets, Self-Host, And First-Run UX
-
-| Version | Date | PR | Changes |
-| --- | --- | --- | --- |
 | `v1.1.8` | 2026-04-16 | [#10](https://github.com/dngrtech/qlsm/pull/10) | Bug fixes and performance improvements. |
 | `v1.1.7` | 2026-04-14 | [#9](https://github.com/dngrtech/qlsm/pull/9) | Synced the GitHub Pages landing page with README content. |
 | `v1.1.6` | 2026-04-12 | [#8](https://github.com/dngrtech/qlsm/pull/8) | Auto-opens Add Host after the first password change. |
@@ -132,9 +88,4 @@ Unmerged or superseded pull requests are not listed.
 | `v1.1.2` | 2026-04-07 | [#3](https://github.com/dngrtech/qlsm/pull/3) | Added bundled QL assets, minqlx plugins, and QLFilter sources to version control. |
 | `v1.1.1` | 2026-04-07 | [#2](https://github.com/dngrtech/qlsm/pull/2) | Bug fixes and performance improvements. |
 | `v1.1.0` | 2026-04-07 | [#1](https://github.com/dngrtech/qlsm/pull/1) | Bug fixes and performance improvements. |
-
-## v1.0 Initial Baseline
-
-| Version | Date | Changes |
-| --- | --- | --- |
-| `v1.0.0` | Before 2026-04-07 | Initial QLSM baseline before tracked pull request history. |
+| `v1.0.0` | Before 2026-04-07 | — | Initial QLSM baseline before tracked pull request history. |
