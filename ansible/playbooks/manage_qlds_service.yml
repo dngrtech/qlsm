@@ -40,6 +40,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
 
     - name: Check if INPUT SNAT rule exists (required for NAT on start)
@@ -50,6 +51,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
 
     - name: Add INPUT SNAT rule (required for NAT on start)
@@ -57,6 +59,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
         - input_snat_check.rc != 0
 
@@ -68,6 +71,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
 
     - name: Add PREROUTING DNAT rule (on start)
@@ -75,6 +79,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
         - prerouting_check.rc != 0
 
@@ -86,6 +91,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
 
     - name: Add POSTROUTING SNAT rule (on start)
@@ -93,6 +99,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
         - postrouting_check.rc != 0
 
@@ -101,6 +108,7 @@
       when:
         - firewall_mode_effective == 'full'
         - lan_rate_enabled | default(false)
+        - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
 
     - name: Write QLSM network rules config

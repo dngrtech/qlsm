@@ -441,7 +441,8 @@ def start_instance_logic(instance_id):
             'service_state': 'started',
             'port': instance.port,
             'id': instance.id,
-            'lan_rate_enabled': instance.lan_rate_enabled
+            'lan_rate_enabled': instance.lan_rate_enabled,
+            'lan_rate_uses_hook': bool(instance.host.lan_rate_uses_hook) if instance.host else False,
         }
         start_extravars = with_self_host_network_extravars(instance, start_extravars)
 
