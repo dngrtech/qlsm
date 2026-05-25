@@ -76,6 +76,7 @@ describe('InstanceDetailsModal lan rate guard', () => {
       host_id: 9,
       host_name: 'ubuntu-host',
       host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: false,
       host_ip_address: '203.0.113.10',
       port: 27960,
       hostname: 'Ubuntu Server',
@@ -98,7 +99,40 @@ describe('InstanceDetailsModal lan rate guard', () => {
 
     const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     expect(toggle).toBeDisabled();
-    expect(screen.getByTestId('info-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
+    expect(screen.getByTestId('info-tooltip')).toHaveTextContent(/99k LAN Rate currently requires Debian/);
+  });
+
+  it('enables 99k on a migrated ubuntu host (lan_rate_uses_hook: true)', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      id: 11,
+      name: 'inst-11',
+      host_id: 12,
+      host_name: 'ubuntu-migrated',
+      host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: true,
+      host_ip_address: '203.0.113.20',
+      port: 27962,
+      hostname: 'Migrated Ubuntu',
+      lan_rate_enabled: false,
+      status: 'RUNNING',
+    });
+
+    render(
+      <InstanceDetailsModal
+        isOpen={true}
+        instanceId={11}
+        onClose={vi.fn()}
+        onInstanceDeleted={vi.fn()}
+        onInstanceUpdated={vi.fn()}
+        onOpenEditConfig={vi.fn()}
+        onOpenHostDrawer={vi.fn()}
+        serverStatus={null}
+      />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
+    expect(toggle).not.toBeDisabled();
+    expect(screen.queryByTestId('info-tooltip')).not.toBeInTheDocument();
   });
 
   it('allows disabling 99k for ubuntu when already enabled', async () => {
@@ -108,6 +142,7 @@ describe('InstanceDetailsModal lan rate guard', () => {
       host_id: 10,
       host_name: 'ubuntu-host',
       host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: false,
       host_ip_address: '203.0.113.11',
       port: 27961,
       hostname: 'Ubuntu Server',

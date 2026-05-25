@@ -69,20 +69,38 @@ describe('InstanceActionsMenu lan rate guard', () => {
   it('disables the 99k action for ubuntu hosts when lan rate is off', () => {
     const { handleToggleLanRate } = renderMenu({
       host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: false,
       lan_rate_enabled: false,
     });
 
     const actionButton = screen.getByRole('button', { name: /99k lan rate/i });
     expect(actionButton).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
+    expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent(/99k LAN Rate currently requires Debian/);
 
     fireEvent.click(actionButton);
     expect(handleToggleLanRate).not.toHaveBeenCalled();
   });
 
+  it('enables the 99k action for migrated ubuntu hosts (lan_rate_uses_hook: true)', () => {
+    const { handleToggleLanRate } = renderMenu({
+      host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: true,
+      lan_rate_enabled: false,
+      status: 'running',
+    });
+
+    const actionButton = screen.getByRole('button', { name: /99k lan rate/i });
+    expect(actionButton).not.toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByTestId('lan-rate-tooltip')).not.toBeInTheDocument();
+
+    fireEvent.click(actionButton);
+    expect(handleToggleLanRate).toHaveBeenCalledWith(1, 'inst-1', false);
+  });
+
   it('allows disabling 99k for ubuntu hosts when already enabled', () => {
     const { handleToggleLanRate } = renderMenu({
       host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: false,
       lan_rate_enabled: true,
     });
 

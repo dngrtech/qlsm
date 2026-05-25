@@ -258,7 +258,7 @@ describe('AddInstanceForm draft lifecycle', () => {
 
     await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
     expect(screen.getByTestId('lan-rate-disabled')).toHaveTextContent('true');
-    expect(screen.getByTestId('lan-rate-reason')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
+    expect(screen.getByTestId('lan-rate-reason')).toHaveTextContent(/99k LAN Rate currently requires Debian/);
   });
 
   it('resets lan rate when switching from debian to ubuntu', async () => {
@@ -296,6 +296,36 @@ describe('AddInstanceForm draft lifecycle', () => {
     await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
     await waitFor(() => expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('false'));
     expect(screen.getByTestId('lan-rate-disabled')).toHaveTextContent('true');
+  });
+
+  it('enables 99k lan rate for migrated ubuntu hosts (lan_rate_uses_hook: true)', async () => {
+    render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [
+            { id: 3, name: 'ubu-migrated', os_type: 'ubuntu', lan_rate_uses_hook: true },
+          ],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+        }}
+        initialHostId={3}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('3'));
+    expect(screen.getByTestId('lan-rate-disabled')).toHaveTextContent('false');
+    expect(screen.getByTestId('lan-rate-reason')).toHaveTextContent('');
   });
 
   it('does not preselect default preset factories when adding an instance', async () => {

@@ -6,7 +6,7 @@ import { Trash2, RefreshCw, SlidersHorizontal, Zap, FileText, ExternalLink, Chec
 import InfoTooltip from './common/InfoTooltip';
 import {
   canEnableLanRate,
-  getLanRateUnsupportedReason,
+  getLanRateUnsupportedMessage,
 } from '../utils/lanRateCompatibility';
 
 // Define InstanceStatus constants to match backend enum values
@@ -37,13 +37,17 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
   });
 
   const isActionable = [InstanceStatus.RUNNING, InstanceStatus.ACTIVE, InstanceStatus.UPDATED, InstanceStatus.ERROR, InstanceStatus.STOPPED, InstanceStatus.IDLE].includes(instance.status?.toLowerCase());
+  const hostShape = {
+    os_type: instance.host_os_type,
+    lan_rate_uses_hook: instance.host_lan_rate_uses_hook,
+  };
   const canToggleLanRate = canEnableLanRate({
-    osType: instance.host_os_type,
+    host: hostShape,
     currentEnabled: instance.lan_rate_enabled,
   });
   const lanRateActionDisabled = !isActionable || !canToggleLanRate;
   const lanRateUnsupportedReason = !canToggleLanRate && !instance.lan_rate_enabled
-    ? getLanRateUnsupportedReason(instance.host_os_type)
+    ? getLanRateUnsupportedMessage(hostShape)
     : null;
 
   return (

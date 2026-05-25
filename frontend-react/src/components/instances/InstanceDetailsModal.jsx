@@ -13,7 +13,7 @@ import { validateInstanceName, INSTANCE_NAME_MAX_LENGTH } from '../../utils/reso
 import { copyToClipboard } from '../../utils/clipboard';
 import {
   canEnableLanRate,
-  getLanRateUnsupportedReason,
+  getLanRateUnsupportedMessage,
 } from '../../utils/lanRateCompatibility';
 
 const POLLING_INTERVAL = 3000;
@@ -226,12 +226,16 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
   const statusUpper = instance?.status?.toUpperCase();
   const isActionableStatus = ['ACTIVE', 'RUNNING', 'UPDATED', 'ERROR', 'STOPPED', 'IDLE', 'INACTIVE'].includes(statusUpper);
   const isBusyStatus = ['DEPLOYING', 'CONFIGURING', 'RESTARTING', 'DELETING', 'STOPPING', 'STARTING'].includes(statusUpper);
+  const hostShape = {
+    os_type: hostOsType,
+    lan_rate_uses_hook: instance?.host_lan_rate_uses_hook ?? instance?.host?.lan_rate_uses_hook ?? false,
+  };
   const canToggleLanRate = canEnableLanRate({
-    osType: hostOsType,
+    host: hostShape,
     currentEnabled: instance?.lan_rate_enabled,
   });
   const lanRateUnsupportedReason = !canToggleLanRate && !instance?.lan_rate_enabled
-    ? getLanRateUnsupportedReason(hostOsType)
+    ? getLanRateUnsupportedMessage(hostShape)
     : null;
   const cpuAffinityLabel = Number.isInteger(instance?.cpu_affinity)
     ? `CPU ${instance.cpu_affinity}`

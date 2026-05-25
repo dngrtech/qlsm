@@ -296,6 +296,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     mocks.getInstanceById.mockResolvedValue({
       host_name: 'ubuntu-host',
       host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: false,
       lan_rate_enabled: false,
       name: 'UbuntuInst',
       qlx_plugins: '',
@@ -313,13 +314,39 @@ describe('EditInstanceConfigModal preset saving', () => {
 
     const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     expect(toggle).toBeDisabled();
-    expect(screen.getByTestId('info-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
+    expect(screen.getByTestId('info-tooltip')).toHaveTextContent(/99k LAN Rate currently requires Debian/);
+  });
+
+  it('enables 99k lan rate on a migrated ubuntu host (lan_rate_uses_hook: true)', async () => {
+    mocks.getInstanceById.mockResolvedValue({
+      host_name: 'ubuntu-migrated',
+      host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: true,
+      lan_rate_enabled: false,
+      name: 'UbuntuMigrated',
+      qlx_plugins: '',
+    });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={10}
+        instanceName="UbuntuMigrated"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
+    expect(toggle).not.toBeDisabled();
+    expect(screen.queryByTestId('info-tooltip')).not.toBeInTheDocument();
   });
 
   it('allows disabling an already-enabled ubuntu instance', async () => {
     mocks.getInstanceById.mockResolvedValue({
       host_name: 'ubuntu-host',
       host_os_type: 'ubuntu',
+      host_lan_rate_uses_hook: false,
       lan_rate_enabled: true,
       name: 'UbuntuInst',
       qlx_plugins: '',
@@ -343,7 +370,8 @@ describe('EditInstanceConfigModal preset saving', () => {
 
     expect(toggle).toBeDisabled();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText('99k LAN rate is not compatible with Ubuntu.')).toBeInTheDocument();
+    const tooltips = screen.getAllByTestId('info-tooltip');
+    expect(tooltips.some(t => /99k LAN Rate currently requires Debian/.test(t.textContent))).toBe(true);
   });
 
   it('allows enabling 99k lan rate for legacy debian12 host records', async () => {

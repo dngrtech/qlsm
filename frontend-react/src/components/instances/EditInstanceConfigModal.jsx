@@ -20,7 +20,7 @@ import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import HooksTab from './HooksTab';
 import {
   canEnableLanRate,
-  getLanRateUnsupportedReason,
+  getLanRateUnsupportedMessage,
 } from '../../utils/lanRateCompatibility';
 
 const CONFIG_FILES_ORDER = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
@@ -92,6 +92,7 @@ function EditInstanceConfigModal({
   const [lanRateEnabled, setLanRateEnabled] = useState(false);
   const [originalLanRateEnabled, setOriginalLanRateEnabled] = useState(false);
   const [hostOsType, setHostOsType] = useState(null);
+  const [hostLanRateUsesHook, setHostLanRateUsesHook] = useState(false);
 
   // Restart on Save state
   const [restartAfterSave, setRestartAfterSave] = useState(true);
@@ -287,6 +288,7 @@ function EditInstanceConfigModal({
           const fetchedHostName = instanceDetails.host_name || null;
           setScriptHostName(fetchedHostName);
           setHostOsType(instanceDetails.host_os_type || null);
+          setHostLanRateUsesHook(instanceDetails.host_lan_rate_uses_hook === true);
           const incomingFolders = Array.isArray(configData?.config_folders)
             ? configData.config_folders
             : [];
@@ -363,12 +365,13 @@ function EditInstanceConfigModal({
   };
 
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
+  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook };
   const canToggleLanRate = canEnableLanRate({
-    osType: hostOsType,
+    host: hostShape,
     currentEnabled: originalLanRateEnabled && lanRateEnabled,
   });
   const lanRateUnsupportedReason = !canToggleLanRate && !lanRateEnabled
-    ? getLanRateUnsupportedReason(hostOsType)
+    ? getLanRateUnsupportedMessage(hostShape)
     : null;
 
   const handleLanRateToggle = () => {
