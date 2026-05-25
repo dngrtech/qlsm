@@ -11,6 +11,7 @@ Open from host row **Actions** in the Servers page.
 - **[Configure Auto-Restart](auto-restart.md)**: opens restart schedule modal.
 - **[Update Workshop Item](update-workshop-item.md)**: triggers workshop update on this host.
 - **[Install/Uninstall QLFilter](../features/qlfilter.md)**: depends on current QLFilter state.
+- **Re-run Host Setup**: re-applies the host configuration playbook on an existing host.
 - **Delete / Remove**: removes host from management (or destroys cloud host).
 
 ## What QLFilter Is
@@ -45,6 +46,16 @@ Full guide: [Update Workshop Item](update-workshop-item.md)
 
 This is commonly paired with scheduled restart policy:
 [Configure Auto-Restart](auto-restart.md)
+
+## Re-run Host Setup
+
+**Re-run Host Setup** re-applies the host configuration playbook to an existing host without reprovisioning it. Use this after a platform update that changes how the host is configured, when a previous setup run failed partway through, or to pick up infrastructure changes on an already-active host.
+
+The action is only available when the host status is **Active**. While it runs, the host enters **Configuring** status and other management actions are blocked.
+
+> **Self-hosted hosts** — Re-run Host Setup is available but does not modify Redis connectivity (self-host always uses TCP). On **cloud** and **standalone** hosts it applies the full setup, including any Redis configuration changes introduced in a platform update.
+
+After the playbook completes, the host returns to **Active** status. Any running instances are unaffected — they continue running and pick up the new host configuration on their next restart.
 
 ## Related Pages
 
