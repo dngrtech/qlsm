@@ -23,7 +23,13 @@ SYSTEM_PLUGINS = ['serverchecker']
 
 # Built-in LD_PRELOAD hooks. Always prepended ahead of user hooks.
 # Each tuple is (filename, predicate(instance) -> bool, subdir under /home/ql/qlds-<port>/).
-_SYSTEM_HOOKS = []
+_SYSTEM_HOOKS = [
+    (
+        "force_rate.so",
+        lambda i: bool(i.lan_rate_enabled) and bool(i.host and i.host.lan_rate_uses_hook),
+        "system-hooks",
+    ),
+]
 
 RESERVED_HOOK_FILENAMES = {filename for filename, _, _ in _SYSTEM_HOOKS}
 
