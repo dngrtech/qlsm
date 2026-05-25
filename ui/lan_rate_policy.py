@@ -18,15 +18,36 @@ def _normalized_os_type(host):
     return OS_TYPE_ALIASES.get(normalized, normalized)
 
 
+def host_requires_os_check(host):
+    """Returns True if the legacy iptables-based 99k LAN Rate path is in use
+    on this host, meaning the Debian-only OS restriction must be enforced.
+    Returns False for hosts migrated to the LD_PRELOAD hook mechanism."""
+    return not bool(getattr(host, "lan_rate_uses_hook", False))
+
+
 def host_supports_lan_rate(host):
     """Return whether the host supports enabling 99k LAN rate."""
+    if not host_requires_os_check(host):
+        return True
+    # Legacy path: keep existing Debian-only check.
     return _normalized_os_type(host) in SUPPORTED_LAN_RATE_OS_TYPES
 
 
 def lan_rate_unsupported_message(host):
-    """Return the user-facing incompatibility message for the host."""
-    if _normalized_os_type(host) == "ubuntu":
-        return UBUNTU_99K_LAN_RATE_MESSAGE
+    """Return the user-facing incompatibility message for the host, or None."""
+    if not host_requires_os_check(host):
+        return None
+    # Legacy hosts: Debian-only restriction with migration hint for Ubuntu.
+    os_type = _normalized_os_type(host)
+    if os_type in SUPPORTED_LAN_RATE_OS_TYPES:
+        return None
+    if os_type == "ubuntu":
+        return (
+            "99k LAN Rate currently requires Debian on this host. To enable it "
+            "on Ubuntu (and other OSes), run 'Re-run Host Setup' from the host "
+            "actions menu — this migrates the host to the new LD_PRELOAD hook "
+            "mechanism that works on any OS."
+        )
     return UNKNOWN_99K_LAN_RATE_MESSAGE
 
 
