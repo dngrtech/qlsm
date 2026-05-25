@@ -174,10 +174,15 @@ def setup_host_ansible_logic(host_id, rerun=False):
             append_log(host, f"Ansible setup playbook successful.\nStdout:\n{stdout_content}\nStderr:\n{stderr_content}")
 
             # --- Final Success ---
-            host.status = HostStatus.ACTIVE
             host.qlfilter_status = QLFilterStatus.NOT_INSTALLED
             host.redis_unix_socket = True
-            _mark_host_migrated_to_hook(host)
+            if rerun:
+                from .common import _migrate_host_instances_to_hook
+                ok, failed = _migrate_host_instances_to_hook(host)
+                append_log(host, f"LAN Rate migration: {ok} ok, {failed} failed")
+            else:
+                _mark_host_migrated_to_hook(host)
+            host.status = HostStatus.ACTIVE
             append_log(host, f"Task finished successfully. Host is ACTIVE.")
             db.session.commit()
             log.info(f"Finished task setup_host_ansible for host_id: {host_id}. Status: ACTIVE")

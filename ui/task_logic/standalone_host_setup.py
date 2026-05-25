@@ -103,9 +103,16 @@ def setup_standalone_host_logic(host_id, rerun=False):
             return f"Error during Ansible host setup for host {host_id}"
 
         # Success
-        host.status = HostStatus.ACTIVE
         if host.provider != 'self':
             host.redis_unix_socket = True
+        if rerun:
+            from .common import _migrate_host_instances_to_hook
+            ok, failed = _migrate_host_instances_to_hook(host)
+            append_log(host, f"LAN Rate migration: {ok} ok, {failed} failed")
+        else:
+            from .ansible_host_setup import _mark_host_migrated_to_hook
+            _mark_host_migrated_to_hook(host)
+        host.status = HostStatus.ACTIVE
         append_log(host, "Task finished successfully. Host is ACTIVE.")
         db.session.commit()
         log.info(f"Finished task setup_standalone_host for host_id: {host_id}. Status: ACTIVE")
