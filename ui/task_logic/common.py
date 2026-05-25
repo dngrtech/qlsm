@@ -35,21 +35,24 @@ def _migrate_host_instances_to_hook(host):
     """
     # Lazy imports to avoid circular imports at module load time.
     from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
-    from ui.models import db
+    from ui.models import db, InstanceStatus
 
     host.lan_rate_uses_hook = True
     # Commit BEFORE the loop so inner commits see the updated flag.
     db.session.commit()
 
-    # Capture IDs before the loop — inner commits may expire host.instances.
-    instance_ids_to_migrate = [
-        i.id for i in host.instances if i.lan_rate_enabled
+    # Capture IDs and running state before the loop — inner commits may expire
+    # host.instances. Only restart instances that were already running; leave
+    # intentionally-stopped instances in the stopped state.
+    instances_to_migrate = [
+        (i.id, i.status == InstanceStatus.RUNNING)
+        for i in host.instances if i.lan_rate_enabled
     ]
 
     ok = 0
     failed = 0
-    for instance_id in instance_ids_to_migrate:
-        result = apply_instance_hooks_logic(instance_id, restart_service=True)
+    for instance_id, was_running in instances_to_migrate:
+        result = apply_instance_hooks_logic(instance_id, restart_service=was_running)
         if result is True:
             ok += 1
         else:

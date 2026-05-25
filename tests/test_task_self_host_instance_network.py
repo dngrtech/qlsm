@@ -29,6 +29,7 @@ def _self_host(instances):
     host.ip_address = '172.17.0.1'
     host.ssh_user = 'rage'
     host.ssh_key_path = '/tmp/self-key'
+    host.lan_rate_uses_hook = False
     host.instances = instances
     return host
 

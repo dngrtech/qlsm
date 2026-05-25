@@ -11,6 +11,7 @@ from ui import db
 from ui.models import BinaryMetadata, InstanceStatus, QLInstance
 from ui.task_lock import acquire_lock, release_lock
 from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES, _SYSTEM_HOOKS
+from ui.task_logic.ansible_instance_hooks import _system_hook_source_path
 
 
 CONFIGS_BASE = "configs"
@@ -130,9 +131,12 @@ def get_instance_hooks(instance_id):
             "description": descriptions.get(filename, ""),
         })
 
-    system_hooks_active = [
-        filename for filename, predicate, _subdir in _SYSTEM_HOOKS if predicate(instance)
-    ]
+    system_hooks_active = []
+    for filename, predicate, _subdir in _SYSTEM_HOOKS:
+        if predicate(instance):
+            src = _system_hook_source_path(filename)
+            size = os.path.getsize(src) if os.path.isfile(src) else 0
+            system_hooks_active.append({"filename": filename, "size": size})
 
     return jsonify({
         "data": {

@@ -243,6 +243,9 @@ def deploy_instance_logic(instance_id):
                 append_log(instance, f"Task finished successfully. Status: RUNNING.")
                 db.session.commit()
                 log.info(f"Finished task deploy_instance for instance_id: {instance_id}. Status: RUNNING")
+                if instance.host and instance.host.lan_rate_uses_hook and instance.lan_rate_enabled:
+                    from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
+                    apply_instance_hooks_logic(instance.id, restart_service=True)
                 return f"Instance {instance_id} deployment successful. Status: RUNNING"
 
         # Handle failures (rc != 0 OR (rc == 0 AND no_hosts_matched))
@@ -755,16 +758,16 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             db.session.commit()
             return f"Error during instance {instance.id} LAN rate reconfiguration: Host not found"
 
+        append_log(instance, f"Task started: reconfigure_instance_lan_rate (Job ID: {job.id})")
+        instance.status = InstanceStatus.CONFIGURING
+        db.session.commit()
+        log.info(f"Instance {instance_id} status set to CONFIGURING for LAN rate reconfiguration.")
+
         # Migrated host: delegate to the hooks pipeline.
         if instance.host and instance.host.lan_rate_uses_hook:
             from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
             return apply_instance_hooks_logic(instance.id, restart_service=True)
         # Legacy path (unchanged below) ...
-
-        append_log(instance, f"Task started: reconfigure_instance_lan_rate (Job ID: {job.id})")
-        instance.status = InstanceStatus.CONFIGURING
-        db.session.commit()
-        log.info(f"Instance {instance_id} status set to CONFIGURING for LAN rate reconfiguration.")
 
         # Ensure ZMQ setup is ready before building args
         _prepare_instance_zmq(instance)

@@ -48,11 +48,8 @@ export function getLanRateUnsupportedMessage(host) {
  * Migration-aware wrapper compatible with the deleted canEnableLanRate API.
  * Returns true if enabling is permitted.
  */
-export function canEnableLanRate({ host, currentEnabled, requestedEnabled = true }) {
-  if (currentEnabled === requestedEnabled) {
-    return true;
-  }
-  if (!requestedEnabled) {
+export function canEnableLanRate({ host, currentEnabled }) {
+  if (currentEnabled === true) {
     return true;
   }
   return isLanRateSupported(host);

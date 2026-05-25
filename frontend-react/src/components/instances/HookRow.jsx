@@ -8,14 +8,14 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefined }) {
+function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefined, readOnly = false }) {
   return (
     <div
       style={style}
-      className="flex min-h-10 items-center gap-3 border-b border-[var(--surface-border)] px-3 py-2 hover:bg-[var(--surface-hover)]"
+      className={`flex min-h-10 items-center gap-3 border-b border-[var(--surface-border)] px-3 py-2${readOnly ? '' : ' hover:bg-[var(--surface-hover)]'}`}
       data-testid={`hook-row-${hook.filename}`}
     >
-      {dragHandleProps ? (
+      {!readOnly && (dragHandleProps ? (
         <button
           type="button"
           {...dragHandleProps.attributes}
@@ -27,12 +27,14 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
         </button>
       ) : (
         <span className="h-7 w-7" />
-      )}
+      ))}
+      {readOnly && <span className="h-7 w-7" />}
       <input
         type="checkbox"
         checked={hook.enabled}
-        onChange={() => onToggle(hook.filename)}
-        className="h-4 w-4 cursor-pointer"
+        onChange={readOnly ? undefined : () => onToggle(hook.filename)}
+        disabled={readOnly}
+        className={`h-4 w-4 ${readOnly ? 'cursor-default opacity-75' : 'cursor-pointer'}`}
         aria-label={`Enable ${hook.filename}`}
       />
       <span className="min-w-0 flex-1 truncate font-mono text-sm text-[var(--text-primary)]">
@@ -71,6 +73,10 @@ export function SortableHookRow({ hook, onToggle }) {
       />
     </div>
   );
+}
+
+export function ReadOnlyHookRow({ hook }) {
+  return <HookRowContent hook={{ ...hook, enabled: true }} readOnly />;
 }
 
 export default function HookRow({ hook, onToggle }) {

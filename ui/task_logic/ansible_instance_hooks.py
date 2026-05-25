@@ -1,3 +1,4 @@
+import logging
 import os
 
 from ui import db
@@ -11,6 +12,7 @@ from ui.task_logic.ansible_instance_mgmt import (
 )
 from ui.task_logic.common import append_log
 
+log = logging.getLogger(__name__)
 
 CONFIGS_BASE = "configs"
 ELF_MAGIC = b"\x7fELF"
@@ -49,7 +51,8 @@ def _preflight(instance):
     for filename, predicate, _subdir in _SYSTEM_HOOKS:
         try:
             active = bool(predicate(instance))
-        except Exception:
+        except Exception as exc:
+            log.warning("System hook predicate for %s raised: %s", filename, exc)
             active = False
         if not active:
             continue
@@ -100,6 +103,7 @@ def apply_instance_hooks_logic(instance_id, restart_service=True):
         "ld_preload_paths": _build_ld_preload_paths(instance),
         "cpu_affinity": cpu_affinity,
         "restart_service": restart_service,
+        "lan_rate_uses_hook": bool(instance.host.lan_rate_uses_hook),
     }
     runner_result, error_msg = _run_ansible_playbook(
         instance,

@@ -111,6 +111,81 @@
         - not (lan_rate_uses_hook | default(false))
         - service_state == 'started'
 
+    #######################################################################
+    # Remove stale legacy iptables NAT rules on migrated hosts
+    #######################################################################
+    - name: Check if INPUT SNAT legacy rule exists (hook path cleanup)
+      command: iptables -t nat -C INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      register: legacy_input_snat_check
+      failed_when: false
+      changed_when: false
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
+        - lan_rate_uses_hook | default(false)
+        - service_state in ['started', 'restarted']
+
+    - name: Remove INPUT SNAT legacy rule (hook path cleanup)
+      command: iptables -t nat -D INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
+        - lan_rate_uses_hook | default(false)
+        - service_state in ['started', 'restarted']
+        - legacy_input_snat_check.rc | default(1) == 0
+
+    - name: Check if PREROUTING DNAT legacy rule exists (hook path cleanup)
+      command: iptables -t nat -C PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      register: legacy_prerouting_check
+      failed_when: false
+      changed_when: false
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
+        - lan_rate_uses_hook | default(false)
+        - service_state in ['started', 'restarted']
+
+    - name: Remove PREROUTING DNAT legacy rule (hook path cleanup)
+      command: iptables -t nat -D PREROUTING -p udp --dport {{ game_port }} -j DNAT --to-destination 127.0.0.1
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
+        - lan_rate_uses_hook | default(false)
+        - service_state in ['started', 'restarted']
+        - legacy_prerouting_check.rc | default(1) == 0
+
+    - name: Check if POSTROUTING SNAT legacy rule exists (hook path cleanup)
+      command: iptables -t nat -C POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      register: legacy_postrouting_check
+      failed_when: false
+      changed_when: false
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
+        - lan_rate_uses_hook | default(false)
+        - service_state in ['started', 'restarted']
+
+    - name: Remove POSTROUTING SNAT legacy rule (hook path cleanup)
+      command: iptables -t nat -D POSTROUTING -p udp -d 127.0.0.1 --dport {{ game_port }} -j SNAT --to-source 127.0.0.1
+      when:
+        - firewall_mode_effective == 'full'
+        - lan_rate_enabled | default(false)
+        - lan_rate_uses_hook | default(false)
+        - service_state in ['started', 'restarted']
+        - legacy_postrouting_check.rc | default(1) == 0
+
+    - name: Persist iptables after legacy rule cleanup (hook path)
+      shell: iptables-save > /etc/iptables/rules.v4
+      when: >-
+        (firewall_mode_effective == 'full') and
+        (lan_rate_enabled | default(false) | bool) and
+        (lan_rate_uses_hook | default(false) | bool) and
+        (service_state in ['started', 'restarted']) and (
+          (legacy_input_snat_check.rc | default(1) == 0) or
+          (legacy_prerouting_check.rc | default(1) == 0) or
+          (legacy_postrouting_check.rc | default(1) == 0)
+        )
+
     - name: Write QLSM network rules config
       template:
         src: ../templates/qlsm-network-rules.json.j2
