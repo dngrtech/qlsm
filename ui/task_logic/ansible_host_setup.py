@@ -11,6 +11,13 @@ from .common import append_log # Import from the common module
 
 log = logging.getLogger(__name__)
 
+
+def _mark_host_migrated_to_hook(host):
+    """Single source of truth for marking a host as using the LD_PRELOAD
+    hook mechanism. Called from both initial-setup and rerun-setup paths."""
+    host.lan_rate_uses_hook = True
+
+
 def setup_host_ansible_logic(host_id, rerun=False):
     """
     Task logic to perform initial host setup using Ansible after Terraform provisioning.
@@ -170,6 +177,7 @@ def setup_host_ansible_logic(host_id, rerun=False):
             host.status = HostStatus.ACTIVE
             host.qlfilter_status = QLFilterStatus.NOT_INSTALLED
             host.redis_unix_socket = True
+            _mark_host_migrated_to_hook(host)
             append_log(host, f"Task finished successfully. Host is ACTIVE.")
             db.session.commit()
             log.info(f"Finished task setup_host_ansible for host_id: {host_id}. Status: ACTIVE")
