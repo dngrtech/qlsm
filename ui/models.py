@@ -94,6 +94,7 @@ class Host(db.Model):
             'timezone': self.timezone,
             'cpu_count': self.cpu_count,
             'redis_unix_socket': bool(self.redis_unix_socket),
+            'lan_rate_uses_hook': bool(self.lan_rate_uses_hook),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,
@@ -146,6 +147,7 @@ class QLInstance(db.Model):
             'host_name': self.host.name if self.host else None, # Include host name for convenience
             'host_ip_address': self.host.ip_address if self.host else None, # Include host IP address
             'host_os_type': self.host.os_type if self.host else None,
+            'host_lan_rate_uses_hook': bool(self.host.lan_rate_uses_hook) if self.host else False,
             'port': self.port,
             'hostname': self.hostname, # Added hostname
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode
