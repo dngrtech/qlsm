@@ -41,7 +41,7 @@ describe('HooksTab', () => {
 
   it('shows system hooks section when non-empty', async () => {
     api.fetchInstanceHooks.mockResolvedValueOnce(hooksResponse({
-      system_hooks_active: ['force_rate.so'],
+      system_hooks_active: [{ filename: 'force_rate.so', size: 15880 }],
     }));
 
     render(<HooksTab instanceId={1} />);
@@ -68,7 +68,7 @@ describe('HooksTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /apply.*restart/i }));
 
     await waitFor(() => expect(api.saveInstanceHooks).toHaveBeenCalled());
-    expect(api.saveInstanceHooks).toHaveBeenCalledWith(1, ['a.so', 'b.so', 'c.so']);
+    expect(api.saveInstanceHooks).toHaveBeenCalledWith(1, ['a.so', 'b.so', 'c.so'], undefined);
   });
 
   it('renders hook descriptions from GET data as tooltips', async () => {

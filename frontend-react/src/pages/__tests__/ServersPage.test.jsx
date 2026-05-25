@@ -233,49 +233,4 @@ describe('ServersPage', () => {
     expect(mocks.RconConsole).not.toHaveBeenCalled();
   });
 
-  it('opens the edit modal on the Hooks tab from the hook badge', () => {
-    mocks.serversData = [
-      {
-        id: 1,
-        name: 'Arena Host',
-        provider: 'standalone',
-        region: null,
-        ip_address: '203.0.113.10',
-        status: 'active',
-        qlfilter_status: 'active',
-        timezone: 'UTC',
-        is_standalone: true,
-        expanded: true,
-        instances: [
-          {
-            id: 22,
-            name: 'Arena 22',
-            hostname: 'Arena Hostname',
-            port: 27960,
-            status: 'running',
-            lan_rate_enabled: false,
-            ld_preload_hooks: 'a.so,b.so',
-          },
-        ],
-      },
-    ];
-    mocks.stats = { totalHosts: 1, totalInstances: 1, runningInstances: 1 };
-
-    render(
-      <MemoryRouter>
-        <ServersPage />
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /open ld_preload hooks/i }));
-
-    expect(mocks.EditConfigModal).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        isOpen: true,
-        initialTab: 'hooks',
-        instanceId: 22,
-        instanceName: 'Arena 22',
-      })
-    );
-  });
 });

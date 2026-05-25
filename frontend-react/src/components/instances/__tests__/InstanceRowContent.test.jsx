@@ -33,7 +33,6 @@ function renderRow(overrides = {}) {
     onStart: vi.fn(),
     onToggleLanRate: vi.fn(),
     onEditConfig: vi.fn(),
-    onOpenHooks: vi.fn(),
     onViewLogs: vi.fn(),
     onViewChatLogs: vi.fn(),
     onOpenRcon: vi.fn(),
@@ -43,18 +42,11 @@ function renderRow(overrides = {}) {
 }
 
 describe('InstanceRowContent', () => {
-  it('opens Hooks from the hook badge', () => {
+  it('renders the instance name as a clickable link', () => {
     const props = renderRow();
 
-    fireEvent.click(screen.getByRole('button', { name: /open ld_preload hooks/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Inst' }));
 
-    expect(props.onOpenHooks).toHaveBeenCalledWith(props.inst);
-    expect(screen.getByText('2')).toBeInTheDocument();
-  });
-
-  it('hides the hook badge when no hooks are enabled', () => {
-    renderRow({ inst: { ld_preload_hooks: null } });
-
-    expect(screen.queryByRole('button', { name: /open ld_preload hooks/i })).not.toBeInTheDocument();
+    expect(props.onOpenDetails).toHaveBeenCalledWith(1);
   });
 });
