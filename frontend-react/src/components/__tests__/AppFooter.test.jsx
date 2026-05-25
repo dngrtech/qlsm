@@ -24,7 +24,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: 'v1.8.5' })).toHaveAttribute('href', '/docs/releases');
+    expect(screen.getByRole('link', { name: 'v1.9.0' })).toHaveAttribute('href', 'https://dngrtech.github.io/qlsm/releases/');
     await waitFor(() => {
       expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     });
@@ -34,7 +34,7 @@ describe('AppFooter', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        latest: '1.9.0',
+        latest: '2.0.0',
         releaseNotesUrl: 'https://example.test/qlsm/releases/',
       }),
     })));
@@ -45,7 +45,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    const updateLink = await screen.findByRole('link', { name: 'v1.9.0 available' });
+    const updateLink = await screen.findByRole('link', { name: 'v2.0.0 available' });
     expect(updateLink).toHaveAttribute('href', 'https://example.test/qlsm/releases/');
   });
 
@@ -60,7 +60,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: 'v1.8.5' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'v1.9.0' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     });

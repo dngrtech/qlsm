@@ -1,6 +1,6 @@
 export const CURRENT_VERSION = import.meta.env.VITE_QLSM_VERSION || '0.0.0';
 
-export const DEFAULT_RELEASE_NOTES_URL = '/docs/releases';
+export const DEFAULT_RELEASE_NOTES_URL = 'https://dngrtech.github.io/qlsm/releases/';
 export const DEFAULT_VERSION_MANIFEST_URL =
   import.meta.env.VITE_QLSM_VERSION_MANIFEST_URL || 'https://raw.githubusercontent.com/dngrtech/qlsm/main/docs/user/version.json';
 
