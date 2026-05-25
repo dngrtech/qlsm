@@ -5,7 +5,7 @@ Hosts are added from **Servers** -> **Add New Host**. <img src="../../images/add
 ## Supported OS
 
 Use **Debian 12**.
-Ubuntu is supported as well, but [99k LAN rate](../features/99k-lan-rate.md) is not compatible with Ubuntu. This guide and production workflow assume Debian 12.
+Ubuntu is also supported. Hosts set up before the new hook-based 99k LAN Rate implementation may still be restricted; see [99k LAN Rate](../features/99k-lan-rate.md#migration-from-older-qlsm-hosts) to migrate.
 
 ## Self-Host Deployment
 

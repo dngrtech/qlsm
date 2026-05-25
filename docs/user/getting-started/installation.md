@@ -8,7 +8,7 @@ The easiest path. Requires a Vultr account.
 
 1. Log in to [Vultr](https://vultr.com) and go to **Manage → Startup Scripts**.
 2. Create a new startup script and paste the  [Vultr QLSM startup script](https://raw.githubusercontent.com/dngrtech/qlsm/main/vultr-startup.sh).
-3. Deploy a new VM. Under the **Configure Software** tab, select that startup script from the drop-down menu. Choose **Debian 12** as the OS — Ubuntu is supported too, but [99k LAN rate](../features/99k-lan-rate.md) is not compatible with it. For the plan, **vc2-1c-1gb** ($5/month) works fine.
+3. Deploy a new VM. Under the **Configure Software** tab, select that startup script from the drop-down menu. Choose **Debian 12** as the OS — Ubuntu is also supported. For the plan, **vc2-1c-1gb** ($5/month) works fine.
 4. Wait approximately 10 minutes after the VM boots.
 5. QLSM will be running at the VM's IP address on port 80.
 

@@ -82,7 +82,7 @@ What to expect:
 - `ON` means the instance is using the high-bandwidth LAN-rate path.
 - `OFF` means standard rate behavior.
 - Toggling this action queues a reconfigure and restart cycle.
-- Enabling it is supported only on Debian hosts. Ubuntu hosts show a tooltip explaining that it is unsupported.
+- Hosts set up before the new hook-based implementation may still show OS restrictions. See [99k LAN Rate](../features/99k-lan-rate.md#migration-from-older-qlsm-hosts) to migrate.
 
 Use this action only when you intentionally want to change gameplay/network behavior, not as a general troubleshooting step.
 
