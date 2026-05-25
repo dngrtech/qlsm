@@ -206,7 +206,7 @@ Password mode:
 }
 ```
 
-Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive. Connection tests auto-detect the remote OS from `/etc/os-release` and reject unsupported releases. Ubuntu detections succeed, but the response includes a warning that `99k LAN rate` is not compatible with Ubuntu. That warning is actionable: new `99k LAN rate` enables are allowed only on Debian hosts.
+Password-mode connection tests also verify passwordless sudo for non-root users because the later Ansible flow is non-interactive. Connection tests auto-detect the remote OS from `/etc/os-release` and reject unsupported releases. Ubuntu detections succeed, but the response includes a note that 99k LAN Rate support depends on the host migration status. See the 99k LAN Rate migration docs for how to enable it on older hosts.
 
 Example success response:
 
@@ -214,7 +214,7 @@ Example success response:
 {
   "data": {
     "success": true,
-    "message": "Connection successful. Detected OS: Ubuntu 24.04.2 LTS. Warning: 99k LAN rate is not compatible with Ubuntu."
+    "message": "Connection successful. Detected OS: Ubuntu 24.04.2 LTS."
   }
 }
 ```
@@ -224,6 +224,43 @@ Example success response:
 - Pattern: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`
 - Lowercase letters, numbers, hyphens only
 - Must start and end with letter or number
+
+### Host Response (GET /api/hosts/<id>)
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "my-host-1",
+    "ip_address": "144.202.73.249",
+    "provider": "vultr",
+    "region": "ewr",
+    "machine_size": "vc2-1c-1gb",
+    "ssh_user": "ansible",
+    "ssh_port": 22,
+    "os_type": "debian",
+    "is_standalone": false,
+    "timezone": "America/New_York",
+    "cpu_count": 1,
+    "auto_restart_schedule": null,
+    "lan_rate_uses_hook": false,
+    "status": "active",
+    "qlfilter_status": "unknown",
+    "logs": "...",
+    "instances": [
+      {
+        "id": 1,
+        "name": "duel-server-1",
+        "port": 27960,
+        "status": "running"
+      }
+    ],
+    "created_at": "2026-01-20T12:00:00",
+    "last_updated": "2026-01-20T12:00:00"
+  }
+}
+```
+
+`lan_rate_uses_hook: false` means the host uses the legacy iptables/sysctl mechanism for 99k LAN Rate. After running "Re-run Host Setup", `lan_rate_uses_hook` becomes `true` and instances can use the new hook-based mechanism on any OS.
 
 ## Instances
 

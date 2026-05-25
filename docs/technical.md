@@ -146,6 +146,7 @@ class Host(db.Model):
     timezone = db.Column(db.String(100), nullable=True)  # IANA timezone name
     cpu_count = db.Column(db.Integer, nullable=True)
     auto_restart_schedule = db.Column(db.String(100), nullable=True)  # cron expression
+    lan_rate_uses_hook = db.Column(db.Boolean, default=False, nullable=False)  # uses hook mechanism (True) vs. legacy iptables/sysctl (False)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True)
     logs = db.Column(db.Text, nullable=True)
@@ -156,6 +157,10 @@ class Host(db.Model):
     instances = db.relationship('QLInstance', backref='host', lazy=True, cascade="all, delete-orphan")
 
 ```
+
+### 99k LAN Rate Migration Flag
+
+`lan_rate_uses_hook: bool` — defaults to `False`; set to `True` automatically on successful initial host setup or after a successful Re-run Host Setup. When `True`, the host uses the LD_PRELOAD hook mechanism for 99k LAN Rate; when `False`, the legacy iptables NAT + sysctl `route_localnet` mechanism is used.
 
 ### Self-Host Address Contract
 
