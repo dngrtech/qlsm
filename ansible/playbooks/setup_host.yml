@@ -17,6 +17,7 @@
     rcon_tcp_ports: [28888, 28889, 28890, 28891, 29999, 30000, 30001, 30002]
     remote_rules_path: /tmp/iptables.new.v4
     firewall_mode: full
+    firewall_mode_effective: "{{ firewall_mode | default('full') }}"
     qlsm_network_rules:
       filter:
         udp_accept: [27960, 27961, 27962, 27963]
@@ -277,6 +278,19 @@
         - fail:
             msg: "Firewall change rolled back – SSH check failed."
       when: firewall_mode == 'full'
+
+    - name: Reset route_localnet kernel parameter to default (cleanup of legacy 99k LAN Rate setting)
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: '0'
+        sysctl_set: yes
+        state: present
+        reload: yes
+      loop:
+        - net.ipv4.conf.all.route_localnet
+        - net.ipv4.conf.default.route_localnet
+        - net.ipv4.conf.lo.route_localnet
+      when: firewall_mode_effective == 'full'
 
     - name: Ensure QLSM config directory exists
       file:
