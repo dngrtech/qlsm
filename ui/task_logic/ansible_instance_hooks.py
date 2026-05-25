@@ -3,6 +3,7 @@ import os
 from ui import db
 from ui.models import QLInstance, InstanceStatus
 from ui.task_logic.ansible_instance_mgmt import (
+    _SYSTEM_HOOKS,
     _build_ld_preload_paths,
     _build_qlds_args_string,
     _run_ansible_playbook,
@@ -13,6 +14,13 @@ from ui.task_logic.common import append_log
 
 CONFIGS_BASE = "configs"
 ELF_MAGIC = b"\x7fELF"
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _system_hook_source_path(filename):
+    """Absolute path to a system hook binary in ql-assets/data/system-hooks/."""
+    return os.path.join(REPO_ROOT, "ql-assets", "data", "system-hooks", filename)
 
 
 def _instance_scripts_dir(instance):
@@ -36,6 +44,29 @@ def _preflight(instance):
                     return f"{filename} is not an ELF shared object"
         except OSError as exc:
             return f"{filename} could not be read: {exc}"
+
+    # System-hook source verification
+    for filename, predicate, _subdir in _SYSTEM_HOOKS:
+        try:
+            active = bool(predicate(instance))
+        except Exception:
+            active = False
+        if not active:
+            continue
+        src = _system_hook_source_path(filename)
+        if not os.path.isfile(src):
+            return (
+                f"System hook source missing on UI server: {filename}. "
+                f"Expected at {src}."
+            )
+        try:
+            with open(src, 'rb') as f:
+                magic = f.read(4)
+        except OSError as e:
+            return f"Cannot read system hook {filename}: {e}"
+        if magic != b"\x7fELF":
+            return f"System hook {filename} does not look like an ELF binary."
+
     return None
 
 
