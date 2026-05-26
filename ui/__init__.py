@@ -217,6 +217,8 @@ def create_app(test_config=None):
     api_bp.register_blueprint(instance_api_bp, url_prefix='/instances')
     from ui.routes.instance_hooks_routes import instance_hooks_bp
     api_bp.register_blueprint(instance_hooks_bp, url_prefix='/instances')
+    from ui.routes.instance_hooks_files_routes import instance_hooks_files_bp
+    api_bp.register_blueprint(instance_hooks_files_bp, url_prefix='/instances')
     api_bp.register_blueprint(auth_api_bp, url_prefix='/auth')
     api_bp.register_blueprint(preset_api_bp, url_prefix='/presets')
     api_bp.register_blueprint(user_api_bp, url_prefix='/users')
