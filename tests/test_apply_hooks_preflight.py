@@ -86,3 +86,24 @@ def test_apply_hooks_returns_false_when_system_hook_missing(app, tmp_path):
         from ui.models import QLInstance, InstanceStatus
         updated = QLInstance.query.get(instance_id)
         assert updated.status == InstanceStatus.ERROR
+
+
+def test_preflight_accepts_user_hooks_dir(tmp_path, monkeypatch):
+    """A .so file in user-hooks/ should pass pre-flight even if scripts/ is empty."""
+    from unittest.mock import MagicMock
+    from ui.task_logic import ansible_instance_hooks
+    from ui.task_logic.ansible_instance_hooks import _preflight
+
+    inst = MagicMock()
+    inst.id = 8
+    inst.port = 27975
+    inst.ld_preload_hooks = "ok.so"
+    inst.lan_rate_enabled = False
+    inst.host = MagicMock(); inst.host.name = "preh"; inst.host.lan_rate_uses_hook = False
+
+    inst_dir = tmp_path / "configs" / "preh" / "8" / "user-hooks"
+    inst_dir.mkdir(parents=True)
+    (inst_dir / "ok.so").write_bytes(b"\x7fELF\x00\x00\x00")
+
+    monkeypatch.setattr(ansible_instance_hooks, "CONFIGS_BASE", str(tmp_path / "configs"))
+    assert _preflight(inst) is None
