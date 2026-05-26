@@ -279,6 +279,9 @@ Example success response:
 | `/instances/<id>/config` | PUT | Update config and apply (triggers Ansible sync) |
 | `/instances/<id>/hooks` | GET | List available LD_PRELOAD hook shared objects |
 | `/instances/<id>/hooks` | PUT | Replace enabled LD_PRELOAD hook list and queue apply |
+| `/instances/<id>/hooks/files` | POST | Upload a new hook `.so` file |
+| `/instances/<id>/hooks/files/<filename>` | GET/PUT/PATCH/DELETE | Download, replace, rename, or delete a hook file |
+| `/instances/<id>/hooks/files/<filename>/description` | PATCH | Set a hook file description |
 | `/instances/<id>/lan-rate` | PUT | Toggle 99k LAN rate mode |
 | `/instances/<id>/logs` | GET | Get instance task logs |
 | `/instances/<id>/remote-logs` | GET | Fetch live logs via Ansible (`?filter_mode=`, `?since=`, `?lines=`) |
@@ -395,8 +398,9 @@ Example success response:
 GET /api/instances/<id>/hooks
 ```
 
-Returns `.so` files in the instance `scripts/` directory with enabled state,
-order, file metadata, BinaryMetadata description, and active system hooks.
+Returns `.so` files in the instance `user-hooks/` directory (falling back to
+`scripts/` for legacy instances) with enabled state, order, file metadata,
+BinaryMetadata description, and active system hooks.
 
 ```json
 {
@@ -430,9 +434,9 @@ from `enabled` are disabled.
 ```
 
 Validation requires each filename to be a unique `.so` basename with no path
-separators, no `..`, not reserved for a system hook, present under `scripts/`,
-and an ELF file. Validation failures return `400`; held instance locks return
-`409`.
+separators, no `..`, not reserved for a system hook, present under `user-hooks/`
+(or `scripts/` for legacy instances), and an ELF file. Validation failures
+return `400`; held instance locks return `409`.
 
 Success returns `202 Accepted` and queues `apply_instance_hooks`.
 
@@ -447,6 +451,25 @@ Success returns `202 Accepted` and queues `apply_instance_hooks`.
 Running instances restart after the unit is re-rendered with
 `Environment=LD_PRELOAD=...`; stopped instances update the unit and remain
 stopped.
+
+### Hook File CRUD
+
+Per-file operations on `user-hooks/` files. All mutating endpoints hold a
+30-second per-instance lock and return `409` if the lock is unavailable.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/instances/<id>/hooks/files` | POST | Upload a new `.so` file (multipart `file` field) |
+| `/instances/<id>/hooks/files/<filename>` | PUT | Replace an existing hook file |
+| `/instances/<id>/hooks/files/<filename>` | GET | Download a hook file |
+| `/instances/<id>/hooks/files/<filename>` | PATCH | Rename a hook file (JSON `{"new_name": "..."}`) |
+| `/instances/<id>/hooks/files/<filename>` | DELETE | Delete a hook file |
+| `/instances/<id>/hooks/files/<filename>/description` | PATCH | Set description (JSON `{"description": "..."}`) |
+
+Upload and replace validate ELF magic (`\x7fELF`) and reject files exceeding
+the binary size limit. Rename cascades to `ld_preload_hooks` and
+`BinaryMetadata`. Delete also cascades. Description updates do not require a
+lock and return `200` immediately.
 
 ## Server Status
 

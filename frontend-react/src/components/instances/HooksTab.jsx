@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { closestCenter, DndContext } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { fetchInstanceHooks, saveInstanceHooks } from '../../services/api';
+import { deleteInstanceHook, fetchInstanceHooks, saveInstanceHooks, uploadInstanceHook } from '../../services/api';
 import HookRow, { MissingHookRow, ReadOnlyHookRow, SortableHookRow } from './HookRow';
 
 function errorMessage(error, fallback) {
@@ -9,6 +9,8 @@ function errorMessage(error, fallback) {
 }
 
 export default function HooksTab({ instanceId, draftId, onApplied }) {
+  const uploadRef = useRef(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [available, setAvailable] = useState([]);
@@ -16,8 +18,13 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   const [initialEnabled, setInitialEnabled] = useState([]);
   const [systemHooks, setSystemHooks] = useState([]);
   const [applying, setApplying] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [missingHooks, setMissingHooks] = useState([]);
   const [initialMissing, setInitialMissing] = useState([]);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+
+  const reload = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +55,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     return () => {
       cancelled = true;
     };
-  }, [instanceId, draftId]);
+  }, [instanceId, draftId, reloadKey]);
 
   const enabledSet = useMemo(() => new Set(enabledOrder), [enabledOrder]);
   const enabledRows = useMemo(
@@ -67,6 +74,33 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   );
   const removeMissingHook = (filename) => {
     setMissingHooks((current) => current.filter((f) => f !== filename));
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      await uploadInstanceHook(instanceId, file);
+      reload();
+    } catch (err) {
+      setError(errorMessage(err, 'Upload failed.'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    setDeleteError(null);
+    try {
+      await deleteInstanceHook(instanceId, pendingDelete.filename);
+      setPendingDelete(null);
+      reload();
+    } catch (err) {
+      setDeleteError(errorMessage(err, 'Delete failed.'));
+    }
   };
 
   const dirty = useMemo(
@@ -137,18 +171,45 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="border-b border-[var(--surface-border)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-          User hooks
+        <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-4 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">User hooks</span>
+          {!draftId && instanceId && (
+            <>
+              <input ref={uploadRef} type="file" accept=".so" className="hidden" onChange={handleUpload} />
+              <button
+                type="button"
+                onClick={() => uploadRef.current?.click()}
+                disabled={uploading}
+                className="btn btn-secondary text-xs"
+              >
+                {uploading ? 'Uploading…' : 'Upload .so'}
+              </button>
+            </>
+          )}
         </div>
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={enabledOrder} strategy={verticalListSortingStrategy}>
             {enabledRows.map((hook) => (
-              <SortableHookRow key={hook.filename} hook={hook} onToggle={toggleHook} />
+              <SortableHookRow
+                key={hook.filename}
+                hook={hook}
+                onToggle={toggleHook}
+                instanceId={instanceId}
+                onChanged={reload}
+                onDelete={setPendingDelete}
+              />
             ))}
           </SortableContext>
         </DndContext>
         {disabledRows.map((hook) => (
-          <HookRow key={hook.filename} hook={hook} onToggle={toggleHook} />
+          <HookRow
+            key={hook.filename}
+            hook={hook}
+            onToggle={toggleHook}
+            instanceId={instanceId}
+            onChanged={reload}
+            onDelete={setPendingDelete}
+          />
         ))}
         {missingHooks.map((filename) => (
           <MissingHookRow
@@ -159,7 +220,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
         ))}
         {available.length === 0 && missingHooks.length === 0 && (
           <div className="px-4 py-8 text-sm text-[var(--text-muted)]">
-            No shared objects found in scripts.
+            No hook files found.
           </div>
         )}
       </div>
@@ -181,6 +242,33 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
           {applying ? 'Applying...' : 'Apply & Restart'}
         </button>
       </div>
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div role="dialog" aria-modal="true" className="w-80 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-elevated)] p-6 shadow-xl">
+            <h3 className="mb-2 font-semibold text-[var(--text-primary)]">Delete hook?</h3>
+            <p className="mb-4 text-sm text-[var(--text-muted)]">
+              <span className="font-mono text-[var(--text-primary)]">{pendingDelete.filename}</span> will be permanently deleted.
+            </p>
+            {deleteError && <p className="mb-3 text-sm text-theme-danger">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setPendingDelete(null); setDeleteError(null); }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="rounded px-3 py-1.5 text-sm font-medium bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
