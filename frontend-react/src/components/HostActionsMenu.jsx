@@ -181,7 +181,7 @@ function HostActionsMenu({
                       <button
                         type="button"
                         onClick={() => { closeMenu(); setIsRerunSetupModalOpen(true); }}
-                        disabled={!isHostActive || isQlFilterBusy || isHostBusy}
+                        disabled={!isHostReady || isQlFilterBusy || isHostBusy}
                         className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}
                       >
                         <RotateCcw size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
