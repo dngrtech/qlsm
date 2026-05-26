@@ -39,6 +39,27 @@
       become: false
       when: host_name is defined and instance_id is defined
 
+    - name: Ensure user-hooks directory exists on host
+      ansible.builtin.file:
+        path: "/home/ql/qlds-{{ game_port }}/user-hooks"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Sync user LD_PRELOAD hooks from UI server to instance user-hooks dir
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ instance_id }}/user-hooks/"
+        dest: "/home/ql/qlds-{{ game_port }}/user-hooks/"
+        delete: yes
+        rsync_path: "sudo -u ql rsync"
+        rsync_opts:
+          - "--include=*.so"
+          - "--exclude=*"
+      delegate_to: localhost
+      become: false
+      when: host_name is defined and instance_id is defined
+
     - name: Render QLDS systemd service file with updated LD_PRELOAD
       ansible.builtin.template:
         src: ../templates/qlds@.service.j2

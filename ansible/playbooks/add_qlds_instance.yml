@@ -152,6 +152,14 @@
         group: ql
         mode: '0755'
 
+    - name: Create user-hooks directory for instance
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/user-hooks"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
     - name: Copy scripts into instance baseq3 directory (excluding factories)
       ansible.builtin.shell: |
         rsync -a --exclude='*.factories' {{ common_assets_dir }}/scripts/ {{ qlds_dir }}/baseq3/scripts/
