@@ -820,3 +820,24 @@ class TestCommitDraft:
             'target': 'instance', 'host': 'presets', 'instance_id': 'default'
         }, headers=auth_headers)
         assert response.status_code == 400
+
+
+def test_draft_seeds_user_hooks_from_preset(app, client, auth_headers, tmp_path, monkeypatch):
+    """When a draft is created for a preset that has a user-hooks/ subdir,
+    the draft's user-hooks/ is populated from it."""
+    from ui.routes import draft_routes
+
+    preset_root = tmp_path / "configs" / "presets" / "pX"
+    (preset_root / "scripts").mkdir(parents=True)
+    (preset_root / "user-hooks").mkdir(parents=True)
+    (preset_root / "user-hooks" / "boost.so").write_bytes(b"\x7fELF")
+
+    monkeypatch.setattr(draft_routes, "CONFIGS_BASE", str(tmp_path / "configs"), raising=False)
+
+    res = client.post("/api/drafts/", json={"source": "preset", "preset": "pX"}, headers=auth_headers)
+    assert res.status_code in (200, 201)
+    draft_id = res.get_json()["data"]["draft_id"]
+
+    with app.app_context():
+        draft_user_hooks = draft_routes._get_draft_user_hooks_path(draft_id)
+    assert os.path.isfile(os.path.join(draft_user_hooks, "boost.so"))

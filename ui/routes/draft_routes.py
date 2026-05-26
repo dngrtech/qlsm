@@ -24,6 +24,7 @@ DRAFT_TTL_SECONDS = 3600  # 1 hour
 CONFIGS_BASE = 'configs'
 PRESETS_DIR = 'presets'
 SCRIPTS_DIR = 'scripts'
+USER_HOOKS_DIR = 'user-hooks'
 
 
 def _get_drafts_base():
@@ -34,6 +35,11 @@ def _get_drafts_base():
 def _get_draft_scripts_path(draft_id):
     """Return the scripts directory path for a draft."""
     return os.path.join(_get_drafts_base(), draft_id, SCRIPTS_DIR)
+
+
+def _get_draft_user_hooks_path(draft_id):
+    """Return the user-hooks directory path for a draft."""
+    return os.path.join(_get_drafts_base(), draft_id, USER_HOOKS_DIR)
 
 
 def _get_draft_base_path(draft_id):
@@ -102,6 +108,15 @@ def _seed_draft(draft_scripts_path, source_path):
         shutil.copytree(source_path, draft_scripts_path, dirs_exist_ok=True)
     elif not os.path.exists(draft_scripts_path):
         os.makedirs(draft_scripts_path, exist_ok=True)
+
+    # Seed user-hooks/ alongside scripts/ from the same source root
+    source_root = os.path.dirname(source_path) if os.path.basename(source_path) == SCRIPTS_DIR else source_path
+    source_user_hooks = os.path.join(source_root, USER_HOOKS_DIR)
+    draft_user_hooks = os.path.join(os.path.dirname(draft_scripts_path), USER_HOOKS_DIR)
+    if os.path.isdir(source_user_hooks):
+        shutil.copytree(source_user_hooks, draft_user_hooks, dirs_exist_ok=True)
+    elif not os.path.exists(draft_user_hooks):
+        os.makedirs(draft_user_hooks, exist_ok=True)
 
 
 def _is_path_under(allowed_root, resolved_path):
