@@ -138,8 +138,9 @@ describe('HooksTab', () => {
     render(<HooksTab instanceId={1} />);
 
     await waitFor(() => screen.getByTestId('hook-row-a.so'));
-    fireEvent.click(screen.getByRole('button', { name: /actions for a.so/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /delete/i }));
+    const row = screen.getByTestId('hook-row-a.so');
+    fireEvent.click(within(row).getByRole('button', { name: /actions for a.so/i }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /delete/i, hidden: true }));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/delete hook\?/i)).toBeInTheDocument();
@@ -152,14 +153,12 @@ describe('HooksTab', () => {
     await waitFor(() => screen.getByTestId('hook-row-a.so'));
     expect(api.fetchInstanceHooks).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: /actions for a.so/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /delete/i }));
+    const row = screen.getByTestId('hook-row-a.so');
+    fireEvent.click(within(row).getByRole('button', { name: /actions for a.so/i }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /delete/i, hidden: true }));
 
-    await waitFor(() => screen.getByText(/delete hook\?/i));
-    const deleteBtn = screen.getAllByRole('button', { name: /delete/i }).find(
-      (b) => b.textContent.trim() === 'Delete' && !b.disabled,
-    );
-    fireEvent.click(deleteBtn);
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /delete/i }));
 
     await waitFor(() => expect(api.deleteInstanceHook).toHaveBeenCalledWith(1, 'a.so'));
     await waitFor(() => expect(api.fetchInstanceHooks).toHaveBeenCalledTimes(2));
@@ -169,8 +168,9 @@ describe('HooksTab', () => {
     render(<HooksTab instanceId={1} />);
 
     await waitFor(() => screen.getByTestId('hook-row-a.so'));
-    fireEvent.click(screen.getByRole('button', { name: /actions for a.so/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /delete/i }));
+    const row = screen.getByTestId('hook-row-a.so');
+    fireEvent.click(within(row).getByRole('button', { name: /actions for a.so/i }));
+    fireEvent.click(within(row).getByRole('menuitem', { name: /delete/i, hidden: true }));
 
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
