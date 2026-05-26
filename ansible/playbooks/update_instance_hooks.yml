@@ -20,9 +20,12 @@
       ansible.builtin.synchronize:
         src: "../../ql-assets/data/system-hooks/"
         dest: "/home/ql/qlds-{{ game_port }}/system-hooks/"
+        rsync_path: "sudo -u ql rsync"
         rsync_opts:
           - "--include=*.so"
           - "--exclude=*"
+      delegate_to: localhost
+      become: false
 
     - name: Sync .so hooks from UI server to instance minqlx-plugins
       ansible.builtin.synchronize:
