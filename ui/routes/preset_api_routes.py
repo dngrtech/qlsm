@@ -625,6 +625,7 @@ def create_preset_api():
 
         # Step 1b: Write scripts via draft or legacy
         if draft_id:
+            from ui.routes.draft_routes import _get_draft_user_hooks_path
 
             draft_scripts = _get_draft_scripts_path(draft_id)
             preset_scripts_dir = os.path.join(preset_path, 'scripts')
@@ -632,6 +633,10 @@ def create_preset_api():
                 if os.path.exists(preset_scripts_dir):
                     shutil.rmtree(preset_scripts_dir)
                 shutil.copytree(draft_scripts, preset_scripts_dir)
+            draft_user_hooks = _get_draft_user_hooks_path(draft_id)
+            preset_user_hooks = os.path.join(preset_path, 'user-hooks')
+            if os.path.isdir(draft_user_hooks):
+                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(preset_path, data['scripts'])
@@ -789,12 +794,18 @@ def update_preset_api(preset_id):
 
         # Update scripts via draft or legacy
         if draft_id:
+            from ui.routes.draft_routes import _get_draft_user_hooks_path
+
             draft_scripts = _get_draft_scripts_path(draft_id)
             preset_scripts_dir = os.path.join(preset.path, 'scripts')
             if os.path.exists(draft_scripts):
                 if os.path.exists(preset_scripts_dir):
                     shutil.rmtree(preset_scripts_dir)
                 shutil.copytree(draft_scripts, preset_scripts_dir)
+            draft_user_hooks = _get_draft_user_hooks_path(draft_id)
+            preset_user_hooks = os.path.join(preset.path, 'user-hooks')
+            if os.path.isdir(draft_user_hooks):
+                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(preset.path, data['scripts'])
