@@ -17,6 +17,14 @@
     qlds_dir: "/home/ql/qlds-{{ game_port }}"
 
   tasks:
+    - name: Ensure correct ownership of minqlx-plugins directory
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/minqlx-plugins"
+        owner: ql
+        group: ql
+        recurse: yes
+        state: directory
+
     - name: Sync instance configs (cfg/txt/ent + folders) to baseq3
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/"
@@ -48,7 +56,6 @@
         rsync_path: "sudo -u ql rsync"
         delete: yes
       delegate_to: localhost
-
       become: false
 
     - name: Backfill common minqlx-plugins to instance directory
@@ -60,6 +67,7 @@
           - --itemize-changes
           - /home/ql/assets/common/minqlx-plugins/
           - "{{ qlds_dir }}/minqlx-plugins/"
+      become_user: ql
       register: common_minqlx_backfill
       changed_when: common_minqlx_backfill.stdout != ""
 
@@ -67,7 +75,7 @@
       ansible.builtin.shell: |
         find {{ qlds_dir }}/baseq3/scripts/ -maxdepth 1 -name '*.factories' -type f -delete
       ignore_errors: yes  # Directory may not exist on first run
-      
+
     - name: Sync instance-specific factory files from UI server
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/factories/"
@@ -78,14 +86,6 @@
         delete: no # Don't delete non-factory files (like map scripts)
       delegate_to: localhost
       become: false
-
-    - name: Ensure correct ownership of minqlx-plugins directory
-      ansible.builtin.file:
-        path: "{{ qlds_dir }}/minqlx-plugins"
-        owner: ql
-        group: ql
-        recurse: yes
-        state: directory
 
     - name: Ensure correct ownership of synced configs (recursive)
       ansible.builtin.shell: |

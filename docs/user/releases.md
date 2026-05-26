@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.10.3` | 2026-05-26 | [#91](https://github.com/dngrtech/qlsm/pull/91) | Config apply now self-heals root-owned files in minqlx-plugins before rsync, enabling UI-only recovery from permission-related ERROR states. |
 | `v1.10.2` | 2026-05-26 | [#90](https://github.com/dngrtech/qlsm/pull/90) | Fixed system hooks rsync running as root, preventing permission errors on subsequent config apply. |
 | `v1.10.1` | 2026-05-26 | [#89](https://github.com/dngrtech/qlsm/pull/89) | Re-run Host Setup action now available from ERROR state, enabling recovery without a full host restart. |
 | `v1.10.0` | 2026-05-25 | [#88](https://github.com/dngrtech/qlsm/pull/88) | Migrated 99k LAN Rate to LD_PRELOAD hook path, eliminating iptables NAT dependency. |
