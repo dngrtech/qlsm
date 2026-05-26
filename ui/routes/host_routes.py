@@ -106,6 +106,7 @@ from ui.routes.self_host_helpers import (
     detect_default_self_ssh_user,
     generate_self_host_keys,
 )
+from ui.routes.ssh_key_permissions import normalize_local_ssh_key_material
 from ui.standalone_ssh import StandaloneSSHError, bootstrap_managed_key
 from ui.standalone_ssh import detect_local_os, detect_remote_os
 from ui.standalone_ssh import remove_managed_key
@@ -272,7 +273,7 @@ def generate_managed_standalone_keypair(name, ssh_keys_dir='terraform/ssh-keys')
             capture_output=True,
             text=True,
         )
-        os.chmod(ssh_key_path, 0o600)
+        normalize_local_ssh_key_material(ssh_key_path, public_key_path)
         return ssh_key_path, public_key_path
     except Exception:
         _cleanup_local_key_material(ssh_key_path, public_key_path)
@@ -283,10 +284,14 @@ def _write_standalone_private_key(name, ssh_key, ssh_keys_dir='terraform/ssh-key
     ssh_key_path = _standalone_private_key_path(name, ssh_keys_dir=ssh_keys_dir)
     _cleanup_local_key_material(ssh_key_path, f"{ssh_key_path}.pub")
 
-    with open(ssh_key_path, 'w') as handle:
-        handle.write(ssh_key + '\n')
-    os.chmod(ssh_key_path, 0o600)
-    return ssh_key_path
+    try:
+        with open(ssh_key_path, 'w') as handle:
+            handle.write(ssh_key + '\n')
+        normalize_local_ssh_key_material(ssh_key_path)
+        return ssh_key_path
+    except Exception:
+        _cleanup_local_key_material(ssh_key_path, f"{ssh_key_path}.pub")
+        raise
 
 
 def test_password_connection(host, port, username, password, timeout=15):

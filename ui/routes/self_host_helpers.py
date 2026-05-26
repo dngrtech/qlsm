@@ -3,6 +3,8 @@ import pwd
 import subprocess
 from pathlib import Path
 
+from ui.routes.ssh_key_permissions import normalize_local_ssh_key_material
+
 
 class SelfHostKeyError(RuntimeError):
     pass
@@ -33,6 +35,7 @@ def generate_self_host_keys(name, ssh_keys_dir="terraform/ssh-keys", host_ssh_di
             capture_output=True,
             text=True,
         )
+        normalize_local_ssh_key_material(key_path, Path(str(key_path) + ".pub"))
         public_key = Path(str(key_path) + ".pub").read_text().strip()
         append_authorized_key(public_key, host_ssh_dir=host_ssh_dir)
         return str(key_path), public_key

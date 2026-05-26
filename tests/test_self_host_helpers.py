@@ -96,7 +96,7 @@ def test_remove_authorized_key_rewrites_file(tmp_path):
     assert oct(auth.stat().st_mode & 0o777) == "0o600"
 
 
-def test_generate_self_host_keys_cleans_up_authorized_key_on_chmod_error(monkeypatch, tmp_path):
+def test_generate_self_host_keys_cleans_up_authorized_key_on_permission_fix_error(monkeypatch, tmp_path):
     ssh_keys = tmp_path / "keys"
     host_ssh = tmp_path / "host-ssh"
     host_ssh.mkdir()
@@ -108,11 +108,16 @@ def test_generate_self_host_keys_cleans_up_authorized_key_on_chmod_error(monkeyp
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(helpers.subprocess, "run", fake_run)
-    monkeypatch.setattr(helpers.os, "chmod", MagicMock(side_effect=OSError("chmod failed")))
+    monkeypatch.setattr(
+        helpers,
+        "normalize_local_ssh_key_material",
+        MagicMock(side_effect=OSError("chmod failed")),
+    )
 
     with pytest.raises(helpers.SelfHostKeyError):
         helpers.generate_self_host_keys("self-host", ssh_keys_dir=ssh_keys, host_ssh_dir=host_ssh)
 
     assert not (ssh_keys / "self-host_self_id_rsa").exists()
     assert not (ssh_keys / "self-host_self_id_rsa.pub").exists()
-    assert "generated" not in (host_ssh / "authorized_keys").read_text()
+    auth_path = host_ssh / "authorized_keys"
+    assert not auth_path.exists() or "generated" not in auth_path.read_text()

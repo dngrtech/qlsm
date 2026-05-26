@@ -1,4 +1,5 @@
 import pytest
+import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from tests.helpers import make_user, auth_headers
@@ -193,10 +194,10 @@ def test_create_host_no_body(client, app):
 @patch('ui.routes.host_routes.enqueue_task')
 @patch('ui.routes.host_routes.acquire_lock', return_value=True)
 @patch('ui.routes.host_routes.os.makedirs')
-@patch('ui.routes.host_routes.os.chmod')
+@patch('ui.routes.host_routes.normalize_local_ssh_key_material')
 @patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(True, 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).', {'os_type': 'debian', 'pretty_name': 'Debian GNU/Linux 12 (bookworm)'}))
 @patch('builtins.open', create=True)
-def test_create_standalone_host_success(mock_open, mock_detect_os, mock_chmod, mock_makedirs, mock_lock, mock_enqueue, client, app):
+def test_create_standalone_host_success(mock_open, mock_detect_os, mock_normalize, mock_makedirs, mock_lock, mock_enqueue, client, app):
     """Valid standalone host data creates host and queues setup task."""
     mock_open.return_value.__enter__ = MagicMock(return_value=MagicMock())
     mock_open.return_value.__exit__ = MagicMock(return_value=False)
@@ -292,6 +293,76 @@ def test_create_standalone_host_password_bootstrap_rolls_back_remote_key_on_lock
         assert Host.query.filter_by(name='standalone-lockfail').first() is None
 
 
+def test_generate_managed_standalone_keypair_normalizes_key_ownership(monkeypatch, tmp_path):
+    from ui.routes import host_routes
+
+    ssh_keys_dir = tmp_path / 'ssh-keys'
+    ssh_keys_dir.mkdir()
+
+    def fake_run(cmd, check, capture_output, text):
+        key_path = Path(cmd[cmd.index('-f') + 1])
+        key_path.write_text('private')
+        Path(str(key_path) + '.pub').write_text('public')
+        return subprocess.CompletedProcess(cmd, 0, stdout='', stderr='')
+
+    normalize = MagicMock()
+    monkeypatch.setattr(host_routes.subprocess, 'run', fake_run)
+    monkeypatch.setattr(host_routes, 'normalize_local_ssh_key_material', normalize)
+
+    ssh_key_path, public_key_path = host_routes.generate_managed_standalone_keypair(
+        'owned-host', ssh_keys_dir=ssh_keys_dir
+    )
+
+    assert ssh_key_path == str(ssh_keys_dir / 'owned-host_standalone_id_rsa')
+    assert public_key_path == f'{ssh_key_path}.pub'
+    normalize.assert_called_once_with(ssh_key_path, public_key_path)
+
+
+def test_generate_managed_standalone_keypair_cleans_up_on_permission_fix_error(monkeypatch, tmp_path):
+    from ui.routes import host_routes
+
+    ssh_keys_dir = tmp_path / 'ssh-keys'
+    ssh_keys_dir.mkdir()
+
+    def fake_run(cmd, check, capture_output, text):
+        key_path = Path(cmd[cmd.index('-f') + 1])
+        key_path.write_text('private')
+        Path(str(key_path) + '.pub').write_text('public')
+        return subprocess.CompletedProcess(cmd, 0, stdout='', stderr='')
+
+    monkeypatch.setattr(host_routes.subprocess, 'run', fake_run)
+    monkeypatch.setattr(
+        host_routes,
+        'normalize_local_ssh_key_material',
+        MagicMock(side_effect=OSError('permission denied')),
+    )
+
+    with pytest.raises(OSError, match='permission denied'):
+        host_routes.generate_managed_standalone_keypair('broken-owned-host', ssh_keys_dir=ssh_keys_dir)
+
+    assert not (ssh_keys_dir / 'broken-owned-host_standalone_id_rsa').exists()
+    assert not (ssh_keys_dir / 'broken-owned-host_standalone_id_rsa.pub').exists()
+
+
+def test_write_standalone_private_key_cleans_up_on_permission_fix_error(monkeypatch, tmp_path):
+    from ui.routes import host_routes
+
+    ssh_keys_dir = tmp_path / 'ssh-keys'
+    ssh_keys_dir.mkdir()
+    monkeypatch.setattr(
+        host_routes,
+        'normalize_local_ssh_key_material',
+        MagicMock(side_effect=OSError('permission denied')),
+    )
+
+    with pytest.raises(OSError, match='permission denied'):
+        host_routes._write_standalone_private_key(
+            'broken-inline-key', 'private-key-body', ssh_keys_dir=ssh_keys_dir
+        )
+
+    assert not (ssh_keys_dir / 'broken-inline-key_standalone_id_rsa').exists()
+
+
 def test_create_standalone_host_missing_ip(client, app):
     """Standalone host without IP returns 400."""
     headers = auth_headers(app, DEFAULT_USER)
@@ -308,10 +379,10 @@ def test_create_standalone_host_missing_ip(client, app):
 @patch('ui.routes.host_routes._cleanup_local_key_material')
 @patch('ui.routes.host_routes._detect_and_validate_remote_os', return_value=(False, 'Connection failed: detected OS Ubuntu 22.04.5 LTS is not supported.', None))
 @patch('ui.routes.host_routes.os.makedirs')
-@patch('ui.routes.host_routes.os.chmod')
+@patch('ui.routes.host_routes.normalize_local_ssh_key_material')
 @patch('builtins.open', create=True)
 def test_create_standalone_host_rejects_remote_os_mismatch(
-    mock_open, mock_chmod, mock_makedirs, mock_detect_os, mock_cleanup, client, app
+    mock_open, mock_normalize, mock_makedirs, mock_detect_os, mock_cleanup, client, app
 ):
     mock_open.return_value.__enter__ = MagicMock(return_value=MagicMock())
     mock_open.return_value.__exit__ = MagicMock(return_value=False)
