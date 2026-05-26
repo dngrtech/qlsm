@@ -11,6 +11,7 @@ from ui.task_logic.ansible_instance_mgmt import (
     ensure_instance_cpu_affinity,
 )
 from ui.task_logic.common import append_log
+from ui.task_logic.hook_paths import resolve_user_hook
 
 log = logging.getLogger(__name__)
 
@@ -25,10 +26,6 @@ def _system_hook_source_path(filename):
     return os.path.join(REPO_ROOT, "ql-assets", "data", "system-hooks", filename)
 
 
-def _instance_scripts_dir(instance):
-    return os.path.join(CONFIGS_BASE, instance.host.name, str(instance.id), "scripts")
-
-
 def _enabled_hooks(instance):
     if not instance.ld_preload_hooks:
         return []
@@ -37,11 +34,13 @@ def _enabled_hooks(instance):
 
 def _preflight(instance):
     for filename in _enabled_hooks(instance):
-        full_path = os.path.join(_instance_scripts_dir(instance), filename)
-        if not os.path.isfile(full_path):
+        res = resolve_user_hook(
+            CONFIGS_BASE, instance.host.name, instance.id, filename,
+        )
+        if not res:
             return f"{filename} missing"
         try:
-            with open(full_path, "rb") as handle:
+            with open(res["source"], "rb") as handle:
                 if handle.read(4) != ELF_MAGIC:
                     return f"{filename} is not an ELF shared object"
         except OSError as exc:
