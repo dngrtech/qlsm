@@ -196,16 +196,16 @@ def rename_hook_file(instance_id, filename):
         return jsonify({"data": {"filename": filename}}), 200
 
     src = _hook_path(instance, filename)
-    if not os.path.isfile(src):
-        return jsonify({"error": {"message": f"{filename} not found"}}), 404
     dst = _hook_path(instance, new_name)
-    if os.path.exists(dst):
-        return jsonify({"error": {"message": f"{new_name} already exists"}}), 409
 
     token, err_response = _acquire_or_409(instance_id)
     if err_response:
         return err_response
     try:
+        if not os.path.isfile(src):
+            return jsonify({"error": {"message": f"{filename} not found"}}), 404
+        if os.path.exists(dst):
+            return jsonify({"error": {"message": f"{new_name} already exists"}}), 409
         os.rename(src, dst)
         db.session.refresh(instance)
         if instance.ld_preload_hooks:

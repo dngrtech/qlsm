@@ -84,19 +84,25 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
 
 function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
   const [open, setOpen] = useState(false);
+  const [actionError, setActionError] = useState(null);
   const fileInputRef = useRef(null);
 
   const handleDownload = async () => {
     setOpen(false);
-    const blob = await downloadInstanceHook(instanceId, hook.filename);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = hook.filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    setActionError(null);
+    try {
+      const blob = await downloadInstanceHook(instanceId, hook.filename);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = hook.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError(err?.error?.message || 'Download failed');
+    }
   };
 
   const handleReplace = () => {
@@ -108,8 +114,13 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    await replaceInstanceHook(instanceId, hook.filename, file);
-    onChanged?.();
+    setActionError(null);
+    try {
+      await replaceInstanceHook(instanceId, hook.filename, file);
+      onChanged?.();
+    } catch (err) {
+      setActionError(err?.error?.message || 'Replace failed');
+    }
   };
 
   return (
@@ -118,11 +129,16 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
       <button
         type="button"
         aria-label={`Actions for ${hook.filename}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { setOpen((v) => !v); setActionError(null); }}
         className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
       >
         <MoreVertical size={16} />
       </button>
+      {actionError && (
+        <div className="absolute right-0 z-20 mt-1 w-48 rounded border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-theme-danger shadow-lg">
+          {actionError}
+        </div>
+      )}
       {open && (
         <div
           role="menu"
@@ -168,20 +184,25 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
 
 function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefined, readOnly = false, instanceId, onChanged, onDelete }) {
   const [renaming, setRenaming] = useState(false);
+  const [renameSaving, setRenameSaving] = useState(false);
   const [renameValue, setRenameValue] = useState(hook.filename);
   const [renameError, setRenameError] = useState(null);
 
   const startRename = () => { setRenameValue(hook.filename); setRenameError(null); setRenaming(true); };
   const cancelRename = () => { setRenaming(false); setRenameError(null); };
   const submitRename = async () => {
+    if (renameSaving) return;
+    const trimmed = renameValue.trim();
+    if (trimmed === hook.filename) { cancelRename(); return; }
+    setRenameSaving(true);
     try {
-      const trimmed = renameValue.trim();
-      if (trimmed === hook.filename) { cancelRename(); return; }
       await renameInstanceHook(instanceId, hook.filename, trimmed);
       setRenaming(false);
       onChanged?.();
     } catch (err) {
       setRenameError(err?.error?.message || 'Rename failed');
+    } finally {
+      setRenameSaving(false);
     }
   };
 
@@ -221,9 +242,10 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') submitRename();
-              if (e.key === 'Escape') cancelRename();
+              if (e.key === 'Escape' && !renameSaving) cancelRename();
             }}
             autoFocus
+            disabled={renameSaving}
             className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-sm"
           />
           {renameError && <span className="flex-shrink-0 text-xs text-theme-danger">{renameError}</span>}
