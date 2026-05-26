@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.11.0` | 2026-06-05 | [#93](https://github.com/dngrtech/qlsm/pull/93) | Hook manager: dedicated `user-hooks/` directory with full CRUD — upload, download, replace, rename, delete, and per-file descriptions — plus inline editing and a delete confirmation modal in the Hooks tab. |
 | `v1.10.12` | 2026-06-04 | [#104](https://github.com/dngrtech/qlsm/pull/104) | Auto-install minqlx plugin Python dependencies from `requirements.txt` on every deploy, apply-config, and restart. pip failures are non-blocking and logged to the instance log. |
 | `v1.10.11` | 2026-06-02 | [#103](https://github.com/dngrtech/qlsm/pull/103) | Allow re-running host setup when host is in ERROR status, not just ACTIVE. |
 | `v1.10.10` | 2026-06-02 | [#102](https://github.com/dngrtech/qlsm/pull/102) | Reverted redundant QLSM-LANRATE chain cleanup task from `setup_host.yml` — `iptables-restore` already removes custom chains not present in the rules file. |
