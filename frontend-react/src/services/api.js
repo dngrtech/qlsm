@@ -392,6 +392,82 @@ export const saveInstanceHooks = async (instanceId, enabledFilenames, draftId) =
   }
 };
 
+export const uploadInstanceHook = async (instanceId, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const response = await apiClient.post(
+      `/instances/${instanceId}/hooks/files`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to upload hook');
+  }
+};
+
+export const replaceInstanceHook = async (instanceId, filename, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const response = await apiClient.put(
+      `/instances/${instanceId}/hooks/files/${encodeURIComponent(filename)}`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to replace hook');
+  }
+};
+
+export const renameInstanceHook = async (instanceId, filename, newName) => {
+  try {
+    const response = await apiClient.patch(
+      `/instances/${instanceId}/hooks/files/${encodeURIComponent(filename)}`,
+      { new_name: newName },
+    );
+    return response.data.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to rename hook');
+  }
+};
+
+export const deleteInstanceHook = async (instanceId, filename) => {
+  try {
+    await apiClient.delete(
+      `/instances/${instanceId}/hooks/files/${encodeURIComponent(filename)}`,
+    );
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to delete hook');
+  }
+};
+
+export const downloadInstanceHook = async (instanceId, filename) => {
+  try {
+    const response = await apiClient.get(
+      `/instances/${instanceId}/hooks/files/${encodeURIComponent(filename)}`,
+      { responseType: 'blob' },
+    );
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to download hook');
+  }
+};
+
+export const setInstanceHookDescription = async (instanceId, filename, description) => {
+  try {
+    const response = await apiClient.patch(
+      `/instances/${instanceId}/hooks/files/${encodeURIComponent(filename)}/description`,
+      { description },
+    );
+    return response.data.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to set description');
+  }
+};
+
 export const fetchInstanceRemoteLogs = async (instanceId, options = {}) => {
   try {
     const { filterMode = 'lines', since = '1 hour ago', lines = 500 } = options;
