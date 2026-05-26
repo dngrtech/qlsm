@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.10.1` | 2026-05-26 | [#89](https://github.com/dngrtech/qlsm/pull/89) | Re-run Host Setup action now available from ERROR state, enabling recovery without a full host restart. |
 | `v1.10.0` | 2026-05-25 | [#88](https://github.com/dngrtech/qlsm/pull/88) | Migrated 99k LAN Rate to LD_PRELOAD hook path, eliminating iptables NAT dependency. |
 | `v1.9.0` | 2026-05-24 | [#87](https://github.com/dngrtech/qlsm/pull/87) | Added the app version footer, update-available link, latest-version manifest, and full release notes history. |
 | `v1.8.5` | 2026-05-24 | [#86](https://github.com/dngrtech/qlsm/pull/86) | Bug fixes and performance improvements. |
