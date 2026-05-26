@@ -21,6 +21,8 @@ from .zmq_utils import ensure_zmq_rcon_setup
 
 SYSTEM_PLUGINS = ['serverchecker']
 
+CONFIGS_BASE = "configs"
+
 # Built-in LD_PRELOAD hooks. Always prepended ahead of user hooks.
 # Each tuple is (filename, predicate(instance) -> bool, subdir under /home/ql/qlds-<port>/).
 _SYSTEM_HOOKS = [
@@ -139,14 +141,27 @@ def _build_qlds_args_string(instance):
 
 
 def _build_ld_preload_paths(instance):
-    """Return a colon-joined LD_PRELOAD value, or an empty string."""
+    """Return a colon-joined LD_PRELOAD value, or an empty string.
+
+    User hooks resolve per-filename: files in user-hooks/ map to the
+    /user-hooks/ runtime dir; legacy files in scripts/ map to /minqlx-plugins/.
+    """
+    from ui.task_logic.hook_paths import resolve_user_hook
+
     paths = []
     for filename, predicate, subdir in _SYSTEM_HOOKS:
         if predicate(instance):
             paths.append(f"/home/ql/qlds-{instance.port}/{subdir}/{filename}")
-    if instance.ld_preload_hooks:
-        hooks = (h.strip() for h in instance.ld_preload_hooks.split(',') if h.strip())
-        paths.extend(f"/home/ql/qlds-{instance.port}/minqlx-plugins/{fn}" for fn in hooks)
+    if instance.ld_preload_hooks and instance.host:
+        for fn in (h.strip() for h in instance.ld_preload_hooks.split(',') if h.strip()):
+            res = resolve_user_hook(CONFIGS_BASE, instance.host.name, instance.id, fn)
+            if res is None:
+                log.warning(
+                    "Hook %s not found for instance %s; skipping from LD_PRELOAD",
+                    fn, instance.id,
+                )
+                continue
+            paths.append(f"/home/ql/qlds-{instance.port}/{res['host_subdir']}/{fn}")
     return ":".join(paths)
 
 
