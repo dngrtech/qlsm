@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
+import { Menu, Transition } from '@headlessui/react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertTriangle, Check, Download, Edit2, GripVertical, MoreVertical, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
@@ -65,7 +66,7 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         }}
         autoFocus
         disabled={saving}
-        className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface)] px-1 py-0.5 text-xs"
+        className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface-raised)] px-1 py-0.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
       />
       <button type="button" onClick={save} disabled={saving} aria-label="Save description">
         <Check size={12} />
@@ -83,12 +84,10 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
 }
 
 function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
-  const [open, setOpen] = useState(false);
   const [actionError, setActionError] = useState(null);
   const fileInputRef = useRef(null);
 
   const handleDownload = async () => {
-    setOpen(false);
     setActionError(null);
     try {
       const blob = await downloadInstanceHook(instanceId, hook.filename);
@@ -105,11 +104,6 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
     }
   };
 
-  const handleReplace = () => {
-    setOpen(false);
-    fileInputRef.current?.click();
-  };
-
   const onReplaceFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -123,59 +117,54 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
     }
   };
 
+  const items = [
+    { key: 'download', label: 'Download', icon: Download, onClick: handleDownload },
+    { key: 'replace', label: 'Replace', icon: RefreshCw, onClick: () => fileInputRef.current?.click() },
+    { key: 'rename', label: 'Rename', icon: Edit2, onClick: onRename },
+    { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => onDelete?.(hook), danger: true },
+  ];
+
   return (
     <div className="relative flex-shrink-0">
       <input ref={fileInputRef} type="file" accept=".so" className="hidden" onChange={onReplaceFile} />
-      <button
-        type="button"
-        aria-label={`Actions for ${hook.filename}`}
-        onClick={() => { setOpen((v) => !v); setActionError(null); }}
-        className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-      >
-        <MoreVertical size={16} />
-      </button>
+      <Menu as="div" className="relative">
+        <Menu.Button
+          aria-label={`Actions for ${hook.filename}`}
+          onClick={() => setActionError(null)}
+          className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+        >
+          <MoreVertical size={16} />
+        </Menu.Button>
+        <Transition
+          as={Fragment}
+          unmount={false}
+          enter="transition ease-out duration-100"
+          enterFrom="transform opacity-0 scale-95"
+          enterTo="transform opacity-100 scale-100"
+          leave="transition ease-in duration-75"
+          leaveFrom="transform opacity-100 scale-100"
+          leaveTo="transform opacity-0 scale-95"
+        >
+          <Menu.Items unmount={false} className="absolute right-0 z-50 mt-1 w-36 origin-top-right rounded-md border border-[var(--surface-border)] bg-[var(--surface-elevated)] py-1 shadow-lg focus:outline-none">
+            {items.map((item) => (
+              <Menu.Item key={item.key}>
+                {({ active }) => (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); item.onClick(); }}
+                    className={`${active ? 'bg-black/10 dark:bg-white/10' : ''} ${item.danger ? 'text-[var(--accent-danger)]' : 'text-[var(--text-secondary)]'} flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs`}
+                  >
+                    <item.icon size={14} /> {item.label}
+                  </button>
+                )}
+              </Menu.Item>
+            ))}
+          </Menu.Items>
+        </Transition>
+      </Menu>
       {actionError && (
         <div className="absolute right-0 z-20 mt-1 w-48 rounded border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-theme-danger shadow-lg">
           {actionError}
-        </div>
-      )}
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-10 mt-1 w-32 rounded border border-[var(--surface-border)] bg-[var(--surface-elevated)] py-1 text-sm shadow-lg"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleDownload}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-hover)]"
-          >
-            <Download size={14} /> Download
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleReplace}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-hover)]"
-          >
-            <RefreshCw size={14} /> Replace
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); onRename(); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-hover)]"
-          >
-            <Edit2 size={14} /> Rename
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); onDelete?.(hook); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-theme-danger hover:bg-[var(--surface-hover)]"
-          >
-            <Trash2 size={14} /> Delete
-          </button>
         </div>
       )}
     </div>
@@ -246,7 +235,7 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
             }}
             autoFocus
             disabled={renameSaving}
-            className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface)] px-1 py-0.5 font-mono text-sm"
+            className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface-raised)] px-1 py-0.5 font-mono text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
           />
           {renameError && <span className="flex-shrink-0 text-xs text-theme-danger">{renameError}</span>}
         </span>

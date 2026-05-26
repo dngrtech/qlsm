@@ -24,7 +24,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: 'v1.9.0' })).toHaveAttribute('href', 'https://dngrtech.github.io/qlsm/releases/');
+    expect(screen.getByRole('link', { name: 'v1.11.0' })).toHaveAttribute('href', 'https://dngrtech.github.io/qlsm/releases/');
     await waitFor(() => {
       expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     });
@@ -60,7 +60,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: 'v1.9.0' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'v1.11.0' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     });

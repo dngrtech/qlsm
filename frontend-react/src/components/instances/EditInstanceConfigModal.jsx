@@ -894,7 +894,7 @@ function EditInstanceConfigModal({
                           </div>
                           {activeMainTab === 'hooks' && (
                             <div className="flex-1 min-h-0">
-                              <HooksTab instanceId={instanceId} draftId={pluginDraftId} onApplied={handleHooksApplied} />
+                              <HooksTab instanceId={instanceId} onApplied={handleHooksApplied} />
                             </div>
                           )}
                         </div>
