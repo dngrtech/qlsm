@@ -116,7 +116,8 @@ def get_instance_hooks(instance_id):
 
     on_disk = _list_so_files(scripts_dir)
     on_disk_names = {item["filename"] for item in on_disk}
-    enabled = [name for name in _enabled_list(instance) if name in on_disk_names]
+    all_enabled = _enabled_list(instance)
+    enabled = [name for name in all_enabled if name in on_disk_names]
     order_map = {name: idx + 1 for idx, name in enumerate(enabled)}
     descriptions = _description_map(instance)
 
@@ -129,7 +130,22 @@ def get_instance_hooks(instance_id):
             "enabled": is_enabled,
             "order": order_map[filename] if is_enabled else None,
             "description": descriptions.get(filename, ""),
+            "missing": False,
         })
+
+    # Include hooks registered in DB but absent from disk so the UI can surface
+    # and remove them — without this they are invisible and unremovable.
+    for name in all_enabled:
+        if name not in on_disk_names:
+            available.append({
+                "filename": name,
+                "size": 0,
+                "modified": 0,
+                "enabled": True,
+                "order": None,
+                "description": descriptions.get(name, ""),
+                "missing": True,
+            })
 
     system_hooks_active = []
     for filename, predicate, _subdir in _SYSTEM_HOOKS:

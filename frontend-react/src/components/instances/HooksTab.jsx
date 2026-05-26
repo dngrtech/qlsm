@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { closestCenter, DndContext } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { fetchInstanceHooks, saveInstanceHooks } from '../../services/api';
-import HookRow, { ReadOnlyHookRow, SortableHookRow } from './HookRow';
+import HookRow, { MissingHookRow, ReadOnlyHookRow, SortableHookRow } from './HookRow';
 
 function errorMessage(error, fallback) {
   return error?.error?.message || error?.message || fallback;
@@ -16,6 +16,8 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   const [initialEnabled, setInitialEnabled] = useState([]);
   const [systemHooks, setSystemHooks] = useState([]);
   const [applying, setApplying] = useState(false);
+  const [missingHooks, setMissingHooks] = useState([]);
+  const [initialMissing, setInitialMissing] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,13 +26,17 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     fetchInstanceHooks(instanceId, draftId)
       .then((data) => {
         if (cancelled) return;
-        const enabled = [...(data.available || [])]
-          .filter((hook) => hook.enabled)
+        const all = data.available || [];
+        const enabled = all
+          .filter((hook) => hook.enabled && !hook.missing)
           .sort((a, b) => a.order - b.order)
           .map((hook) => hook.filename);
-        setAvailable(data.available || []);
+        const missing = all.filter((hook) => hook.missing).map((hook) => hook.filename);
+        setAvailable(all.filter((hook) => !hook.missing));
         setEnabledOrder(enabled);
         setInitialEnabled(enabled);
+        setMissingHooks(missing);
+        setInitialMissing(missing);
         setSystemHooks(data.system_hooks_active || []);
       })
       .catch((err) => {
@@ -59,10 +65,15 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
       .sort((a, b) => a.filename.localeCompare(b.filename)),
     [available, enabledSet],
   );
+  const removeMissingHook = (filename) => {
+    setMissingHooks((current) => current.filter((f) => f !== filename));
+  };
+
   const dirty = useMemo(
     () => enabledOrder.length !== initialEnabled.length
-      || enabledOrder.some((filename, index) => initialEnabled[index] !== filename),
-    [enabledOrder, initialEnabled],
+      || enabledOrder.some((filename, index) => initialEnabled[index] !== filename)
+      || missingHooks.length !== initialMissing.length,
+    [enabledOrder, initialEnabled, missingHooks, initialMissing],
   );
 
   const toggleHook = (filename) => {
@@ -85,6 +96,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
 
   const handleCancel = () => {
     setEnabledOrder(initialEnabled);
+    setMissingHooks(initialMissing);
     setError(null);
   };
 
@@ -94,6 +106,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     try {
       await saveInstanceHooks(instanceId, enabledOrder, draftId);
       setInitialEnabled(enabledOrder);
+      setInitialMissing(missingHooks);
       onApplied?.();
     } catch (err) {
       setError(errorMessage(err, 'Failed to save hooks.'));
@@ -137,7 +150,14 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
         {disabledRows.map((hook) => (
           <HookRow key={hook.filename} hook={hook} onToggle={toggleHook} />
         ))}
-        {available.length === 0 && (
+        {missingHooks.map((filename) => (
+          <MissingHookRow
+            key={filename}
+            hook={{ filename }}
+            onRemove={removeMissingHook}
+          />
+        ))}
+        {available.length === 0 && missingHooks.length === 0 && (
           <div className="px-4 py-8 text-sm text-[var(--text-muted)]">
             No shared objects found in scripts.
           </div>

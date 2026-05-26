@@ -1,6 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Info } from 'lucide-react';
+import { AlertTriangle, GripVertical, Info } from 'lucide-react';
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -77,6 +77,31 @@ export function SortableHookRow({ hook, onToggle }) {
 
 export function ReadOnlyHookRow({ hook }) {
   return <HookRowContent hook={{ ...hook, enabled: true }} readOnly />;
+}
+
+export function MissingHookRow({ hook, onRemove }) {
+  return (
+    <div
+      className="flex min-h-10 items-center gap-3 border-b border-[var(--surface-border)] bg-theme-danger/5 px-3 py-2"
+      data-testid={`hook-row-missing-${hook.filename}`}
+    >
+      <span className="h-7 w-7 flex items-center justify-center text-theme-danger">
+        <AlertTriangle size={15} />
+      </span>
+      <input
+        type="checkbox"
+        checked
+        onChange={() => onRemove(hook.filename)}
+        className="h-4 w-4 cursor-pointer"
+        aria-label={`Remove missing hook ${hook.filename}`}
+      />
+      <span className="min-w-0 flex-1 truncate font-mono text-sm text-theme-danger">
+        {hook.filename}
+      </span>
+      <span className="text-xs text-theme-danger">File missing</span>
+      <span className="w-3.5" />
+    </div>
+  );
 }
 
 export default function HookRow({ hook, onToggle }) {
