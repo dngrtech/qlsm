@@ -660,6 +660,7 @@ def commit_draft(draft_id):
         return jsonify({"error": {"message": "Invalid target. Provide host + instance_id or preset name."}}), 400
 
     draft_scripts_path = _get_draft_scripts_path(draft_id)
+    draft_user_hooks_path = _get_draft_user_hooks_path(draft_id)
 
     if data.get("target") == "instance" and os.path.isdir(draft_scripts_path):
         from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES
@@ -679,12 +680,23 @@ def commit_draft(draft_id):
         current_app.logger.error(f"Failed to commit draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to commit draft"}}), 500
 
+    # Copy user-hooks/ alongside scripts/
     if data.get("target") == "instance":
         from ui.models import QLInstance
         from ui.task_logic.common import append_log
 
+        inst_user_hooks = os.path.join(
+            os.path.dirname(target_path), USER_HOOKS_DIR
+        )
+        if os.path.isdir(draft_user_hooks_path):
+            shutil.copytree(draft_user_hooks_path, inst_user_hooks, dirs_exist_ok=True)
+
         instance = db.session.get(QLInstance, int(data["instance_id"]))
         if instance and instance.ld_preload_hooks:
+            committed_hooks = (
+                set(os.listdir(inst_user_hooks))
+                if os.path.isdir(inst_user_hooks) else set()
+            )
             on_disk = (
                 {name for name in os.listdir(target_path) if name.endswith(".so")}
                 if os.path.isdir(target_path)
@@ -695,7 +707,8 @@ def commit_draft(draft_id):
                 for item in instance.ld_preload_hooks.split(",")
                 if item.strip()
             ]
-            kept_hooks = [name for name in current_hooks if name in on_disk]
+            # Keep hooks that exist in committed user-hooks/ OR in scripts/ (legacy)
+            kept_hooks = [name for name in current_hooks if name in committed_hooks or name in on_disk]
             if kept_hooks != current_hooks:
                 removed = sorted(set(current_hooks) - set(kept_hooks))
                 instance.ld_preload_hooks = ",".join(kept_hooks) if kept_hooks else None
