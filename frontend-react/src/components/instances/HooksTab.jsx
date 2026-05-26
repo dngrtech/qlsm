@@ -106,6 +106,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     try {
       await saveInstanceHooks(instanceId, enabledOrder, draftId);
       setInitialEnabled(enabledOrder);
+      setInitialMissing(missingHooks);
       onApplied?.();
     } catch (err) {
       setError(errorMessage(err, 'Failed to save hooks.'));
