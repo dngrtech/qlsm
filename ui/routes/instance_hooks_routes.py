@@ -1,7 +1,6 @@
 import os
 import re
 import shutil
-import tempfile
 import uuid
 
 from flask import Blueprint, jsonify, request
@@ -12,22 +11,13 @@ from ui.models import BinaryMetadata, InstanceStatus, QLInstance
 from ui.task_lock import acquire_lock, release_lock
 from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES, _SYSTEM_HOOKS
 from ui.task_logic.ansible_instance_hooks import _system_hook_source_path
+from ui.task_logic.hook_paths import user_hooks_dir as _user_hooks_dir, draft_user_hooks_dir as _draft_user_hooks_dir
 
 
-CONFIGS_BASE = "configs"
 ELF_MAGIC = b"\x7fELF"
 _DRAFT_ID_RE = re.compile(r'^[0-9a-f-]{36}$')
 
 instance_hooks_bp = Blueprint("instance_hooks_api", __name__)
-
-
-def _scripts_dir(instance):
-    return os.path.join(CONFIGS_BASE, instance.host.name, str(instance.id), "scripts")
-
-
-def _draft_scripts_dir(draft_id):
-    base = os.environ.get('QLDS_DRAFTS_DIR') or os.path.join(tempfile.gettempdir(), 'qlds-drafts')
-    return os.path.join(base, draft_id, 'scripts')
 
 
 def _enabled_list(instance):
@@ -110,11 +100,11 @@ def get_instance_hooks(instance_id):
 
     draft_id = request.args.get('draft_id', '').strip()
     if draft_id and _DRAFT_ID_RE.match(draft_id):
-        scripts_dir = _draft_scripts_dir(draft_id)
+        hooks_dir = _draft_user_hooks_dir(draft_id)
     else:
-        scripts_dir = _scripts_dir(instance)
+        hooks_dir = _user_hooks_dir(instance)
 
-    on_disk = _list_so_files(scripts_dir)
+    on_disk = _list_so_files(hooks_dir)
     on_disk_names = {item["filename"] for item in on_disk}
     all_enabled = _enabled_list(instance)
     enabled = [name for name in all_enabled if name in on_disk_names]
@@ -184,23 +174,23 @@ def put_instance_hooks(instance_id):
         if error:
             return jsonify({"error": {"message": f"{name}: {error}"}}), 400
 
-    scripts_dir = _scripts_dir(instance)
+    hooks_dir = _user_hooks_dir(instance)
     draft_id = payload.get('draft_id', '') or ''
     use_draft = bool(draft_id and _DRAFT_ID_RE.match(draft_id))
-    draft_dir = _draft_scripts_dir(draft_id) if use_draft else None
+    draft_dir = _draft_user_hooks_dir(draft_id) if use_draft else None
 
     for name in enabled:
-        full_path = os.path.join(scripts_dir, name)
+        full_path = os.path.join(hooks_dir, name)
         if not os.path.isfile(full_path):
             if draft_dir:
                 draft_path = os.path.join(draft_dir, name)
                 if os.path.isfile(draft_path):
-                    os.makedirs(scripts_dir, exist_ok=True)
+                    os.makedirs(hooks_dir, exist_ok=True)
                     shutil.copy2(draft_path, full_path)
                 else:
-                    return jsonify({"error": {"message": f"{name}: file not found in scripts/"}}), 400
+                    return jsonify({"error": {"message": f"{name}: file not found in user-hooks/"}}), 400
             else:
-                return jsonify({"error": {"message": f"{name}: file not found in scripts/"}}), 400
+                return jsonify({"error": {"message": f"{name}: file not found in user-hooks/"}}), 400
         if not _is_elf_file(full_path):
             return jsonify({"error": {"message": f"{name}: not a valid ELF binary"}}), 400
 

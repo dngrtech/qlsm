@@ -37,12 +37,13 @@ def instance_with_scripts(app, tmp_path, monkeypatch):
         db.session.add(inst)
         db.session.commit()
 
-        scripts = tmp_path / "configs" / host.name / str(inst.id) / "scripts"
-        scripts.mkdir(parents=True)
+        user_hooks = tmp_path / "configs" / host.name / str(inst.id) / "user-hooks"
+        user_hooks.mkdir(parents=True)
         for filename in ("a.so", "b.so", "c.so"):
-            (scripts / filename).write_bytes(b"\x7fELF" + b"\x00" * 32)
+            (user_hooks / filename).write_bytes(b"\x7fELF" + b"\x00" * 32)
+
         monkeypatch.setattr(
-            "ui.routes.instance_hooks_routes.CONFIGS_BASE",
+            "ui.task_logic.hook_paths.CONFIGS_BASE",
             str(tmp_path / "configs"),
         )
         yield inst
@@ -87,11 +88,53 @@ def test_get_includes_binary_metadata_description(app, client, headers, instance
 
 
 def test_get_excludes_orphaned_enabled_entries(client, headers, instance_with_scripts, tmp_path):
-    os.remove(tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts" / "a.so")
+    os.remove(tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "user-hooks" / "a.so")
     response = client.get(f"/api/instances/{instance_with_scripts.id}/hooks", headers=headers)
     assert response.status_code == 200
     data = response.get_json()["data"]
-    assert all(hook["filename"] != "a.so" for hook in data["available"])
+    # a.so is still in ld_preload_hooks but absent from disk — shown with missing=True
+    missing = [h for h in data["available"] if h["filename"] == "a.so"]
+    assert len(missing) == 1
+    assert missing[0]["missing"] is True
+
+
+def test_get_ignores_legacy_scripts_so_files(client, headers, instance_with_scripts, tmp_path):
+    legacy = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts"
+    legacy.mkdir(parents=True)
+    (legacy / "legacy.so").write_bytes(b"\x7fELF")
+    response = client.get(f"/api/instances/{instance_with_scripts.id}/hooks", headers=headers)
+    filenames = {h["filename"] for h in response.get_json()["data"]["available"]}
+    assert "legacy.so" not in filenames
+
+
+def test_legacy_hook_in_scripts_still_applies_but_not_listed(
+    app, client, headers, instance_with_scripts, tmp_path, monkeypatch
+):
+    """Pre-existing instances with a .so only in scripts/ must continue to Apply
+    (via LD_PRELOAD resolver fallback) but must NOT appear in GET /hooks."""
+    from unittest.mock import patch, MagicMock
+    from ui.task_logic import ansible_instance_mgmt
+
+    scripts = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "legacy.so").write_bytes(b"\x7fELF" + b"\x00" * 32)
+
+    monkeypatch.setattr(ansible_instance_mgmt, "CONFIGS_BASE", str(tmp_path / "configs"), raising=False)
+
+    with app.app_context():
+        from ui.models import QLInstance, db
+        inst = db.session.get(QLInstance, instance_with_scripts.id)
+        inst.ld_preload_hooks = "legacy.so"
+        db.session.commit()
+
+        from ui.task_logic.ansible_instance_mgmt import _build_ld_preload_paths
+        result = _build_ld_preload_paths(inst)
+
+    assert "minqlx-plugins/legacy.so" in result
+
+    response = client.get(f"/api/instances/{instance_with_scripts.id}/hooks", headers=headers)
+    filenames = {h["filename"] for h in response.get_json()["data"]["available"]}
+    assert "legacy.so" not in filenames
 
 
 def test_get_404_when_instance_missing(client, headers):
@@ -140,7 +183,7 @@ def test_put_rejects_nonexistent_file(client, headers, instance_with_scripts):
 
 
 def test_put_rejects_non_elf(client, headers, instance_with_scripts, tmp_path):
-    bad = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts" / "bad.so"
+    bad = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "user-hooks" / "bad.so"
     bad.write_bytes(b"NOT_ELF")
     response = _put(client, headers, instance_with_scripts.id, {"enabled": ["bad.so"]})
     assert response.status_code == 400
@@ -190,6 +233,15 @@ def test_put_stopped_instance_enqueues_without_restart(app, client, headers, ins
 
     assert response.status_code == 202
     assert enq.call_args.kwargs["restart_service"] is False
+
+
+def test_put_rejects_file_present_only_in_legacy_scripts(client, headers, instance_with_scripts, tmp_path):
+    scripts = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "legacy.so").write_bytes(b"\x7fELF")
+    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["legacy.so"]})
+    assert response.status_code == 400
+    assert "not found" in response.get_json()["error"]["message"].lower()
 
 
 def test_put_happy_path_persists_and_enqueues(app, client, headers, instance_with_scripts):
