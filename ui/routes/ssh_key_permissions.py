@@ -14,7 +14,6 @@ def normalize_local_ssh_key_material(private_key_path, public_key_path=None):
     the normal app user later.
     """
     private_path = Path(private_key_path)
-    private_path.parent.mkdir(parents=True, exist_ok=True)
     owner_stat = private_path.parent.stat()
     owner_uid = owner_stat.st_uid
     owner_gid = owner_stat.st_gid
