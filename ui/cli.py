@@ -39,15 +39,18 @@ def register_cli_commands(app):
         from ui.models import Host, HostStatus
         from ui.task_logic.common import append_log
 
-        hosts = Host.query.filter_by(status=HostStatus.REBOOTING).all()
-        if not hosts:
-            logger.info("recover-rebooting-hosts: no hosts in REBOOTING state")
-            return
+        try:
+            hosts = Host.query.filter_by(status=HostStatus.REBOOTING).all()
+            if not hosts:
+                logger.info("recover-rebooting-hosts: no hosts in REBOOTING state")
+                return
 
-        for host in hosts:
-            host.status = HostStatus.ACTIVE
-            append_log(host, "Recovered from interrupted reboot on startup.")
-            logger.info("recover-rebooting-hosts: recovered host %s", host.name)
+            for host in hosts:
+                host.status = HostStatus.ACTIVE
+                append_log(host, "Recovered from interrupted reboot on startup.")
+                logger.info("recover-rebooting-hosts: recovered host %s", host.name)
 
-        db.session.commit()
-        logger.info("recover-rebooting-hosts: recovered %d host(s)", len(hosts))
+            db.session.commit()
+            logger.info("recover-rebooting-hosts: recovered %d host(s)", len(hosts))
+        except Exception as e:
+            logger.error("recover-rebooting-hosts: failed: %s", e, exc_info=True)
