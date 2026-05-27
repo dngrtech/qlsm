@@ -9,11 +9,33 @@ import {
   replaceInstanceHook,
   setInstanceHookDescription,
 } from '../../services/api';
+import InfoTooltip from '../common/InfoTooltip';
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function timeAgo(ts) {
+  if (!ts) return null;
+  const secs = Math.floor(Date.now() / 1000) - ts;
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 86400 * 30) return `${Math.floor(secs / 86400)}d ago`;
+  return `${Math.floor(secs / (86400 * 30))}mo ago`;
+}
+
+function FilenameCell({ filename }) {
+  const dot = filename.lastIndexOf('.');
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = dot > 0 ? filename.slice(dot) : '';
+  return (
+    <span className="font-mono text-sm text-[var(--text-primary)]">
+      {base}<span className="text-[var(--text-muted)]">{ext}</span>
+    </span>
+  );
 }
 
 function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
@@ -68,7 +90,7 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         disabled={saving}
         className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface-raised)] px-1 py-0.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
       />
-      <button type="button" onClick={save} disabled={saving} aria-label="Save description">
+      <button type="button" onClick={save} disabled={saving} aria-label="Save description" className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[var(--accent-success)] hover:bg-[var(--surface-elevated)]">
         <Check size={12} />
       </button>
       <button
@@ -76,6 +98,7 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         onClick={() => { setEditing(false); setValue(hook.description || ''); }}
         disabled={saving}
         aria-label="Cancel description"
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
       >
         <X size={12} />
       </button>
@@ -176,6 +199,38 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
   const [renameSaving, setRenameSaving] = useState(false);
   const [renameValue, setRenameValue] = useState(hook.filename);
   const [renameError, setRenameError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleDownload = async () => {
+    setActionError(null);
+    try {
+      const blob = await downloadInstanceHook(instanceId, hook.filename);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = hook.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setActionError(err?.error?.message || 'Download failed');
+    }
+  };
+
+  const onReplaceFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setActionError(null);
+    try {
+      await replaceInstanceHook(instanceId, hook.filename, file);
+      onChanged?.();
+    } catch (err) {
+      setActionError(err?.error?.message || 'Replace failed');
+    }
+  };
 
   const startRename = () => { setRenameValue(hook.filename); setRenameError(null); setRenaming(true); };
   const cancelRename = () => { setRenaming(false); setRenameError(null); };
@@ -198,7 +253,7 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
   return (
     <div
       style={style}
-      className={`flex min-h-10 items-center gap-3 border-b border-[var(--surface-border)] px-3 py-2${readOnly ? '' : ' hover:bg-[var(--surface-hover)]'}`}
+      className={`flex min-h-12 items-center gap-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2.5${readOnly ? '' : ' hover:bg-[var(--surface-elevated)]'}`}
       data-testid={`hook-row-${hook.filename}`}
     >
       {!readOnly && (dragHandleProps ? (
@@ -206,23 +261,27 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
           type="button"
           {...dragHandleProps.attributes}
           {...dragHandleProps.listeners}
-          className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
           aria-label={`Reorder ${hook.filename}`}
         >
           <GripVertical size={16} />
         </button>
       ) : (
-        <span className="h-7 w-7" />
+        <span className="h-7 w-7 flex-shrink-0" />
       ))}
-      {readOnly && <span className="h-7 w-7" />}
-      <input
-        type="checkbox"
-        checked={hook.enabled}
-        onChange={readOnly ? undefined : () => onToggle(hook.filename)}
+      {readOnly && <span className="h-7 w-7 flex-shrink-0" />}
+      <button
+        type="button"
+        onClick={readOnly ? undefined : () => onToggle(hook.filename)}
         disabled={readOnly}
-        className={`h-4 w-4 ${readOnly ? 'cursor-default opacity-75' : 'cursor-pointer'}`}
+        className="neu-toggle neu-toggle--sm flex-shrink-0"
         aria-label={`Enable ${hook.filename}`}
-      />
+        aria-pressed={hook.enabled}
+      >
+        <span className={`neu-toggle__track ${hook.enabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+          <span className={`neu-toggle__knob ${hook.enabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+        </span>
+      </button>
       {renaming ? (
         <span className="flex min-w-0 flex-1 items-center gap-1">
           <input
@@ -240,13 +299,10 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
           {renameError && <span className="flex-shrink-0 text-xs text-theme-danger">{renameError}</span>}
         </span>
       ) : (
-        <span className="min-w-0 basis-1/3 truncate font-mono text-sm text-[var(--text-primary)]">
-          {hook.filename}
-        </span>
+        <div className="flex min-w-0 basis-1/3 flex-col">
+          <FilenameCell filename={hook.filename} />
+        </div>
       )}
-      <span className="w-20 flex-shrink-0 text-right font-mono text-xs text-[var(--text-muted)]">
-        {formatSize(hook.size)}
-      </span>
       {!readOnly && instanceId ? (
         <DescriptionCell hook={hook} instanceId={instanceId} onChanged={onChanged} readOnly={readOnly} />
       ) : (
@@ -255,6 +311,33 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
         ) : (
           <span className="min-w-0 flex-1" />
         )
+      )}
+      <span className="w-16 flex-shrink-0 text-right font-mono text-xs text-[var(--text-muted)]">
+        {formatSize(hook.size)}
+      </span>
+      {!readOnly && instanceId && (
+        <div className="relative flex flex-shrink-0 items-center">
+          <input ref={fileInputRef} type="file" accept=".so" className="hidden" onChange={onReplaceFile} />
+          <div className="flex items-center">
+            <button type="button" onClick={handleDownload} aria-label={`Download ${hook.filename}`} className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">
+              <Download size={14} />
+            </button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} aria-label={`Replace ${hook.filename}`} className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">
+              <RefreshCw size={14} />
+            </button>
+            <button type="button" onClick={startRename} disabled={renaming} aria-label={`Rename ${hook.filename}`} className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">
+              <Edit2 size={14} />
+            </button>
+            <button type="button" onClick={() => onDelete?.(hook)} aria-label={`Delete ${hook.filename}`} className="flex h-7 w-7 items-center justify-center rounded text-[var(--accent-danger)] hover:bg-[var(--surface-elevated)]">
+              <Trash2 size={14} />
+            </button>
+          </div>
+          {actionError && (
+            <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-theme-danger shadow-lg">
+              {actionError}
+            </div>
+          )}
+        </div>
       )}
       {!readOnly && instanceId && (
         <HookActionsMenu
@@ -294,25 +377,58 @@ export function SortableHookRow({ hook, onToggle, instanceId, onChanged, onDelet
 }
 
 export function ReadOnlyHookRow({ hook }) {
-  return <HookRowContent hook={{ ...hook, enabled: true }} readOnly />;
+  return (
+    <div
+      className="flex min-h-10 items-center gap-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2"
+      data-testid={`hook-row-${hook.filename}`}
+    >
+      <div className="flex flex-shrink-0 items-center gap-1">
+        <button
+          type="button"
+          disabled
+          className="neu-toggle neu-toggle--sm cursor-not-allowed opacity-75"
+          aria-label={`${hook.filename} is always active`}
+          aria-pressed={true}
+        >
+          <span className="neu-toggle__track neu-toggle__track--on">
+            <span className="neu-toggle__knob neu-toggle__knob--on" />
+          </span>
+        </button>
+        <InfoTooltip text="System hooks are always active and cannot be disabled" size={12} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <FilenameCell filename={hook.filename} />
+      </div>
+      {hook.description && (
+        <span className="flex-shrink-0 text-xs text-[var(--text-muted)]">{hook.description}</span>
+      )}
+      <span className="w-16 flex-shrink-0 text-right font-mono text-xs text-[var(--text-muted)]">
+        {formatSize(hook.size)}
+      </span>
+    </div>
+  );
 }
 
 export function MissingHookRow({ hook, onRemove }) {
   return (
     <div
-      className="flex min-h-10 items-center gap-3 border-b border-[var(--surface-border)] bg-theme-danger/5 px-3 py-2"
+      className="flex min-h-12 items-center gap-3 rounded-lg border border-theme-danger/40 bg-theme-danger/5 px-3 py-2.5"
       data-testid={`hook-row-missing-${hook.filename}`}
     >
       <span className="h-7 w-7 flex items-center justify-center text-theme-danger">
         <AlertTriangle size={15} />
       </span>
-      <input
-        type="checkbox"
-        checked
-        onChange={() => onRemove(hook.filename)}
-        className="h-4 w-4 cursor-pointer"
+      <button
+        type="button"
+        onClick={() => onRemove(hook.filename)}
+        className="neu-toggle neu-toggle--sm"
         aria-label={`Remove missing hook ${hook.filename}`}
-      />
+        aria-pressed={true}
+      >
+        <span className="neu-toggle__track neu-toggle__track--on">
+          <span className="neu-toggle__knob neu-toggle__knob--on" />
+        </span>
+      </button>
       <span className="min-w-0 flex-1 truncate font-mono text-sm text-theme-danger">
         {hook.filename}
       </span>
