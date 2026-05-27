@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.10.6` | 2026-05-27 | [#97](https://github.com/dngrtech/qlsm/pull/97) | Auto-transitions REBOOTING hosts to ACTIVE on web container startup, fixing the self-hosted reboot recovery bug. |
 | `v1.10.5` | 2026-05-26 | [#94](https://github.com/dngrtech/qlsm/pull/94) | Normalized local SSH key ownership during standalone and self-host setup so reruns do not fail on root-owned private keys. |
 | `v1.10.4` | 2026-05-26 | [#92](https://github.com/dngrtech/qlsm/pull/92) | Hooks tab now shows registered hooks whose binary is missing on disk, with a warning and the ability to remove them. |
 | `v1.10.3` | 2026-05-26 | [#91](https://github.com/dngrtech/qlsm/pull/91) | Config apply now self-heals root-owned files in minqlx-plugins before rsync, enabling UI-only recovery from permission-related ERROR states. |
