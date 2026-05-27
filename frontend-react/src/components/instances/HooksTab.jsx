@@ -161,17 +161,19 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
         </div>
       )}
       {systemHooks.length > 0 && (
-        <div className="border-b border-[var(--surface-border)]">
-          <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+        <div>
+          <div className="px-4 pt-3 pb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             System hooks
           </div>
-          {systemHooks.map((hook) => (
-            <ReadOnlyHookRow key={hook.filename} hook={hook} />
-          ))}
+          <div className="flex flex-col gap-2 px-3">
+            {systemHooks.map((hook) => (
+              <ReadOnlyHookRow key={hook.filename} hook={hook} />
+            ))}
+          </div>
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-4 py-2">
+        <div className="flex items-center justify-between px-4 pt-2 pb-3">
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">User hooks</span>
           {!draftId && instanceId && (
             <>
@@ -187,42 +189,44 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
             </>
           )}
         </div>
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={enabledOrder} strategy={verticalListSortingStrategy}>
-            {enabledRows.map((hook) => (
-              <SortableHookRow
-                key={hook.filename}
-                hook={hook}
-                onToggle={toggleHook}
-                instanceId={instanceId}
-                onChanged={reload}
-                onDelete={setPendingDelete}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-        {disabledRows.map((hook) => (
-          <HookRow
-            key={hook.filename}
-            hook={hook}
-            onToggle={toggleHook}
-            instanceId={instanceId}
-            onChanged={reload}
-            onDelete={setPendingDelete}
-          />
-        ))}
-        {missingHooks.map((filename) => (
-          <MissingHookRow
-            key={filename}
-            hook={{ filename }}
-            onRemove={removeMissingHook}
-          />
-        ))}
-        {available.length === 0 && missingHooks.length === 0 && (
-          <div className="px-4 py-8 text-sm text-[var(--text-muted)]">
-            No hook files found.
-          </div>
-        )}
+        <div className="flex flex-col gap-2 px-3 pb-17">
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={enabledOrder} strategy={verticalListSortingStrategy}>
+              {enabledRows.map((hook) => (
+                <SortableHookRow
+                  key={hook.filename}
+                  hook={hook}
+                  onToggle={toggleHook}
+                  instanceId={instanceId}
+                  onChanged={reload}
+                  onDelete={setPendingDelete}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+          {disabledRows.map((hook) => (
+            <HookRow
+              key={hook.filename}
+              hook={hook}
+              onToggle={toggleHook}
+              instanceId={instanceId}
+              onChanged={reload}
+              onDelete={setPendingDelete}
+            />
+          ))}
+          {missingHooks.map((filename) => (
+            <MissingHookRow
+              key={filename}
+              hook={{ filename }}
+              onRemove={removeMissingHook}
+            />
+          ))}
+          {available.length === 0 && missingHooks.length === 0 && (
+            <div className="py-6 text-center text-sm text-[var(--text-muted)]">
+              No hook files found.
+            </div>
+          )}
+        </div>
       </div>
       <div className="flex justify-end gap-2 border-t border-[var(--surface-border)] px-4 py-3">
         <button

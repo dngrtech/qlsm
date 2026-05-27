@@ -33,8 +33,8 @@ describe('HooksTab', () => {
     render(<HooksTab instanceId={1} />);
 
     await waitFor(() => expect(screen.getByTestId('hook-row-a.so')).toBeInTheDocument());
-    expect(screen.getByRole('checkbox', { name: /enable a.so/i })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /enable c.so/i })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: /enable a.so/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /enable c.so/i })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('hides system hooks section when system_hooks_active is empty', async () => {
@@ -52,16 +52,16 @@ describe('HooksTab', () => {
     render(<HooksTab instanceId={1} />);
 
     await waitFor(() => expect(screen.getByText(/system hooks/i)).toBeInTheDocument());
-    expect(screen.getByText('force_rate.so')).toBeInTheDocument();
+    expect(screen.getByText('force_rate')).toBeInTheDocument();
   });
 
-  it('toggling a checkbox marks the form dirty and enables Apply', async () => {
+  it('toggling a hook marks the form dirty and enables Apply', async () => {
     render(<HooksTab instanceId={1} />);
 
     await waitFor(() => screen.getByTestId('hook-row-a.so'));
     const apply = screen.getByRole('button', { name: /apply.*restart/i });
     expect(apply).toBeDisabled();
-    fireEvent.click(screen.getByRole('checkbox', { name: /enable c.so/i }));
+    fireEvent.click(screen.getByRole('button', { name: /enable c.so/i }));
     expect(apply).toBeEnabled();
   });
 
@@ -69,7 +69,7 @@ describe('HooksTab', () => {
     render(<HooksTab instanceId={1} />);
 
     await waitFor(() => screen.getByTestId('hook-row-a.so'));
-    fireEvent.click(screen.getByRole('checkbox', { name: /enable c.so/i }));
+    fireEvent.click(screen.getByRole('button', { name: /enable c.so/i }));
     fireEvent.click(screen.getByRole('button', { name: /apply.*restart/i }));
 
     await waitFor(() => expect(api.saveInstanceHooks).toHaveBeenCalled());
@@ -88,7 +88,7 @@ describe('HooksTab', () => {
     render(<HooksTab instanceId={1} onApplied={onApplied} />);
 
     await waitFor(() => screen.getByTestId('hook-row-a.so'));
-    fireEvent.click(screen.getByRole('checkbox', { name: /enable c.so/i }));
+    fireEvent.click(screen.getByRole('button', { name: /enable c.so/i }));
     fireEvent.click(screen.getByRole('button', { name: /apply.*restart/i }));
 
     await waitFor(() => expect(onApplied).toHaveBeenCalled());
