@@ -91,6 +91,10 @@ print('yes' if 'alembic_version' in tables else 'no')
     flask sync-builtin-presets
     echo "[entrypoint] Built-in presets ready."
 
+    echo "[entrypoint] Recovering any interrupted reboots..."
+    flask recover-rebooting-hosts
+    echo "[entrypoint] Reboot recovery complete."
+
     USER_COUNT=$(python3 -c "
 import sqlite3
 con = sqlite3.connect('/app/data/qlds_ui.db')
