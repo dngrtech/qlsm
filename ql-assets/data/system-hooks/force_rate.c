@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <errno.h>
 
 /*
  * force_rate.so - LD_PRELOAD library for Quake Live Dedicated Server
@@ -34,6 +35,13 @@ static void patch_sys_islanaddress(void)
     void *target = (void *)SYS_ISLANADDRESS_ADDR;
     long page_size = sysconf(_SC_PAGESIZE);
     void *page_start = (void *)((uintptr_t)target & ~(page_size - 1));
+
+    /* Silently skip if the target page isn't mapped — this constructor runs in
+     * every process that inherits LD_PRELOAD (e.g. the bash wrapper script and
+     * any subshells it spawns). Only qzeroded.x64 maps this address. */
+    unsigned char vec;
+    if (mincore(page_start, page_size, &vec) != 0)
+        return;
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
         perror("[force_rate] mprotect failed");
