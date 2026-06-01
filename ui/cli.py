@@ -31,3 +31,26 @@ def register_cli_commands(app):
                 logger.error(f"Poll cycle failed: {e}", exc_info=True)
             stop_event.wait(POLL_INTERVAL)
         logger.info("Status poller stopped")
+
+    @app.cli.command('recover-rebooting-hosts')
+    def recover_rebooting_hosts():
+        """Transition REBOOTING hosts to ACTIVE on startup (self-host reboot recovery)."""
+        from ui import db
+        from ui.models import Host, HostStatus
+        from ui.task_logic.common import append_log
+
+        try:
+            hosts = Host.query.filter_by(status=HostStatus.REBOOTING).all()
+            if not hosts:
+                logger.info("recover-rebooting-hosts: no hosts in REBOOTING state")
+                return
+
+            for host in hosts:
+                host.status = HostStatus.ACTIVE
+                append_log(host, "Recovered from interrupted reboot on startup.")
+                logger.info("recover-rebooting-hosts: recovered host %s", host.name)
+
+            db.session.commit()
+            logger.info("recover-rebooting-hosts: recovered %d host(s)", len(hosts))
+        except Exception as e:
+            logger.error("recover-rebooting-hosts: failed: %s", e, exc_info=True)
