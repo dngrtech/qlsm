@@ -7,6 +7,9 @@
 -A INPUT -i lo -j ACCEPT
 -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
+# Allow DHCP responses (systemd-networkd uses raw sockets, bypassing conntrack)
+-A INPUT -p udp --sport 67 --dport 68 -j ACCEPT
+
 # SSH
 -A INPUT -p tcp --dport {{ ssh_port }} -j ACCEPT
 
