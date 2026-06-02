@@ -1087,13 +1087,14 @@ def rerun_setup_api(host_id):
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
 
-    if host.status != HostStatus.ACTIVE:
-        return jsonify({"error": {"message": f"Host must be ACTIVE to re-run setup. Current status: {host.status.value}"}}), 409
+    if host.status not in (HostStatus.ACTIVE, HostStatus.ERROR):
+        return jsonify({"error": {"message": f"Host must be ACTIVE or ERROR to re-run setup. Current status: {host.status.value}"}}), 409
 
     lock_token = str(uuid.uuid4())
     if not acquire_lock('host', host.id, lock_token, ttl=1260):
         return jsonify({"error": {"message": "Host is currently locked by another operation."}}), 409
 
+    original_status = host.status
     try:
         update_host(host.id, status=HostStatus.CONFIGURING)
 
@@ -1106,7 +1107,7 @@ def rerun_setup_api(host_id):
                      on_failure=host_job_failure_handler)
     except Exception as e:
         try:
-            update_host(host.id, status=HostStatus.ACTIVE)
+            update_host(host.id, status=original_status)
         except Exception:
             current_app.logger.error(f"Failed to revert host {host.id} status after enqueue failure", exc_info=True)
         release_lock('host', host.id, lock_token)
