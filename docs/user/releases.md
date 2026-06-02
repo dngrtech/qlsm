@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.10.10` | 2026-06-02 | [#102](https://github.com/dngrtech/qlsm/pull/102) | Reverted redundant QLSM-LANRATE chain cleanup task from `setup_host.yml` — `iptables-restore` already removes custom chains not present in the rules file. |
 | `v1.10.9` | 2026-06-02 | [#101](https://github.com/dngrtech/qlsm/pull/101) | Fixed 127.0.0.1 showing as client IP on hosts with stale `QLSM-LANRATE-*` iptables chains from a pre-release version. Instance restart or hook sync now removes the chains automatically. |
 | `v1.10.8` | 2026-06-02 | [#100](https://github.com/dngrtech/qlsm/pull/100) | Removed `sv_serverType` from qlds startup args — the `force_rate.so` hook makes it unnecessary and keeping the default (`2`) shows real client IPs in `rcon status`. |
 | `v1.10.7` | 2026-06-01 | [#98](https://github.com/dngrtech/qlsm/pull/98) | Fixed DHCP lease expiry on systemd-networkd hosts (OVH/standalone) by allowing DHCP responses in the iptables firewall template. |
