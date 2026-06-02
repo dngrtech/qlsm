@@ -46,7 +46,7 @@ Follow the same steps and toggle the setting off. The server reverts to standard
 
 When enabled, QLSM:
 
-- Adds `+set sv_lanForceRate 1` and `+set sv_serverType 1` to the qlds startup arguments
+- Adds `+set sv_lanForceRate 1` to the qlds startup arguments
 - Loads `force_rate.so` via `LD_PRELOAD`. The library patches `Sys_IsLANAddress` inside qzeroded.x64 so the engine treats every client as a LAN client, which (in combination with `sv_lanForceRate 1`) forces `rate=99999` for all clients.
 
 The hook binary lives on each instance host at `/home/ql/qlds-<port>/system-hooks/force_rate.so`, synced from QLSM's `ql-assets/data/system-hooks/`.
