@@ -106,9 +106,9 @@ def _build_qlds_args_string(instance):
     parts = []
 
     if instance.lan_rate_enabled:
-        parts += ['+set sv_serverType 1', '+set sv_lanForceRate 1']
+        parts += ['+set sv_lanForceRate 1']
     else:
-        parts += ['+set sv_serverType 2', '+set sv_lanForceRate 0']
+        parts += ['+set sv_lanForceRate 0']
 
     redis_db_index = instance.port - 27959
     parts += [

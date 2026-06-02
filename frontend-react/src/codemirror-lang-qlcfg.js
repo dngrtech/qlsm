@@ -54,7 +54,6 @@ export const qlcfgLanguage = StreamLanguage.define({
 
 // Cvars managed by the app — setting these manually has no effect
 const MANAGED_CVARS = {
-  sv_servertype: 'Managed by the 99k LAN rate toggle. Default: 2 (99k LAN rate OFF).',
   sv_lanforcerate: 'Managed by the 99k LAN rate toggle. Default: 0 (99k LAN rate OFF).',
   net_ip: 'Forced to "" by the app (binds all interfaces, required for 99k LAN rate).',
   net_strict: 'Forced to 1 by the app.',
