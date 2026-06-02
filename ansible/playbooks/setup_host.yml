@@ -238,6 +238,22 @@
       changed_when: false
       when: firewall_mode == 'full'
 
+    - name: Remove stale QLSM-LANRATE custom chains before applying rules
+      shell: |
+        iptables -t nat -D PREROUTING -j QLSM-LANRATE-PREROUTING 2>/dev/null || true
+        iptables -t nat -F QLSM-LANRATE-PREROUTING 2>/dev/null || true
+        iptables -t nat -X QLSM-LANRATE-PREROUTING 2>/dev/null || true
+        iptables -t nat -D INPUT -j QLSM-LANRATE-INPUT 2>/dev/null || true
+        iptables -t nat -F QLSM-LANRATE-INPUT 2>/dev/null || true
+        iptables -t nat -X QLSM-LANRATE-INPUT 2>/dev/null || true
+        iptables -t nat -D POSTROUTING -j QLSM-LANRATE-POSTROUTING 2>/dev/null || true
+        iptables -t nat -F QLSM-LANRATE-POSTROUTING 2>/dev/null || true
+        iptables -t nat -X QLSM-LANRATE-POSTROUTING 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+      when: firewall_mode == 'full'
+
     - name: Dry-run iptables-restore (syntax check only)
       shell: iptables-restore --test < {{ remote_rules_path }}
       args:
