@@ -251,6 +251,7 @@
         iptables -t nat -X QLSM-LANRATE-POSTROUTING 2>/dev/null || true
       args:
         executable: /bin/bash
+      changed_when: false
       when: firewall_mode == 'full'
 
     - name: Dry-run iptables-restore (syntax check only)
