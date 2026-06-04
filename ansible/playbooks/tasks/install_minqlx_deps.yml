@@ -1,0 +1,34 @@
+---
+# Shared task: install minqlx plugin Python dependencies.
+# Requires: qlds_dir (e.g. /home/ql/qlds-27960)
+# Failure is non-blocking — a QLSM_PIP_WARN sentinel is emitted so callers can log it.
+#
+# NOTE: pip runs as root (inherited become: yes from the importing playbook). This is
+# intentional and consistent with the existing pip block in add_qlds_instance.yml.
+# Packages are installed system-wide, which matches current QLSM practice. If
+# venv-per-instance support is ever needed, revisit this file and add_qlds_instance.yml
+# together.
+
+- name: Get pip3 version
+  command: pip3 --version
+  register: pip3_version_output
+  changed_when: false
+
+- name: Check if requirements.txt exists in minqlx-plugins
+  ansible.builtin.stat:
+    path: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
+  register: minqlx_req_stat_result
+
+- name: Install plugin Python deps from requirements.txt
+  pip:
+    requirements: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
+    executable: pip3
+    extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
+  when: minqlx_req_stat_result.stat.exists
+  ignore_errors: yes
+  register: pip_install_result
+
+- name: Warn if pip install failed
+  ansible.builtin.debug:
+    msg: "QLSM_PIP_WARN: pip install failed: {{ pip_install_result.stderr | default(pip_install_result.stdout | default('unknown error')) | truncate(200) }}"
+  when: pip_install_result is defined and pip_install_result.failed | default(false)
