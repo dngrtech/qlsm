@@ -578,6 +578,11 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
         stdout_content = runner_result.stdout() if hasattr(runner_result, 'stdout') and callable(runner_result.stdout) else getattr(runner_result, '_stdout', "")
         stderr_content = getattr(runner_result, '_stderr', "")
 
+        pip_warning = _extract_pip_warning(stdout_content)
+        if pip_warning:
+            append_log(instance, f"Warning: {pip_warning}")
+            db.session.commit()
+
         if runner_result.rc == 0:
             # If Ansible playbook was successful, the instance should be running with new config.
             final_status = InstanceStatus.RUNNING
