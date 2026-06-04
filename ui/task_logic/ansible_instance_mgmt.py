@@ -161,9 +161,19 @@ def _extract_ansible_failure_detail(stdout_content, stderr_content, rc):
         if source:
             for line in reversed(source.splitlines()):
                 line = line.strip()
+                if "QLSM_PIP_WARN:" in line:
+                    continue
                 if line:
                     return line[:400]
     return f"Ansible runner failed with RC: {rc}"
+
+
+# TODO: This file exceeds the 300-line limit and should be split into focused modules.
+def _extract_pip_warning(stdout_content):
+    for line in (stdout_content or "").splitlines():
+        if "QLSM_PIP_WARN:" in line:
+            return line.split("QLSM_PIP_WARN:")[-1].strip()
+    return None
 
 
 def deploy_instance_logic(instance_id):
@@ -231,6 +241,11 @@ def deploy_instance_logic(instance_id):
         stderr_content = getattr(runner_result, '_stderr', "")
 
         append_log(instance, f"Ansible execution finished. RC: {runner_result.rc}.")
+
+        pip_warning = _extract_pip_warning(stdout_content)
+        if pip_warning:
+            append_log(instance, f"Warning: {pip_warning}")
+            db.session.commit()
 
         # Determine final status based ONLY on rc and stdout content check
         if runner_result.rc == 0:
