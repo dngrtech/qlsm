@@ -161,9 +161,19 @@ def _extract_ansible_failure_detail(stdout_content, stderr_content, rc):
         if source:
             for line in reversed(source.splitlines()):
                 line = line.strip()
+                if "QLSM_PIP_WARN:" in line:
+                    continue
                 if line:
                     return line[:400]
     return f"Ansible runner failed with RC: {rc}"
+
+
+# TODO: This file exceeds the 300-line limit and should be split into focused modules.
+def _extract_pip_warning(stdout_content):
+    for line in (stdout_content or "").splitlines():
+        if "QLSM_PIP_WARN:" in line:
+            return line.split("QLSM_PIP_WARN:")[-1].strip()
+    return None
 
 
 def deploy_instance_logic(instance_id):
@@ -231,6 +241,11 @@ def deploy_instance_logic(instance_id):
         stderr_content = getattr(runner_result, '_stderr', "")
 
         append_log(instance, f"Ansible execution finished. RC: {runner_result.rc}.")
+
+        pip_warning = _extract_pip_warning(stdout_content)
+        if pip_warning:
+            append_log(instance, f"Warning: {pip_warning}")
+            db.session.commit()
 
         # Determine final status based ONLY on rc and stdout content check
         if runner_result.rc == 0:
@@ -339,6 +354,11 @@ def restart_instance_logic(instance_id):
         # Check result and update status
         stdout_content = runner_result.stdout() if hasattr(runner_result, 'stdout') and callable(runner_result.stdout) else getattr(runner_result, '_stdout', "")
         stderr_content = getattr(runner_result, '_stderr', "")
+
+        pip_warning = _extract_pip_warning(stdout_content)
+        if pip_warning:
+            append_log(instance, f"Warning: {pip_warning}")
+            db.session.commit()
 
         if runner_result.rc == 0:
             instance.status = InstanceStatus.RUNNING
@@ -562,6 +582,11 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
         # Check result and update status
         stdout_content = runner_result.stdout() if hasattr(runner_result, 'stdout') and callable(runner_result.stdout) else getattr(runner_result, '_stdout', "")
         stderr_content = getattr(runner_result, '_stderr', "")
+
+        pip_warning = _extract_pip_warning(stdout_content)
+        if pip_warning:
+            append_log(instance, f"Warning: {pip_warning}")
+            db.session.commit()
 
         if runner_result.rc == 0:
             # If Ansible playbook was successful, the instance should be running with new config.

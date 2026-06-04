@@ -226,22 +226,7 @@
   #######################################################################
   # 4. Install Instance-Specific Dependencies (if any)
   #######################################################################
-    - name: Get pip3 version
-      command: pip3 --version
-      register: pip3_version_output
-      changed_when: false
-
-    - name: Check if instance-specific requirements.txt exists
-      ansible.builtin.stat:
-        path: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
-      register: minqlx_req_stat_result
-
-    - name: Install instance-specific plugin Python deps if present
-      pip:
-        requirements: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
-        executable: pip3
-        extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
-      when: minqlx_req_stat_result.stat.exists
+    - ansible.builtin.import_tasks: tasks/install_minqlx_deps.yml
 
   #######################################################################
   # 5. Ensure Ownership and Permissions

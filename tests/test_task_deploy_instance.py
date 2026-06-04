@@ -344,3 +344,53 @@ def test_build_qlds_args_always_injects_empty_net_ip(test_app):
             inst = _make_instance_for_args(lan_rate_enabled=lan_rate)
             result = _build_qlds_args_string(inst)
             assert '+set net_ip ""' in result
+
+
+# Pure unit tests for _extract_pip_warning (no mocks required)
+from ui.task_logic.ansible_instance_mgmt import _extract_pip_warning
+
+def test_extract_pip_warning_returns_none_when_absent():
+    """Returns None when stdout has no QLSM_PIP_WARN line."""
+    assert _extract_pip_warning("some task output\nno warning here") is None
+    assert _extract_pip_warning("") is None
+    assert _extract_pip_warning(None) is None
+
+def test_extract_pip_warning_returns_first_match():
+    """Returns the first QLSM_PIP_WARN message when multiple are present."""
+    stdout = "first line\nQLSM_PIP_WARN: first warning\nQLSM_PIP_WARN: second warning\n"
+    result = _extract_pip_warning(stdout)
+    assert result == "first warning"
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_deploy_instance_pip_warning_logged(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    """Pip install warnings emitted by Ansible are logged to the instance log."""
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance()
+    mock_session.get.return_value = mock_instance
+
+    stdout = 'task output\nQLSM_PIP_WARN: pip install failed: No module named requests\nmore output'
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, stdout, ''), None)
+
+    result = deploy_instance(10)
+
+    assert mock_instance.status == InstanceStatus.RUNNING
+    logged_messages = [str(call) for call in mock_append_log.call_args_list]
+    assert any('pip install failed' in msg for msg in logged_messages)
+
+def test_extract_ansible_failure_detail_skips_pip_warn_lines():
+    """QLSM_PIP_WARN lines are not returned as the primary Ansible failure detail."""
+    from ui.task_logic.ansible_instance_mgmt import _extract_ansible_failure_detail
+    stdout = "normal task output\nreal error: something failed\nQLSM_PIP_WARN: pip install failed: missing pkg\n"
+    result = _extract_ansible_failure_detail(stdout, "", 1)
+    assert "QLSM_PIP_WARN" not in result
+    assert "real error" in result

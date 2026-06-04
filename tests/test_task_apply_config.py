@@ -219,3 +219,57 @@ def test_apply_instance_config_exception(
     assert mock_instance.status == InstanceStatus.ERROR
     assert mock_session.commit.call_count == 2
     assert 'Error during instance 12 config application: Config apply error' in result
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_apply_instance_config_pip_warning_logged(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    """Pip install warnings emitted by Ansible are logged during config apply."""
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance(status=InstanceStatus.RUNNING)
+    mock_session.get.return_value = mock_instance
+
+    stdout = 'task output\nQLSM_PIP_WARN: pip install failed: No module named requests\nmore output'
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, stdout, ''), None)
+
+    result = apply_instance_config(12)
+
+    assert mock_instance.status == InstanceStatus.RUNNING
+    logged_messages = [str(call) for call in mock_append_log.call_args_list]
+    assert any('pip install failed' in msg for msg in logged_messages)
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_apply_instance_config_pip_warning_no_restart(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    """With restart=False a pip warning is logged and status ends as UPDATED, not RUNNING."""
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance(status=InstanceStatus.RUNNING)
+    mock_session.get.return_value = mock_instance
+
+    stdout = 'task output\nQLSM_PIP_WARN: pip install failed: No module named requests\nmore output'
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, stdout, ''), None)
+
+    result = apply_instance_config(12, restart=False)
+
+    assert mock_instance.status == InstanceStatus.UPDATED
+    logged_messages = [str(call) for call in mock_append_log.call_args_list]
+    assert any('pip install failed' in msg for msg in logged_messages)

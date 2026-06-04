@@ -71,6 +71,8 @@
       register: common_minqlx_backfill
       changed_when: common_minqlx_backfill.stdout != ""
 
+    - ansible.builtin.import_tasks: tasks/install_minqlx_deps.yml
+
     - name: Remove existing factory files before syncing (ensures only selected factories remain)
       ansible.builtin.shell: |
         find {{ qlds_dir }}/baseq3/scripts/ -maxdepth 1 -name '*.factories' -type f -delete

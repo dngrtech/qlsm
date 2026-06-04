@@ -142,5 +142,24 @@ Instance config directories (`configs/<host_name>/<instance_id>/`) support one l
 ### Frontend adapter
 `useStateAdapter` (in `fileManager/adapters/`) tracks both file content and the `config_folders` list. `serialize()` returns `{ files: Record<path,content>, folders: string[] }`. Consumers destructure this: `const { files, folders } = serializeConfigs();`.
 
+## Plugin Python Dependencies (`requirements.txt`)
+
+To install Python packages required by minqlx plugins, create a `requirements.txt` file inside the instance's scripts directory:
+
+**Location:** `configs/<host_name>/<instance_id>/scripts/requirements.txt`
+
+**Format:** Standard pip requirements format — one package per line, e.g.:
+
+```
+requests>=2.28
+redis==4.5.1
+```
+
+**Trigger:** QLSM runs `pip install -r requirements.txt` automatically on every new instance deploy, every "Apply Config", and every restart. pip skips already-satisfied packages, so this is safe to run repeatedly.
+
+**Failure behavior:** If pip fails (e.g., a package name is wrong or the host has no internet access), QLSM logs a warning to the instance log but does not block the config sync or service restart. Review the instance log to diagnose the failure.
+
+**Creating the file:** Use the file manager in the instance's Config tab — click "New File", name it `requirements.txt`, and enter one package per line.
+
 ## File Size Guideline
 Keep source files under 300 lines of code (excluding comments/blanks). Files approaching 500 lines should be refactored into focused submodules. This guideline is aspirational — some high-complexity modules (e.g., `ansible_instance_mgmt.py`, `instance_routes.py`) currently exceed it and are candidates for future refactoring.
