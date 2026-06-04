@@ -21,7 +21,7 @@
   register: minqlx_req_stat_result
 
 - name: Install plugin Python deps from requirements.txt
-  pip:
+  ansible.builtin.pip:
     requirements: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
     executable: pip3
     extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"

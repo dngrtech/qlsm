@@ -155,7 +155,7 @@ requests>=2.28
 redis==4.5.1
 ```
 
-**Trigger:** QLSM runs `pip install -r requirements.txt` automatically on every "Apply Config" and every new instance deploy. pip skips already-satisfied packages, so this is safe to run repeatedly.
+**Trigger:** QLSM runs `pip install -r requirements.txt` automatically on every new instance deploy, every "Apply Config", and every restart. pip skips already-satisfied packages, so this is safe to run repeatedly.
 
 **Failure behavior:** If pip fails (e.g., a package name is wrong or the host has no internet access), QLSM logs a warning to the instance log but does not block the config sync or service restart. Review the instance log to diagnose the failure.
 
