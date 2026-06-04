@@ -170,3 +170,30 @@ def test_restart_instance_exception(
     assert mock_instance.status == InstanceStatus.ERROR
     assert mock_session.commit.call_count == 2
     assert 'Ansible internal error' in result
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_restart_instance_pip_warning_logged(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    """Pip install warnings emitted by Ansible are logged during restart."""
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance(status=InstanceStatus.RUNNING)
+    mock_session.get.return_value = mock_instance
+
+    stdout = 'task output\nQLSM_PIP_WARN: pip install failed: No module named requests\nmore output'
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, stdout, ''), None)
+
+    result = restart_instance(mock_instance.id)
+
+    assert mock_instance.status == InstanceStatus.RUNNING
+    logged_messages = [str(call) for call in mock_append_log.call_args_list]
+    assert any('pip install failed' in msg for msg in logged_messages)
