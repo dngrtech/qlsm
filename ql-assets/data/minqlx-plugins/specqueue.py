@@ -1127,7 +1127,8 @@ class specqueue(minqlx.Plugin):
     def add_to_spec(self, player):
         try:
             self._spec.add_to_times(player.steam_id)
-            player.center_print("^6Spectate Mode\n^7Type ^4!s ^7to show spectators.")
+            if self.get_cvar("qlx_queueSpecMsg", bool):
+                player.center_print("^6Spectate Mode\n^7Type ^4!s ^7to show spectators.")
         except Exception as e:
             raise KeyError("add to spec Exception: {} ; {}"
                            .format(type(e).__name__, traceback.format_exc()))
