@@ -105,7 +105,7 @@ class kickban(minqlx.Plugin):
         ts = time.time()
         # Use a UUID as the member so two kicks within the same float-timestamp
         # resolution are stored as distinct sorted set entries.
-        self.db.zadd(self._kicks_key(steam_id), {str(uuid.uuid4()): ts})
+        self.db.zadd(self._kicks_key(steam_id), ts, str(uuid.uuid4()))
         count += 1
 
         if count >= self._threshold():
@@ -163,7 +163,7 @@ class kickban(minqlx.Plugin):
         ban_id = self.db.zcard(base_key)
 
         pipe = self.db.pipeline()
-        pipe.zadd(base_key, {ban_id: time.time() + duration * 60})
+        pipe.zadd(base_key, time.time() + duration * 60, ban_id)
         pipe.hset(
             base_key + ":{}".format(ban_id),
             mapping={
