@@ -705,7 +705,8 @@ class specqueue(minqlx.Plugin):
                     self.add_to_spec(player)
                     self.remove_from_queue(player)
                     self.remove_from_join(player)
-                    player.center_print("^6You are set to spectate only")
+                    if self.get_cvar("qlx_queueSpecMsg", bool):
+                        player.center_print("^6You are set to spectate only")
             spec_player()
         except Exception as e:
             if ENABLE_LOG:
