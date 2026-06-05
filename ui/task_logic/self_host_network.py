@@ -75,10 +75,11 @@ def is_self_host(host):
 
 def build_self_host_network_rules(host, exclude_instance_id=None):
     lan_ports = []
+    uses_hook = bool(getattr(host, 'lan_rate_uses_hook', False))
     for instance in getattr(host, "instances", []) or []:
         if exclude_instance_id is not None and instance.id == exclude_instance_id:
             continue
-        if getattr(instance, "lan_rate_enabled", False):
+        if getattr(instance, "lan_rate_enabled", False) and not uses_hook:
             lan_ports.append(int(instance.port))
 
     return {
