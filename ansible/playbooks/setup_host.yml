@@ -483,14 +483,28 @@
       register: pip3_version_output
       changed_when: false
 
+    - name: Check if minqlx-plugins requirements.txt is available on controller
+      stat:
+        path: "{{ playbook_dir }}/../../ql-assets/data/minqlx-plugins/requirements.txt"
+      delegate_to: localhost
+      become: no
+      register: minqlx_reqs_stat
+
+    - name: Stage minqlx requirements file on host
+      copy:
+        src: "{{ playbook_dir }}/../../ql-assets/data/minqlx-plugins/requirements.txt"
+        dest: "/root/minqlx-requirements.txt"
+        owner: root
+        group: root
+        mode: '0644'
+      when: minqlx_reqs_stat.stat.exists
+
     - name: Install core Python dependencies for minqlx
       pip:
-        name:
-          - redis
-          - pyzmq
-          - discord.py
+        requirements: "/root/minqlx-requirements.txt"
         executable: pip3
         extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
+      when: minqlx_reqs_stat.stat.exists
 
   #######################################################################
   # 6a. Configure Redis Unix Socket
