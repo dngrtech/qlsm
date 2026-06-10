@@ -15,4 +15,5 @@ protect.py
 restartserver.py
 specall.py
 specqueue.py
+spec_switch_guard.py
 voteban.py
