@@ -143,6 +143,12 @@
       notify: restart ssh
       when: not is_standalone
 
+    - name: ensure ssh service is enabled on boot
+      service:
+        name: ssh
+        enabled: true
+      when: not is_standalone
+
     - name: Pre-seed iptables-persistent answers
       debconf:
         name: iptables-persistent
