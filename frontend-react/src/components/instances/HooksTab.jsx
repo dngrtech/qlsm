@@ -4,6 +4,7 @@ import { closestCenter, DndContext } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { deleteInstanceHook, fetchInstanceHooks, saveInstanceHooks, uploadInstanceHook } from '../../services/api';
 import HookRow, { MissingHookRow, ReadOnlyHookRow, SortableHookRow } from './HookRow';
+import ConfirmationModal from '../ConfirmationModal';
 
 function errorMessage(error, fallback) {
   return error?.error?.message || error?.message || fallback;
@@ -24,7 +25,6 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   const [missingHooks, setMissingHooks] = useState([]);
   const [initialMissing, setInitialMissing] = useState([]);
   const [pendingDelete, setPendingDelete] = useState(null);
-  const [deleteError, setDeleteError] = useState(null);
 
   const reload = () => setReloadKey((k) => k + 1);
 
@@ -95,13 +95,11 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   };
 
   const confirmDelete = async () => {
-    setDeleteError(null);
     try {
       await deleteInstanceHook(instanceId, pendingDelete.filename);
-      setPendingDelete(null);
       reload();
     } catch (err) {
-      setDeleteError(errorMessage(err, 'Delete failed.'));
+      setError(errorMessage(err, 'Delete failed.'));
     }
   };
 
@@ -261,33 +259,16 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
           {applying ? 'Applying...' : 'Apply & Restart'}
         </button>
       </div>
-      {pendingDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div role="dialog" aria-modal="true" className="w-80 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-elevated)] p-6 shadow-xl">
-            <h3 className="mb-2 font-semibold text-[var(--text-primary)]">Delete hook?</h3>
-            <p className="mb-4 text-sm text-[var(--text-muted)]">
-              <span className="font-mono text-[var(--text-primary)]">{pendingDelete.filename}</span> will be permanently deleted.
-            </p>
-            {deleteError && <p className="mb-3 text-sm text-theme-danger">{deleteError}</p>}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => { setPendingDelete(null); setDeleteError(null); }}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="rounded px-3 py-1.5 text-sm font-medium bg-red-600 text-white hover:bg-red-700"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmationModal
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete hook?"
+        message={<>Delete <span className="font-mono text-theme-primary">{pendingDelete?.filename}</span>? This cannot be undone.</>}
+        confirmButtonText="Delete"
+        confirmButtonVariant="danger"
+        zIndexClass="z-[60]"
+      />
     </div>
   );
 }
