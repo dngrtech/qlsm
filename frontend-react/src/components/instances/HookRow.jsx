@@ -259,9 +259,10 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
     }
   };
 
+  const vtName = `hook-${hook.filename.replace(/[^a-zA-Z0-9]/g, '-')}`;
   return (
     <div
-      style={style}
+      style={{ ...style, viewTransitionName: vtName }}
       className={`flex min-h-12 items-center gap-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)] px-3 py-2.5${readOnly ? '' : ' hover:bg-[var(--surface-elevated)]'}`}
       data-testid={`hook-row-${hook.filename}`}
     >

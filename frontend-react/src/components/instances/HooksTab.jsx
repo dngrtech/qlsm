@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { closestCenter, DndContext } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { deleteInstanceHook, fetchInstanceHooks, saveInstanceHooks, uploadInstanceHook } from '../../services/api';
@@ -111,11 +112,16 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   );
 
   const toggleHook = (filename) => {
-    setEnabledOrder((current) => (
+    const doUpdate = () => setEnabledOrder((current) => (
       current.includes(filename)
         ? current.filter((item) => item !== filename)
         : [...current, filename]
     ));
+    if (document.startViewTransition) {
+      document.startViewTransition(() => flushSync(doUpdate));
+    } else {
+      doUpdate();
+    }
   };
 
   const handleDragEnd = ({ active, over }) => {
