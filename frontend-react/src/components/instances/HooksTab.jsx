@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { closestCenter, DndContext } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -11,6 +11,7 @@ function errorMessage(error, fallback) {
 
 export default function HooksTab({ instanceId, draftId, onApplied }) {
   const uploadRef = useRef(null);
+  const scrollRef = useRef(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -111,6 +112,14 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     [enabledOrder, initialEnabled, missingHooks, initialMissing],
   );
 
+  const restrictToTab = useCallback(({ transform, draggingNodeRect }) => {
+    if (!scrollRef.current || !draggingNodeRect) return { ...transform, x: 0 };
+    const bounds = scrollRef.current.getBoundingClientRect();
+    const minY = bounds.top - draggingNodeRect.top;
+    const maxY = bounds.bottom - draggingNodeRect.bottom;
+    return { ...transform, x: 0, y: Math.min(Math.max(transform.y, minY), maxY) };
+  }, []);
+
   const toggleHook = (filename) => {
     const doUpdate = () => setEnabledOrder((current) => (
       current.includes(filename)
@@ -178,7 +187,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
           </div>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-4 pt-2 pb-3">
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">User hooks</span>
           {!draftId && instanceId && (
@@ -196,7 +205,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
           )}
         </div>
         <div className="flex flex-col gap-2 px-3 pb-17">
-          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToTab]}>
             <SortableContext items={enabledOrder} strategy={verticalListSortingStrategy}>
               {enabledRows.map((hook) => (
                 <SortableHookRow
