@@ -618,6 +618,8 @@
     - name: restart networking
       service: { name: networking, state: restarted }
       when: not is_standalone
+    - name: enable ssh service on boot
+      service: { name: ssh, enabled: true }
     - name: restart ssh
       service: { name: ssh, state: restarted }
       when: not is_standalone
