@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -195,6 +195,15 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
 }
 
 function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefined, readOnly = false, instanceId, onChanged, onDelete }) {
+  const [localEnabled, setLocalEnabled] = useState(hook.enabled);
+  useEffect(() => { setLocalEnabled(hook.enabled); }, [hook.enabled]);
+
+  const handleToggle = () => {
+    if (readOnly) return;
+    setLocalEnabled((v) => !v);
+    setTimeout(() => onToggle(hook.filename), 300);
+  };
+
   const [renaming, setRenaming] = useState(false);
   const [renameSaving, setRenameSaving] = useState(false);
   const [renameValue, setRenameValue] = useState(hook.filename);
@@ -272,14 +281,14 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
       {readOnly && <span className="h-7 w-7 flex-shrink-0" />}
       <button
         type="button"
-        onClick={readOnly ? undefined : () => onToggle(hook.filename)}
+        onClick={readOnly ? undefined : handleToggle}
         disabled={readOnly}
         className="neu-toggle neu-toggle--sm flex-shrink-0"
         aria-label={`Enable ${hook.filename}`}
-        aria-pressed={hook.enabled}
+        aria-pressed={localEnabled}
       >
-        <span className={`neu-toggle__track ${hook.enabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-          <span className={`neu-toggle__knob ${hook.enabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+        <span className={`neu-toggle__track ${localEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+          <span className={`neu-toggle__knob ${localEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
         </span>
       </button>
       {renaming ? (
