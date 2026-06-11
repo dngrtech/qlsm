@@ -259,7 +259,7 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
     }
   };
 
-  const vtName = `hook-${hook.filename.replace(/[^a-zA-Z0-9]/g, '-')}`;
+  const vtName = `hook-${hook.filename.replace(/[^a-zA-Z0-9]/g, (c) => `x${c.charCodeAt(0).toString(16)}x`)}`;
   return (
     <div
       style={{ ...style, viewTransitionName: vtName }}
