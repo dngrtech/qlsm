@@ -24,7 +24,7 @@ class reset_acc(minqlx.Plugin):
     def cmd_resetstats(self, player, msg, channel):
         if len(msg) == 1:
             self._reset(player, player)
-            return
+            return minqlx.RET_STOP_ALL
 
         if player.privileges is None or player.privileges not in ("admin", "mod"):
             player.tell("^1Only admins can reset another player's stats.")
@@ -37,6 +37,7 @@ class reset_acc(minqlx.Plugin):
             return minqlx.RET_STOP_ALL
 
         self._reset(player, target)
+        return minqlx.RET_STOP_ALL
 
     def _reset(self, requester, target):
         if not hasattr(minqlx, "reset_player_stats"):
