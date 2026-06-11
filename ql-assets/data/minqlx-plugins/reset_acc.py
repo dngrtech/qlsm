@@ -23,7 +23,10 @@ class reset_acc(minqlx.Plugin):
         self.add_hook("client_command", self.handle_client_command, priority=minqlx.PRI_HIGH)
 
     def handle_client_command(self, player, cmd):
-        if cmd.lower().startswith("say !resetstats") or cmd.lower().startswith("say_team !resetstats"):
+        lower = cmd.lower()
+        if lower.startswith("say !resetstats") or lower.startswith("say_team !resetstats"):
+            msg = cmd.split()[1:]  # drop "say"/"say_team", keep "!resetstats [name...]"
+            self.cmd_resetstats(player, msg, None)
             return minqlx.RET_STOP_ALL
 
     def cmd_resetstats(self, player, msg, channel):
