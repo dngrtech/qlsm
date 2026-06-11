@@ -40,10 +40,14 @@ class spec_switch_guard(minqlx.Plugin):
         self._spec_since = {}  # steam_id -> float: wall-clock time player entered spec from an active team
 
     def handle_team_switch(self, player, old_team, new_team):
+        # Record only. Do NOT pop the entry here on spec->active: an in-frame
+        # free->spec->free cycle (the queue-skip exploit) fires two
+        # team_switch events back-to-back, and the second would wipe the
+        # timer before team_switch_attempt can block the rejoiner. Entries
+        # decay naturally on the next free->spec (overwrite) and are
+        # cleaned on player_disconnect.
         if new_team == "spectator" and old_team in ("red", "blue", "free"):
             self._spec_since[player.steam_id] = time.time()
-        elif new_team != "spectator":
-            self._spec_since.pop(player.steam_id, None)
 
     def handle_team_switch_attempt(self, player, old_team, new_team):
         if not self._enabled:

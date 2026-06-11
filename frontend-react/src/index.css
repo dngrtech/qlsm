@@ -2804,6 +2804,13 @@ body {
   left: 18px;
 }
 
+/* Suppress root page cross-fade when hook rows animate between sections */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 /* Responsive adjustments */
 @media (max-width: 1023px) {
   .navbar-content {
