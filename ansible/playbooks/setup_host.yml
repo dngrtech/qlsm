@@ -451,6 +451,7 @@
       become: yes
       become_user: ql
       shell: |
+        set -e
         for patch in /tmp/minqlx-patches/*.patch; do
           [ -f "$patch" ] || continue
           patch -p1 --forward --reject-file=- < "$patch"
