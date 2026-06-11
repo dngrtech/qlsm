@@ -20,6 +20,11 @@ ADMIN_LEVEL = 2
 class reset_acc(minqlx.Plugin):
     def __init__(self):
         self.add_command("resetstats", self.cmd_resetstats, 0)
+        self.add_hook("client_command", self.handle_client_command, priority=minqlx.PRI_HIGH)
+
+    def handle_client_command(self, player, cmd):
+        if cmd.lower().startswith("say !resetstats") or cmd.lower().startswith("say_team !resetstats"):
+            return minqlx.RET_STOP_ALL
 
     def cmd_resetstats(self, player, msg, channel):
         if len(msg) == 1:
