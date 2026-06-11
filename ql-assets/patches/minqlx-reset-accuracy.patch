@@ -1,6 +1,6 @@
 --- a/python_embed.c
 +++ b/python_embed.c
-@@ -1269,6 +1269,36 @@ static PyObject* PyMinqlx_SetScore(PyObject* self, PyObject* args) {
+@@ -1269,6 +1269,38 @@ static PyObject* PyMinqlx_SetScore(PyObject* self, PyObject* args) {
      Py_RETURN_TRUE;
  }
 
@@ -25,6 +25,8 @@
 +
 +    g_entities[client_id].client->accuracy_shots = 0;
 +    g_entities[client_id].client->accuracy_hits = 0;
++    g_entities[client_id].client->round_shots = 0;
++    g_entities[client_id].client->round_hits = 0;
 +    g_entities[client_id].client->expandedStats.numKills = 0;
 +    g_entities[client_id].client->expandedStats.numDeaths = 0;
 +    for (int i = 0; i < 16; i++) {
@@ -37,7 +39,7 @@
  /*
  * ================================================================
  *                           callvote
-@@ -1754,6 +1784,8 @@ static PyObject* PyMinqlx_Callvote(PyObject* self, PyObject* args) {
+@@ -1754,6 +1786,8 @@ static PyObject* PyMinqlx_Callvote(PyObject* self, PyObject* args) {
      {"set_score", PyMinqlx_SetScore, METH_VARARGS,
       "Sets a player's score."},
 +    {"reset_player_stats", PyMinqlx_ResetPlayerStats, METH_VARARGS,
