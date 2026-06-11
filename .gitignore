@@ -105,6 +105,8 @@ ql-assets/data/*
 !ql-assets/data/system-hooks/**
 !ql-assets/qlfilter/
 !ql-assets/qlfilter/**
+!ql-assets/patches/
+!ql-assets/patches/**
 
 # ── Configs (default preset only) ────────────────────────────────────────────
 !configs/

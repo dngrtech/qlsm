@@ -1,0 +1,91 @@
+---
+- name: Rebuild minqlx and deploy to shared location
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    minqlx_build_dir: "/tmp/minqlx-build"
+    minqlx_shared_dir: "/home/ql/minqlx-shared"
+
+  tasks:
+    - name: Clean up old minqlx build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+
+    - name: Create fresh minqlx build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Clone minqlx repo as ql user
+      become: yes
+      become_user: ql
+      git:
+        repo: https://github.com/MinoMino/minqlx.git
+        dest: "{{ minqlx_build_dir }}"
+        depth: 1
+
+    - name: Copy local minqlx patches to build host
+      copy:
+        src: "{{ playbook_dir }}/../../ql-assets/patches/"
+        dest: "/tmp/minqlx-patches/"
+        mode: '0644'
+
+    - name: Apply local minqlx patches
+      become: yes
+      become_user: ql
+      shell: |
+        for patch in /tmp/minqlx-patches/*.patch; do
+          [ -f "$patch" ] || continue
+          patch -p1 --forward --reject-file=- < "$patch"
+        done
+      args:
+        chdir: "{{ minqlx_build_dir }}"
+        executable: /bin/bash
+
+    - name: Compile minqlx (make) as ql user
+      become: yes
+      become_user: ql
+      make:
+        chdir: "{{ minqlx_build_dir }}"
+
+    - name: Copy minqlx compiled files to shared location
+      copy:
+        src: "{{ minqlx_build_dir }}/{{ item.src }}"
+        dest: "{{ minqlx_shared_dir }}/{{ item.dest }}"
+        remote_src: yes
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - { src: "bin/minqlx.x64.so", dest: "minqlx.x64.so" }
+        - { src: "bin/run_server_x64_minqlx.sh", dest: "run_server_x64_minqlx.sh" }
+        - { src: "python/minqlx/", dest: "minqlx/" }
+
+    - name: Copy optional helper scripts if present
+      become: yes
+      shell: |
+        for h in minqlx-cmd quake_live.sh; do
+          if [ -f "{{ minqlx_build_dir }}/$h" ]; then
+            cp "{{ minqlx_build_dir }}/$h" "{{ minqlx_shared_dir }}/$h"
+            chown ql:ql "{{ minqlx_shared_dir }}/$h"
+            chmod 0755 "{{ minqlx_shared_dir }}/$h"
+          fi
+        done
+      args:
+        executable: /bin/bash
+
+    - name: Clean up minqlx build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+
+    - name: Clean up patch staging directory
+      file:
+        path: "/tmp/minqlx-patches"
+        state: absent

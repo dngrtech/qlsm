@@ -60,3 +60,31 @@ def _migrate_host_instances_to_hook(host):
             append_log(host, f"instance id={instance_id} migration result: {result}")
 
     return ok, failed
+
+
+def _restart_running_instances(host):
+    """Restart all RUNNING instances on a host.
+
+    Used after a minqlx rebuild so instances load the new binary.
+    Stopped instances are left untouched.
+    Returns (restarted_ok, restarted_failed) counts.
+    """
+    from ui.task_logic.ansible_instance_mgmt import restart_instance_logic
+    from ui.models import db, InstanceStatus
+
+    running_ids = [
+        i.id for i in host.instances if i.status == InstanceStatus.RUNNING
+    ]
+
+    ok = 0
+    failed = 0
+    for instance_id in running_ids:
+        result = restart_instance_logic(instance_id)
+        if result is True:
+            ok += 1
+        else:
+            failed += 1
+            append_log(host, f"instance id={instance_id} restart result: {result}")
+        db.session.commit()
+
+    return ok, failed

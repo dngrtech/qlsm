@@ -441,6 +441,24 @@
         depth: 1
       # Consider adding 'version: master' or a specific tag/commit for reproducibility
 
+    - name: Copy local minqlx patches to build host
+      copy:
+        src: "{{ playbook_dir }}/../../ql-assets/patches/"
+        dest: "/tmp/minqlx-patches/"
+        mode: '0644'
+
+    - name: Apply local minqlx patches
+      become: yes
+      become_user: ql
+      shell: |
+        for patch in /tmp/minqlx-patches/*.patch; do
+          [ -f "$patch" ] || continue
+          patch -p1 --forward --reject-file=- < "$patch"
+        done
+      args:
+        chdir: "{{ minqlx_build_dir }}"
+        executable: /bin/bash
+
     - name: Compile minqlx (make) as ql user
       become: yes
       become_user: ql
