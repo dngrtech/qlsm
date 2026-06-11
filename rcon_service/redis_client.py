@@ -40,8 +40,8 @@ class RedisClient:
             self.redis_url,
             decode_responses=True,
             password=self._redis_password,
-            socket_timeout=None,         # redis-py 8.x changed default to 5s,
-            socket_connect_timeout=5,    # which breaks idle pubsub listen() loops
+            socket_timeout=None,         # redis-py 8.x default 5s breaks idle pubsub listen() loops
+            socket_connect_timeout=5,
         )
         await self._redis.ping()
         log.info("Connected to Redis successfully.")
