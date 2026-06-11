@@ -100,6 +100,18 @@
 
 
     
+    - name: Sync minqlx binary and runtime from shared location
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ qlds_dir }}/{{ item.dest }}"
+        remote_src: yes
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - { src: "/home/ql/minqlx-shared/minqlx.x64.so", dest: "minqlx.x64.so" }
+        - { src: "/home/ql/minqlx-shared/run_server_x64_minqlx.sh", dest: "run_server_x64_minqlx.sh" }
+
     - name: Render QLDS systemd service file (Update Hostname/Args)
       ansible.builtin.template:
         src: ../templates/qlds@.service.j2

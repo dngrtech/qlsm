@@ -53,6 +53,7 @@ class reset_acc(minqlx.Plugin):
             return
 
         result = minqlx.reset_player_stats(target.id)
+
         if not result:
             requester.tell("^1Could not reset stats (player not fully connected?).")
             return
