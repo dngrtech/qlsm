@@ -5,11 +5,14 @@ Designed for FFA warmup/practice servers where players want per-fight
 stats. After a fight, type !resetstats to zero your accuracy, kills,
 deaths, and score so the next Tab press shows only that engagement.
 
-Requires minqlx built with the reset_player_stats() C binding.
+Requires minqlx built with the reset_player_stats() and
+reset_player_accuracy() C bindings.
 
 Commands:
-  !resetstats          - Reset your own stats to 0
+  !resetstats          - Reset accuracy, K/D, and score to 0
   !resetstats <name>   - Admin: reset another player's stats
+  !resetacc            - Reset accuracy only (K/D unchanged)
+  !resetacc <name>     - Admin: reset another player's accuracy only
 """
 
 import minqlx
@@ -20,34 +23,58 @@ ADMIN_LEVEL = 2
 class reset_acc(minqlx.Plugin):
     def __init__(self):
         self.add_command("resetstats", self.cmd_resetstats, 0)
+        self.add_command("resetacc", self.cmd_resetacc, 0)
         self.add_hook("client_command", self.handle_client_command, priority=minqlx.PRI_HIGH)
 
     def handle_client_command(self, player, cmd):
         lower = cmd.lower()
-        if lower.startswith("say !resetstats") or lower.startswith("say_team !resetstats"):
-            msg = cmd.split()[1:]  # drop "say"/"say_team", keep "!resetstats [name...]"
-            self.cmd_resetstats(player, msg, None)
-            return minqlx.RET_STOP_ALL
+        for prefix in ("say ", "say_team "):
+            if lower.startswith(prefix):
+                body = lower[len(prefix):]
+                if body.startswith("!resetstats"):
+                    msg = cmd.split()[1:]
+                    self.cmd_resetstats(player, msg, None)
+                    return minqlx.RET_STOP_ALL
+                if body.startswith("!resetacc"):
+                    msg = cmd.split()[1:]
+                    self.cmd_resetacc(player, msg, None)
+                    return minqlx.RET_STOP_ALL
 
     def cmd_resetstats(self, player, msg, channel):
         if len(msg) == 1:
-            self._reset(player, player)
+            self._reset_all(player, player)
             return minqlx.RET_STOP_ALL
 
         if player.privileges is None or player.privileges not in ("admin", "mod"):
             player.tell("^1Only admins can reset another player's stats.")
             return minqlx.RET_STOP_ALL
 
-        target_name = " ".join(msg[1:]).lower()
-        target = self._find_player(target_name)
+        target = self._find_player(" ".join(msg[1:]).lower())
         if target is None:
-            player.tell(f"^1No player found matching ^7{target_name}^1.")
+            player.tell(f"^1No player found matching ^7{' '.join(msg[1:])}^1.")
             return minqlx.RET_STOP_ALL
 
-        self._reset(player, target)
+        self._reset_all(player, target)
         return minqlx.RET_STOP_ALL
 
-    def _reset(self, requester, target):
+    def cmd_resetacc(self, player, msg, channel):
+        if len(msg) == 1:
+            self._reset_accuracy(player, player)
+            return minqlx.RET_STOP_ALL
+
+        if player.privileges is None or player.privileges not in ("admin", "mod"):
+            player.tell("^1Only admins can reset another player's accuracy.")
+            return minqlx.RET_STOP_ALL
+
+        target = self._find_player(" ".join(msg[1:]).lower())
+        if target is None:
+            player.tell(f"^1No player found matching ^7{' '.join(msg[1:])}^1.")
+            return minqlx.RET_STOP_ALL
+
+        self._reset_accuracy(player, target)
+        return minqlx.RET_STOP_ALL
+
+    def _reset_all(self, requester, target):
         if not hasattr(minqlx, "reset_player_stats"):
             requester.tell("^1reset_player_stats not available — minqlx patch required.")
             return
@@ -65,6 +92,23 @@ class reset_acc(minqlx.Plugin):
         else:
             requester.tell(f"^2Reset stats for ^7{target.clean_name}^2.")
             target.tell(f"^2Your stats were reset by ^7{requester.clean_name}^2.")
+
+    def _reset_accuracy(self, requester, target):
+        if not hasattr(minqlx, "reset_player_accuracy"):
+            requester.tell("^1reset_player_accuracy not available — minqlx patch required.")
+            return
+
+        result = minqlx.reset_player_accuracy(target.id)
+
+        if not result:
+            requester.tell("^1Could not reset accuracy (player not fully connected?).")
+            return
+
+        if requester.id == target.id:
+            requester.tell("^2Accuracy reset. ^7WEAP and +acc are now 0.")
+        else:
+            requester.tell(f"^2Reset accuracy for ^7{target.clean_name}^2.")
+            target.tell(f"^2Your accuracy was reset by ^7{requester.clean_name}^2.")
 
     def _find_player(self, name_fragment):
         for p in self.players():

@@ -1,6 +1,6 @@
 --- a/python_embed.c
 +++ b/python_embed.c
-@@ -1269,6 +1269,38 @@ static PyObject* PyMinqlx_SetScore(PyObject* self, PyObject* args) {
+@@ -1269,6 +1269,68 @@ static PyObject* PyMinqlx_SetScore(PyObject* self, PyObject* args) {
      Py_RETURN_TRUE;
  }
 
@@ -36,13 +36,45 @@
 +    Py_RETURN_TRUE;
 +}
 +
++/*
++* ================================================================
++*                       reset_player_accuracy
++* ================================================================
++*/
++
++static PyObject* PyMinqlx_ResetPlayerAccuracy(PyObject* self, PyObject* args) {
++    int client_id;
++    if (!PyArg_ParseTuple(args, "i:reset_player_accuracy", &client_id))
++        return NULL;
++    else if (client_id < 0 || client_id >= sv_maxclients->integer) {
++        PyErr_Format(PyExc_ValueError,
++                     "client_id needs to be a number from 0 to %d.",
++                     sv_maxclients->integer);
++        return NULL;
++    }
++    else if (!g_entities[client_id].client)
++        Py_RETURN_FALSE;
++
++    g_entities[client_id].client->accuracy_shots = 0;
++    g_entities[client_id].client->accuracy_hits = 0;
++    g_entities[client_id].client->round_shots = 0;
++    g_entities[client_id].client->round_hits = 0;
++    for (int i = 0; i < 16; i++) {
++        g_entities[client_id].client->expandedStats.shotsFired[i] = 0;
++        g_entities[client_id].client->expandedStats.shotsHit[i] = 0;
++    }
++    Py_RETURN_TRUE;
++}
++
  /*
  * ================================================================
  *                           callvote
-@@ -1754,6 +1786,8 @@ static PyObject* PyMinqlx_Callvote(PyObject* self, PyObject* args) {
+@@ -1754,6 +1816,10 @@ static PyObject* PyMinqlx_Callvote(PyObject* self, PyObject* args) {
      {"set_score", PyMinqlx_SetScore, METH_VARARGS,
       "Sets a player's score."},
 +    {"reset_player_stats", PyMinqlx_ResetPlayerStats, METH_VARARGS,
 +     "Resets a player's accuracy, kills, and deaths to zero."},
++    {"reset_player_accuracy", PyMinqlx_ResetPlayerAccuracy, METH_VARARGS,
++     "Resets a player's accuracy to zero without changing kills or deaths."},
      {"callvote", PyMinqlx_Callvote, METH_VARARGS,
       "Calls a vote as if started by the server and not a player."},
