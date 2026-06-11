@@ -204,6 +204,15 @@
         name: "{{ host_timezone | default('UTC') }}"
       when: host_timezone is defined
 
+    - name: Prevent needrestart from restarting network services after package upgrades
+      lineinfile:
+        path: /etc/needrestart/needrestart.conf
+        line: "$nrconf{restart_blacklist} = [qr/^systemd-networkd/, qr/^systemd-udevd/];"
+        regexp: '^\$nrconf\{restart_blacklist\}'
+        create: no
+        state: present
+      ignore_errors: yes
+
   ########################################################################
   # 2. Firewall: build atomically, verify, roll back on failure
   ########################################################################
