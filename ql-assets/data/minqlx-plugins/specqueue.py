@@ -1958,7 +1958,7 @@ class specqueue(minqlx.Plugin):
             if last is None or curr != last:
                 self._afk_last_pos[sid] = curr
                 self._afk_last_moved[sid] = now
-            elif now - self._afk_last_moved.get(sid, now) >= afk_time:
+            elif now - self._afk_last_moved.get(sid, 0) >= afk_time:
                 self._afk_last_pos.pop(sid, None)
                 self._afk_last_moved.pop(sid, None)
                 name = getattr(player, "clean_name", None) or player.name
