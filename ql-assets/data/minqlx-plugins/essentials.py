@@ -38,6 +38,7 @@ class essentials(minqlx.Plugin):
     def __init__(self):
         super().__init__()
         self.add_hook("player_connect", self.handle_player_connect)
+        self.add_hook("player_loaded", self.handle_player_loaded_essentials)
         self.add_hook("player_disconnect", self.handle_player_disconnect)
         self.add_hook("vote_called", self.handle_vote_called)
         self.add_hook("command", self.handle_command, priority=minqlx.PRI_LOW)
@@ -116,12 +117,27 @@ class essentials(minqlx.Plugin):
 
         self.shuffle_used_this_map = False
 
+        # In-memory cache of sounds_enabled flag; avoids per-player Redis reads in sound commands.
+        self._sounds_enabled = {}
+
     def handle_player_connect(self, player):
-        self.update_player(player)
+        @minqlx.thread
+        def _update(): self.update_player(player)
+        _update()
+
+    def handle_player_loaded_essentials(self, player):
+        @minqlx.thread
+        def _load_flag():
+            flag = self.db.get_flag(player, "essentials:sounds_enabled", default=True)
+            self._sounds_enabled[player.steam_id] = flag
+        _load_flag()
 
     def handle_player_disconnect(self, player, reason):
         self.recent_dcs.appendleft((player, time.time()))
-        self.update_seen_player(player)
+        self._sounds_enabled.pop(player.steam_id, None)
+        @minqlx.thread
+        def _update(): self.update_seen_player(player)
+        _update()
 
     def handle_vote_called(self, caller, vote, args):
         # Enforce teamsizes.
@@ -320,8 +336,9 @@ class essentials(minqlx.Plugin):
         return minqlx.RET_STOP_ALL
 
     def cmd_enable_sounds(self, player, msg, channel):
-        flag = self.db.get_flag(player, "essentials:sounds_enabled", default=True)
+        flag = self._sounds_enabled.get(player.steam_id, True)
         self.db.set_flag(player, "essentials:sounds_enabled", not flag)
+        self._sounds_enabled[player.steam_id] = not flag
         
         if flag:
             player.tell("Sounds have been disabled. Use ^6{}sounds^7 to enable them again."
@@ -337,7 +354,7 @@ class essentials(minqlx.Plugin):
         if len(msg) < 2:
             return minqlx.RET_USAGE
 
-        if not self.db.get_flag(player, "essentials:sounds_enabled", default=True):
+        if not self._sounds_enabled.get(player.steam_id, True):
             player.tell("Sounds are disabled. Use ^6{}sounds^7 to enable them again."
                 .format(self.get_cvar("qlx_commandPrefix")))
             return minqlx.RET_STOP_ALL
@@ -351,7 +368,7 @@ class essentials(minqlx.Plugin):
         players = self.players()
         players.remove(player)
         for p in players:
-            if self.db.get_flag(p, "essentials:sounds_enabled", default=True):
+            if self._sounds_enabled.get(p.steam_id, True):
                 self.play_sound(msg[1], p)
 
         return minqlx.RET_STOP_ALL
@@ -361,7 +378,7 @@ class essentials(minqlx.Plugin):
         if len(msg) < 2:
             return minqlx.RET_USAGE
 
-        if not self.db.get_flag(player, "essentials:sounds_enabled", default=True):
+        if not self._sounds_enabled.get(player.steam_id, True):
             player.tell("Sounds are disabled. Use ^6{}sounds^7 to enable them again."
                 .format(self.get_cvar("qlx_commandPrefix")))
             return minqlx.RET_STOP_ALL
@@ -375,14 +392,14 @@ class essentials(minqlx.Plugin):
         players = self.players()
         players.remove(player)
         for p in players:
-            if self.db.get_flag(p, "essentials:sounds_enabled", default=True):
+            if self._sounds_enabled.get(p.steam_id, True):
                 self.play_music(msg[1], p)
 
         return minqlx.RET_STOP_ALL
 
     def cmd_stopsound(self, player, msg, channel):
         """Stops all sounds playing. Useful if someone plays one of those really long ones."""
-        if not self.db.get_flag(player, "essentials:sounds_enabled", default=True):
+        if not self._sounds_enabled.get(player.steam_id, True):
             player.tell("Sounds are disabled. Use ^6{}sounds^7 to enable them again."
                 .format(self.get_cvar("qlx_commandPrefix")))
             return minqlx.RET_STOP_ALL
@@ -391,7 +408,7 @@ class essentials(minqlx.Plugin):
 
     def cmd_stopmusic(self, player, msg, channel):
         """Stops any music playing."""
-        if not self.db.get_flag(player, "essentials:sounds_enabled", default=True):
+        if not self._sounds_enabled.get(player.steam_id, True):
             player.tell("Sounds are disabled. Use ^6{}sounds^7 to enable them again."
                 .format(self.get_cvar("qlx_commandPrefix")))
             return minqlx.RET_STOP_ALL
