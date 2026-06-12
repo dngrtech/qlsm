@@ -223,6 +223,7 @@ import re
 from os import path
 from zipfile import ZipFile
 import traceback
+import threading
 
 VERSION = "8.0"
 SOUND_TRIGGERS = "minqlx:myFun:triggers:{}:{}"
@@ -317,6 +318,8 @@ class myFun(minqlx.Plugin):
         self.soundFile = None
         # variable to store the sound trigger
         self.trigger = ""
+        # lock serialising concurrent scan_chat threads accessing soundFile/trigger/played
+        self._sound_lock = threading.Lock()
         # stores time of last sound play
         self.last_sound = None
         # variables used when checking for the presence of a sound file
@@ -545,39 +548,41 @@ class myFun(minqlx.Plugin):
             return
 
         # find the sound trigger for this sound (sets self.trigger, self.soundFile)
-        if self.find_sound_trigger(self.clean_text(msg)):
-            # stop sound processing if the player has this sound trigger turned off
-            if self.db.exists(PLAYERS_SOUNDS.format(player.steam_id, self.soundFile)):
-                return minqlx.RET_NONE
-            # check sound delay time
-            delay_time = self.check_time(player)
-            # see if admin is trying to play sound
-            admin_sound = self.db.get_permission(player.steam_id) >= self.admin_level
-            if delay_time:
-                # if admins have no delay time restriction then PASS
-                if self.admin_allowed and admin_sound:
-                    pass
-                # otherwise, impose the delay time wait and stop sound trigger processing
-                else:
-                    player.tell("^3You played a sound recently. {} seconds timeout remaining."
-                                .format(delay_time))
+        # lock ensures concurrent chat messages from two players don't race on shared fields
+        with self._sound_lock:
+            if self.find_sound_trigger(self.clean_text(msg)):
+                # stop sound processing if the player has this sound trigger turned off
+                if self.db.exists(PLAYERS_SOUNDS.format(player.steam_id, self.soundFile)):
                     return minqlx.RET_NONE
-            # check to see if a sound has been played
-            if not self.last_sound or self.admin_allowed > 1 and admin_sound:
-                pass
-            # Make sure the last sound played was not within the sound delay limit
-            elif time.time() - self.last_sound < self.get_cvar("qlx_funSoundDelay", int):
-                player.tell("^3A sound has been played in last {} seconds. Try again after the timeout."
-                            .format(self.get_cvar("qlx_funSoundDelay")))
-                return minqlx.RET_NONE
-            # call the play sound function
-            self.play_sound(self.soundFile)
+                # check sound delay time
+                delay_time = self.check_time(player)
+                # see if admin is trying to play sound
+                admin_sound = self.db.get_permission(player.steam_id) >= self.admin_level
+                if delay_time:
+                    # if admins have no delay time restriction then PASS
+                    if self.admin_allowed and admin_sound:
+                        pass
+                    # otherwise, impose the delay time wait and stop sound trigger processing
+                    else:
+                        player.tell("^3You played a sound recently. {} seconds timeout remaining."
+                                    .format(delay_time))
+                        return minqlx.RET_NONE
+                # check to see if a sound has been played
+                if not self.last_sound or self.admin_allowed > 1 and admin_sound:
+                    pass
+                # Make sure the last sound played was not within the sound delay limit
+                elif time.time() - self.last_sound < self.get_cvar("qlx_funSoundDelay", int):
+                    player.tell("^3A sound has been played in last {} seconds. Try again after the timeout."
+                                .format(self.get_cvar("qlx_funSoundDelay")))
+                    return minqlx.RET_NONE
+                # call the play sound function
+                self.play_sound(self.soundFile)
 
-        # If the sound played record the time with the player's steam id (for delay_time processing)
-        if self.played:
-            self.sound_limiting[player.steam_id] = time.time()
-        # unset self.played so it can be checked again the next time a sound trigger is typed
-        self.played = False
+            # If the sound played record the time with the player's steam id (for delay_time processing)
+            if self.played:
+                self.sound_limiting[player.steam_id] = time.time()
+            # unset self.played so it can be checked again the next time a sound trigger is typed
+            self.played = False
         return minqlx.RET_NONE
 
     def handle_console_print(self, text):
@@ -1086,7 +1091,7 @@ class myFun(minqlx.Plugin):
             self.file_status = False
             minqlx.console_command("fdir {}".format(msg[1]))
             count = 0
-            if count < 10 and not self.file_status:
+            while count < 10 and not self.file_status:
                 count += 1
                 time.sleep(0.1)
             self.checking_file = False
@@ -1171,22 +1176,29 @@ class myFun(minqlx.Plugin):
         if play == 3 or not active:
             self.played = True
             self.last_sound = time.time()
-            for p in self.players():
-                if self.db.get_flag(p, "essentials:sounds_enabled", default=True) and \
-                        not self.db.exists(PLAYERS_SOUNDS.format(p.steam_id, _path)):
-                    super().play_sound(_path, p)
+            targets = [p for p in self.players()
+                       if self.db.get_flag(p, "essentials:sounds_enabled", default=True)
+                       and not self.db.exists(PLAYERS_SOUNDS.format(p.steam_id, _path))]
         elif play == 1 or (play == 2 and active):
             self.played = True
             self.last_sound = time.time()
             teams = self.teams()
-            for p in teams["red"] + teams["blue"] + teams["free"]:
-                if not p.is_alive and self.db.get_flag(p, "essentials:sounds_enabled", default=True) and \
-                        not self.db.exists(PLAYERS_SOUNDS.format(p.steam_id, _path)):
-                    super().play_sound(_path, p)
-            for p in teams["spectator"]:
-                if self.db.get_flag(p, "essentials:sounds_enabled", default=True) and \
-                        not self.db.exists(PLAYERS_SOUNDS.format(p.steam_id, _path)):
-                    super().play_sound(_path, p)
+            targets = [p for p in teams["red"] + teams["blue"] + teams["free"]
+                       if not p.is_alive
+                       and self.db.get_flag(p, "essentials:sounds_enabled", default=True)
+                       and not self.db.exists(PLAYERS_SOUNDS.format(p.steam_id, _path))]
+            targets += [p for p in teams["spectator"]
+                        if self.db.get_flag(p, "essentials:sounds_enabled", default=True)
+                        and not self.db.exists(PLAYERS_SOUNDS.format(p.steam_id, _path))]
+        else:
+            return
+
+        # dispatch send_server_command to the game frame — must not be called from a background thread
+        @minqlx.next_frame
+        def _send(pts=targets, path=_path):
+            for p in pts:
+                super(myFun, self).play_sound(path, p)
+        _send()
 
     def last_2_sound(self):
         # 0 = don't play sound for anyone when the last 2 (or  1 on either team of a team based game) remains
