@@ -396,6 +396,8 @@ class specqueue(minqlx.Plugin):
         self.set_cvar_once("qlx_queueShuffleOnMapChange", "0")
         self.set_cvar_once("qlx_queueShuffleTime", "10")
         self.set_cvar_once("qlx_queueShuffleMessage", "2")
+        self.set_cvar_once("qlx_queueAfkMoveTime", "0")        # seconds; 0 = disabled
+        self.set_cvar_once("qlx_queueAfkExemptLevel", "5")     # permission level exempt from auto-spec
         self.set_cvar_once("qlx_queueShowQPosition", "1")
         self.set_cvar_once("qlx_queuePositionLabel", "0")
         self.set_cvar_once("qlx_queueCleanClanTags", "0")
@@ -463,6 +465,8 @@ class specqueue(minqlx.Plugin):
         self._queue_tags = False
         self._specPlayer = []
         self._afk_tag = {}
+        self._afk_last_pos = {}    # sid -> (x, y, z)
+        self._afk_last_moved = {}  # sid -> float timestamp
         self.retrieving_elo = False
         self.elo_ratings = {}
         self.elo_lock = RLock()
@@ -476,6 +480,7 @@ class specqueue(minqlx.Plugin):
         self.remove_conflicting_hooks()
         self.set_queue_label()
         self.get_cvars()
+        self._start_afk_position_poll()
 
     # ==============================================
     #               Event Handler's
@@ -1906,9 +1911,15 @@ class specqueue(minqlx.Plugin):
                             if permission >= admin:
                                 if admin_multiplier:
                                     if time_in_spec >= max_spec_time * admin_multiplier:
-                                        spec.kick("was in spectate, not the queue, for too long.")
+                                        @minqlx.next_frame
+                                        def do_kick(s=spec):
+                                            s.kick("was in spectate, not the queue, for too long.")
+                                        do_kick()
                             elif time_in_spec >= max_spec_time:
-                                spec.kick("was in spectate, not the queue, for too long.")
+                                @minqlx.next_frame
+                                def do_kick(s=spec):
+                                    s.kick("was in spectate, not the queue, for too long.")
+                                do_kick()
                         else:
                             self.remove_from_spec(spec)
         except Exception as e:
@@ -2309,9 +2320,13 @@ class specqueue(minqlx.Plugin):
     def add_to_afk(self, player, afk_tag):
         try:
             self._afk.add_to_times(player.steam_id)
-            player.center_print("^6AFK Mode\n^7Type ^4!here ^7when back.")
             self._afk_tag[str(player.steam_id)] = afk_tag
-            player.clan = player.clan
+
+            @minqlx.next_frame
+            def notify(p=player):
+                p.center_print("^6AFK Mode\n^7Type ^4!here ^7when back.")
+                p.clan = p.clan
+            notify()
         except Exception as e:
             if ENABLE_LOG:
                 self.queue_log.info("specqueue add_to_afk Exception: {}\n{}"
@@ -2323,8 +2338,11 @@ class specqueue(minqlx.Plugin):
             if str(sid) in self._afk:
                 self._afk.remove_from_times(sid)
                 if msg:
-                    player.center_print("^3Not marked AFK\n^7Join to play or enter the queue.")
-                    player.clan = player.clan
+                    @minqlx.next_frame
+                    def notify(p=player):
+                        p.center_print("^3Not marked AFK\n^7Join to play or enter the queue.")
+                        p.clan = p.clan
+                    notify()
             if str(sid) in self._afk_tag:
                 del self._afk_tag[str(sid)]
         except Exception as e:
