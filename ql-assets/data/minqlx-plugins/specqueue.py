@@ -528,6 +528,9 @@ class specqueue(minqlx.Plugin):
                     del self.elo_ratings[str(player.steam_id)]
                 except KeyError:
                     pass
+            sid = str(player.steam_id)
+            self._afk_last_pos.pop(sid, None)
+            self._afk_last_moved.pop(sid, None)
             if ENABLE_LOG:
                 self.queue_log.info("specqueue process player disconnect: {}".format(player))
             try:
@@ -786,6 +789,8 @@ class specqueue(minqlx.Plugin):
             self.q_game_info = [self.game.type_short, self.get_cvar("teamsize", int), self.get_cvar("fraglimit", int)]
             self._ignore = False
             self._ignore_msg_already_said = False
+            self._afk_last_pos.clear()
+            self._afk_last_moved.clear()
             self.end_screen = False
             self.check_spec_time()
             self.death_count = 0
