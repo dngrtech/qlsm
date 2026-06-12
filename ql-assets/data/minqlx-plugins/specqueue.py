@@ -1943,6 +1943,8 @@ class specqueue(minqlx.Plugin):
             afk_time = self.get_cvar("qlx_queueAfkMoveTime", int)
             if afk_time <= 0:
                 return
+            if self._queue.count < 1:
+                return
             exempt_level = self.get_cvar("qlx_queueAfkExemptLevel", int)
             now = time.time()
             free_players = self.teams().get("free", [])
