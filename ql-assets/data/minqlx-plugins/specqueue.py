@@ -1927,6 +1927,51 @@ class specqueue(minqlx.Plugin):
                 self.queue_log.info("specqueue check spec time Exception:{} {}"
                                     .format(type(e).__name__, traceback.format_exc()))
 
+    @minqlx.thread
+    def _start_afk_position_poll(self):
+        while True:
+            time.sleep(1)
+            self._check_afk_positions()
+
+    def _check_afk_positions(self):
+        try:
+            afk_time = self.get_cvar("qlx_queueAfkMoveTime", int)
+            if afk_time <= 0:
+                return
+            exempt_level = self.get_cvar("qlx_queueAfkExemptLevel", int)
+            now = time.time()
+            free_players = self.teams().get("free", [])
+        except Exception:
+            return
+        for player in free_players:
+            sid = str(player.steam_id)
+            try:
+                if self.db.get_permission(player.steam_id) >= exempt_level:
+                    self._afk_last_pos.pop(sid, None)
+                    self._afk_last_moved.pop(sid, None)
+                    continue
+                pos = player.position()
+                curr = (pos.x, pos.y, pos.z)
+            except Exception:
+                continue
+            last = self._afk_last_pos.get(sid)
+            if last is None or curr != last:
+                self._afk_last_pos[sid] = curr
+                self._afk_last_moved[sid] = now
+            elif now - self._afk_last_moved.get(sid, now) >= afk_time:
+                self._afk_last_pos.pop(sid, None)
+                self._afk_last_moved.pop(sid, None)
+                name = getattr(player, "clean_name", None) or player.name
+
+                @minqlx.next_frame
+                def move(p=player, n=name):
+                    try:
+                        p.put("spectator")
+                        self.msg("^1{} was moved to spectator for being AFK.".format(n))
+                    except Exception:
+                        pass
+                move()
+
     # Search for a player name match using the supplied string
     def find_player(self, name):
         try:
