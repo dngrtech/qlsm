@@ -126,21 +126,25 @@ class serverchecker(minqlx.Plugin):
 
     def on_game_start(self, data):
         self._match_start_time = time.time()
-        self.update_status()
+        self._update_status_async()
 
     def on_game_end(self, data):
         self._match_start_time = None
-        self.update_status()
+        self._update_status_async()
 
     def on_player_connect(self, player):
-        self.update_status()
+        self._update_status_async()
 
     def on_player_disconnect(self, player, reason):
-        self.update_status()
+        self._update_status_async()
 
     def on_map(self, mapname, factory):
         self._match_start_time = None
         self._refresh_workshop_item_for_map(mapname)
+        self._update_status_async()
+
+    @minqlx.thread
+    def _update_status_async(self):
         self.update_status()
 
     # ── Update loop ────────────────────────────────────────────────────────
