@@ -420,7 +420,6 @@ class specqueue(minqlx.Plugin):
         self.add_hook("set_configstring", self.handle_set_config_string, priority=minqlx.PRI_HIGHEST)
         self.add_hook("client_command", self.handle_client_command)
         self.add_hook("vote_ended", self.handle_vote_ended)
-        self.add_hook("plugin_unload", self.handle_plugin_unload)
         self.add_hook("console_print", self.handle_console_print)
         self.add_hook("map", self.handle_map)
 
@@ -1932,10 +1931,6 @@ class specqueue(minqlx.Plugin):
             if ENABLE_LOG:
                 self.queue_log.info("specqueue check spec time Exception:{} {}"
                                     .format(type(e).__name__, traceback.format_exc()))
-
-    def handle_plugin_unload(self, plugin):
-        if plugin == self.__class__.__name__:
-            self._afk_poll_stop.set()
 
     @minqlx.thread
     def _start_afk_position_poll(self):
