@@ -115,7 +115,11 @@ set qlx_queueGetEloRatingsEachMap "1"
 
 import minqlx
 import time
-from threading import RLock
+import traceback
+import logging
+import os
+from logging.handlers import RotatingFileHandler
+from threading import RLock, Event
 from random import randrange
 import re
 import requests
@@ -140,11 +144,6 @@ ELO_REQUEST_TIMEOUT = 5.0
 
 ENABLE_LOG = True  # set to True/False to enable/disable logging
 
-if ENABLE_LOG:
-    import traceback
-    import logging
-    import os
-    from logging.handlers import RotatingFileHandler
 
 
 # This is the class used to manage the player queue. I tried using the Queue that comes with python
@@ -421,6 +420,7 @@ class specqueue(minqlx.Plugin):
         self.add_hook("set_configstring", self.handle_set_config_string, priority=minqlx.PRI_HIGHEST)
         self.add_hook("client_command", self.handle_client_command)
         self.add_hook("vote_ended", self.handle_vote_ended)
+        self.add_hook("plugin_unload", self.handle_plugin_unload)
         self.add_hook("console_print", self.handle_console_print)
         self.add_hook("map", self.handle_map)
 
@@ -467,6 +467,7 @@ class specqueue(minqlx.Plugin):
         self._afk_tag = {}
         self._afk_last_pos = {}    # sid -> (x, y, z)
         self._afk_last_moved = {}  # sid -> float timestamp
+        self._afk_poll_stop = Event()
         self.retrieving_elo = False
         self.elo_ratings = {}
         self.elo_lock = RLock()
@@ -1124,15 +1125,16 @@ class specqueue(minqlx.Plugin):
                     count += 1
             self.displaying_queue = False
         except Exception as e:
-            self.queue_log.info("specqueue queue message Exception: {}\n{}"
-                                .format(type(e).__name__, traceback.format_exc()))
+            if ENABLE_LOG:
+                self.queue_log.info("specqueue queue message Exception: {}\n{}"
+                                    .format(type(e).__name__, traceback.format_exc()))
 
     def add_spectators(self):
         try:
             for player in self.teams()["spectator"]:
                 self.add_to_spec(player)
         except Exception as e:
-            raise KeyError("add spectators Exception: { ; {}"
+            raise KeyError("add spectators Exception: {}; {}"
                            .format(type(e).__name__, traceback.format_exc()))
 
     def add_to_spec(self, player):
@@ -1491,9 +1493,10 @@ class specqueue(minqlx.Plugin):
 
     @minqlx.thread
     def request_elo_rating(self, sid):
-        if self.retrieving_elo or not sid:
-            return
-        self.retrieving_elo = True
+        with self.elo_lock:
+            if self.retrieving_elo or not sid:
+                return
+            self.retrieving_elo = True
         if ENABLE_LOG:
             self.queue_log.info("Requesting ELO rating information from {} for: {}".format(ELO_URL, sid))
         try:
@@ -1502,7 +1505,6 @@ class specqueue(minqlx.Plugin):
             response = False
             url = "http://{}/elo/{}".format(ELO_URL, sid)
             attempts = 0
-            elo_dict = {}
             while attempts < 3:
                 attempts += 1
                 info = requests.get(url, timeout=ELO_REQUEST_TIMEOUT)
@@ -1515,7 +1517,6 @@ class specqueue(minqlx.Plugin):
                 else:
                     time.sleep(0.1)
             if response:
-                elo_dict[sid] = {}
                 now = int(time.time())
                 save_db = self.get_cvar("qlx_queueSaveEloToDatabase", bool)
                 with self.elo_lock:
@@ -1932,10 +1933,13 @@ class specqueue(minqlx.Plugin):
                 self.queue_log.info("specqueue check spec time Exception:{} {}"
                                     .format(type(e).__name__, traceback.format_exc()))
 
+    def handle_plugin_unload(self, plugin):
+        if plugin == self.__class__.__name__:
+            self._afk_poll_stop.set()
+
     @minqlx.thread
     def _start_afk_position_poll(self):
-        while True:
-            time.sleep(1)
+        while not self._afk_poll_stop.wait(1):
             self._check_afk_positions()
 
     def _check_afk_positions(self):
@@ -1990,6 +1994,7 @@ class specqueue(minqlx.Plugin):
                     if player.id == _id or player.steam_id == _id:
                         found_player = player
                         return found_player, int(str([found_player]).split(":")[0].split("(")[1])
+                return -1, -1
             else:
                 # Remove color codes from the supplied string
                 player_name = re.sub(r"\^[0-9]", "", name).lower()
@@ -2325,7 +2330,10 @@ class specqueue(minqlx.Plugin):
         if len(msg) > 1:
             if self.db.get_permission(player.steam_id) >= self.get_cvar("qlx_queueAdmin", int):
                 match = self.find_player(msg[1])
-                self.exec_go_afk(match[0], msg[0][1:])
+                if match and match[0] not in (-1, 0):
+                    self.exec_go_afk(match[0], msg[0][1:])
+                else:
+                    player.tell("^1Could not find unique player matching: {}".format(msg[1]))
         else:
             self.exec_go_afk(player, msg[0][1:])
 
