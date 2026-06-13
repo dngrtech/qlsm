@@ -404,6 +404,9 @@ def add_instance_api():
         # - 'factories' key PRESENT (even if empty {}) → respect user selection, only deploy selected
         instance_factories_dir = os.path.join(instance_config_dir, 'factories')
         os.makedirs(instance_factories_dir, exist_ok=True)
+
+        instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
+        os.makedirs(instance_user_hooks_dir, exist_ok=True)
         
         if 'factories' in data:
             # User explicitly provided factory selection - only deploy what they selected
