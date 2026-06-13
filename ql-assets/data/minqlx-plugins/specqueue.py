@@ -466,6 +466,7 @@ class specqueue(minqlx.Plugin):
         self._afk_tag = {}
         self._afk_last_pos = {}    # sid -> (x, y, z)
         self._afk_last_moved = {}  # sid -> float timestamp
+        self._afk_pos_lock = RLock()
         self._afk_poll_stop = Event()
         self.retrieving_elo = False
         self.elo_ratings = {}
@@ -481,6 +482,9 @@ class specqueue(minqlx.Plugin):
         self.set_queue_label()
         self.get_cvars()
         self._start_afk_position_poll()
+
+    def __del__(self):
+        self._afk_poll_stop.set()
 
     # ==============================================
     #               Event Handler's
@@ -529,8 +533,9 @@ class specqueue(minqlx.Plugin):
                 except KeyError:
                     pass
             sid = str(player.steam_id)
-            self._afk_last_pos.pop(sid, None)
-            self._afk_last_moved.pop(sid, None)
+            with self._afk_pos_lock:
+                self._afk_last_pos.pop(sid, None)
+                self._afk_last_moved.pop(sid, None)
             if ENABLE_LOG:
                 self.queue_log.info("specqueue process player disconnect: {}".format(player))
             try:
@@ -789,8 +794,9 @@ class specqueue(minqlx.Plugin):
             self.q_game_info = [self.game.type_short, self.get_cvar("teamsize", int), self.get_cvar("fraglimit", int)]
             self._ignore = False
             self._ignore_msg_already_said = False
-            self._afk_last_pos.clear()
-            self._afk_last_moved.clear()
+            with self._afk_pos_lock:
+                self._afk_last_pos.clear()
+                self._afk_last_moved.clear()
             self.end_screen = False
             self.check_spec_time()
             self.death_count = 0
@@ -1953,20 +1959,22 @@ class specqueue(minqlx.Plugin):
             sid = str(player.steam_id)
             try:
                 if self.db.get_permission(player.steam_id) >= exempt_level:
-                    self._afk_last_pos.pop(sid, None)
-                    self._afk_last_moved.pop(sid, None)
+                    with self._afk_pos_lock:
+                        self._afk_last_pos.pop(sid, None)
+                        self._afk_last_moved.pop(sid, None)
                     continue
                 pos = player.position()
                 curr = (pos.x, pos.y, pos.z)
             except Exception:
                 continue
-            last = self._afk_last_pos.get(sid)
-            if last is None or curr != last:
-                self._afk_last_pos[sid] = curr
-                self._afk_last_moved[sid] = now
-            elif now - self._afk_last_moved.get(sid, 0) >= afk_time:
-                self._afk_last_pos.pop(sid, None)
-                self._afk_last_moved.pop(sid, None)
+            with self._afk_pos_lock:
+                last = self._afk_last_pos.get(sid)
+                if last is None or curr != last:
+                    self._afk_last_pos[sid] = curr
+                    self._afk_last_moved[sid] = now
+                elif now - self._afk_last_moved.get(sid, 0) >= afk_time:
+                    self._afk_last_pos.pop(sid, None)
+                    self._afk_last_moved.pop(sid, None)
                 name = getattr(player, "clean_name", None) or player.name
 
                 @minqlx.next_frame
