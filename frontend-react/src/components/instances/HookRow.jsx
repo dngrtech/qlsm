@@ -90,8 +90,8 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         disabled={saving}
         className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface-raised)] px-1 py-0.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
       />
-      <button type="button" onClick={save} disabled={saving} aria-label="Save description" className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[var(--accent-success)] hover:bg-[var(--surface-elevated)]">
-        <Check size={12} />
+      <button type="button" onClick={save} disabled={saving} aria-label="Save description" className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded hover:bg-[var(--surface-elevated)]">
+        <Check size={12} color="#22c55e" />
       </button>
       <button
         type="button"
@@ -100,7 +100,7 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         aria-label="Cancel description"
         className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
       >
-        <X size={12} />
+        <X size={12} color="#ff0000" />
       </button>
     </span>
   );

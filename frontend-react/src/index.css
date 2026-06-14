@@ -218,6 +218,10 @@ body {
   color: var(--accent-danger);
 }
 
+.text-theme-accent {
+  color: var(--accent-primary);
+}
+
 /* ============================================
    Typography Classes
    ============================================ */
