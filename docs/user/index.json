@@ -54,7 +54,7 @@
       },
       {
         "id": "edit-configs",
-        "title": "Edit Configs, Plugins, And Factories",
+        "title": "Edit Configs, Plugins, Factories, And Hooks",
         "path": "/docs/operations/edit-configs.md"
       },
       {
@@ -86,6 +86,11 @@
         "id": "99k-lan-rate",
         "title": "99k LAN Rate",
         "path": "/docs/features/99k-lan-rate.md"
+      },
+      {
+        "id": "hooks",
+        "title": "LD_PRELOAD Hooks",
+        "path": "/docs/features/hooks.md"
       }
     ]
   },

@@ -10,8 +10,8 @@ QLSM is a free, open source web UI for deploying and managing Quake Live dedicat
 
 ## Core topics
 
-- **Operations** — [Host Actions](operations/host-actions-menu.md), [Instance Actions](operations/instance-actions-menu.md), [Live Status](operations/live-status.md), [RCON Console](operations/rcon-console.md).
-- **Features** — [QLFilter](features/qlfilter.md) anti-DDoS, [99k LAN Rate](features/99k-lan-rate.md) NAT trick.
+- **Operations** — [Host Actions](operations/host-actions-menu.md), [Instance Actions](operations/instance-actions-menu.md), [Edit Configs](operations/edit-configs.md), [Live Status](operations/live-status.md), [RCON Console](operations/rcon-console.md), [Server Logs](operations/server-logs.md), [Chat Logs](operations/chat-logs.md), [Auto-Restart](operations/auto-restart.md).
+- **Features** — [QLFilter](features/qlfilter.md) anti-DDoS, [99k LAN Rate](features/99k-lan-rate.md) NAT trick, [LD_PRELOAD Hooks](features/hooks.md) custom native libraries.
 - **Administration** — [User Management & API Keys](administration/user-management.md).
 
 ## Install

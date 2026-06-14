@@ -37,6 +37,10 @@ Use this page when a new instance does not become playable or stable.
 - Restart affected instances (manual or from the workshop update modal).
 - Configure scheduled host restart to keep updates consistent: [Configure Auto-Restart](../operations/auto-restart.md)
 
+## Problem: Self-host stuck in REBOOTING state
+
+A self-host can get stuck in **REBOOTING** if the QLSM container is restarted while a reboot is in progress. QLSM auto-recovers this state on container startup — no manual action needed. If the host is still REBOOTING after QLSM restarts, check that the underlying machine finished booting and is reachable over SSH.
+
 ## Problem: Auto-restart runs at the wrong local time
 
 - Auto-restart follows host local timezone.

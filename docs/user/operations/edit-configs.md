@@ -1,4 +1,4 @@
-# Edit Configs, Plugins, And Factories
+# Edit Configs, Plugins, Factories, And Hooks
 
 ## Configuration Files
 
@@ -115,6 +115,12 @@ Use **New**, **Upload**, **Rename**, and **Delete** to stage plugin file changes
 
 `.so` files are shown as binary files instead of text. You can replace the binary and add a short description so the file is easier to identify later.
 
+### Python Dependency Auto-Install
+
+If your plugin directory contains a `requirements.txt` file, QLSM automatically runs `pip install -r requirements.txt` on the host every time you deploy or sync configs. You do not need to SSH into the host to install dependencies manually.
+
+If pip encounters an error (e.g. a package unavailable on the host Python version), QLSM logs a warning but does not fail the deploy. Check the instance logs if a plugin behaves unexpectedly after a fresh deploy.
+
 ### Validate Plugin
 
 The **Validate** button appears when a Python plugin file is open. Use it to check the current editor contents for errors before saving or applying plugin changes.
@@ -139,9 +145,21 @@ The **Factories** tab controls factory files included in the deployment bundle.
 ![](../images/factories.png)
 
 
+## Hooks
+
+The **Hooks** tab manages LD_PRELOAD libraries — native `.so` files loaded into the QLDS process before it starts.
+
+- **System hooks** are managed by QLSM and are read-only (e.g. `force_rate.so` when 99k LAN rate is on).
+- **User hooks** are `.so` files you upload. You can enable/disable, reorder (drag), and delete them.
+
+QLSM validates that uploaded files are ELF binaries. Non-ELF files are rejected at upload. If a hook binary is missing from the host, QLSM shows a warning row with an option to remove the stale entry.
+
+Full guide: [LD_PRELOAD Hooks](../features/hooks.md)
+
 ## Related Pages
 
 - [Deploy A New Instance](../getting-started/deploy-new-instance.md)
 - [Instance Actions Menu](instance-actions-menu.md)
 - [Presets And Default Config](../presets/overview.md)
 - [99k LAN Rate](../features/99k-lan-rate.md)
+- [LD_PRELOAD Hooks](../features/hooks.md)
