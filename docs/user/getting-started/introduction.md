@@ -23,7 +23,7 @@ QLSM supports three ways to run your Quake Live servers:
 - **Logs** — [server logs](../operations/server-logs.md) and [chat logs](../operations/chat-logs.md) (including rotated archives), searchable.
 - **Workshop management** — push updates manually or schedule [automatic restarts](../operations/auto-restart.md) that also pull the latest Steam Workshop content.
 - **[QLFilter](../features/qlfilter.md)** — optional eBPF/XDP anti-DDoS filter that drops reflection garbage before it reaches your QLDS ports.
-- **[99k LAN rate mode](../features/99k-lan-rate.md)** — NAT-based trick that enables the high-bandwidth LAN rate path for internet servers. Real improvement for LG-heavy or large CA/FFA servers.
+- **[99k LAN rate mode](../features/99k-lan-rate.md)** — patches the QLDS LAN-detection function via LD_PRELOAD so every client is treated as LAN, enabling the high-bandwidth rate path. Real improvement for LG-heavy or large CA/FFA servers.
 - **[LD_PRELOAD hooks](../features/hooks.md)** — upload custom native `.so` libraries loaded into each QLDS process at launch. System hooks (like `force_rate.so`) are managed automatically.
 - **[User and API management](../administration/user-management.md)** — multi-user support, API keys, external REST API.
 
