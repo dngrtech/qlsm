@@ -33,7 +33,8 @@ Everything runs over SSH via Ansible.
 <img width="1312" height="936" alt="qlsm-main" src="https://github.com/user-attachments/assets/b85e895a-f28a-436b-bc10-4e7ea0684b02" />
 
 
-<img width="1258" height="1218" alt="edit_config" src="https://github.com/user-attachments/assets/23cbf0dd-b291-46af-941b-74ad802c746b" />
+<img width="858" height="774" alt="instance-edit-config" src="https://github.com/user-attachments/assets/a4cdc92d-705a-4e67-996f-79122c857b0c" />
+
 
 
 ## Stack
