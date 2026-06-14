@@ -385,6 +385,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                           setProvider(value);
                           setError(null);
                           resetConnectionTest();
+                          if (value === 'standalone') {
+                            setIpAddress('');
+                            setSshUser('');
+                          }
                         }}
                         vultrConfigured={vultrConfigured}
                         vultrUnavailableMessage={VULTR_UNAVAILABLE_MESSAGE}
