@@ -2,6 +2,8 @@
 
 The **Hooks** tab in the instance config editor manages LD_PRELOAD libraries — native `.so` files that are loaded into the QLDS process before it starts.
 
+![](../images/hooks.png)
+
 ## Why LD_PRELOAD Hooks
 
 Some low-level behaviors in Quake Live can only be changed by patching the running process. LD_PRELOAD lets a small native library intercept or replace specific C functions inside `qzeroded.x64` at launch time. QLSM uses this mechanism for [99k LAN rate](99k-lan-rate.md) and exposes the same mechanism to you for custom use.
