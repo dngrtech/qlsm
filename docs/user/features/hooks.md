@@ -44,7 +44,7 @@ Click the delete (trash) icon on the hook row and confirm in the modal. Deleting
 
 ## Missing Hooks
 
-If a hook file exists in the database but its binary is missing from the host filesystem, QLSM shows a warning row with the filename highlighted. You can remove missing hooks from this row. This can happen if host files were deleted out-of-band.
+If a hook file exists in the database but its binary is missing from the host filesystem, QLSM shows a warning row with the filename highlighted. Click the remove button on that row to delete the stale entry. This can happen if host files were deleted out-of-band.
 
 ## Load Order
 
