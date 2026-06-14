@@ -4,7 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.12.2` | 2026-06-14 | [#TBD]() | Fix three Hooks tab UX bugs: uploading a hook no longer blanks the tab (silent reload); replacing an existing hook now enables "Apply & Restart" since the server must reload the binary; description save button was invisible (undefined CSS variable `--accent-success`) and is now correctly styled with the accent colour. |
+| `v1.12.2` | 2026-06-14 | [#118](https://github.com/dngrtech/qlsm/pull/118) | Fix three Hooks tab UX bugs: uploading a hook no longer blanks the tab (silent reload); replacing an existing hook now enables "Apply & Restart" since the server must reload the binary; description save button was invisible (undefined CSS variable `--accent-success`) and is now correctly styled with the accent colour. |
 | `v1.12.0` | 2026-06-14 | [#117](https://github.com/dngrtech/qlsm/pull/117) | Expanded user documentation: new LD_PRELOAD Hooks page, Hooks tab coverage in Edit Configs, plugin requirements.txt auto-install docs, Re-run Host Setup availability and downtime behavior corrected, legacy 99k LAN Rate migration notes removed, nav index expanded. |
 | `v1.11.9` | 2026-06-14 | [#116](https://github.com/dngrtech/qlsm/pull/116) | Fix standalone host IP address field pre-filling with the self-host IP when switching providers in the Add Host modal. |
 | `v1.11.8` | 2026-06-13 | [#115](https://github.com/dngrtech/qlsm/pull/115) | Removed "99k LAN rate is not compatible with Ubuntu" warning from the add-host form and connection test response — Ubuntu hosts have supported 99k LAN rate via the LD_PRELOAD hook since v1.10.0. |
