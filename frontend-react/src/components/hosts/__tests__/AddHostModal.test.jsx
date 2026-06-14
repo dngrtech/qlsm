@@ -119,7 +119,7 @@ describe('AddHostModal self provider', () => {
     mocks.getHosts.mockResolvedValue([{ id: 7, provider: 'self', name: 'self-host' }]);
     mocks.testHostConnection
       .mockResolvedValueOnce({ success: true, message: 'Connection successful. Detected OS: Debian GNU/Linux 12 (bookworm).' })
-      .mockResolvedValueOnce({ success: true, message: 'Connection successful. Detected OS: Ubuntu 24.04.2 LTS. Warning: 99k LAN rate is not compatible with Ubuntu.' });
+      .mockResolvedValueOnce({ success: true, message: 'Connection successful. Detected OS: Ubuntu 24.04.2 LTS.' });
     mocks.createHost.mockResolvedValue({ message: 'Standalone host added.' });
 
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
@@ -153,7 +153,7 @@ describe('AddHostModal self provider', () => {
     fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
     await waitFor(() => expect(mocks.testHostConnection).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('success'));
-    await waitFor(() => expect(screen.getByTestId('connection-message')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu'));
+    await waitFor(() => expect(screen.getByTestId('connection-message')).toHaveTextContent('Connection successful. Detected OS: Ubuntu 24.04.2 LTS.'));
 
     fireEvent.click(screen.getByRole('button', { name: /add host/i }));
 

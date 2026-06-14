@@ -73,7 +73,6 @@ def validate_ip_address(ip_str):
         return None, {"message": "Invalid IP address format", "status_code": 400}
 
 # Valid OS info surfaced during standalone host auto-detection
-UBUNTU_99K_LAN_RATE_WARNING = "99k LAN rate is not compatible with Ubuntu."
 VALID_STANDALONE_AUTH_METHODS = {'key', 'password'}
 VALID_TIMEZONES = {
     'Africa/Johannesburg', 'America/Anchorage', 'America/Chicago', 'America/Denver',
@@ -304,11 +303,7 @@ def test_password_connection(host, port, username, password, timeout=15):
 
 def _build_detected_os_success_message(detected_os):
     detected_name = detected_os['pretty_name']
-    detected_os_type = detected_os['os_type']
-    message = f"Connection successful. Detected OS: {detected_name}."
-    if detected_os_type == 'ubuntu':
-        message = f"{message} Warning: {UBUNTU_99K_LAN_RATE_WARNING}"
-    return message
+    return f"Connection successful. Detected OS: {detected_name}."
 
 
 def _validate_detected_remote_os(detected_os):

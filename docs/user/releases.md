@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.11.8` | 2026-06-13 | [#115](https://github.com/dngrtech/qlsm/pull/115) | Removed "99k LAN rate is not compatible with Ubuntu" warning from the add-host form and connection test response — Ubuntu hosts have supported 99k LAN rate via the LD_PRELOAD hook since v1.10.0. |
 | `v1.11.7` | 2026-06-13 | [#113](https://github.com/dngrtech/qlsm/pull/113) | Fix 7 critical specqueue plugin bugs: thread leak on plugin reload (AFK poll thread had no stop condition), TOCTOU race on ELO fetch flag, `!afk <id>` crash on unknown player, self-crashing exception handler in `add_spectators` (malformed format string), unconditional `traceback` import, missing `ENABLE_LOG` guard in `queue_message`, and dead `elo_dict` code. Applied to both `configs/presets/` and `ql-assets/` copies. |
 | `v1.11.6` | 2026-06-13 | [#112](https://github.com/dngrtech/qlsm/pull/112) | Create `user-hooks/` directory on instance creation so the Ansible deploy playbook rsync has a valid source and does not fail with "No such file or directory". |
 | `v1.11.5` | 2026-06-11 | [#111](https://github.com/dngrtech/qlsm/pull/111) | Fix `qlsm-rcon` container crash-loop caused by redis-py 8.0.0 changing the default `socket_timeout` from `None` to 5 seconds. Pubsub `listen()` now raises `TimeoutError` after 5 idle seconds and exits. Explicitly set `socket_timeout=None` to restore the previous behaviour for pubsub listeners. |

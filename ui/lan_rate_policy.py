@@ -4,7 +4,6 @@ SUPPORTED_LAN_RATE_OS_TYPES = frozenset({"debian"})
 OS_TYPE_ALIASES = {
     "debian12": "debian",
 }
-UBUNTU_99K_LAN_RATE_MESSAGE = "99k LAN rate is not compatible with Ubuntu."
 UNKNOWN_99K_LAN_RATE_MESSAGE = "99k LAN rate is only supported on Debian hosts."
 
 
