@@ -51,14 +51,6 @@ When enabled, QLSM:
 
 The hook binary lives on each instance host at `/home/ql/qlds-<port>/system-hooks/force_rate.so`, synced from QLSM's `ql-assets/data/system-hooks/`. You can see it listed as a read-only system hook in the instance's **Hooks** tab — see [LD_PRELOAD Hooks](hooks.md).
 
-## Migration From Older QLSM Hosts
-
-If your host was set up before this implementation shipped, the toggle may still be restricted to Debian and may use the older iptables-based mechanism. To migrate the host in place:
-
-1. Open the host's Actions menu.
-2. Click **Re-run Host Setup**.
-3. After the run completes, the toggle works on any OS, and any instance that already had 99k LAN Rate enabled is restarted with the new hook automatically.
-
 ## Related Pages
 
 - [Deploy A New Instance](../getting-started/deploy-new-instance.md)
