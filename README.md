@@ -43,7 +43,7 @@ Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers
 
 ## Requirements
 
-Debian 12 recommended (Ubuntu 22 is also supported, but the [99k LAN rate](https://dngrtech.github.io/qlsm/features/99k-lan-rate/) feature requires Debian 12):
+Debian 12 recommended (Ubuntu is also supported):
 
 - **Docker** — [install guide](https://docs.docker.com/engine/install/debian/)
 - **Docker Compose** (usually included with Docker)
