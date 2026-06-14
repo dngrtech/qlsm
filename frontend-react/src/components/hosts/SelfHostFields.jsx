@@ -17,15 +17,6 @@ function SelfHostFields({ ipAddress, onIpAddressChange, sshUser, onSshUserChange
         </p>
       )}
 
-      {osInfo?.os_type === 'ubuntu' && (
-        <p
-          className="text-xs font-medium"
-          style={{ color: 'var(--accent-danger)' }}
-        >
-          Warning: 99k LAN rate is not compatible with Ubuntu.
-        </p>
-      )}
-
       <div>
         <label htmlFor="modal-self-ip" className={labelClass}>
           <span className="inline-flex items-center gap-1.5">

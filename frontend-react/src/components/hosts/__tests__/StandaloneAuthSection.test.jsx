@@ -65,7 +65,7 @@ it('renders the detected OS message after a successful connection test', () => {
   expect(screen.getByText(/Detected OS: Debian GNU\/Linux 12/i)).toBeInTheDocument();
 });
 
-it('renders success details in green and the Ubuntu warning in red', () => {
+it('renders Ubuntu OS success details in green', () => {
   render(
     <StandaloneAuthSection
       authMethod="password"
@@ -77,13 +77,13 @@ it('renders success details in green and the Ubuntu warning in red', () => {
       ipAddress="203.0.113.10"
       sshUser="root"
       connectionTestStatus="success"
-      connectionTestMessage="Connection successful. Detected OS: Ubuntu 24.04.2 LTS. Warning: 99k LAN rate is not compatible with Ubuntu."
+      connectionTestMessage="Connection successful. Detected OS: Ubuntu 24.04.2 LTS."
       onTestConnection={() => {}}
     />
   );
 
   expect(screen.getByText(/Detected OS: Ubuntu 24\.04\.2 LTS/i)).toHaveStyle('color: #22d97f');
-  expect(screen.getByText(/Warning: 99k LAN rate is not compatible with Ubuntu\./i)).toHaveStyle('color: var(--accent-danger)');
+  expect(screen.queryByText(/not compatible with Ubuntu/i)).not.toBeInTheDocument();
 });
 
 const renderSection = (overrides = {}) =>
