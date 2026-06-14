@@ -25,12 +25,27 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   const [missingHooks, setMissingHooks] = useState([]);
   const [initialMissing, setInitialMissing] = useState([]);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [hasReplacedHook, setHasReplacedHook] = useState(false);
 
   const reload = () => setReloadKey((k) => k + 1);
 
+  // Reset to blank loading state only when the target instance/draft changes.
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setAvailable([]);
+    setEnabledOrder([]);
+    setInitialEnabled([]);
+    setSystemHooks([]);
+    setMissingHooks([]);
+    setInitialMissing([]);
+    setHasReplacedHook(false);
+  }, [instanceId, draftId]);
+
+  // Fetch (or silently re-fetch on reload). Does NOT set loading=true so
+  // uploads/deletes refresh without blanking the tab.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
     fetchInstanceHooks(instanceId, draftId)
       .then((data) => {
@@ -82,10 +97,12 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    const isReplacement = available.some((h) => h.filename === file.name);
     setUploading(true);
     setError(null);
     try {
       await uploadInstanceHook(instanceId, file);
+      if (isReplacement) setHasReplacedHook(true);
       reload();
     } catch (err) {
       setError(errorMessage(err, 'Upload failed.'));
@@ -104,10 +121,11 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   };
 
   const dirty = useMemo(
-    () => enabledOrder.length !== initialEnabled.length
+    () => hasReplacedHook
+      || enabledOrder.length !== initialEnabled.length
       || enabledOrder.some((filename, index) => initialEnabled[index] !== filename)
       || missingHooks.length !== initialMissing.length,
-    [enabledOrder, initialEnabled, missingHooks, initialMissing],
+    [hasReplacedHook, enabledOrder, initialEnabled, missingHooks, initialMissing],
   );
 
   const restrictToTab = useCallback(({ transform, draggingNodeRect }) => {
@@ -144,6 +162,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
   const handleCancel = () => {
     setEnabledOrder(initialEnabled);
     setMissingHooks(initialMissing);
+    setHasReplacedHook(false);
     setError(null);
   };
 
@@ -154,6 +173,7 @@ export default function HooksTab({ instanceId, draftId, onApplied }) {
       await saveInstanceHooks(instanceId, enabledOrder, draftId);
       setInitialEnabled(enabledOrder);
       setInitialMissing(missingHooks);
+      setHasReplacedHook(false);
       onApplied?.();
     } catch (err) {
       setError(errorMessage(err, 'Failed to save hooks.'));

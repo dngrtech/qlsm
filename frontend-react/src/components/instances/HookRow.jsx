@@ -90,7 +90,7 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         disabled={saving}
         className="min-w-0 flex-1 rounded border border-[var(--surface-border)] bg-[var(--surface-raised)] px-1 py-0.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent-primary)]"
       />
-      <button type="button" onClick={save} disabled={saving} aria-label="Save description" className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[var(--accent-success)] hover:bg-[var(--surface-elevated)]">
+      <button type="button" onClick={save} disabled={saving} aria-label="Save description" style={{ color: 'var(--accent-primary)' }} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded hover:bg-[var(--surface-elevated)]">
         <Check size={12} />
       </button>
       <button
