@@ -29,7 +29,7 @@ def zadd_compat(db, key, member, score):
     """Support both redis-py 2.x and 3.x+ zadd signatures."""
     try:
         return db.zadd(key, {member: score})
-    except Exception:
+    except TypeError:
         return db.zadd(key, score, member)
 
 class ban(minqlx.Plugin):
