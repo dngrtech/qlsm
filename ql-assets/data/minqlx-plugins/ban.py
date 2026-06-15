@@ -25,6 +25,13 @@ LENGTH_REGEX = re.compile(r"(?P<number>[0-9]+) (?P<scale>seconds?|minutes?|hours
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 PLAYER_KEY = "minqlx:players:{}"
 
+def zadd_compat(db, key, member, score):
+    """Support both redis-py 2.x and 3.x+ zadd signatures."""
+    try:
+        return db.zadd(key, {member: score})
+    except Exception:
+        return db.zadd(key, score, member)
+
 class ban(minqlx.Plugin):
     def __init__(self):
         super().__init__()
@@ -214,7 +221,7 @@ class ban(minqlx.Plugin):
             base_key = PLAYER_KEY.format(ident) + ":bans"
             ban_id = str(self.db.zcard(base_key))
             db = self.db.pipeline()
-            db.zadd(base_key, time.time() + td.total_seconds(), ban_id)
+            zadd_compat(db, base_key, ban_id, time.time() + td.total_seconds())
             issued_by = str(player.steam_id) if player.steam_id is not None else "0"
             ban = {"expires": expires, "reason": reason, "issued": now, "issued_by": issued_by}
             db.hmset(base_key + ":{}".format(ban_id), ban)
