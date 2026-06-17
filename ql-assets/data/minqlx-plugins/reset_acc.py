@@ -20,15 +20,15 @@ Commands:
 
 CVars:
   qlx_autoResetDelay   - Default delay in seconds before auto-reset fires
-                         (default: 2, range: 0-5)
+                         (default: 2.0, range: 0-5, decimals ok e.g. 0.5)
 """
 
 import threading
 import minqlx
 
 ADMIN_LEVEL = 2
-AUTO_RESET_DELAY_DEFAULT = 2
-AUTO_RESET_DELAY_MAX = 5
+AUTO_RESET_DELAY_DEFAULT = 2.0
+AUTO_RESET_DELAY_MAX = 5.0
 VALID_MODES = ("kill", "death", "both", "off")
 
 
@@ -42,7 +42,7 @@ class reset_acc(minqlx.Plugin):
         self.add_hook("kill", self.handle_kill)
         self.add_hook("player_disconnect", self.handle_disconnect)
 
-        # {steam_id: {"mode": "kill"|"death"|"both", "delay": int}}
+        # {steam_id: {"mode": "kill"|"death"|"both", "delay": float}}
         self._auto_acc = {}
         self._auto_stats = {}
         # {steam_id: [threading.Timer, ...]}
@@ -106,7 +106,7 @@ class reset_acc(minqlx.Plugin):
         if len(msg) == 1:
             pref = store.get(sid)
             if pref is None:
-                player.tell(f"^7Auto-reset {label}: ^1off^7. Usage: ^3!{cmd} [kill|death|both|off] [0-5]")
+                player.tell(f"^7Auto-reset {label}: ^1off^7. Usage: ^3!{cmd} [kill|death|both|off] [0-5, decimals ok]")
             else:
                 player.tell(f"^7Auto-reset {label}: ^2{pref['mode']}^7, delay ^2{pref['delay']}s^7.")
             return
@@ -129,26 +129,26 @@ class reset_acc(minqlx.Plugin):
         player.tell(f"^7Auto-reset {label}: ^2{mode}^7, delay ^2{delay}s^7.")
 
     def _parse_delay(self, player, raw):
-        """Parse and validate a delay argument. Returns int or None on error."""
         if raw is None:
             return self._server_delay()
 
-        if not raw.isdigit():
-            player.tell("^1Delay must be a whole number of seconds (0–5).")
+        try:
+            val = float(raw)
+        except ValueError:
+            player.tell(f"^1Delay must be a number between 0 and {AUTO_RESET_DELAY_MAX}.")
             return None
 
-        val = int(raw)
         if val > AUTO_RESET_DELAY_MAX:
             player.tell(f"^1Max delay is {AUTO_RESET_DELAY_MAX}s.")
             return None
 
-        return max(0, val)
+        return max(0.0, val)
 
     def _server_delay(self):
-        raw = self.get_cvar("qlx_autoResetDelay", int)
+        raw = self.get_cvar("qlx_autoResetDelay", float)
         if raw is None:
             return AUTO_RESET_DELAY_DEFAULT
-        return max(0, min(AUTO_RESET_DELAY_MAX, raw))
+        return max(0.0, min(AUTO_RESET_DELAY_MAX, raw))
 
     # -------------------------------------------------------------------------
     # Kill hook
