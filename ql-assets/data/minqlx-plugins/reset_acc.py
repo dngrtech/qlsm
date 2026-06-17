@@ -182,15 +182,10 @@ class reset_acc(minqlx.Plugin):
         if reset_fn is None:
             return
 
-        if delay == 0:
-            player.tell("^3Auto-resetting now...")
-        else:
-            player.tell(f"^3Auto-reset in ^7{delay}s^3 — check ^7Tab^3 or ^7+acc^3 now.")
-
         def _fire(p=player, fn=reset_fn):
             @minqlx.next_frame
             def _execute():
-                fn(p, p)
+                fn(p, p, silent=True)
             _execute()
 
         for old_t in self._pending_timers.pop(sid, []):
@@ -216,7 +211,7 @@ class reset_acc(minqlx.Plugin):
     # Reset helpers
     # -------------------------------------------------------------------------
 
-    def _reset_all(self, requester, target):
+    def _reset_all(self, requester, target, silent=False):
         if not hasattr(minqlx, "reset_player_stats"):
             requester.tell("^1reset_player_stats not available — minqlx patch required.")
             return
@@ -229,13 +224,14 @@ class reset_acc(minqlx.Plugin):
 
         minqlx.set_score(target.id, 0)
 
-        if requester.id == target.id:
-            requester.tell("^2Stats reset. ^7Accuracy, K/D, and score are now 0.")
-        else:
-            requester.tell(f"^2Reset stats for ^7{target.clean_name}^2.")
-            target.tell(f"^2Your stats were reset by ^7{requester.clean_name}^2.")
+        if not silent:
+            if requester.id == target.id:
+                requester.tell("^2Stats reset. ^7Accuracy, K/D, and score are now 0.")
+            else:
+                requester.tell(f"^2Reset stats for ^7{target.clean_name}^2.")
+                target.tell(f"^2Your stats were reset by ^7{requester.clean_name}^2.")
 
-    def _reset_accuracy(self, requester, target):
+    def _reset_accuracy(self, requester, target, silent=False):
         if not hasattr(minqlx, "reset_player_accuracy"):
             requester.tell("^1reset_player_accuracy not available — minqlx patch required.")
             return
@@ -246,11 +242,12 @@ class reset_acc(minqlx.Plugin):
             requester.tell("^1Could not reset accuracy (player not fully connected?).")
             return
 
-        if requester.id == target.id:
-            requester.tell("^2Accuracy reset. ^7WEAP and +acc are now 0.")
-        else:
-            requester.tell(f"^2Reset accuracy for ^7{target.clean_name}^2.")
-            target.tell(f"^2Your accuracy was reset by ^7{requester.clean_name}^2.")
+        if not silent:
+            if requester.id == target.id:
+                requester.tell("^2Accuracy reset. ^7WEAP and +acc are now 0.")
+            else:
+                requester.tell(f"^2Reset accuracy for ^7{target.clean_name}^2.")
+                target.tell(f"^2Your accuracy was reset by ^7{requester.clean_name}^2.")
 
     def _find_player(self, name_fragment):
         for p in self.players():
