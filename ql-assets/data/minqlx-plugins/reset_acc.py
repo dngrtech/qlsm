@@ -182,14 +182,16 @@ class reset_acc(minqlx.Plugin):
         if reset_fn is None:
             return
 
+        if self._pending_timers.get(sid):
+            return
+
         def _fire(p=player, fn=reset_fn):
+            self._pending_timers.pop(p.steam_id, None)
+
             @minqlx.next_frame
             def _execute():
                 fn(p, p, silent=True)
             _execute()
-
-        for old_t in self._pending_timers.pop(sid, []):
-            old_t.cancel()
 
         t = threading.Timer(delay, _fire)
         t.daemon = True
