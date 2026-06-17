@@ -155,12 +155,10 @@ class reset_acc(minqlx.Plugin):
     # -------------------------------------------------------------------------
 
     def handle_kill(self, victim, killer, data):
-        if data.get("TEAMKILL"):
-            return
-
         self_kill = killer.steam_id == victim.steam_id
+        is_teamkill = bool(data.get("TEAMKILL"))
 
-        if not self_kill:
+        if not self_kill and not is_teamkill:
             self._schedule_auto_reset(killer, "kill")
         self._schedule_auto_reset(victim, "death")
 
@@ -195,12 +193,13 @@ class reset_acc(minqlx.Plugin):
                 fn(p, p)
             _execute()
 
+        for old_t in self._pending_timers.pop(sid, []):
+            old_t.cancel()
+
         t = threading.Timer(delay, _fire)
         t.daemon = True
         t.start()
-
-        timers = self._pending_timers.setdefault(sid, [])
-        timers.append(t)
+        self._pending_timers[sid] = [t]
 
     # -------------------------------------------------------------------------
     # Disconnect cleanup
