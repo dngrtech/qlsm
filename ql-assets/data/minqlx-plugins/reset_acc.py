@@ -31,6 +31,8 @@ AUTO_RESET_DELAY_DEFAULT = 2.0
 AUTO_RESET_DELAY_MAX = 5.0
 VALID_MODES = ("kill", "death", "both", "off")
 
+DB_KEY = "minqlx:players:{}:reset_acc:{}"
+
 
 class reset_acc(minqlx.Plugin):
     def __init__(self):
@@ -40,6 +42,7 @@ class reset_acc(minqlx.Plugin):
         self.add_command("autoresetstats", self.cmd_autoresetstats, 0)
 
         self.add_hook("kill", self.handle_kill)
+        self.add_hook("player_loaded", self.handle_loaded)
         self.add_hook("player_disconnect", self.handle_disconnect)
 
         # {steam_id: {"mode": "kill"|"death"|"both", "delay": float}}
@@ -49,6 +52,35 @@ class reset_acc(minqlx.Plugin):
         self._pending_timers = {}
 
         self.set_cvar_once("qlx_autoResetDelay", str(AUTO_RESET_DELAY_DEFAULT))
+
+    # -------------------------------------------------------------------------
+    # Redis persistence
+    # -------------------------------------------------------------------------
+
+    def _db_load(self, player, store, key):
+        sid = player.steam_id
+        mode = self.db.get(DB_KEY.format(sid, f"{key}:mode"))
+        if mode not in ("kill", "death", "both"):
+            return
+        try:
+            delay = float(self.db.get(DB_KEY.format(sid, f"{key}:delay")) or AUTO_RESET_DELAY_DEFAULT)
+        except (TypeError, ValueError):
+            delay = AUTO_RESET_DELAY_DEFAULT
+        delay = max(0.0, min(AUTO_RESET_DELAY_MAX, delay))
+        store[sid] = {"mode": mode, "delay": delay}
+
+    def _db_save(self, player, key, pref):
+        sid = player.steam_id
+        if pref is None:
+            self.db.delete(DB_KEY.format(sid, f"{key}:mode"))
+            self.db.delete(DB_KEY.format(sid, f"{key}:delay"))
+        else:
+            self.db[DB_KEY.format(sid, f"{key}:mode")] = pref["mode"]
+            self.db[DB_KEY.format(sid, f"{key}:delay")] = str(pref["delay"])
+
+    def handle_loaded(self, player):
+        self._db_load(player, self._auto_acc, "acc")
+        self._db_load(player, self._auto_stats, "stats")
 
     # -------------------------------------------------------------------------
     # Manual reset commands
@@ -93,14 +125,14 @@ class reset_acc(minqlx.Plugin):
     # -------------------------------------------------------------------------
 
     def cmd_autoresetacc(self, player, msg, channel):
-        self._handle_auto_cmd(player, msg, self._auto_acc, "accuracy", "autoresetacc")
+        self._handle_auto_cmd(player, msg, self._auto_acc, "accuracy", "autoresetacc", "acc")
         return minqlx.RET_STOP_ALL
 
     def cmd_autoresetstats(self, player, msg, channel):
-        self._handle_auto_cmd(player, msg, self._auto_stats, "stats", "autoresetstats")
+        self._handle_auto_cmd(player, msg, self._auto_stats, "stats", "autoresetstats", "stats")
         return minqlx.RET_STOP_ALL
 
-    def _handle_auto_cmd(self, player, msg, store, label, cmd):
+    def _handle_auto_cmd(self, player, msg, store, label, cmd, db_key):
         sid = player.steam_id
 
         if len(msg) == 1:
@@ -113,11 +145,12 @@ class reset_acc(minqlx.Plugin):
 
         mode = msg[1].lower()
         if mode not in VALID_MODES:
-            player.tell(f"^1Invalid mode. Use: kill | death | both | off")
+            player.tell("^1Invalid mode. Use: kill | death | both | off")
             return
 
         if mode == "off":
             store.pop(sid, None)
+            self._db_save(player, db_key, None)
             player.tell(f"^7Auto-reset {label}: ^1disabled^7.")
             return
 
@@ -125,7 +158,9 @@ class reset_acc(minqlx.Plugin):
         if delay is None:
             return
 
-        store[sid] = {"mode": mode, "delay": delay}
+        pref = {"mode": mode, "delay": delay}
+        store[sid] = pref
+        self._db_save(player, db_key, pref)
         player.tell(f"^7Auto-reset {label}: ^2{mode}^7, delay ^2{delay}s^7.")
 
     def _parse_delay(self, player, raw):
