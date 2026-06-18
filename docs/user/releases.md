@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.12.5` | 2026-06-18 | — | Fix `commlink.py` calling `minqlx.unload_plugin("commlink")` from `__init__` — this raised `PluginUnloadError` (plugin not yet registered), cascading into a Python runtime `SystemError` that broke all plugin commands including `!ban`. |
 | `v1.12.4` | 2026-06-18 | — | Fix `zadd_compat` in ban.py catching only `TypeError` — redis-py 2.x raises `RedisError` when a dict is passed as positional args, so `!ban` always threw instead of falling back to the old API. |
 | `v1.12.3` | 2026-06-14 | [#119](https://github.com/dngrtech/qlsm/pull/119) | Fix `zadd_compat` in ban.py (both trees) catching `Exception` instead of `TypeError`, which could silently mask unrelated runtime errors in the argument expressions. |
 | `v1.12.2` | 2026-06-14 | [#118](https://github.com/dngrtech/qlsm/pull/118) | Fix three Hooks tab UX bugs: uploading a hook no longer blanks the tab (silent reload); replacing an existing hook now enables "Apply & Restart" since the server must reload the binary; description save button was invisible (undefined CSS variable `--accent-success`) and is now correctly styled with the accent colour. |
