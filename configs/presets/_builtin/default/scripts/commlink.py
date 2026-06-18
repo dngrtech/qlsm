@@ -54,8 +54,6 @@ TEAM_BASED_GAMETYPES = ("ca", "ctf", "ft", "tdm", "ictf", "wipeout", "dom", "ad"
 class commlink(minqlx.Plugin):
     def __init__(self):
         if not self.get_cvar("qlx_commlinkIdentity"):
-            self.msg("^1Error: ^7Please set your ^4qlx_commlinkIdentity^7 cvar in your server.cfg.")
-            minqlx.unload_plugin("commlink")
             return
                      
         self.add_hook("unload", self.handle_unload)
