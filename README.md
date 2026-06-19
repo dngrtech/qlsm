@@ -8,7 +8,7 @@ Features:
   * Standalone remote server
   * VULTR cloud provisioning via Terraform
 - Automatic CPU affinity assignment for QLDS instances on multi-vCPU hosts
-- Optional [99k LAN rate mode](https://dngrtech.github.io/qlsm/features/99k-lan-rate/). Only Debian 12 supports this feature
+- Optional [99k LAN rate mode](https://dngrtech.github.io/qlsm/features/99k-lan-rate/).
 - Optional [QLFilter ](https://dngrtech.github.io/qlsm/features/qlfilter/) deployment (anti-DDOS protection)
 - Per-instance [RCON console](https://dngrtech.github.io/qlsm/operations/rcon-console/) with command line and live feed of all server events
 - [Live server status](https://dngrtech.github.io/qlsm/operations/live-status/) with current map, gametype, mode/factory, match timer, player list, and scores
