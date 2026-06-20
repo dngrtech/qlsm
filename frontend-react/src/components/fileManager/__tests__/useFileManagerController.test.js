@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useFileManagerController } from '../useFileManagerController';
+import { useStateAdapter } from '../adapters/useStateAdapter';
 
 function createAdapter(tree) {
   return {
@@ -200,6 +201,104 @@ describe('useFileManagerController initial selection', () => {
 
     anchorClick.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  it('does not refetch from the server after uploading into a state adapter', async () => {
+    const readServerContent = vi.fn().mockRejectedValue(new Error('404 not found'));
+
+    const { result } = renderHook(() => {
+      const adapter = useStateAdapter({
+        initialFiles: {},
+        serverTree: [{ name: 'ca.factories', path: 'ca.factories', type: 'file' }],
+        readServerContent,
+        allowedExtensions: ['.factories'],
+      });
+      return useFileManagerController({
+        adapter,
+        capabilities: { allowedExtensions: ['.factories'] },
+        checkable: true,
+        checkedFiles: adapter.checkedFiles,
+        onCheck: adapter.setChecked,
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleUpload(
+        new File(['{"factory": true}'], 'ak.factories'),
+      );
+    });
+
+    expect(result.current.actionError).toBeNull();
+    expect(result.current.currentContent).toBe('{"factory": true}');
+    expect(readServerContent).not.toHaveBeenCalledWith('ak.factories');
+  });
+
+  it('does not refetch from the server after creating a file in a state adapter', async () => {
+    const readServerContent = vi.fn().mockRejectedValue(new Error('404 not found'));
+    const template = '{\n  \n}';
+
+    const { result } = renderHook(() => {
+      const adapter = useStateAdapter({
+        initialFiles: {},
+        serverTree: [],
+        readServerContent,
+        allowedExtensions: ['.factories'],
+      });
+      return useFileManagerController({
+        adapter,
+        capabilities: {
+          allowedExtensions: ['.factories'],
+          newFileTemplate: () => template,
+        },
+        checkable: true,
+        checkedFiles: adapter.checkedFiles,
+        onCheck: adapter.setChecked,
+      });
+    });
+
+    await act(async () => {
+      result.current.openNewFileModal();
+    });
+    await act(async () => {
+      await result.current.handleCreateFromModal('new.factories');
+    });
+
+    expect(result.current.actionError).toBeNull();
+    expect(result.current.currentContent).toBe(template);
+    expect(readServerContent).not.toHaveBeenCalledWith('new.factories');
+  });
+
+  it('does not refetch from the server after replacing a file in a state adapter', async () => {
+    const readServerContent = vi.fn().mockRejectedValue(new Error('404 not found'));
+
+    const { result } = renderHook(() => {
+      const adapter = useStateAdapter({
+        initialFiles: { 'ca.factories': '{"old": true}' },
+        serverTree: [],
+        readServerContent,
+        allowedExtensions: ['.factories'],
+      });
+      return useFileManagerController({
+        adapter,
+        capabilities: { allowedExtensions: ['.factories'] },
+        checkable: true,
+        checkedFiles: adapter.checkedFiles,
+        onCheck: adapter.setChecked,
+        defaultSelectedPath: 'ca.factories',
+      });
+    });
+
+    await waitFor(() => expect(result.current.selectedFile?.path).toBe('ca.factories'));
+
+    await act(async () => {
+      await result.current.handleReplace(
+        new File(['{"new": true}'], 'ca.factories'),
+      );
+    });
+
+    expect(result.current.actionError).toBeNull();
+    expect(result.current.currentContent).toBe('{"new": true}');
+    expect(readServerContent).not.toHaveBeenCalledWith('ca.factories');
   });
 
   it('selects and opens the uploaded file', async () => {
