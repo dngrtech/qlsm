@@ -233,6 +233,74 @@ describe('useFileManagerController initial selection', () => {
     expect(readServerContent).not.toHaveBeenCalledWith('ak.factories');
   });
 
+  it('does not refetch from the server after creating a file in a state adapter', async () => {
+    const readServerContent = vi.fn().mockRejectedValue(new Error('404 not found'));
+    const template = '{\n  \n}';
+
+    const { result } = renderHook(() => {
+      const adapter = useStateAdapter({
+        initialFiles: {},
+        serverTree: [],
+        readServerContent,
+        allowedExtensions: ['.factories'],
+      });
+      return useFileManagerController({
+        adapter,
+        capabilities: {
+          allowedExtensions: ['.factories'],
+          newFileTemplate: () => template,
+        },
+        checkable: true,
+        checkedFiles: adapter.checkedFiles,
+        onCheck: adapter.setChecked,
+      });
+    });
+
+    await act(async () => {
+      result.current.openNewFileModal();
+    });
+    await act(async () => {
+      await result.current.handleCreateFromModal('new.factories');
+    });
+
+    expect(result.current.actionError).toBeNull();
+    expect(result.current.currentContent).toBe(template);
+    expect(readServerContent).not.toHaveBeenCalledWith('new.factories');
+  });
+
+  it('does not refetch from the server after replacing a file in a state adapter', async () => {
+    const readServerContent = vi.fn().mockRejectedValue(new Error('404 not found'));
+
+    const { result } = renderHook(() => {
+      const adapter = useStateAdapter({
+        initialFiles: { 'ca.factories': '{"old": true}' },
+        serverTree: [],
+        readServerContent,
+        allowedExtensions: ['.factories'],
+      });
+      return useFileManagerController({
+        adapter,
+        capabilities: { allowedExtensions: ['.factories'] },
+        checkable: true,
+        checkedFiles: adapter.checkedFiles,
+        onCheck: adapter.setChecked,
+        defaultSelectedPath: 'ca.factories',
+      });
+    });
+
+    await waitFor(() => expect(result.current.selectedFile?.path).toBe('ca.factories'));
+
+    await act(async () => {
+      await result.current.handleReplace(
+        new File(['{"new": true}'], 'ca.factories'),
+      );
+    });
+
+    expect(result.current.actionError).toBeNull();
+    expect(result.current.currentContent).toBe('{"new": true}');
+    expect(readServerContent).not.toHaveBeenCalledWith('ca.factories');
+  });
+
   it('selects and opens the uploaded file', async () => {
     const adapter = createAdapter([]);
     adapter.upload.mockResolvedValue({ path: 'uploaded.cfg' });
