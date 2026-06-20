@@ -121,7 +121,7 @@ export function useFileManagerController({
     });
   }, []);
 
-  const handleSelectFile = useCallback(async (item) => {
+  const handleSelectFile = useCallback(async (item, preloadedContent) => {
     if (!item || item.type === 'folder') return;
     setSelectedFile(item);
     setActionError(null);
@@ -136,6 +136,13 @@ export function useFileManagerController({
       } catch {
         setBinaryDescription('');
       }
+      return;
+    }
+    // A freshly uploaded/created file lives only in local adapter state; its
+    // content is passed in directly to avoid a stale-closure refetch (which
+    // would 404 against the server for files that were never persisted).
+    if (preloadedContent !== undefined) {
+      setCurrentContent(preloadedContent ?? '');
       return;
     }
     if (editedContent[item.path] !== undefined) {
@@ -212,9 +219,9 @@ export function useFileManagerController({
     if (adapter.serialize) adapter.writeContent(selectedFile.path, value).catch(() => {});
   }, [adapter, selectedFile]);
 
-  const selectPath = useCallback(async (path, fallback = null) => {
+  const selectPath = useCallback(async (path, fallback = null, preloadedContent) => {
     const item = flatFiles.find(file => file.path === path) || fallback;
-    if (item) await handleSelectFile(item);
+    if (item) await handleSelectFile(item, preloadedContent);
   }, [flatFiles, handleSelectFile]);
 
   const openNewFileModal = useCallback((targetDir = '') => {
@@ -250,7 +257,7 @@ export function useFileManagerController({
       }
       if (targetDir) expandFolder(targetDir);
       pendingLocalPathsRef.current.add(path);
-      await selectPath(path, { path, name, type: 'file' });
+      await selectPath(path, { path, name, type: 'file' }, template);
       setShowNewModal(false);
       setActionError(null);
     } catch (err) {
@@ -269,7 +276,7 @@ export function useFileManagerController({
       if (dir) expandFolder(dir);
       setActionError(null);
       pendingLocalPathsRef.current.add(path);
-      await selectPath(path, { path, name: basename(path), type: 'file' });
+      await selectPath(path, { path, name: basename(path), type: 'file' }, result?.content);
     } catch (err) {
       setActionError(getErrorMessage(err, 'Upload failed'));
     }
@@ -392,7 +399,7 @@ export function useFileManagerController({
         ...selectedFile,
         name: basename(uploadedPath),
         path: uploadedPath,
-      });
+      }, result?.content);
     } catch (err) {
       setActionError(getErrorMessage(err, 'Replace failed'));
     }

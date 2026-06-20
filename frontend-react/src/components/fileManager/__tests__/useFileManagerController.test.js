@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useFileManagerController } from '../useFileManagerController';
+import { useStateAdapter } from '../adapters/useStateAdapter';
 
 function createAdapter(tree) {
   return {
@@ -200,6 +201,36 @@ describe('useFileManagerController initial selection', () => {
 
     anchorClick.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  it('does not refetch from the server after uploading into a state adapter', async () => {
+    const readServerContent = vi.fn().mockRejectedValue(new Error('404 not found'));
+
+    const { result } = renderHook(() => {
+      const adapter = useStateAdapter({
+        initialFiles: {},
+        serverTree: [{ name: 'ca.factories', path: 'ca.factories', type: 'file' }],
+        readServerContent,
+        allowedExtensions: ['.factories'],
+      });
+      return useFileManagerController({
+        adapter,
+        capabilities: { allowedExtensions: ['.factories'] },
+        checkable: true,
+        checkedFiles: adapter.checkedFiles,
+        onCheck: adapter.setChecked,
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleUpload(
+        new File(['{"factory": true}'], 'ak.factories'),
+      );
+    });
+
+    expect(result.current.actionError).toBeNull();
+    expect(result.current.currentContent).toBe('{"factory": true}');
+    expect(readServerContent).not.toHaveBeenCalledWith('ak.factories');
   });
 
   it('selects and opens the uploaded file', async () => {

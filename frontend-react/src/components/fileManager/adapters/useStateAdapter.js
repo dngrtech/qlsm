@@ -147,7 +147,7 @@ export function useStateAdapter({
       next.delete(targetPath);
       return next;
     });
-    return { path: targetPath };
+    return { path: targetPath, content };
   }, [allowedExtensions]);
 
   const deleteFile = useCallback(async (path) => {
