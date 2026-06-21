@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.12.7` | 2026-06-20 | TBD | Add `qlx_brandingMapCredit` cvar to `branding.py` (default `0`). When `0`, the map's baked-in author credit (e.g. "Till Merker") is dropped from the loading screen and only the configured `qlx_serverBrandTopField` / `qlx_serverBrandBottomField` brand text is shown; set to `1` to restore the original behaviour of prepending the map credit. Synced to all `configs/presets/` copies and the `ql-assets/` canonical copy. |
 | `v1.12.6` | 2026-06-19 | — | Fix factory file upload in Edit Instance Config failing with "Failed to read file". Newly uploaded/created factory files live only in local state until save, but the file manager immediately re-read them through a stale React closure that fell back to a server fetch — 404ing on files that were never persisted. Uploaded/created content is now passed directly to the editor instead of being refetched. |
 | `v1.12.5` | 2026-06-18 | — | Fix `commlink.py` calling `minqlx.unload_plugin("commlink")` from `__init__` — this raised `PluginUnloadError` (plugin not yet registered), cascading into a Python runtime `SystemError` that broke all plugin commands including `!ban`. |
 | `v1.12.4` | 2026-06-18 | — | Fix `zadd_compat` in ban.py catching only `TypeError` — redis-py 2.x raises `RedisError` when a dict is passed as positional args, so `!ban` always threw instead of falling back to the old API. |
