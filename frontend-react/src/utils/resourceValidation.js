@@ -1,9 +1,12 @@
 // RFC 1123 compliant hostname validation
 export const HOST_NAME_MAX_LENGTH = 20;
 export const INSTANCE_NAME_MAX_LENGTH = 40;
-export const HOST_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/;
+// Hyphens are escaped (\-) so the source stays valid when used as an HTML
+// `pattern` attribute, which browsers now compile with the `v` (unicodeSets)
+// flag — an unescaped trailing hyphen throws "Invalid character class".
+export const HOST_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$/;
 // Instance names also allow spaces (unlike host names)
-export const INSTANCE_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9- ]*[a-zA-Z0-9])?$/;
+export const INSTANCE_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9\- ]*[a-zA-Z0-9])?$/;
 
 export function validateHostName(name) {
   if (typeof name !== 'string') return 'Name must be a string';
