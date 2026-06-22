@@ -27,7 +27,7 @@ _QLX_PLUGINS_RE = re.compile(r'^[a-zA-Z0-9_, ]*$')
 PROTECTED_CONFIG_FILES = {'server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'}
 ALLOWED_CONFIG_EXTENSIONS = {'.cfg', '.txt', '.ent'}
 ALLOWED_FACTORY_EXTENSIONS = {'.factories'}
-RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories'}
+RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories', 'user-hooks'}
 _FOLDER_NAME_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 MAX_CONFIG_PATH_DEPTH = 2  # one folder + filename
 
