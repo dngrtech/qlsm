@@ -5,12 +5,8 @@ Designed for FFA warmup/practice servers where players want per-fight
 stats. After a fight, type !resetstats to zero your accuracy, kills,
 deaths, and score so the next Tab press shows only that engagement.
 
-When auto-reset of full stats is enabled (!autoresetstats), the player is
-privately told their overall accuracy ("^7ACC: ^2[n]%") on every kill and
-death, so they see what they had right before the stats wipe.
-
-Requires minqlx built with the reset_player_stats(), reset_player_accuracy()
-and player_accuracy() C bindings.
+Requires minqlx built with the reset_player_stats() and
+reset_player_accuracy() C bindings.
 
 Commands:
   !resetstats          - Reset accuracy, K/D, and score to 0
@@ -211,23 +207,15 @@ class reset_acc(minqlx.Plugin):
         reset_fn = None
         delay = self._server_delay()
 
-        stats_applies = bool(stats_pref and stats_pref["mode"] in (trigger, "both"))
-        acc_applies = bool(acc_pref and acc_pref["mode"] in (trigger, "both"))
-
-        if stats_applies:
+        if stats_pref and stats_pref["mode"] in (trigger, "both"):
             reset_fn = self._reset_all
             delay = stats_pref["delay"]
-        elif acc_applies:
+        elif acc_pref and acc_pref["mode"] in (trigger, "both"):
             reset_fn = self._reset_accuracy
             delay = acc_pref["delay"]
 
         if reset_fn is None:
             return
-
-        # Tell the player their accuracy before a full-stats auto-reset wipes
-        # it. Fires on every kill/death, even when a reset timer is pending.
-        if stats_applies:
-            self._tell_accuracy(player)
 
         if self._pending_timers.get(sid):
             return
@@ -259,19 +247,6 @@ class reset_acc(minqlx.Plugin):
     # -------------------------------------------------------------------------
     # Reset helpers
     # -------------------------------------------------------------------------
-
-    def _tell_accuracy(self, player):
-        if not hasattr(minqlx, "player_accuracy"):
-            return
-        try:
-            acc = minqlx.player_accuracy(player.id)
-        except ValueError:
-            return
-        if not acc:
-            return
-        hits, shots = acc
-        pct = round(100 * hits / shots) if shots > 0 else 0
-        player.tell(f"^7ACC: ^2{pct}%")
 
     def _reset_all(self, requester, target, silent=False):
         if not hasattr(minqlx, "reset_player_stats"):
