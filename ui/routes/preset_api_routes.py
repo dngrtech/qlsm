@@ -28,7 +28,7 @@ API_TO_FILE_MAP = {v: k for k, v in CONFIG_FILE_MAP.items()}
 ALLOWED_PRESET_CONFIG_EXTENSIONS = {'.cfg', '.txt', '.ent'}
 ALLOWED_PRESET_FACTORY_EXTENSIONS = {'.factories'}
 PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
-RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories'}
+RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories', 'user-hooks'}
 MAX_CONFIG_PATH_DEPTH = 2
 
 
