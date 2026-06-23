@@ -129,7 +129,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   useEffect(() => {
     if (!isOpen || !providerOptionsReady || provider !== 'standalone') return;
     if (!sshUser) setSshUser('root');
-  }, [isOpen, provider, providerOptionsReady]);
+  }, [isOpen, provider, providerOptionsReady, sshUser]);
 
   const resetForm = () => {
     setName('');
@@ -142,6 +142,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setLoading(false);
     setIpAddress('');
     setSshPort(22);
+    // Cleared to '' here, but setProviderOptionsReady(false) below re-fires the
+    // standalone seeding effect, which restores 'root' once options reload.
     setSshUser('');
     setSshKey('');
     setSshPassword('');
