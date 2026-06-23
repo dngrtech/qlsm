@@ -123,6 +123,14 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     if (!sshUser) setSshUser(selfHostDefaults?.ssh_user || 'root');
   }, [isOpen, provider, providerOptionsReady, selfHostDefaults]);
 
+  // Seed the standalone SSH user to 'root' so the field's value matches what the
+  // input displays — otherwise the username shows "root" while state is empty,
+  // leaving the Test Connection button incorrectly disabled.
+  useEffect(() => {
+    if (!isOpen || !providerOptionsReady || provider !== 'standalone') return;
+    if (!sshUser) setSshUser('root');
+  }, [isOpen, provider, providerOptionsReady, sshUser]);
+
   const resetForm = () => {
     setName('');
     setNameError(null);
@@ -134,6 +142,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setLoading(false);
     setIpAddress('');
     setSshPort(22);
+    // Cleared to '' here, but setProviderOptionsReady(false) below re-fires the
+    // standalone seeding effect, which restores 'root' once options reload.
     setSshUser('');
     setSshKey('');
     setSshPassword('');
@@ -387,7 +397,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                           resetConnectionTest();
                           if (value === 'standalone') {
                             setIpAddress('');
-                            setSshUser('');
+                            setSshUser('root');
                           }
                         }}
                         vultrConfigured={vultrConfigured}
