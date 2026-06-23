@@ -7,6 +7,7 @@ import shutil
 import time
 import subprocess
 from pathlib import Path
+from shlex import quote as shlex_quote
 from rq import get_current_job
 from flask import current_app
 
@@ -22,7 +23,7 @@ from ui import rq  # or however you get your RQ queue
 log = logging.getLogger(__name__)
 
 
-def _host_recovered_after_reboot(host, attempts=24, delay=10):
+def _host_recovered_after_reboot(host, attempts=12, delay=10):
     """Return True if a host becomes reachable with critical services after reboot.
 
     Host reboot playbooks can return RC=4 while SSH is temporarily unavailable.
@@ -62,10 +63,6 @@ def _host_recovered_after_reboot(host, attempts=24, delay=10):
         if attempt < attempts - 1:
             time.sleep(delay)
     return False
-
-
-def shlex_quote(value):
-    return "'" + str(value).replace("'", "'\\''") + "'"
 
 
 def restart_host_ansible_logic(host_id):

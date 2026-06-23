@@ -19,7 +19,7 @@ def test_restart_self_host_does_not_require_redis_server(mock_run, app):
         assert mock_run.call_args.kwargs['extravars']['critical_services'] == ['ssh']
 
 
-@patch('ui.task_logic.ansible_host_restart._host_recovered_after_reboot', return_value=True, create=True)
+@patch('ui.task_logic.ansible_host_restart._host_recovered_after_reboot', return_value=True)
 @patch('ui.task_logic.ansible_host_restart._run_host_ansible_playbook', return_value=(False, '', 'ssh timed out'))
 def test_failed_restart_playbook_marks_host_active_when_recovery_probe_succeeds(mock_run, mock_recovered, app):
     with app.app_context():
@@ -42,7 +42,7 @@ def test_failed_restart_playbook_marks_host_active_when_recovery_probe_succeeds(
         mock_recovered.assert_called_once()
 
 
-@patch('ui.task_logic.ansible_host_restart._host_recovered_after_reboot', return_value=False, create=True)
+@patch('ui.task_logic.ansible_host_restart._host_recovered_after_reboot', return_value=False)
 @patch('ui.task_logic.ansible_host_restart._run_host_ansible_playbook', return_value=(False, '', 'ssh timed out'))
 def test_failed_restart_playbook_keeps_error_when_recovery_probe_fails(mock_run, mock_recovered, app):
     with app.app_context():

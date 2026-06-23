@@ -149,9 +149,13 @@ def poll_all_hosts():
         total_instances += len(running)
         active_count = _fetch_and_cache_host(host, running, redis_client)
         if host.status == HostStatus.ERROR and active_count:
-            host.status = HostStatus.ACTIVE
-            append_log(host, "Recovered automatically: status poll succeeded after ERROR.")
-            db.session.commit()
-            logger.info("Recovered host %s from ERROR after successful status poll", host.name)
+            try:
+                host.status = HostStatus.ACTIVE
+                append_log(host, "Recovered automatically: status poll succeeded after ERROR.")
+                db.session.commit()
+                logger.info("Recovered host %s from ERROR after successful status poll", host.name)
+            except Exception:
+                db.session.rollback()
+                logger.exception("Failed to recover host %s from ERROR", host.name)
 
     logger.debug("Poll cycle complete — %d host(s), %d running instance(s)", len(hosts), total_instances)
