@@ -7,6 +7,7 @@ import shutil
 import time
 import subprocess
 from pathlib import Path
+from shlex import quote as shlex_quote
 from rq import get_current_job
 from flask import current_app
 
@@ -20,6 +21,49 @@ from .ansible_runner import _run_host_ansible_playbook, SimpleAnsibleResult # Im
 from ui import rq  # or however you get your RQ queue
 
 log = logging.getLogger(__name__)
+
+
+def _host_recovered_after_reboot(host, attempts=12, delay=10):
+    """Return True if a host becomes reachable with critical services after reboot.
+
+    Host reboot playbooks can return RC=4 while SSH is temporarily unavailable.
+    This probe distinguishes a real failure from a successfully rebooted host
+    that outlived Ansible's wait window.
+    """
+    if not host.ssh_key_path or not host.ip_address or not host.ssh_user:
+        return False
+
+    key_path = os.path.abspath(host.ssh_key_path)
+    services = ['ssh'] if host.provider == 'self' else ['ssh', 'redis-server']
+    service_check = ' '.join(shlex_quote(service) for service in services)
+    remote_cmd = (
+        "cat /proc/uptime >/dev/null && "
+        f"for svc in {service_check}; do systemctl is-active --quiet $svc || exit 1; done"
+    )
+    cmd = [
+        'ssh',
+        '-i', key_path,
+        '-p', str(host.ssh_port),
+        '-o', 'StrictHostKeyChecking=no',
+        '-o', 'BatchMode=yes',
+        '-o', 'ConnectTimeout=8',
+        '-l', host.ssh_user,
+        host.ip_address,
+        remote_cmd,
+    ]
+
+    for attempt in range(attempts):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.debug("Post-reboot recovery probe for host %s failed: %s", host.name, exc)
+            result = None
+        if result is not None and result.returncode == 0:
+            return True
+        if attempt < attempts - 1:
+            time.sleep(delay)
+    return False
+
 
 def restart_host_ansible_logic(host_id):
     host = get_host(host_id)
@@ -63,6 +107,22 @@ def restart_host_ansible_logic(host_id):
             update_host(host.id, status=HostStatus.ACTIVE, logs=f"Host restarted successfully via Ansible.\n{original_logs}")
             return True
         else:
+            current_app.logger.warning(
+                "Host restart playbook for %s returned failure; probing for post-reboot recovery. Error: %s",
+                host.name,
+                stderr,
+            )
+            if _host_recovered_after_reboot(host):
+                update_host(
+                    host.id,
+                    status=HostStatus.ACTIVE,
+                    logs=(
+                        "Host restart playbook failed, but host recovered after reboot probe.\n"
+                        f"Ansible error: {stderr}\n{original_logs}"
+                    ),
+                )
+                current_app.logger.info("Host %s recovered after failed restart playbook.", host.name)
+                return True
             current_app.logger.error(f"Failed to restart host {host.name}. Error: {stderr}")
             update_host(host.id, status=HostStatus.ERROR, logs=f"Host restart via Ansible failed. Error: {stderr}\n{original_logs}")
             return False
