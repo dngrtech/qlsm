@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.12.10` | 2026-06-23 | [#126](https://github.com/dngrtech/qlsm/pull/126) | Auto-recover hosts after reboot timeouts: failed restart playbooks now probe for post-reboot reachability before marking ERROR, and the status poller can restore stale ERROR hosts to ACTIVE when live instance status is available. |
 | `v1.12.9` | 2026-06-22 | [#125](https://github.com/dngrtech/qlsm/pull/125) | Fix the Test Connection button staying disabled for standalone hosts in the Add Host modal. |
 | `v1.12.8` | 2026-06-21 | [#123](https://github.com/dngrtech/qlsm/pull/123) | Hide the `user-hooks/` directory from the Configuration Files tab. |
 | `v1.12.7` | 2026-06-20 | [#122](https://github.com/dngrtech/qlsm/pull/122) | Add `qlx_brandingMapCredit` cvar to `branding.py` (default `0`). When `0`, the map's baked-in author credit is dropped from the loading screen and only the configured `qlx_serverBrandTopField` / `qlx_serverBrandBottomField` brand text is shown; set to `1` to restore the original behaviour of prepending the map credit. |

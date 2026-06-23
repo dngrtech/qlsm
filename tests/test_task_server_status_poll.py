@@ -2,6 +2,9 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
+from ui.database import create_host, create_instance, get_host
+from ui.models import HostStatus, InstanceStatus
+
 POLL_MODULE = 'ui.task_logic.server_status_poll'
 
 
@@ -261,6 +264,44 @@ def test_poll_all_hosts_no_redis(mock_host_class, mock_fetch):
 
     mock_fetch.assert_not_called()
     mock_host_class.query.filter_by.assert_not_called()
+
+
+@patch(f'{POLL_MODULE}.subprocess.run')
+def test_poll_all_hosts_recovers_error_host_when_status_poll_succeeds(mock_run, app):
+    """A stale ERROR host with live instance status should self-heal to ACTIVE."""
+    from ui.task_logic.server_status_poll import poll_all_hosts
+
+    payload = {'map': 'campgrounds', 'players': [], 'maxplayers': 16}
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps({'27960': payload}), stderr='')
+    mock_redis = MagicMock()
+    app.extensions['redis'] = mock_redis
+
+    with app.app_context():
+        host = create_host(
+            name='stale-error-host',
+            provider='standalone',
+            status=HostStatus.ERROR,
+            is_standalone=True,
+            ssh_user='debian',
+            ssh_key_path='/tmp/test-key',
+            ssh_port=22,
+            ip_address='203.0.113.20',
+        )
+        instance = create_instance(
+            name='live-instance',
+            host_id=host.id,
+            port=27960,
+            hostname='live.example',
+        )
+        instance.status = InstanceStatus.RUNNING
+
+        poll_all_hosts()
+
+        refreshed = get_host(host.id)
+        assert refreshed.status == HostStatus.ACTIVE
+        assert 'Recovered automatically' in refreshed.logs
+
+    mock_redis.setex.assert_called_once()
 
 
 def test_status_poller_cli_command_exists(app):

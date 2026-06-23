@@ -6,6 +6,8 @@ import subprocess
 from flask import current_app
 
 from ui.models import Host, HostStatus, InstanceStatus
+from ui import db
+from ui.task_logic.common import append_log
 from ui.task_logic.self_host_network import resolve_self_host_management_target
 
 logger = logging.getLogger(__name__)
@@ -76,7 +78,11 @@ def _write_status_to_redis(redis_client, host_id, instance_id, data):
 
 
 def _fetch_and_cache_host(host, instances, redis_client):
-    """SSH to one host, read all instance statuses, write to management Redis."""
+    """SSH to one host, read all instance statuses, write to management Redis.
+
+    Returns the count of instances with live status data, or None if the poll
+    could not reach/read the host.
+    """
     redis_password = os.environ.get("REDIS_PASSWORD") if getattr(host, "provider", None) == "self" else None
     cmd = _build_ssh_command(host, instances, redis_password=redis_password)
     target = _ssh_target_for_host(host)
@@ -99,7 +105,7 @@ def _fetch_and_cache_host(host, instances, redis_client):
                 f"SSH to host {host.ip_address} failed "
                 f"(exit {result.returncode}): {result.stderr[:200]}"
             )
-            return
+            return None
 
         port_map = _parse_ssh_output(result.stdout)
         active = sum(1 for inst in instances if port_map.get(str(inst.port)))
@@ -107,11 +113,14 @@ def _fetch_and_cache_host(host, instances, redis_client):
         for inst in instances:
             data = port_map.get(str(inst.port))
             _write_status_to_redis(redis_client, host.id, inst.id, data)
+        return active
 
     except subprocess.TimeoutExpired:
         logger.warning(f"SSH timeout polling host {host.ip_address}")
+        return None
     except Exception as e:
         logger.error(f"Unexpected error polling host {host.ip_address}: {e}", exc_info=True)
+        return None
 
 
 def poll_all_hosts():
@@ -121,9 +130,9 @@ def poll_all_hosts():
         logger.error("Management Redis not available — skipping status poll")
         return
 
-    hosts = Host.query.filter_by(status=HostStatus.ACTIVE).all()
+    hosts = Host.query.filter(Host.status.in_([HostStatus.ACTIVE, HostStatus.ERROR])).all()
     if not hosts:
-        logger.debug("No active hosts — skipping poll cycle")
+        logger.debug("No pollable hosts — skipping poll cycle")
         return
 
     total_instances = 0
@@ -138,6 +147,11 @@ def poll_all_hosts():
             logger.debug("Skipping host %s — no SSH key configured", host.name)
             continue
         total_instances += len(running)
-        _fetch_and_cache_host(host, running, redis_client)
+        active_count = _fetch_and_cache_host(host, running, redis_client)
+        if host.status == HostStatus.ERROR and active_count:
+            host.status = HostStatus.ACTIVE
+            append_log(host, "Recovered automatically: status poll succeeded after ERROR.")
+            db.session.commit()
+            logger.info("Recovered host %s from ERROR after successful status poll", host.name)
 
     logger.debug("Poll cycle complete — %d host(s), %d running instance(s)", len(hosts), total_instances)
