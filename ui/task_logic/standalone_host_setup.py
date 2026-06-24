@@ -199,6 +199,7 @@ def _setup_playbook_extra_vars(host):
         'is_standalone': 'true',
         'ssh_port': str(host.ssh_port),
         'firewall_mode': 'helper' if host.provider == 'self' else 'full',
+        'static_network_hardening': 'false' if host.provider == 'self' else 'true',
     }
     if host.provider == 'self':
         extra_vars['use_host_redis'] = 'false'

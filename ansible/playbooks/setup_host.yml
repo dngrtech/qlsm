@@ -30,6 +30,7 @@
     ssh_port: 22
     is_standalone: false
     use_host_redis: true
+    static_network_hardening: true
 
   tasks:
   #######################################################################
@@ -44,16 +45,16 @@
         primary_prefix: "{{ ansible_default_ipv4.prefix }}"
 
     - name: Detect network renderer
-      command: which netplan
-      register: netplan_which
+      command: systemctl is-active systemd-networkd
+      register: networkd_active
       failed_when: false
       changed_when: false
-      when: ansible_facts['os_family'] == 'Debian'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening
 
     - name: Set network_renderer fact
       set_fact:
-        network_renderer: "{{ 'netplan' if netplan_which.rc == 0 else 'ifupdown' }}"
-      when: ansible_facts['os_family'] == 'Debian'
+        network_renderer: "{{ 'netplan' if networkd_active.rc == 0 else 'ifupdown' }}"
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening
 
     - name: Disable cloud-init network configuration
       copy:
@@ -62,7 +63,7 @@
         owner: root
         group: root
         mode: '0644'
-      when: ansible_facts['os_family'] == 'Debian'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening
 
     - name: Configure static network interface (ifupdown)
       copy:
@@ -81,13 +82,13 @@
             gateway {{ current_gateway }}
             dns-nameservers 8.8.8.8 9.9.9.9
       notify: restart networking
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'ifupdown'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'ifupdown'
 
     - name: Remove cloud-init ifupdown drop-in
       file:
         path: /etc/network/interfaces.d/50-cloud-init
         state: absent
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'ifupdown'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'ifupdown'
 
     - name: Configure static network interface (netplan)
       copy:
@@ -112,26 +113,40 @@
                     - 9.9.9.9
                 dhcp4: false
                 dhcp6: false
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'netplan'
 
-    - name: Remove cloud-init netplan config
-      file:
-        path: /etc/netplan/50-cloud-init.yaml
-        state: absent
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+    - name: Remove conflicting netplan configs
+      shell: find /etc/netplan -maxdepth 1 -name '*.yaml' ! -name '99-static.yaml' -delete
+      changed_when: false
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'netplan'
+
+    - name: Validate netplan configuration
+      command: netplan generate
+      changed_when: false
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'netplan'
 
     - name: Apply netplan configuration
       command: netplan apply
-      async: 10
+      async: 30
       poll: 0
       changed_when: false
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+      register: netplan_apply_job
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'netplan'
 
     - name: Wait for connection to recover after netplan apply
       wait_for_connection:
         delay: 5
         timeout: 60
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'netplan'
+
+    - name: Check netplan apply result
+      async_status:
+        jid: "{{ netplan_apply_job.ansible_job_id }}"
+      register: netplan_apply_result
+      until: netplan_apply_result.finished
+      retries: 6
+      delay: 5
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'netplan'
 
     - name: Configure resolv.conf resolver options
       copy:
@@ -143,7 +158,7 @@
         owner: root
         group: root
         mode: '0644'
-      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'ifupdown'
+      when: ansible_facts['os_family'] == 'Debian' and static_network_hardening and network_renderer == 'ifupdown'
 
     - name: Disable cloud-init hostname and hosts management
       copy:
