@@ -44,14 +44,15 @@
         primary_prefix: "{{ ansible_default_ipv4.prefix }}"
 
     - name: Detect network renderer
-      stat:
-        path: /etc/netplan
-      register: netplan_dir
+      command: which netplan
+      register: netplan_which
+      failed_when: false
+      changed_when: false
       when: ansible_facts['os_family'] == 'Debian'
 
     - name: Set network_renderer fact
       set_fact:
-        network_renderer: "{{ 'netplan' if netplan_dir.stat.exists else 'ifupdown' }}"
+        network_renderer: "{{ 'netplan' if netplan_which.rc == 0 else 'ifupdown' }}"
       when: ansible_facts['os_family'] == 'Debian'
 
     - name: Disable cloud-init network configuration
@@ -121,6 +122,15 @@
 
     - name: Apply netplan configuration
       command: netplan apply
+      async: 10
+      poll: 0
+      changed_when: false
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+
+    - name: Wait for connection to recover after netplan apply
+      wait_for_connection:
+        delay: 5
+        timeout: 60
       when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
 
     - name: Configure resolv.conf resolver options
@@ -133,7 +143,7 @@
         owner: root
         group: root
         mode: '0644'
-      when: ansible_facts['os_family'] == 'Debian'
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'ifupdown'
 
     - name: Disable cloud-init hostname and hosts management
       copy:
