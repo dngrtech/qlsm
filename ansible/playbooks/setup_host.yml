@@ -41,6 +41,18 @@
         current_ip: "{{ ansible_default_ipv4.address }}"
         current_netmask: "{{ ansible_default_ipv4.netmask }}"
         current_gateway: "{{ ansible_default_ipv4.gateway }}"
+        primary_prefix: "{{ ansible_default_ipv4.prefix }}"
+
+    - name: Detect network renderer
+      stat:
+        path: /etc/netplan
+      register: netplan_dir
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Set network_renderer fact
+      set_fact:
+        network_renderer: "{{ 'netplan' if netplan_dir.stat.exists else 'ifupdown' }}"
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Disable cloud-init network configuration
       copy:
@@ -49,7 +61,7 @@
         owner: root
         group: root
         mode: '0644'
-      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Configure static network interface (ifupdown)
       copy:
@@ -68,7 +80,48 @@
             gateway {{ current_gateway }}
             dns-nameservers 8.8.8.8 9.9.9.9
       notify: restart networking
-      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'ifupdown'
+
+    - name: Remove cloud-init ifupdown drop-in
+      file:
+        path: /etc/network/interfaces.d/50-cloud-init
+        state: absent
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'ifupdown'
+
+    - name: Configure static network interface (netplan)
+      copy:
+        dest: /etc/netplan/99-static.yaml
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          network:
+            version: 2
+            ethernets:
+              {{ primary_interface }}:
+                addresses:
+                  - {{ current_ip }}/{{ primary_prefix }}
+                routes:
+                  - to: default
+                    via: {{ current_gateway }}
+                    on-link: true
+                nameservers:
+                  addresses:
+                    - 8.8.8.8
+                    - 9.9.9.9
+                dhcp4: false
+                dhcp6: false
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+
+    - name: Remove cloud-init netplan config
+      file:
+        path: /etc/netplan/50-cloud-init.yaml
+        state: absent
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
+
+    - name: Apply netplan configuration
+      command: netplan apply
+      when: ansible_facts['os_family'] == 'Debian' and network_renderer == 'netplan'
 
     - name: Configure resolv.conf resolver options
       copy:
@@ -80,7 +133,7 @@
         owner: root
         group: root
         mode: '0644'
-      when: ansible_facts['os_family'] == 'Debian' and not is_standalone
+      when: ansible_facts['os_family'] == 'Debian'
 
     - name: Disable cloud-init hostname and hosts management
       copy:
@@ -651,7 +704,6 @@
         state: restarted
     - name: restart networking
       service: { name: networking, state: restarted }
-      when: not is_standalone
     - name: restart ssh
       service: { name: ssh, state: restarted }
       when: not is_standalone
