@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 
 /*
  * force_rate.so - LD_PRELOAD library for Quake Live Dedicated Server
@@ -20,6 +21,39 @@
 
 /* Address of Sys_IsLANAddress in qzeroded.x64 */
 #define SYS_ISLANADDRESS_ADDR 0x004518d0
+#define PATCH_RETRY_ATTEMPTS 50
+#define PATCH_RETRY_DELAY_NS 20000000L  /* 20ms, 1s total */
+
+static int is_qzeroded_process(void)
+{
+    char exe_path[256];
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len < 0)
+        return 0;
+    exe_path[len] = '\0';
+    return strstr(exe_path, "qzeroded") != NULL;
+}
+
+static int page_is_mapped(void *page_start, long page_size)
+{
+    unsigned char vec;
+    if (mincore(page_start, (size_t)page_size, &vec) == 0)
+        return 1;
+    return errno != ENOMEM && errno != EINVAL;
+}
+
+static int wait_for_target_page(void *page_start, long page_size)
+{
+    struct timespec delay = { .tv_sec = 0, .tv_nsec = PATCH_RETRY_DELAY_NS };
+
+    for (int attempt = 0; attempt < PATCH_RETRY_ATTEMPTS; attempt++) {
+        if (page_is_mapped(page_start, page_size))
+            return 1;
+        nanosleep(&delay, NULL);
+    }
+
+    return page_is_mapped(page_start, page_size);
+}
 
 /*
  * Patch Sys_IsLANAddress to always return 1.
@@ -34,14 +68,27 @@ static void patch_sys_islanaddress(void)
 {
     void *target = (void *)SYS_ISLANADDRESS_ADDR;
     long page_size = sysconf(_SC_PAGESIZE);
+
+    if (page_size <= 0)
+        return;
+
     void *page_start = (void *)((uintptr_t)target & ~(page_size - 1));
 
     /* Silently skip if the target page isn't mapped — this constructor runs in
      * every process that inherits LD_PRELOAD (e.g. the bash wrapper script and
-     * any subshells it spawns). Only qzeroded.x64 maps this address. */
-    unsigned char vec;
-    if (mincore(page_start, page_size, &vec) != 0)
-        return;
+     * any subshells it spawns). Only qzeroded.x64 maps this address. For the
+     * real qzeroded process, retry briefly so constructor/load ordering does
+     * not cause a false negative before the text page appears. */
+    if (!page_is_mapped(page_start, page_size)) {
+        if (!is_qzeroded_process())
+            return;
+        if (!wait_for_target_page(page_start, page_size)) {
+            fprintf(stderr,
+                    "[force_rate] target page %p not mapped after retry; patch skipped\n",
+                    page_start);
+            return;
+        }
+    }
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
         perror("[force_rate] mprotect failed");
@@ -51,6 +98,7 @@ static void patch_sys_islanaddress(void)
     /* Write: MOV EAX, 1; RET */
     uint8_t patch[] = { 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3 };
     memcpy(target, patch, sizeof(patch));
+    __builtin___clear_cache((char *)target, (char *)target + sizeof(patch));
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_EXEC) != 0)
         perror("[force_rate] mprotect restore failed");
