@@ -105,17 +105,19 @@ def register_cli_commands(app):
             if ok:
                 succeeded.append(inst.id)
             else:
-                failed.append(inst.id)
+                inst_id = inst.id
+                failed.append(inst_id)
                 # Never leave a deliberately-stopped instance as ERROR. Re-fetch so the
                 # restore does not depend on the identity map reflecting a commit made
-                # inside stop_instance_logic.
-                inst = db.session.get(QLInstance, inst.id)
+                # inside stop_instance_logic. The instance may be gone (deleted mid-run),
+                # so log via the saved id, not inst.
+                inst = db.session.get(QLInstance, inst_id)
                 if inst is not None and inst.status != InstanceStatus.STOPPED:
                     inst.status = InstanceStatus.STOPPED
                     db.session.commit()
                 logger.error(
                     "reconcile-service-enablement: instance %s could not be "
-                    "reconciled; restored to STOPPED", inst.id,
+                    "reconciled; restored to STOPPED", inst_id,
                 )
 
         logger.info(
