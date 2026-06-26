@@ -147,6 +147,9 @@
       ansible.builtin.systemd:
         name: "qlds@{{ game_port }}"
         state: restarted
+        # A restart means the instance is intended to run — keep it enabled so it
+        # survives the next reboot (covers restart and config-apply-with-restart).
+        enabled: yes
       when: restart_service | bool
 
   handlers:
