@@ -21,7 +21,13 @@ added to `RESERVED_HOOK_FILENAMES`.
 ## Rebuilding
 
 ```
-gcc -shared -fPIC -o ql-assets/data/system-hooks/force_rate.so ql-assets/data/system-hooks/force_rate.c
+gcc -shared -fPIC -Wall -Wextra -Werror -Wl,--build-id=none -o ql-assets/data/system-hooks/force_rate.so ql-assets/data/system-hooks/force_rate.c
+```
+
+or:
+
+```
+make force-rate.so
 ```
 
 x86-64 Linux only. Commit the rebuilt `.so` alongside source changes.
