@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from ui import db
 from ui.models import Host, QLInstance, HostStatus, InstanceStatus
+from ui.task_logic.ansible_instance_mgmt import STOP_SUCCESS_MARKER
 
 
 def _make_host():
@@ -20,8 +21,9 @@ def _make_instance(name, port, status, host):
     return inst
 
 
-# stop_instance_logic returns this string verbatim on success (rc == 0).
-SUCCESS = "Instance {} stop successful. Status: STOPPED"
+# Mirror stop_instance_logic's success return, built from the shared marker so a
+# reworded message can't let this test drift out of sync with the CLI's detection.
+SUCCESS = "Instance {{}} {marker}. Status: STOPPED".format(marker=STOP_SUCCESS_MARKER)
 
 
 def test_reconcile_targets_only_stopped_instances(runner, app):
@@ -83,3 +85,36 @@ def test_reconcile_failure_keeps_instance_stopped_and_exits_nonzero(runner, app)
     # ... and the correctly-stopped instance is restored to STOPPED, never ERROR.
     with app.app_context():
         assert db.session.get(QLInstance, s1_id).status == InstanceStatus.STOPPED
+
+
+def test_reconcile_mixed_success_and_failure(runner, app):
+    """One instance succeeds, another fails in the same run: the command exits
+    non-zero (partial failure), the failed instance is restored to STOPPED, and the
+    succeeded instance is left STOPPED."""
+    with app.app_context():
+        host = _make_host()
+        good = _make_instance("good", 27960, InstanceStatus.STOPPED, host)
+        bad = _make_instance("bad", 27961, InstanceStatus.STOPPED, host)
+        good_id = good.id
+        bad_id = bad.id
+
+    def _mixed(instance_id):
+        if instance_id == bad_id:
+            inst = db.session.get(QLInstance, instance_id)
+            inst.status = InstanceStatus.ERROR
+            db.session.commit()
+            return f"Error during instance {instance_id} stop: host unreachable"
+        return SUCCESS.format(instance_id)
+
+    with patch(
+        "ui.task_logic.ansible_instance_mgmt.stop_instance_logic", side_effect=_mixed
+    ):
+        result = runner.invoke(args=["reconcile-service-enablement"])
+
+    # Any failure in the batch yields a non-zero exit ...
+    assert result.exit_code != 0
+    # ... the failed instance is restored to STOPPED (never left ERROR) ...
+    with app.app_context():
+        assert db.session.get(QLInstance, bad_id).status == InstanceStatus.STOPPED
+        # ... and the succeeded instance is unchanged (STOPPED).
+        assert db.session.get(QLInstance, good_id).status == InstanceStatus.STOPPED

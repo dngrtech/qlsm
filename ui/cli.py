@@ -1,4 +1,5 @@
 import signal
+import sys
 import threading
 import logging
 import click
@@ -70,10 +71,12 @@ def register_cli_commands(app):
         Preconditions: run only after the updated manage_qlds_service.yml is live on
         this host, and ideally when target hosts are reachable.
         """
-        import sys
         from ui import db
         from ui.models import QLInstance, InstanceStatus
-        from ui.task_logic.ansible_instance_mgmt import stop_instance_logic
+        from ui.task_logic.ansible_instance_mgmt import (
+            stop_instance_logic,
+            STOP_SUCCESS_MARKER,
+        )
 
         stopped = QLInstance.query.filter_by(status=InstanceStatus.STOPPED).all()
         if not stopped:
@@ -90,9 +93,9 @@ def register_cli_commands(app):
             try:
                 result = stop_instance_logic(inst.id)
                 # stop_instance_logic never raises; on success it returns a string
-                # containing "stop successful" and leaves status STOPPED, on failure
+                # containing STOP_SUCCESS_MARKER and leaves status STOPPED, on failure
                 # it returns an "Error..." string and persists ERROR.
-                ok = isinstance(result, str) and "stop successful" in result
+                ok = isinstance(result, str) and STOP_SUCCESS_MARKER in result
             except Exception as e:
                 logger.error(
                     "reconcile-service-enablement: exception for instance %s: %s",
@@ -103,8 +106,11 @@ def register_cli_commands(app):
                 succeeded.append(inst.id)
             else:
                 failed.append(inst.id)
-                # Never leave a deliberately-stopped instance as ERROR.
-                if inst.status != InstanceStatus.STOPPED:
+                # Never leave a deliberately-stopped instance as ERROR. Re-fetch so the
+                # restore does not depend on the identity map reflecting a commit made
+                # inside stop_instance_logic.
+                inst = db.session.get(QLInstance, inst.id)
+                if inst is not None and inst.status != InstanceStatus.STOPPED:
                     inst.status = InstanceStatus.STOPPED
                     db.session.commit()
                 logger.error(
