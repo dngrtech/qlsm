@@ -248,7 +248,29 @@
         state: directory # Ensure directory exists
 
   #######################################################################
-  # 6. Register and Start Service
+  # 6. Sync System Hooks
+  #######################################################################
+    - name: Ensure system-hooks directory exists
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/system-hooks"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Sync built-in system hooks from UI server
+      ansible.builtin.synchronize:
+        src: "../../ql-assets/data/system-hooks/"
+        dest: "{{ qlds_dir }}/system-hooks/"
+        rsync_path: "sudo -u ql rsync"
+        rsync_opts:
+          - "--include=*.so"
+          - "--exclude=*"
+      delegate_to: localhost
+      become: false
+
+  #######################################################################
+  # 7. Register and Start Service
   #######################################################################
     - name: Render QLDS systemd service file
       ansible.builtin.template:
