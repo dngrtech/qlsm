@@ -211,7 +211,9 @@
       ansible.builtin.systemd:
         name: qlds@{{ game_port }}
         state: "{{ service_state }}"
-        # Removed: enabled parameter (should be handled by deploy playbook)
+        # Persist operator intent across reboots: a deliberately stopped instance
+        # must not auto-start on host boot, while started/restarted ones must.
+        enabled: "{{ 'no' if service_state == 'stopped' else 'yes' }}"
       when:
         - service_state != 'status' # Only manage state if not just querying
         - service_action == 'manage' # Use renamed variable

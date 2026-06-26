@@ -1,4 +1,5 @@
 import signal
+import sys
 import threading
 import logging
 import click
@@ -54,3 +55,77 @@ def register_cli_commands(app):
             logger.info("recover-rebooting-hosts: recovered %d host(s)", len(hosts))
         except Exception as e:
             logger.error("recover-rebooting-hosts: failed: %s", e, exc_info=True)
+
+    @app.cli.command('reconcile-service-enablement')
+    def reconcile_service_enablement():
+        """Disable systemd units for STOPPED instances so they stay down on reboot.
+
+        Backfill for the stop-disables-unit fix. Idempotent; safe to re-run.
+
+        Never worsens DB state: stop_instance_logic persists ERROR (and returns an
+        error string rather than raising) on any failure, so a STOPPED instance on an
+        unreachable/rebooting host would otherwise be silently downgraded. This loop
+        treats a non-success return as a failure, restores the instance to STOPPED,
+        tallies results, and exits non-zero if any instance could not be reconciled.
+
+        Preconditions: run only after the updated manage_qlds_service.yml is live on
+        this host, and ideally when target hosts are reachable.
+        """
+        from ui import db
+        from ui.models import QLInstance, InstanceStatus
+        from ui.task_logic.ansible_instance_mgmt import (
+            stop_instance_logic,
+            STOP_SUCCESS_MARKER,
+        )
+
+        stopped = QLInstance.query.filter_by(status=InstanceStatus.STOPPED).all()
+        if not stopped:
+            logger.info("reconcile-service-enablement: no STOPPED instances")
+            return
+
+        succeeded, failed = [], []
+        for inst in stopped:
+            logger.info(
+                "reconcile-service-enablement: disabling unit for instance %s (port %s)",
+                inst.id, inst.port,
+            )
+            ok = False
+            try:
+                result = stop_instance_logic(inst.id)
+                # stop_instance_logic never raises; on success it returns a string
+                # containing STOP_SUCCESS_MARKER and leaves status STOPPED, on failure
+                # it returns an "Error..." string and persists ERROR.
+                ok = isinstance(result, str) and STOP_SUCCESS_MARKER in result
+            except Exception as e:
+                logger.error(
+                    "reconcile-service-enablement: exception for instance %s: %s",
+                    inst.id, e, exc_info=True,
+                )
+
+            if ok:
+                succeeded.append(inst.id)
+            else:
+                inst_id = inst.id
+                failed.append(inst_id)
+                # Never leave a deliberately-stopped instance as ERROR. Re-fetch so the
+                # restore does not depend on the identity map reflecting a commit made
+                # inside stop_instance_logic. The instance may be gone (deleted mid-run),
+                # so log via the saved id, not inst.
+                inst = db.session.get(QLInstance, inst_id)
+                if inst is not None and inst.status != InstanceStatus.STOPPED:
+                    inst.status = InstanceStatus.STOPPED
+                    db.session.commit()
+                logger.error(
+                    "reconcile-service-enablement: instance %s could not be "
+                    "reconciled; restored to STOPPED", inst_id,
+                )
+
+        logger.info(
+            "reconcile-service-enablement: %d succeeded, %d failed (of %d STOPPED)",
+            len(succeeded), len(failed), len(stopped),
+        )
+        if failed:
+            logger.error(
+                "reconcile-service-enablement: failed instances: %s", failed
+            )
+            sys.exit(1)
