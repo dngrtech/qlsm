@@ -292,6 +292,33 @@ When a host has more than one CPU, QLSM assigns each QLDS instance a persisted L
 
 Service files render systemd `CPUAffinity=<cpu>` only when an assignment exists. One CPU hosts and hosts with unknown CPU counts omit affinity and use normal Linux scheduling. Existing instances are not restarted or rewritten during upgrade; they get affinity on the next QLSM-managed service render, or after manual DB assignment plus an instance restart.
 
+### QLDS unit enablement invariant
+
+A `qlds@<port>` systemd unit is `enabled` (auto-starts on host boot) **if and only
+if** the instance's intended state is "running":
+
+- **Stop** (`manage_qlds_service.yml`, `service_state: stopped`) → `enabled: no`
+- **Start / restart / deploy / config-apply-with-restart** → `enabled: yes`
+- **Config-apply-without-restart** → enablement left untouched
+
+This ensures a deliberately `STOPPED` instance stays stopped across host reboots
+(including the auto-restart timer), which keeps the panel status accurate.
+
+After deploying this change to a host that already has stopped instances, run the
+one-shot backfill to clear stale enable symlinks:
+
+```bash
+flask reconcile-service-enablement
+```
+
+**Preconditions / safety:** the backfill executes `manage_qlds_service.yml` from the
+repo working copy on the UI host and SSHes to every target host, so run it only
+**after** the updated playbook is live on the UI server, and ideally when target
+hosts are reachable. It is safe against unreachable hosts: a `STOPPED` instance whose
+stop run fails is restored to `STOPPED` (never left `ERROR`), failures are tallied,
+and the command exits non-zero so a deploy script can detect a partial run and
+re-run later.
+
 ### Terraform (Host Provisioning)
 
 -   **Terraform Modules:** Reusable Terraform modules (e.g., `terraform/modules/gcp_instance`, `terraform/modules/vultr_instance`) define the infrastructure for different cloud providers.
