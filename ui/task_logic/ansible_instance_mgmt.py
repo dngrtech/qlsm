@@ -412,7 +412,8 @@ def stop_instance_logic(instance_id):
             log.error(f"Instance with id {instance_id} not found.")
             return f"Error: Instance {instance_id} not found."
 
-        append_log(instance, f"Task started: stop_instance (Job ID: {job.id})")
+        job_id = job.id if job else "MANUAL"
+        append_log(instance, f"Task started: stop_instance (Job ID: {job_id})")
         instance.status = InstanceStatus.STOPPING
         db.session.commit()
         log.info(f"Instance {instance_id} status set to STOPPING.")
