@@ -15,6 +15,7 @@
 !README.md
 !requirements.txt
 !VERSION
+!Makefile
 !pytest.ini
 !docker-compose.yml
 !host-init/

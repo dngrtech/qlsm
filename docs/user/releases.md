@@ -4,7 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.12.12` | 2026-06-24 | TBD | Add retry handling to `force_rate.so` so the LD_PRELOAD hook waits briefly for qzeroded's target text page before giving up on the LAN-rate patch. |
+| `v1.12.12` | 2026-06-24 | [#128](https://github.com/dngrtech/qlsm/pull/128) | Add retry handling to `force_rate.so` so the LD_PRELOAD hook waits briefly for qzeroded's target text page before giving up on the LAN-rate patch. |
 | `v1.12.11` | 2026-06-23 | [#127](https://github.com/dngrtech/qlsm/pull/127) | Apply static network hardening to all hosts, not just non-standalone hosts. |
 | `v1.12.10` | 2026-06-23 | [#126](https://github.com/dngrtech/qlsm/pull/126) | Auto-recover hosts after reboot timeouts: failed restart playbooks now probe for post-reboot reachability before marking ERROR, and the status poller can restore stale ERROR hosts to ACTIVE when live instance status is available. |
 | `v1.12.9` | 2026-06-22 | [#125](https://github.com/dngrtech/qlsm/pull/125) | Fix the Test Connection button staying disabled for standalone hosts in the Add Host modal. |

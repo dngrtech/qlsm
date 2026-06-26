@@ -1,0 +1,26 @@
+name: Verify system hooks
+
+on:
+  pull_request:
+    paths:
+      - "ql-assets/data/system-hooks/**"
+      - "Makefile"
+      - ".github/workflows/system-hooks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "ql-assets/data/system-hooks/**"
+      - "Makefile"
+      - ".github/workflows/system-hooks.yml"
+
+jobs:
+  force-rate:
+    name: Rebuild force_rate.so
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify committed system hook binaries
+        run: make verify-system-hooks

@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <errno.h>
+#include <limits.h>
 #include <time.h>
 
 /*
@@ -22,11 +23,11 @@
 /* Address of Sys_IsLANAddress in qzeroded.x64 */
 #define SYS_ISLANADDRESS_ADDR 0x004518d0
 #define PATCH_RETRY_ATTEMPTS 50
-#define PATCH_RETRY_DELAY_NS 20000000L  /* 20ms, 1s total */
+#define PATCH_RETRY_DELAY_NS 20000000L
 
 static int is_qzeroded_process(void)
 {
-    char exe_path[256];
+    char exe_path[PATH_MAX];
     ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
     if (len < 0)
         return 0;
@@ -37,22 +38,28 @@ static int is_qzeroded_process(void)
 static int page_is_mapped(void *page_start, long page_size)
 {
     unsigned char vec;
-    if (mincore(page_start, (size_t)page_size, &vec) == 0)
-        return 1;
-    return errno != ENOMEM && errno != EINVAL;
+    return mincore(page_start, (size_t)page_size, &vec) == 0;
+}
+
+static void sleep_retry_delay(void)
+{
+    struct timespec delay = { .tv_sec = 0, .tv_nsec = PATCH_RETRY_DELAY_NS };
+    struct timespec remaining;
+
+    while (nanosleep(&delay, &remaining) != 0 && errno == EINTR)
+        delay = remaining;
 }
 
 static int wait_for_target_page(void *page_start, long page_size)
 {
-    struct timespec delay = { .tv_sec = 0, .tv_nsec = PATCH_RETRY_DELAY_NS };
-
+    /* 50 attempts at 20ms each gives qzeroded up to ~1s to map its text page. */
     for (int attempt = 0; attempt < PATCH_RETRY_ATTEMPTS; attempt++) {
         if (page_is_mapped(page_start, page_size))
             return 1;
-        nanosleep(&delay, NULL);
+        sleep_retry_delay();
     }
 
-    return page_is_mapped(page_start, page_size);
+    return 0;
 }
 
 /*
