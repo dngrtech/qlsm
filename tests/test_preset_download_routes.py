@@ -3,10 +3,20 @@ import json
 import os
 import zipfile
 
+import pytest
 from flask_jwt_extended import create_access_token
 
 from ui import db
 from ui.models import BinaryMetadata, ConfigPreset
+
+
+@pytest.fixture(autouse=True)
+def presets_base(tmp_path, monkeypatch):
+    """Route export validation at this test's isolated presets root."""
+    base = tmp_path / 'configs' / 'presets'
+    base.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr('ui.routes.preset_api_routes.PRESETS_DIR', str(base))
+    return base
 
 
 def auth_headers(app):
@@ -160,6 +170,31 @@ def test_download_preset_skips_symlinks(client, app, tmp_path):
         assert b'do not export' not in response.data
 
 
+def test_download_preset_rejects_path_outside_presets_root(client, app, tmp_path):
+    outside_dir = tmp_path / 'outside-preset-root'
+    write_file(outside_dir / 'secret.txt', 'do not export\n')
+    with app.app_context():
+        preset = ConfigPreset(
+            name='outside-root',
+            description='Outside root',
+            path=str(outside_dir),
+            is_builtin=False,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        preset_id = preset.id
+
+    response = client.get(
+        f'/api/presets/{preset_id}/download',
+        headers=auth_headers(app),
+    )
+
+    assert response.status_code == 500
+    assert response.mimetype != 'application/zip'
+    assert response.get_json()['error']['message'] == 'Preset path is invalid.'
+    assert b'do not export' not in response.data
+
+
 def test_download_preset_sanitizes_legacy_filename(client, app, tmp_path):
     preset_id, _preset_dir = create_preset(app, tmp_path, name='Unsafe Name')
     with app.app_context():
@@ -187,8 +222,8 @@ def test_download_missing_preset_returns_404(client, app):
     assert response.get_json()['error']['message'] == 'Preset not found.'
 
 
-def test_download_preset_missing_directory_returns_500(client, app, tmp_path):
-    missing_path = tmp_path / 'missing-preset-dir'
+def test_download_preset_missing_directory_returns_500(client, app, presets_base):
+    missing_path = presets_base / 'missing-preset-dir'
     with app.app_context():
         preset = ConfigPreset(
             name='missing-dir',
