@@ -30,7 +30,7 @@ Implementation can proceed autonomously through all tasks.
 Modify:
 
 - `ui/routes/preset_api_routes.py` — add ZIP export helper functions and `GET /<preset_id>/download` route near existing preset routes.
-- `tests/test_preset_download_routes.py` — new backend route tests for archive content, manifest, exclusions, and errors.
+- `tests/test_preset_download_routes.py` — new backend route tests for archive content, manifest/metadata, auth, filename safety, symlink exclusions, and errors.
 - `frontend-react/src/services/api.js` — add `downloadPreset(presetId)` returning a Blob.
 - `frontend-react/src/components/addInstance/SavePresetModal.jsx` — add optional post-save download state UI and button callback props.
 - `frontend-react/src/components/instances/EditInstanceConfigModal.jsx` — keep the modal open after save, store returned preset id/name, wire download action.
@@ -110,6 +110,15 @@ def read_zip(response):
     return zipfile.ZipFile(io.BytesIO(response.data))
 
 
+def test_download_preset_requires_authentication(client, app, tmp_path):
+    preset_id, _preset_dir = create_preset(app, tmp_path)
+
+    response = client.get(f'/api/presets/{preset_id}/download')
+
+    assert response.status_code in {401, 422}
+    assert response.mimetype != 'application/zip'
+
+
 def test_download_preset_returns_zip_with_full_preset_directory(client, app, tmp_path):
     preset_id, _preset_dir = create_preset(app, tmp_path)
 
@@ -152,6 +161,8 @@ def test_download_preset_returns_zip_with_full_preset_directory(client, app, tmp
         assert manifest['includes']['user_hooks'] is True
         assert manifest['includes']['checked_plugins'] is True
         assert manifest['includes']['checked_factories'] is True
+        assert manifest['includes']['binary_metadata'] is True
+        assert manifest['counts']['binary_metadata'] == 0
 
 
 def test_download_preset_includes_binary_metadata_json(client, app, tmp_path):
@@ -172,13 +183,54 @@ def test_download_preset_includes_binary_metadata_json(client, app, tmp_path):
 
     assert response.status_code == 200
     with read_zip(response) as archive:
+        manifest = json.loads(archive.read('manifest.json').decode('utf-8'))
         metadata = json.loads(archive.read('binary_metadata.json').decode('utf-8'))
-        assert metadata == [
-            {
-                'file_path': 'force_rate.so',
-                'description': '99k LAN rate hook',
-            }
-        ]
+        assert manifest['counts']['binary_metadata'] == 1
+        assert metadata == {
+            'format_version': 1,
+            'metadata': [
+                {
+                    'file_path': 'force_rate.so',
+                    'description': '99k LAN rate hook',
+                }
+            ],
+        }
+
+
+def test_download_preset_skips_symlinks(client, app, tmp_path):
+    preset_id, preset_dir = create_preset(app, tmp_path, name='symlink-safe')
+    outside_secret = tmp_path / 'outside-secret.txt'
+    outside_secret.write_text('do not export\n')
+    os.symlink(outside_secret, preset_dir / 'leaked-secret.txt')
+    os.symlink(tmp_path, preset_dir / 'linked-dir')
+
+    response = client.get(
+        f'/api/presets/{preset_id}/download',
+        headers=auth_headers(app),
+    )
+
+    assert response.status_code == 200
+    with read_zip(response) as archive:
+        names = set(archive.namelist())
+        assert 'leaked-secret.txt' not in names
+        assert not any(name.startswith('linked-dir/') for name in names)
+        assert b'do not export' not in response.data
+
+
+def test_download_preset_sanitizes_legacy_filename(client, app, tmp_path):
+    preset_id, _preset_dir = create_preset(app, tmp_path, name='Unsafe Name')
+    with app.app_context():
+        preset = ConfigPreset.query.get(preset_id)
+        preset.name = '../Unsafe Name\nWith Spaces'
+        db.session.commit()
+
+    response = client.get(
+        f'/api/presets/{preset_id}/download',
+        headers=auth_headers(app),
+    )
+
+    assert response.status_code == 200
+    assert 'Unsafe-Name-With-Spaces.zip' in response.headers['Content-Disposition']
 
 
 def test_download_missing_preset_returns_404(client, app):
@@ -254,6 +306,7 @@ import fnmatch
 import io
 import json
 import os
+import re
 import shutil
 import zipfile
 from flask import Blueprint, request, jsonify, current_app, send_file
@@ -270,6 +323,14 @@ EXPORT_EXCLUDED_FILES = {'.DS_Store'}
 EXPORT_EXCLUDED_PATTERNS = ('*.pyc', '*.pyo', '*.swp', '*.tmp', '*~')
 
 
+def _safe_export_filename(name):
+    """Return a filesystem/browser-safe base filename for preset exports."""
+    safe = re.sub(r'\s+', '-', name or '')
+    safe = re.sub(r'[^A-Za-z0-9._-]+', '-', safe)
+    safe = re.sub(r'-+', '-', safe).strip('.-')
+    return safe or 'preset'
+
+
 def _should_skip_export_path(relative_path, is_dir=False):
     """Return True for generated/editor junk that should not enter exports."""
     parts = relative_path.replace(os.sep, '/').split('/')
@@ -284,6 +345,10 @@ def _should_skip_export_path(relative_path, is_dir=False):
 
 
 def _preset_export_manifest(preset):
+    binary_metadata_count = BinaryMetadata.query.filter_by(
+        context_type='preset',
+        context_key=preset.name,
+    ).count()
     return {
         'type': 'qlsm-preset-export',
         'format_version': EXPORT_FORMAT_VERSION,
@@ -305,6 +370,9 @@ def _preset_export_manifest(preset):
             'checked_factories': True,
             'binary_metadata': True,
         },
+        'counts': {
+            'binary_metadata': binary_metadata_count,
+        },
     }
 
 
@@ -313,13 +381,16 @@ def _preset_binary_metadata_export(preset_name):
         context_type='preset',
         context_key=preset_name,
     ).order_by(BinaryMetadata.file_path.asc()).all()
-    return [
-        {
-            'file_path': row.file_path,
-            'description': row.description or '',
-        }
-        for row in rows
-    ]
+    return {
+        'format_version': EXPORT_FORMAT_VERSION,
+        'metadata': [
+            {
+                'file_path': row.file_path,
+                'description': row.description or '',
+            }
+            for row in rows
+        ],
+    }
 
 
 def _build_preset_export_zip(preset):
@@ -340,7 +411,8 @@ def _build_preset_export_zip(preset):
         for current_root, dirs, files in os.walk(root):
             dirs[:] = [
                 dirname for dirname in dirs
-                if not _should_skip_export_path(
+                if not os.path.islink(os.path.join(current_root, dirname))
+                and not _should_skip_export_path(
                     os.path.relpath(os.path.join(current_root, dirname), root),
                     is_dir=True,
                 )
@@ -348,6 +420,11 @@ def _build_preset_export_zip(preset):
             for filename in sorted(files):
                 full_path = os.path.abspath(os.path.join(current_root, filename))
                 rel_path = os.path.relpath(full_path, root).replace(os.sep, '/')
+                if os.path.islink(full_path):
+                    current_app.logger.debug(
+                        'Skipping preset export symlink: %s', full_path
+                    )
+                    continue
                 if not full_path.startswith(root + os.sep) and full_path != root:
                     current_app.logger.warning(
                         'Skipping preset export path outside root: %s', full_path
@@ -357,11 +434,18 @@ def _build_preset_export_zip(preset):
                     continue
                 if rel_path in {'manifest.json', 'binary_metadata.json'}:
                     continue
-                archive.write(full_path, rel_path)
+                try:
+                    archive.write(full_path, rel_path)
+                except FileNotFoundError:
+                    current_app.logger.warning(
+                        'Skipping disappeared preset export path: %s', full_path
+                    )
 
     buffer.seek(0)
     return buffer
 ```
+
+Concurrent mutation policy: this is a deterministic best-effort live export, not a snapshot/lock design. Files that disappear between traversal and `archive.write()` are skipped and logged as warnings. Any other archive-generation failure that prevents producing a valid ZIP is caught by the route and returned as the controlled JSON `500` response below; do not leak tracebacks to the client.
 
 - [ ] **Step 3: Add route**
 
@@ -387,7 +471,7 @@ def download_preset_api(preset_id):
         return send_file(
             archive,
             as_attachment=True,
-            download_name=f'{preset.name}.zip',
+            download_name=f'{_safe_export_filename(preset.name)}.zip',
             mimetype='application/zip',
         )
     except Exception as e:
@@ -557,6 +641,24 @@ to:
 const isSubmitDisabled = Boolean(savedPreset) || isSaving || isValidating || !presetName.trim() || !!validateNameLocally(presetName);
 ```
 
+Also guard all submit paths, not just the button. At the start of `handleSave`, add:
+
+```js
+if (savedPreset) return;
+```
+
+Update the Enter-key handler so it cannot submit after success. Change its save condition from:
+
+```js
+if (!isSaving && !isValidating && presetName.trim()) {
+```
+
+to:
+
+```js
+if (!savedPreset && !isSaving && !isValidating && presetName.trim()) {
+```
+
 - [ ] **Step 5: Commit modal UI changes**
 
 ```bash
@@ -649,7 +751,20 @@ const handleSavePresetModalClose = useCallback(() => {
 }, []);
 ```
 
-- [ ] **Step 5: Add archive download helper**
+- [ ] **Step 5: Add frontend filename-safe helper and archive download helper**
+
+Before `handleDownloadSavedPreset`, add the same filename-safe behavior used by the backend:
+
+```js
+const safePresetDownloadName = (name) => {
+  const safe = String(name || '')
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '');
+  return safe || 'preset';
+};
+```
 
 Before the `return (` in `EditInstanceConfigModal.jsx`, add:
 
@@ -662,7 +777,7 @@ const handleDownloadSavedPreset = useCallback(async (preset) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${preset.name || 'preset'}.zip`;
+    a.download = `${safePresetDownloadName(preset.name)}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -740,7 +855,8 @@ git commit -m "feat: wire preset download from edit modal"
 **Files:**
 
 - Modify: `frontend-react/src/components/instances/__tests__/EditInstanceConfigModal.test.jsx`
-- Test: same file
+- Modify/Create: `frontend-react/src/components/addInstance/__tests__/SavePresetModal.test.jsx`
+- Test: both files
 
 - [ ] **Step 1: Add `downloadPreset` mock**
 
@@ -862,30 +978,90 @@ it('keeps save preset modal open and downloads the saved preset archive', async 
 
   await waitFor(() => expect(mocks.downloadPreset).toHaveBeenCalledWith(42));
   expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+  expect(document.body.appendChild).toHaveBeenCalledWith(
+    expect.objectContaining({ download: 'saved-from-edit.zip' })
+  );
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:qlsm-preset');
 });
 ```
 
-- [ ] **Step 6: Run frontend test file**
+- [ ] **Step 6: Add frontend tests for unsafe download names and Enter-key duplicate-save prevention**
+
+Add a second `EditInstanceConfigModal.test.jsx` case after the download test:
+
+```jsx
+it('sanitizes the browser download filename for unsafe saved preset names', async () => {
+  mocks.createPreset.mockResolvedValue({
+    message: 'saved',
+    data: { id: 42, name: '../Unsafe Name\nWith Spaces' },
+  });
+
+  render(
+    <EditInstanceConfigModal
+      isOpen={true}
+      onClose={vi.fn()}
+      instanceId={1}
+      instanceName="Test123"
+      onConfigSaved={vi.fn()}
+    />
+  );
+
+  await waitFor(() => expect(screen.getByRole('button', { name: /save preset/i })).toBeInTheDocument());
+
+  fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+  fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /download preset/i }));
+
+  await waitFor(() => expect(mocks.downloadPreset).toHaveBeenCalledWith(42));
+  expect(document.body.appendChild).toHaveBeenCalledWith(
+    expect.objectContaining({ download: 'Unsafe-Name-With-Spaces.zip' })
+  );
+});
+```
+
+In `SavePresetModal.test.jsx`, add or extend component-level coverage so the real modal keyboard path is tested after success:
+
+```jsx
+it('does not save again when Enter is pressed after a preset has been saved', async () => {
+  const onSave = vi.fn();
+
+  render(
+    <SavePresetModal
+      isOpen={true}
+      onClose={vi.fn()}
+      onSave={onSave}
+      savedPreset={{ id: 42, name: 'saved-from-edit' }}
+    />
+  );
+
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter', code: 'Enter' });
+
+  expect(onSave).not.toHaveBeenCalled();
+});
+```
+
+If the existing modal keydown listener is attached to a more specific container than `role="dialog"`, target that container in the test; the assertion must remain that `onSave` is not called when `savedPreset` is present.
+
+- [ ] **Step 7: Run frontend test files**
 
 Run:
 
 ```bash
-cd frontend-react && pnpm test -- src/components/instances/__tests__/EditInstanceConfigModal.test.jsx --runInBand
+cd frontend-react && pnpm test -- src/components/instances/__tests__/EditInstanceConfigModal.test.jsx src/components/addInstance/__tests__/SavePresetModal.test.jsx --runInBand
 ```
 
 If Vitest rejects `--runInBand`, run:
 
 ```bash
-cd frontend-react && pnpm test -- src/components/instances/__tests__/EditInstanceConfigModal.test.jsx
+cd frontend-react && pnpm test -- src/components/instances/__tests__/EditInstanceConfigModal.test.jsx src/components/addInstance/__tests__/SavePresetModal.test.jsx
 ```
 
-Expected: all tests in the file pass.
+Expected: all tests in both files pass.
 
-- [ ] **Step 7: Commit frontend tests**
+- [ ] **Step 8: Commit frontend tests**
 
 ```bash
-git add frontend-react/src/components/instances/__tests__/EditInstanceConfigModal.test.jsx
+git add frontend-react/src/components/instances/__tests__/EditInstanceConfigModal.test.jsx frontend-react/src/components/addInstance/__tests__/SavePresetModal.test.jsx
 git commit -m "test: cover preset download from save modal"
 ```
 
@@ -913,7 +1089,7 @@ Downloads the saved preset as a ZIP archive. The archive contains the full saved
 
 Responses:
 
-- `200 OK` — `application/zip` attachment named `<preset-name>.zip`
+- `200 OK` — `application/zip` attachment named `<safe-preset-name>.zip`
 - `404 Not Found` — preset id does not exist
 - `500 Internal Server Error` — preset directory is missing or archive generation failed
 ```
@@ -1007,7 +1183,7 @@ pytest tests/test_preset_download_routes.py -v
 Run:
 
 ```bash
-cd frontend-react && pnpm test -- src/components/instances/__tests__/EditInstanceConfigModal.test.jsx
+cd frontend-react && pnpm test -- src/components/instances/__tests__/EditInstanceConfigModal.test.jsx src/components/addInstance/__tests__/SavePresetModal.test.jsx
 ```
 
 Expected: both pass.
@@ -1037,6 +1213,12 @@ Stop and wait for explicit merge approval.
 
 ---
 
+## Deferred follow-ups
+
+- Finding 7 — Frontend object URL cleanup failure-path robustness: optional follow-up because the planned happy-path cleanup remains required and covers normal browser behavior; add `try/finally` cleanup for DOM/click failures later if implementation touches that area further.
+
+---
+
 ## Self-Review
 
 Spec coverage:
@@ -1062,3 +1244,10 @@ Type consistency:
 - `savedPresetForDownload` shape is consistently `{ id, name }`.
 - `downloadPreset(presetId)` consistently returns Blob.
 - Backend route consistently uses `preset_id` and returns `application/zip`.
+
+---
+**Review loop closed:** 2026-06-27
+- Findings: `/home/rage/qlsm/docs/findings/2026-06-27-preset-download-export-findings.md`
+- Assessment: `/home/rage/qlsm/docs/assess-review-findings/2026-06-27-preset-download-export-assessment.md`
+- Accepted findings folded in: 1. Archive path containment does not handle symlinks, 2. Duplicate save is still possible from the Enter key after success, 3. Download filename sanitization is specified but not enforced in the plan, 6. Backend tests do not assert authentication is required
+- Deferred: 7. Frontend object URL cleanup failure-path robustness

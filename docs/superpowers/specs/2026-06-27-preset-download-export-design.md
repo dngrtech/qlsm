@@ -91,6 +91,14 @@ Success:
 - download name: `<safe-preset-name>.zip`
 - MIME type: `application/zip`
 
+Filename safety:
+
+- derive `<safe-preset-name>` with a shared filename-safe helper, not by using raw `preset.name`
+- normalize whitespace to `-`
+- replace path separators, control characters, and characters outside `[A-Za-z0-9._-]` with `-`
+- collapse repeated `-`, trim leading/trailing `.-`, and fall back to `preset` if the result is empty
+- use the same helper for the backend `Content-Disposition` filename and the frontend `<a download>` filename so legacy/builtin rows with unsafe names still produce safe downloads
+
 Errors:
 
 - `404` if preset id does not exist
@@ -151,11 +159,32 @@ Suggested shape:
 }
 ```
 
-If binary metadata is not naturally stored as files inside the preset directory, the download endpoint should include it in the manifest or a separate `binary_metadata.json`. The exact placement can be chosen during implementation, but the archive must preserve hook descriptions/metadata needed to understand the exported hooks.
+Binary metadata should be emitted as a generated `binary_metadata.json` file beside `manifest.json`; it should not be written back into the preset directory. This version is not an import/restore contract, but the export shape must be explicit and versioned:
+
+```json
+{
+  "format_version": 1,
+  "metadata": [
+    {
+      "file_path": "force_rate.so",
+      "description": "99k LAN rate hook"
+    }
+  ]
+}
+```
+
+Current semantics:
+
+- `metadata` contains the current `BinaryMetadata` fields needed to understand exported hooks: `file_path` and `description`.
+- `manifest.includes.binary_metadata` means the archive supports/emits the generated metadata file.
+- Add `manifest.counts.binary_metadata` with the number of metadata entries so consumers can distinguish supported-but-empty from present rows.
+- Emit `binary_metadata.json` even when empty as `{ "format_version": 1, "metadata": [] }`.
 
 ## Archive safety rules
 
 The endpoint must walk only under `preset.path` and write archive names relative to that root.
+
+Symlink policy: skip symlinked files and symlinked directories entirely. Do not follow symlinks, even if their target appears to be safe. Log skipped symlinks at debug level at most; they are not export failures.
 
 Exclude generated/editor/runtime junk:
 
@@ -203,11 +232,17 @@ On modal close/open reset:
 
 - clear `savedPresetForDownload`
 
+Duplicate-save guard:
+
+- when `savedPresetForDownload` / `savedPreset` is set, disable the Save button
+- `handleSave` must return without calling `onSave` when `savedPreset` is set
+- the Enter-key `handleKeyDown` path must also require `!savedPreset` before submitting
+
 Download button:
 
 - calls `downloadPreset(savedPresetForDownload.id)`
 - creates object URL
-- uses `<a download>` with `<preset-name>.zip`
+- uses `<a download>` with `<safe-preset-name>.zip` from the filename-safe helper
 - revokes URL after click
 
 ## Tests
@@ -215,12 +250,16 @@ Download button:
 Backend tests:
 
 - `GET /presets/<id>/download` returns a ZIP for an existing preset.
+- Unauthenticated `GET /presets/<id>/download` is rejected and does not return a ZIP body.
 - ZIP contains all root config files.
 - ZIP contains custom config files in custom top-level folders.
 - ZIP contains `factories/`, `scripts/`, `user-hooks/` when present.
 - ZIP contains `checked_plugins.json` and `checked_factories.json` when present.
 - ZIP contains generated `manifest.json`.
+- ZIP contains generated versioned `binary_metadata.json`, and `manifest.counts.binary_metadata` matches its entry count.
 - ZIP excludes `__pycache__` and `.pyc` files.
+- ZIP skips symlinked files and directories, including a symlink pointing outside `preset.path`.
+- Unsafe legacy preset names produce sanitized backend attachment filenames.
 - Missing preset returns `404`.
 - Missing preset directory returns error.
 
@@ -228,6 +267,8 @@ Frontend tests:
 
 - Saving a preset from edit mode leaves the save modal open in success/download state.
 - Download button calls `downloadPreset` with the returned preset id.
+- Download uses the filename-safe helper so unsafe legacy preset names become safe `<name>.zip` values.
+- Pressing Enter after the success/download state is shown does not call `createPreset` again.
 - Existing save payload still includes all serialized config files/folders, factories, checked plugins, and draft id.
 
 ## Acceptance criteria
@@ -237,3 +278,10 @@ Frontend tests:
 - No sensitive runtime-only instance values are exported.
 - Existing save/load preset behavior remains unchanged.
 - Tests prove custom config files are not dropped.
+
+---
+**Review loop closed:** 2026-06-27
+- Findings: `/home/rage/qlsm/docs/findings/2026-06-27-preset-download-export-findings.md`
+- Assessment: `/home/rage/qlsm/docs/assess-review-findings/2026-06-27-preset-download-export-assessment.md`
+- Accepted findings folded in: 1. Archive path containment does not handle symlinks, 2. Duplicate save is still possible from the Enter key after success, 3. Download filename sanitization is specified but not enforced in the plan, 6. Backend tests do not assert authentication is required
+- Deferred: 7. Frontend object URL cleanup failure-path robustness
