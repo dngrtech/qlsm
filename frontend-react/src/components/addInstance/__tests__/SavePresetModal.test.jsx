@@ -13,7 +13,7 @@ vi.mock('@headlessui/react', () => {
     void _transition;
     return <div {...props}>{children}</div>;
   };
-  Dialog.Title = ({ as: Component = 'div', children, ...props }) => <Component {...props}>{children}</Component>;
+  Dialog.Title = ({ children, ...props }) => <div {...props}>{children}</div>;
   const DialogBackdrop = ({ transition: _transition, ...props }) => {
     void _transition;
     return <div {...props} />;

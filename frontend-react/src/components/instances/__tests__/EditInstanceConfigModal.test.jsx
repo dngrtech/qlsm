@@ -249,8 +249,8 @@ describe('EditInstanceConfigModal preset saving', () => {
       discard: vi.fn(),
       consume: vi.fn(),
     });
-    global.URL.createObjectURL = vi.fn(() => 'blob:qlsm-preset');
-    global.URL.revokeObjectURL = vi.fn();
+    window.URL.createObjectURL = vi.fn(() => 'blob:qlsm-preset');
+    window.URL.revokeObjectURL = vi.fn();
     vi.spyOn(document.body, 'appendChild');
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
@@ -307,7 +307,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(downloadButton);
 
     await waitFor(() => expect(mocks.downloadPreset).toHaveBeenCalledWith(42));
-    expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(window.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     const anchor = document.body.appendChild.mock.calls.find(
       ([node]) => node instanceof HTMLAnchorElement,
     )?.[0];
@@ -315,7 +315,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       href: 'blob:qlsm-preset',
       download: 'saved-from-edit.zip',
     }));
-    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:qlsm-preset');
+    expect(window.URL.revokeObjectURL).toHaveBeenCalledWith('blob:qlsm-preset');
   });
 
   it('sanitizes unsafe saved preset names before downloading', async () => {
