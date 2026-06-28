@@ -3,7 +3,7 @@ import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
-import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
+import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, downloadPreset, getFactoryTree, getFactoryContent } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
@@ -119,6 +119,8 @@ function EditInstanceConfigModal({
   const [isLoadPresetModalOpen, setIsLoadPresetModalOpen] = useState(false);
   const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState(false);
   const [isSavingPreset, setIsSavingPreset] = useState(false);
+  const [savedPresetForDownload, setSavedPresetForDownload] = useState(null);
+  const [isDownloadingPreset, setIsDownloadingPreset] = useState(false);
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
@@ -490,12 +492,16 @@ function EditInstanceConfigModal({
       };
 
       const response = await createPreset(presetData);
+      const savedPreset = response.data;
 
       // Update presets list
       const updatedPresets = await getPresets();
       setPresets(updatedPresets || []);
 
-      setIsSavePresetModalOpen(false);
+      setSavedPresetForDownload({
+        id: savedPreset.id,
+        name: savedPreset.name || name.trim(),
+      });
       showSuccess(response.message || `Preset "${name}" saved successfully.`);
     } catch (err) {
       setPresetError(err.error?.message || err.message || 'Failed to save preset.');
@@ -658,6 +664,46 @@ function EditInstanceConfigModal({
   const cancelModalClose = () => {
     setShowCloseConfirm(false);
   };
+
+  const handleSavePresetModalClose = useCallback(() => {
+    setIsSavePresetModalOpen(false);
+    setSavedPresetForDownload(null);
+    setPresetError(null);
+  }, []);
+
+  const safePresetDownloadName = useCallback((name) => {
+    const safeName = String(name || '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^A-Za-z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^[.-]+|[.-]+$/g, '');
+    return safeName || 'preset';
+  }, []);
+
+  const handleDownloadSavedPreset = useCallback(async (preset) => {
+    if (!preset?.id) return;
+
+    setIsDownloadingPreset(true);
+    setPresetError(null);
+    try {
+      const blob = await downloadPreset(preset.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safePresetDownloadName(preset.name)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err.error?.message || err.message || 'Failed to download preset.';
+      setPresetError(message);
+      showError(message);
+    } finally {
+      setIsDownloadingPreset(false);
+    }
+  }, [safePresetDownloadName, showError]);
 
   // Reset dirty state when modal is truly closed (not just confirmation hidden)
   useEffect(() => {
@@ -908,7 +954,15 @@ function EditInstanceConfigModal({
                                   <FolderOpen className="w-4 h-4 mr-2" />
                                   Load Preset
                                 </button>
-                                <button type="button" onClick={() => setIsSavePresetModalOpen(true)} className="btn btn-secondary">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSavedPresetForDownload(null);
+                                    setPresetError(null);
+                                    setIsSavePresetModalOpen(true);
+                                  }}
+                                  className="btn btn-secondary"
+                                >
                                   <Save className="w-4 h-4 mr-2" />
                                   Save Preset
                                 </button>
@@ -987,9 +1041,12 @@ function EditInstanceConfigModal({
       {/* Save Preset Modal */}
       <SavePresetModal
         isOpen={isSavePresetModalOpen}
-        onClose={() => setIsSavePresetModalOpen(false)}
+        onClose={handleSavePresetModalClose}
         onSave={handleSavePreset}
         isSaving={isSavingPreset}
+        savedPreset={savedPresetForDownload}
+        onDownload={handleDownloadSavedPreset}
+        isDownloading={isDownloadingPreset}
         zIndexClass="z-[60]"
         initialDescription=""
       />
