@@ -1,9 +1,10 @@
 import React, { Fragment, useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, Transition, Listbox, Portal } from '@headlessui/react';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react-dom';
-import { LoaderCircle, FolderOpen, X, Check, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
+import { LoaderCircle, FolderOpen, X, Check, ChevronDown, AlertTriangle, Trash2, Download } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
 import { deletePreset } from '../../services/api';
+import { triggerPresetDownload } from '../../utils/presetDownload';
 
 function LoadPresetModal({
   isOpen,
@@ -22,6 +23,10 @@ function LoadPresetModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
+  // Download state
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
+
   // Floating UI for dropdown positioning
   const { x, y, strategy, refs } = useFloating({
     placement: 'bottom-start',
@@ -36,6 +41,7 @@ function LoadPresetModal({
       setShowConfirmation(false);
       setShowDeleteConfirmation(false);
       setDeleteError(null);
+      setDownloadError(null);
     }
   }, [isOpen]);
 
@@ -81,6 +87,19 @@ function LoadPresetModal({
   const handleCancelDelete = () => {
     setShowDeleteConfirmation(false);
     setDeleteError(null);
+  };
+
+  const handleDownloadClick = async () => {
+    if (!selectedPreset || isDownloading) return;
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      await triggerPresetDownload(selectedPreset);
+    } catch (err) {
+      setDownloadError(err.error?.message || err.message || 'Failed to download preset.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   // If showing delete confirmation, render the delete confirmation view
@@ -333,9 +352,15 @@ function LoadPresetModal({
                   )}
                 </div>
 
+                {downloadError && (
+                  <div className="relative z-10 alert-error mt-4">
+                    <p className="text-sm">{downloadError}</p>
+                  </div>
+                )}
+
                 <div className="relative z-10 mt-6 flex justify-between items-center">
-                  {/* Left side - Delete button */}
-                  <div>
+                  {/* Left side - Delete and Download buttons */}
+                  <div className="flex space-x-3">
                     <button
                       type="button"
                       className="btn btn-danger"
@@ -345,6 +370,25 @@ function LoadPresetModal({
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
                       Delete
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleDownloadClick}
+                      disabled={!selectedPreset || isDownloading}
+                      title={selectedPreset ? 'Download selected preset archive' : 'Select a preset to download'}
+                    >
+                      {isDownloading ? (
+                        <>
+                          <LoaderCircle className="w-4 h-4 mr-1 animate-spin" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 mr-1" />
+                          Download
+                        </>
+                      )}
                     </button>
                   </div>
 

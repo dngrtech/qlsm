@@ -3,7 +3,8 @@ import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
-import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, downloadPreset, getFactoryTree, getFactoryContent } from '../../services/api';
+import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
+import { triggerPresetDownload } from '../../utils/presetDownload';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
@@ -671,31 +672,13 @@ function EditInstanceConfigModal({
     setPresetError(null);
   }, []);
 
-  const safePresetDownloadName = useCallback((name) => {
-    const safeName = String(name || '')
-      .trim()
-      .replace(/\s+/g, '-')
-      .replace(/[^A-Za-z0-9._-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^[.-]+|[.-]+$/g, '');
-    return safeName || 'preset';
-  }, []);
-
   const handleDownloadSavedPreset = useCallback(async (preset) => {
     if (!preset?.id) return;
 
     setIsDownloadingPreset(true);
     setPresetError(null);
     try {
-      const blob = await downloadPreset(preset.id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${safePresetDownloadName(preset.name)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await triggerPresetDownload(preset);
     } catch (err) {
       const message = err.error?.message || err.message || 'Failed to download preset.';
       setPresetError(message);
@@ -703,7 +686,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsDownloadingPreset(false);
     }
-  }, [safePresetDownloadName, showError]);
+  }, [showError]);
 
   // Reset dirty state when modal is truly closed (not just confirmation hidden)
   useEffect(() => {
