@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AppFooter from '../AppFooter';
+import { CURRENT_VERSION } from '../../utils/versioning';
 
 describe('AppFooter', () => {
   afterEach(() => {
@@ -24,7 +25,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: 'v1.11.0' })).toHaveAttribute('href', 'https://dngrtech.github.io/qlsm/releases/');
+    expect(screen.getByRole('link', { name: `v${CURRENT_VERSION}` })).toHaveAttribute('href', 'https://dngrtech.github.io/qlsm/releases/');
     await waitFor(() => {
       expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     });
@@ -60,7 +61,7 @@ describe('AppFooter', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: 'v1.11.0' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: `v${CURRENT_VERSION}` })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     });
