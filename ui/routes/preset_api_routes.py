@@ -907,7 +907,7 @@ def download_preset_api(preset_id):
         current_app.logger.error(
             "Error exporting preset %s: %s", preset_id, e, exc_info=True
         )
-        return jsonify({"error": {"message": f"Error exporting preset: {str(e)}"}}), 500
+        return jsonify({"error": {"message": "Failed to export preset archive."}}), 500
 
 
 @preset_api_bp.route('/<int:preset_id>', methods=['PUT'], endpoint='update_preset_api')
