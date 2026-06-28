@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(),
+  downloadPreset: vi.fn(),
   flushEdits: vi.fn(),
   getBinaryMeta: vi.fn(),
   getFactoryContent: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@headlessui/react', () => {
 
 vi.mock('../../../services/api', () => ({
   createPreset: mocks.createPreset,
+  downloadPreset: mocks.downloadPreset,
   getFactoryContent: mocks.getFactoryContent,
   getFactoryTree: mocks.getFactoryTree,
   getInstanceById: mocks.getInstanceById,
@@ -79,14 +81,21 @@ vi.mock('../../addInstance/LoadPresetModal', () => ({
 }));
 
 vi.mock('../../addInstance/SavePresetModal', () => ({
-  default: ({ isOpen, onSave }) => (
+  default: ({ isOpen, onSave, savedPreset, onDownload }) => (
     isOpen ? (
-      <button
-        type="button"
-        onClick={() => onSave({ name: 'saved-from-edit', description: 'copy' })}
-      >
-        Confirm Save Preset
-      </button>
+      <div>
+        <button
+          type="button"
+          onClick={() => onSave({ name: 'saved-from-edit', description: 'copy' })}
+        >
+          Confirm Save Preset
+        </button>
+        {savedPreset && (
+          <button type="button" onClick={() => onDownload(savedPreset)}>
+            Download Preset
+          </button>
+        )}
+      </div>
     ) : null
   ),
 }));
@@ -189,7 +198,8 @@ describe('EditInstanceConfigModal preset saving', () => {
     if (!EditInstanceConfigModal) {
       ({ default: EditInstanceConfigModal } = await import('../EditInstanceConfigModal'));
     }
-    mocks.createPreset.mockResolvedValue({ message: 'saved' });
+    mocks.createPreset.mockResolvedValue({ message: 'saved', data: { id: 42, name: 'saved-from-edit' } });
+    mocks.downloadPreset.mockResolvedValue(new Blob(['zip-bytes'], { type: 'application/zip' }));
     mocks.flushEdits.mockResolvedValue(undefined);
     mocks.getBinaryMeta.mockResolvedValue({});
     mocks.getFactoryContent.mockResolvedValue({ content: '' });
@@ -239,6 +249,10 @@ describe('EditInstanceConfigModal preset saving', () => {
       discard: vi.fn(),
       consume: vi.fn(),
     });
+    global.URL.createObjectURL = vi.fn(() => 'blob:qlsm-preset');
+    global.URL.revokeObjectURL = vi.fn();
+    vi.spyOn(document.body, 'appendChild');
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
   it('preserves checked plugin file paths when saving a preset from edit mode', async () => {
@@ -266,6 +280,73 @@ describe('EditInstanceConfigModal preset saving', () => {
         checked_factories: [],
       })
     );
+  });
+
+  it('keeps the save modal open and downloads the saved preset archive', async () => {
+    const onClose = vi.fn();
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={onClose}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save preset/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
+
+    await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(1));
+    const downloadButton = await screen.findByRole('button', { name: /download preset/i });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(downloadButton);
+
+    await waitFor(() => expect(mocks.downloadPreset).toHaveBeenCalledWith(42));
+    expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    const anchor = document.body.appendChild.mock.calls.find(
+      ([node]) => node instanceof HTMLAnchorElement,
+    )?.[0];
+    expect(anchor).toEqual(expect.objectContaining({
+      href: 'blob:qlsm-preset',
+      download: 'saved-from-edit.zip',
+    }));
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:qlsm-preset');
+  });
+
+  it('sanitizes unsafe saved preset names before downloading', async () => {
+    mocks.createPreset.mockResolvedValue({
+      message: 'saved',
+      data: { id: 42, name: '../Unsafe Name\nWith Spaces' },
+    });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save preset/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
+
+    const downloadButton = await screen.findByRole('button', { name: /download preset/i });
+    fireEvent.click(downloadButton);
+
+    await waitFor(() => expect(mocks.downloadPreset).toHaveBeenCalledWith(42));
+    const anchor = document.body.appendChild.mock.calls.find(
+      ([node]) => node instanceof HTMLAnchorElement,
+    )?.[0];
+    expect(anchor.download).toBe('Unsafe-Name-With-Spaces.zip');
   });
 
   it('sends factory adapter files when saving instance configuration', async () => {
