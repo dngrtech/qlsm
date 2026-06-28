@@ -13,7 +13,10 @@ function SavePresetModal({
   onSave,
   isSaving = false,
   zIndexClass = 'z-50',
-  initialDescription = ''
+  initialDescription = '',
+  savedPreset = null,
+  onDownload = null,
+  isDownloading = false
 }) {
   const [presetName, setPresetName] = useState('');
   const [description, setDescription] = useState('');
@@ -57,6 +60,8 @@ function SavePresetModal({
   };
 
   const handleSave = async () => {
+    if (savedPreset) return;
+
     // Client-side validation first
     const localError = validateNameLocally(presetName);
     if (localError) {
@@ -85,12 +90,12 @@ function SavePresetModal({
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !isSaving && !isValidating && presetName.trim()) {
+    if (e.key === 'Enter' && !savedPreset && !isSaving && !isValidating && presetName.trim()) {
       handleSave();
     }
   };
 
-  const isSubmitDisabled = isSaving || isValidating || !presetName.trim() || !!validateNameLocally(presetName);
+  const isSubmitDisabled = Boolean(savedPreset) || isSaving || isValidating || !presetName.trim() || !!validateNameLocally(presetName);
 
   return (
     <Dialog open={isOpen} as="div" className={classNames("relative", zIndexClass)} onClose={onClose}>
@@ -109,6 +114,35 @@ function SavePresetModal({
                     Save as Preset
                   </span>
                 </Dialog.Title>
+
+                {savedPreset && (
+                  <div className="relative z-10 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
+                      Preset saved: {savedPreset.name}
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                      You can download the saved preset archive now, or close this dialog.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-secondary mt-3"
+                      onClick={() => onDownload?.(savedPreset)}
+                      disabled={isDownloading || !onDownload}
+                    >
+                      {isDownloading ? (
+                        <>
+                          <LoaderCircle className="w-4 h-4 mr-1 animate-spin" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-1" />
+                          Download Preset
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
 
                 <div className="relative z-10 mt-4">
                   <label htmlFor="presetName" className="label-tech mb-1.5 block">
