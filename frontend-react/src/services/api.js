@@ -561,6 +561,18 @@ export const deletePreset = async (presetId) => {
   }
 };
 
+export const downloadPreset = async (presetId) => {
+  try {
+    const response = await apiClient.get(`/presets/${presetId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to download preset ${presetId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to download preset');
+  }
+};
+
 // Validate preset name availability
 export const validatePresetName = async (name) => {
   try {
