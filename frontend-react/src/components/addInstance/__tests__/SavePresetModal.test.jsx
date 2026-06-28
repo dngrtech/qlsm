@@ -52,4 +52,39 @@ describe('SavePresetModal', () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(mocks.validatePresetName).not.toHaveBeenCalled();
   });
+
+  it('shows a disabled download button with a hint before the preset is saved', () => {
+    const onDownload = vi.fn();
+
+    render(
+      <SavePresetModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        savedPreset={null}
+        onDownload={onDownload}
+      />
+    );
+
+    const downloadButton = screen.getByRole('button', { name: /download preset/i });
+    expect(downloadButton).toBeDisabled();
+    expect(screen.getByText(/save the preset to download its config archive/i)).toBeInTheDocument();
+
+    fireEvent.click(downloadButton);
+    expect(onDownload).not.toHaveBeenCalled();
+  });
+
+  it('does not render the download section when downloads are unsupported', () => {
+    render(
+      <SavePresetModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        savedPreset={null}
+        onDownload={null}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /download preset/i })).not.toBeInTheDocument();
+  });
 });

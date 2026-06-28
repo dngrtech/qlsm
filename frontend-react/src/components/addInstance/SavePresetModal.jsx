@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
-import { LoaderCircle, Save, X } from 'lucide-react';
+import { Download, LoaderCircle, Save, X } from 'lucide-react';
 import { validatePresetName } from '../../services/api';
 import { classNames } from '../../utils/uiUtils';
+import InfoTooltip from '../common/InfoTooltip';
 
 // Valid preset name pattern (matches backend)
 const PRESET_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -115,32 +116,45 @@ function SavePresetModal({
                   </span>
                 </Dialog.Title>
 
-                {savedPreset && (
+                {onDownload && (
                   <div className="relative z-10 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">
-                      Preset saved: {savedPreset.name}
-                    </p>
-                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      You can download the saved preset archive now, or close this dialog.
-                    </p>
-                    <button
-                      type="button"
-                      className="btn btn-secondary mt-3"
-                      onClick={() => onDownload?.(savedPreset)}
-                      disabled={isDownloading || !onDownload}
-                    >
-                      {isDownloading ? (
-                        <>
-                          <LoaderCircle className="w-4 h-4 mr-1 animate-spin" />
-                          Downloading...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4 mr-1" />
-                          Download Preset
-                        </>
+                    {savedPreset ? (
+                      <>
+                        <p className="text-sm font-semibold text-[var(--text-primary)]">
+                          Preset saved: {savedPreset.name}
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                          You can download the saved preset archive now, or close this dialog.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        Save the preset to download its config archive.
+                      </p>
+                    )}
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => savedPreset && onDownload(savedPreset)}
+                        disabled={!savedPreset || isDownloading}
+                      >
+                        {isDownloading ? (
+                          <>
+                            <LoaderCircle className="w-4 h-4 mr-1 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 mr-1" />
+                            Download Preset
+                          </>
+                        )}
+                      </button>
+                      {!savedPreset && (
+                        <InfoTooltip text="Download will be available after you save the preset." />
                       )}
-                    </button>
+                    </div>
                   </div>
                 )}
 
