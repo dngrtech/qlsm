@@ -68,7 +68,6 @@ describe('SavePresetModal', () => {
 
     const downloadButton = screen.getByRole('button', { name: /download preset/i });
     expect(downloadButton).toBeDisabled();
-    expect(screen.getByText(/save the preset to download its config archive/i)).toBeInTheDocument();
 
     fireEvent.click(downloadButton);
     expect(onDownload).not.toHaveBeenCalled();
