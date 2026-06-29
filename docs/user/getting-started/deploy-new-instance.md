@@ -14,7 +14,7 @@ When the add new QLDS instance form opens, config is preloaded from the **defaul
 
 - Default preset is a built-in baseline template — it cannot be modified or deleted.
 - Modify the preloaded values freely before deploying; those changes only affect this instance.
-- To save a customized starting point, use **Save As New** to create your own preset.
+- To save a customized starting point, use **Save Preset** and enter a new preset name.
 
 Preset details: [Presets And Default Config](../presets/overview.md)
 

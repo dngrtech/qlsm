@@ -3,13 +3,11 @@ import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
-import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
-import { triggerPresetDownload } from '../../utils/presetDownload';
+import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
-import LoadPresetModal from '../addInstance/LoadPresetModal';
-import SavePresetModal from '../addInstance/SavePresetModal';
+import PresetManagerModal from '../presetManager/PresetManagerModal';
 import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
 import { useNotification } from '../NotificationProvider';
 import InfoTooltip from '../common/InfoTooltip';
@@ -116,12 +114,11 @@ function EditInstanceConfigModal({
   const [expandedPluginPath, setExpandedPluginPath] = useState(null);
   const [expandedFactoryPath, setExpandedFactoryPath] = useState(null);
 
-  // State for preset modals
-  const [isLoadPresetModalOpen, setIsLoadPresetModalOpen] = useState(false);
-  const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState(false);
+  // State for preset manager
+  const [isPresetManagerOpen, setIsPresetManagerOpen] = useState(false);
+  const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [savedPresetForDownload, setSavedPresetForDownload] = useState(null);
-  const [isDownloadingPreset, setIsDownloadingPreset] = useState(false);
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
@@ -454,7 +451,7 @@ function EditInstanceConfigModal({
       setSelectedPresetId(presetId);
       setIsDirty(true);
 
-      setIsLoadPresetModalOpen(false);
+      setIsPresetManagerOpen(false);
       showSuccess(`Preset "${presetData.name}" loaded successfully.`);
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
@@ -507,6 +504,41 @@ function EditInstanceConfigModal({
     } catch (err) {
       setPresetError(err.error?.message || err.message || 'Failed to save preset.');
       showError('Failed to save preset.');
+    } finally {
+      setIsSavingPreset(false);
+    }
+  }, [checkedPlugins, instanceId, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
+
+  const handleOverwritePreset = useCallback(async (presetId, { description }) => {
+    setIsSavingPreset(true);
+    setPresetError(null);
+    try {
+      const { files: serializedFactories } = serializeFactories();
+      const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
+      if (pluginFileManagerRef.current?.flushEdits) {
+        await pluginFileManagerRef.current.flushEdits();
+      }
+      const presetData = {
+        description: description || null,
+        configs: cfgFiles,
+        config_folders: cfgFolders,
+        factories: serializedFactories,
+        checked_factories: Object.keys(serializedFactories),
+      };
+      if (pluginDraftId) {
+        presetData.draft_id = pluginDraftId;
+        presetData.checked_plugins = Array.from(checkedPlugins);
+      }
+      presetData.binary_meta_source = { context_type: 'instance', context_key: String(instanceId) };
+      const response = await updatePreset(presetId, presetData);
+      const updatedPresets = await getPresets();
+      setPresets(updatedPresets || []);
+      const saved = response.data || {};
+      setSavedPresetForDownload({ id: saved.id ?? presetId, name: saved.name });
+      showSuccess(response.message || 'Preset overwritten successfully.');
+    } catch (err) {
+      setPresetError(err.error?.message || err.message || 'Failed to overwrite preset.');
+      showError('Failed to overwrite preset.');
     } finally {
       setIsSavingPreset(false);
     }
@@ -665,28 +697,6 @@ function EditInstanceConfigModal({
   const cancelModalClose = () => {
     setShowCloseConfirm(false);
   };
-
-  const handleSavePresetModalClose = useCallback(() => {
-    setIsSavePresetModalOpen(false);
-    setSavedPresetForDownload(null);
-    setPresetError(null);
-  }, []);
-
-  const handleDownloadSavedPreset = useCallback(async (preset) => {
-    if (!preset?.id) return;
-
-    setIsDownloadingPreset(true);
-    setPresetError(null);
-    try {
-      await triggerPresetDownload(preset);
-    } catch (err) {
-      const message = err.error?.message || err.message || 'Failed to download preset.';
-      setPresetError(message);
-      showError(message);
-    } finally {
-      setIsDownloadingPreset(false);
-    }
-  }, [showError]);
 
   // Reset dirty state when modal is truly closed (not just confirmation hidden)
   useEffect(() => {
@@ -933,17 +943,17 @@ function EditInstanceConfigModal({
                           <div className="flex gap-2">
                             {activeMainTab !== 'hooks' && (
                               <>
-                                <button type="button" onClick={() => setIsLoadPresetModalOpen(true)} className="btn btn-secondary">
+                                <button
+                                  type="button"
+                                  onClick={() => { setSavedPresetForDownload(null); setPresetError(null); setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
+                                  className="btn btn-secondary"
+                                >
                                   <FolderOpen className="w-4 h-4 mr-2" />
                                   Load Preset
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setSavedPresetForDownload(null);
-                                    setPresetError(null);
-                                    setIsSavePresetModalOpen(true);
-                                  }}
+                                  onClick={() => { setSavedPresetForDownload(null); setPresetError(null); setPresetManagerTab('save'); setIsPresetManagerOpen(true); }}
                                   className="btn btn-secondary"
                                 >
                                   <Save className="w-4 h-4 mr-2" />
@@ -1010,28 +1020,20 @@ function EditInstanceConfigModal({
         zIndexClass="z-[60]"
       />
 
-      {/* Load Preset Modal */}
-      <LoadPresetModal
-        isOpen={isLoadPresetModalOpen}
-        onClose={() => setIsLoadPresetModalOpen(false)}
-        onLoad={handleLoadPreset}
+      {/* Preset Manager Modal */}
+      <PresetManagerModal
+        isOpen={isPresetManagerOpen}
+        onClose={() => { setIsPresetManagerOpen(false); setSavedPresetForDownload(null); setPresetError(null); }}
+        initialTab={presetManagerTab}
+        zIndexClass="z-[60]"
         presets={presets}
         isLoading={loadingPresets}
-        zIndexClass="z-[60]"
-        onPresetDeleted={handlePresetDeleted}
-      />
-
-      {/* Save Preset Modal */}
-      <SavePresetModal
-        isOpen={isSavePresetModalOpen}
-        onClose={handleSavePresetModalClose}
-        onSave={handleSavePreset}
+        onLoadPreset={handleLoadPreset}
+        onSavePreset={handleSavePreset}
+        onOverwritePreset={handleOverwritePreset}
         isSaving={isSavingPreset}
         savedPreset={savedPresetForDownload}
-        onDownload={handleDownloadSavedPreset}
-        isDownloading={isDownloadingPreset}
-        zIndexClass="z-[60]"
-        initialDescription=""
+        onPresetDeleted={handlePresetDeleted}
       />
     </>
   );

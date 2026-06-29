@@ -16,15 +16,15 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 
 ## Built-in Presets
 
-QLSM ships a set of **built-in presets** that provide ready-to-use baselines. Built-in presets **cannot be modified, renamed, or deleted** — they are read-only. The **Update Preset** button is hidden when a built-in preset is loaded, and the Load Preset picker does not show a delete option for them.
+QLSM ships a set of **built-in presets** that provide ready-to-use baselines. Built-in presets **cannot be modified, renamed, or deleted** — they are read-only. The Preset Manager's Save tab treats a built-in name as a new-name validation conflict instead of overwrite mode, and the Load tab disables delete for built-ins.
 
 The `default` preset is always available as the standard baseline. Additional built-in presets may appear in the list depending on your QLSM version.
 
-To customize a built-in preset, load it and use **Save As New** to create your own editable copy.
+To customize a built-in preset, load it and save it under a new name from the Preset Manager's **Save / Overwrite** tab.
 
 <img src="../../images/save-preset-button.png" width="146" />
 
-Use **Save as Preset** or **Save As New** when you want to turn the current draft into a reusable preset.
+Use **Save Preset** when you want to turn the current draft into a reusable preset.
 
 <img src="../../images/load-preset-button.png" width="146" />
 
@@ -46,33 +46,29 @@ The saved preset keeps both the files and the selection state. A plugin or facto
 
 ## Load A Saved Preset
 
-Use **Load Preset** in the deploy form or in **Edit Config** to open the preset picker.
+Use **Load Preset** in the deploy form or in **Edit Config** to open the Preset Manager on the **Load Preset** tab.
 
 <img src="../../images/load-preset-modal.png" width="463" />
 
 Loading a preset overwrites the current draft with the saved config files, plugin file tree, plugin selections, factory files, and factory selections.
 
 - Built-in presets (e.g., `default`) are always available and cannot be deleted.
-- User-created presets can be deleted from this modal.
+- User-created presets can be downloaded or deleted from this tab.
 
 ## Custom Preset Workflow
 
 1. Open **Deploy New Instance** (or **Edit Config** on an existing instance).
 2. Adjust config files, plugin files, plugin selections, factory files, and factory selections for your gamemode.
-3. Click **Save as Preset** or **Save As New** and give it a name.
+3. Click **Save Preset** and give it a name.
 4. On future deployments, click **Load Preset** and select your saved preset.
 
 ## Update A Loaded Preset
 
-If you load a user-created preset and then change the draft, the form exposes an **Update Preset** button.
+If you load a user-created preset and then change the draft, click **Save Preset** to open the Preset Manager's **Save / Overwrite** tab. Selecting or typing the existing preset name switches the form into overwrite mode, with a warning border, an **Overwriting** badge, and an **Overwrite Preset** button.
 
-<img src="../../images/update-preset-button.png" width="230" />
-
-Use **Update Preset** to overwrite the saved preset with your current draft.
-
-- The button stays disabled (greyed out) until the loaded preset has unsaved changes.
-- The **Update Preset** button is not shown at all for built-in presets — they cannot be modified.
-- Use **Save As New** to create your own editable copy of any preset, including built-ins.
+- Built-in presets never enter overwrite mode — they cannot be modified.
+- Use a different name to create your own editable copy of any preset, including built-ins.
+- The description auto-fills from the matched preset until you edit it manually.
 
 ## Instance-Specific Ownership
 

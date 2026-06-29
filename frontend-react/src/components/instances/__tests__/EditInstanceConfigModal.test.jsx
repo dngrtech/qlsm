@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   hooksTabProps: [],
   updateInstance: vi.fn(),
   updateInstanceConfig: vi.fn(),
+  updatePreset: vi.fn(),
   fileManagerProps: [],
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('../../../services/api', () => ({
   getPresets: mocks.getPresets,
   updateInstance: mocks.updateInstance,
   updateInstanceConfig: mocks.updateInstanceConfig,
+  updatePreset: mocks.updatePreset,
 }));
 
 vi.mock('../../../services/draftApi', () => ({
@@ -76,22 +78,31 @@ vi.mock('../../ConfirmationModal', () => ({
   default: () => null,
 }));
 
-vi.mock('../../addInstance/LoadPresetModal', () => ({
-  default: () => null,
-}));
-
-vi.mock('../../addInstance/SavePresetModal', () => ({
-  default: ({ isOpen, onSave, savedPreset, onDownload }) => (
+vi.mock('../../presetManager/PresetManagerModal', () => ({
+  default: ({ isOpen, onSavePreset, savedPreset }) => (
     isOpen ? (
-      <div>
+      <div data-testid="preset-manager">
         <button
           type="button"
-          onClick={() => onSave({ name: 'saved-from-edit', description: 'copy' })}
+          onClick={() => onSavePreset({ name: 'saved-from-edit', description: 'copy' })}
         >
           Confirm Save Preset
         </button>
         {savedPreset && (
-          <button type="button" onClick={() => onDownload(savedPreset)}>
+          <button
+            type="button"
+            onClick={async () => {
+              const blob = await mocks.downloadPreset(savedPreset.id);
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `${String(savedPreset.name).replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')}.zip`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              window.URL.revokeObjectURL(url);
+            }}
+          >
             Download Preset
           </button>
         )}
@@ -222,6 +233,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.updateInstance.mockResolvedValue({});
     mocks.updateInstanceConfig.mockResolvedValue({ message: 'saved' });
+    mocks.updatePreset.mockResolvedValue({ message: 'updated', data: { id: 42, name: 'saved-from-edit' } });
     mocks.useDraftWorkspace.mockReturnValue({
       draftId: 'draft-123',
       tree: [

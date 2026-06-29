@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getFactoryContent: vi.fn(),
   getFactoryTree: vi.fn(),
   getPresetById: vi.fn(),
+  getPresets: vi.fn(),
   fileManagerProps: [],
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('../../../services/api', () => ({
   getFactoryContent: mocks.getFactoryContent,
   getFactoryTree: mocks.getFactoryTree,
   getPresetById: mocks.getPresetById,
+  getPresets: mocks.getPresets,
   savePreset: mocks.savePreset,
   updatePreset: mocks.updatePreset,
 }));
@@ -122,20 +124,21 @@ vi.mock('../InstanceBasicInfoForm', () => ({
   ),
 }));
 
-vi.mock('../SavePresetModal', () => ({
-  default: ({ isOpen, onSave }) => (
+vi.mock('../../presetManager/PresetManagerModal', () => ({
+  default: ({ isOpen, initialTab, initialOverwriteName, onSavePreset }) => (
     isOpen ? (
-      <button
-        type="button"
-        onClick={() => onSave({ name: 'saved-preset', description: 'copy' })}
-      >
-        Confirm Save Preset
-      </button>
+      <div data-testid="preset-manager" data-tab={initialTab} data-overwrite={initialOverwriteName || ''}>
+        preset-manager
+        <button
+          type="button"
+          onClick={() => onSavePreset({ name: 'saved-preset', description: 'copy' })}
+        >
+          Confirm Save Preset
+        </button>
+      </div>
     ) : null
   ),
 }));
-vi.mock('../LoadPresetModal', () => ({ default: () => null }));
-vi.mock('../UpdatePresetModal', () => ({ default: () => null }));
 vi.mock('../../config/FullScreenConfigEditorModal', () => ({ default: () => null }));
 
 vi.mock('../../../codemirror-lang-qlcfg', () => ({
@@ -175,6 +178,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     mocks.getFactoryContent.mockResolvedValue({ content: '' });
     mocks.getFactoryTree.mockResolvedValue([]);
     mocks.getPresetById.mockResolvedValue({});
+    mocks.getPresets.mockResolvedValue([]);
     mocks.savePreset.mockResolvedValue({ message: 'saved' });
     mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.updatePreset.mockResolvedValue({ message: 'updated' });
@@ -393,7 +397,7 @@ describe('AddInstanceForm draft lifecycle', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
 
     await waitFor(() => expect(mocks.savePreset).toHaveBeenCalledTimes(1));

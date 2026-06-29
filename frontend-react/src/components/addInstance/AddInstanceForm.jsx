@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { LoaderCircle, Save, FolderOpen, RefreshCw, Settings, Code2, LayoutGrid, CheckCircle } from 'lucide-react';
+import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, CheckCircle } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
-import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, savePreset, updatePreset } from '../../services/api';
+import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, getPresets, savePreset, updatePreset } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import InstanceBasicInfoForm from './InstanceBasicInfoForm';
-import SavePresetModal from './SavePresetModal';
-import LoadPresetModal from './LoadPresetModal';
-import UpdatePresetModal from './UpdatePresetModal';
+import PresetManagerModal from '../presetManager/PresetManagerModal';
 import FullScreenConfigEditorModal from '../config/FullScreenConfigEditorModal';
 import {
   CONFIG_CAPS,
@@ -141,11 +139,11 @@ function AddInstanceForm({
   const [isFullScreenEditorOpen, setIsFullScreenEditorOpen] = useState(false);
   const [editingFileDetails, setEditingFileDetails] = useState({ name: '', path: '', content: '', language: undefined, linterSource: null, kind: 'config' });
 
-  // Preset modal states
-  const [showSavePresetModal, setShowSavePresetModal] = useState(false);
-  const [showLoadPresetModal, setShowLoadPresetModal] = useState(false);
+  // Preset manager states
+  const [isPresetManagerOpen, setIsPresetManagerOpen] = useState(false);
+  const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
-  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [, setIsLoadingPreset] = useState(false);
 
   // Local presets state (allows filtering after deletion without refetching)
   const [presets, setPresets] = useState(initialData.presets || []);
@@ -154,7 +152,6 @@ function AddInstanceForm({
   const [loadedPreset, setLoadedPreset] = useState(null); // { id, name, description } or null
   const [isPresetModified, setIsPresetModified] = useState(false);
   const [isUpdatingPreset, setIsUpdatingPreset] = useState(false);
-  const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
@@ -575,7 +572,7 @@ function AddInstanceForm({
       loadedPresetCheckedPluginsRef.current = nextCheckedBaseline;
       initialCheckedPluginsRef.current = nextCheckedBaseline;
 
-      setShowLoadPresetModal(false);
+      setIsPresetManagerOpen(false);
     } catch (err) {
       setInternalFormError(err.error?.message || err.message || `Failed to load preset.`);
     } finally {
@@ -620,7 +617,7 @@ function AddInstanceForm({
       presetData.checked_plugins = Array.from(checkedPlugins);
 
       await savePreset(presetData);
-      setShowSavePresetModal(false);
+      setIsPresetManagerOpen(false);
       setInternalFormError(null);
     } catch (err) {
       // Don't close modal on error, let user retry
@@ -630,55 +627,42 @@ function AddInstanceForm({
     }
   }, [checkedPlugins, draftPreset, pluginDraftId, serializeConfigs, serializeFactories]);
 
-  // Show confirmation dialog before updating preset
-  const handleUpdatePresetClick = useCallback(() => {
-    setShowUpdateConfirm(true);
-  }, []);
-
-  // Actually perform the update after confirmation
-  const handleConfirmUpdate = useCallback(async (description) => {
-    if (!loadedPreset) return;
-
-    setShowUpdateConfirm(false);
+  const handleOverwritePreset = useCallback(async (presetId, { description }) => {
     setIsUpdatingPreset(true);
     try {
       const { files: serializedFactoriesUpdate } = serializeFactories();
       const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
-        description: description,
+        description,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactoriesUpdate,
         checked_factories: Object.keys(serializedFactoriesUpdate),
       };
-
       if (pluginsManagerRef.current?.flushEdits) {
         await pluginsManagerRef.current.flushEdits();
       }
-
-      if (pluginDraftId) {
-        presetData.draft_id = pluginDraftId;
-      }
-
-      // Persist the current checked plugins state
+      if (pluginDraftId) presetData.draft_id = pluginDraftId;
       presetData.checked_plugins = Array.from(checkedPlugins);
-
-      await updatePreset(loadedPreset.id, presetData);
-
-      // Reset modified state after successful save and update loaded preset description
-      loadedPresetConfigRef.current = serializeConfigs().files;
-      loadedPresetCheckedPluginsRef.current = new Set(checkedPlugins);
-      setLoadedPreset(prev => ({ ...prev, description: description || '' }));
-      setIsPresetModified(false);
+      await updatePreset(presetId, presetData);
+      const refreshed = await getPresets();
+      setPresets(refreshed || []);
+      if (loadedPreset?.id === presetId) {
+        loadedPresetConfigRef.current = serializeConfigs().files;
+        loadedPresetCheckedPluginsRef.current = new Set(checkedPlugins);
+        setLoadedPreset((prev) => (prev ? { ...prev, description: description || '' } : prev));
+        setIsPresetModified(false);
+      }
       setInternalFormError(null);
+      setIsPresetManagerOpen(false);
     } catch (err) {
-      setInternalFormError(err.error?.message || err.message || 'Failed to update preset.');
+      setInternalFormError(err.error?.message || err.message || 'Failed to overwrite preset.');
     } finally {
       setIsUpdatingPreset(false);
     }
   }, [checkedPlugins, loadedPreset, pluginDraftId, serializeConfigs, serializeFactories]);
 
-  // Handle preset deletion from LoadPresetModal
+  // Handle preset deletion from PresetManagerModal
   const handlePresetDeleted = useCallback((deletedPresetId) => {
     // Remove from local presets list
     setPresets(prev => prev.filter(p => p.id !== deletedPresetId));
@@ -949,31 +933,19 @@ function AddInstanceForm({
         {/* Left side - Preset buttons + Esc hint */}
         <div className="flex items-center gap-3">
           <div className="flex gap-2">
-            {loadedPreset ? (
-              <>
-                {!loadedPreset.is_builtin && (
-                  <button
-                    type="button"
-                    onClick={handleUpdatePresetClick}
-                    disabled={!isPresetModified || isUpdatingPreset}
-                    className="btn btn-secondary"
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${isUpdatingPreset ? 'animate-spin' : ''}`} />
-                    {isUpdatingPreset ? 'Updating...' : `Update "${loadedPreset.name}"`}
-                  </button>
-                )}
-                <button type="button" onClick={() => setShowSavePresetModal(true)} className="btn btn-secondary">
-                  <Save className="w-4 h-4 mr-2" />
-                  Save As New
-                </button>
-              </>
-            ) : (
-              <button type="button" onClick={() => setShowSavePresetModal(true)} className="btn btn-secondary">
-                <Save className="w-4 h-4 mr-2" />
-                Save as Preset
-              </button>
-            )}
-            <button type="button" onClick={() => setShowLoadPresetModal(true)} className="btn btn-secondary">
+            <button
+              type="button"
+              onClick={() => { setPresetManagerTab('save'); setIsPresetManagerOpen(true); }}
+              className="btn btn-secondary"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Preset
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
+              className="btn btn-secondary"
+            >
               <FolderOpen className="w-4 h-4 mr-2" />
               Load Preset
             </button>
@@ -1012,31 +984,20 @@ function AddInstanceForm({
       </div>
 
       {/* Modals */}
-      <SavePresetModal
-        isOpen={showSavePresetModal}
-        onClose={() => setShowSavePresetModal(false)}
-        onSave={handleSavePreset}
-        isSaving={isSavingPreset}
-        initialDescription={loadedPreset?.description || ''}
-      />
-
-      <LoadPresetModal
-        isOpen={showLoadPresetModal}
-        onClose={() => setShowLoadPresetModal(false)}
-        onLoad={handleLoadPreset}
+      <PresetManagerModal
+        isOpen={isPresetManagerOpen}
+        onClose={() => setIsPresetManagerOpen(false)}
+        initialTab={presetManagerTab}
+        zIndexClass="z-[60]"
         presets={presets}
-        isLoading={isLoadingPreset}
+        isLoading={false}
+        onLoadPreset={handleLoadPreset}
+        onSavePreset={handleSavePreset}
+        onOverwritePreset={handleOverwritePreset}
+        isSaving={isSavingPreset || isUpdatingPreset}
+        savedPreset={null}
         onPresetDeleted={handlePresetDeleted}
-      />
-
-      <UpdatePresetModal
-        isOpen={showUpdateConfirm}
-        onClose={() => setShowUpdateConfirm(false)}
-        onConfirm={handleConfirmUpdate}
-        presetName={loadedPreset?.name || ''}
-        initialDescription={loadedPreset?.description || ''}
-        isUpdating={isUpdatingPreset}
-        zIndexClass="z-50"
+        initialOverwriteName={loadedPreset && !loadedPreset.is_builtin ? loadedPreset.name : null}
       />
 
       <FullScreenConfigEditorModal isOpen={isFullScreenEditorOpen} onClose={handleCloseFullScreenEditor} onSave={handleSaveFullScreenEditor} fileName={editingFileDetails.name} initialContent={editingFileDetails.content} language={editingFileDetails.language} linterSource={editingFileDetails.linterSource} />
