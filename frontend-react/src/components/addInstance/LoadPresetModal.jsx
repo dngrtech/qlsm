@@ -1,9 +1,10 @@
 import React, { Fragment, useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, Transition, Listbox, Portal } from '@headlessui/react';
 import { useFloating, offset, flip, shift, autoUpdate } from '@floating-ui/react-dom';
-import { LoaderCircle, FolderOpen, X, Check, ChevronDown, AlertTriangle, Trash2 } from 'lucide-react';
+import { LoaderCircle, FolderOpen, X, Check, ChevronDown, AlertTriangle, Trash2, Download } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
 import { deletePreset } from '../../services/api';
+import { triggerPresetDownload } from '../../utils/presetDownload';
 
 function LoadPresetModal({
   isOpen,
@@ -22,6 +23,10 @@ function LoadPresetModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
+  // Download state
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
+
   // Floating UI for dropdown positioning
   const { x, y, strategy, refs } = useFloating({
     placement: 'bottom-start',
@@ -36,6 +41,7 @@ function LoadPresetModal({
       setShowConfirmation(false);
       setShowDeleteConfirmation(false);
       setDeleteError(null);
+      setDownloadError(null);
     }
   }, [isOpen]);
 
@@ -81,6 +87,19 @@ function LoadPresetModal({
   const handleCancelDelete = () => {
     setShowDeleteConfirmation(false);
     setDeleteError(null);
+  };
+
+  const handleDownloadClick = async () => {
+    if (!selectedPreset || isDownloading) return;
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      await triggerPresetDownload(selectedPreset);
+    } catch (err) {
+      setDownloadError(err.error?.message || err.message || 'Failed to download preset.');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   // If showing delete confirmation, render the delete confirmation view
@@ -224,7 +243,7 @@ function LoadPresetModal({
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
-            <Dialog.Panel transition className="modal-panel w-full max-w-md transform p-6 text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95">
+            <Dialog.Panel transition className="modal-panel w-full max-w-xl transform p-6 text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95">
                 <div className="accent-line-top" />
                 <Dialog.Title
                   as="h3"
@@ -333,41 +352,59 @@ function LoadPresetModal({
                   )}
                 </div>
 
-                <div className="relative z-10 mt-6 flex justify-between items-center">
-                  {/* Left side - Delete button */}
-                  <div>
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      onClick={handleDeleteClick}
-                      disabled={!selectedPreset || selectedPreset.is_builtin}
-                      title={selectedPreset?.is_builtin ? 'Cannot delete a built-in preset' : 'Delete selected preset'}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Delete
-                    </button>
+                {downloadError && (
+                  <div className="relative z-10 alert-error mt-4">
+                    <p className="text-sm">{downloadError}</p>
                   </div>
+                )}
 
-                  {/* Right side - Cancel and Load buttons */}
-                  <div className="flex space-x-3">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={onClose}
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleLoadClick}
-                      disabled={!selectedPreset}
-                    >
-                      <FolderOpen className="w-4 h-4 mr-1" />
-                      Load Preset
-                    </button>
-                  </div>
+                <div className="relative z-10 mt-6 flex justify-between items-center gap-3">
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={handleDeleteClick}
+                    disabled={!selectedPreset || selectedPreset.is_builtin}
+                    title={selectedPreset?.is_builtin ? 'Cannot delete a built-in preset' : 'Delete selected preset'}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleDownloadClick}
+                    disabled={!selectedPreset || isDownloading}
+                    title={selectedPreset ? 'Download selected preset archive' : 'Select a preset to download'}
+                  >
+                    {isDownloading ? (
+                      <>
+                        <LoaderCircle className="w-4 h-4 mr-1 animate-spin" />
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 mr-1" />
+                        Download
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={onClose}
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleLoadClick}
+                    disabled={!selectedPreset}
+                  >
+                    <FolderOpen className="w-4 h-4 mr-1" />
+                    Load Preset
+                  </button>
                 </div>
               </Dialog.Panel>
           </div>

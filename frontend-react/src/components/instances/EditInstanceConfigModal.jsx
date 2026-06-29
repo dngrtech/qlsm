@@ -4,6 +4,7 @@ import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save,
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, getFactoryTree, getFactoryContent } from '../../services/api';
+import { triggerPresetDownload } from '../../utils/presetDownload';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
@@ -119,6 +120,8 @@ function EditInstanceConfigModal({
   const [isLoadPresetModalOpen, setIsLoadPresetModalOpen] = useState(false);
   const [isSavePresetModalOpen, setIsSavePresetModalOpen] = useState(false);
   const [isSavingPreset, setIsSavingPreset] = useState(false);
+  const [savedPresetForDownload, setSavedPresetForDownload] = useState(null);
+  const [isDownloadingPreset, setIsDownloadingPreset] = useState(false);
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
@@ -490,12 +493,16 @@ function EditInstanceConfigModal({
       };
 
       const response = await createPreset(presetData);
+      const savedPreset = response.data;
 
       // Update presets list
       const updatedPresets = await getPresets();
       setPresets(updatedPresets || []);
 
-      setIsSavePresetModalOpen(false);
+      setSavedPresetForDownload({
+        id: savedPreset.id,
+        name: savedPreset.name || name.trim(),
+      });
       showSuccess(response.message || `Preset "${name}" saved successfully.`);
     } catch (err) {
       setPresetError(err.error?.message || err.message || 'Failed to save preset.');
@@ -658,6 +665,28 @@ function EditInstanceConfigModal({
   const cancelModalClose = () => {
     setShowCloseConfirm(false);
   };
+
+  const handleSavePresetModalClose = useCallback(() => {
+    setIsSavePresetModalOpen(false);
+    setSavedPresetForDownload(null);
+    setPresetError(null);
+  }, []);
+
+  const handleDownloadSavedPreset = useCallback(async (preset) => {
+    if (!preset?.id) return;
+
+    setIsDownloadingPreset(true);
+    setPresetError(null);
+    try {
+      await triggerPresetDownload(preset);
+    } catch (err) {
+      const message = err.error?.message || err.message || 'Failed to download preset.';
+      setPresetError(message);
+      showError(message);
+    } finally {
+      setIsDownloadingPreset(false);
+    }
+  }, [showError]);
 
   // Reset dirty state when modal is truly closed (not just confirmation hidden)
   useEffect(() => {
@@ -908,7 +937,15 @@ function EditInstanceConfigModal({
                                   <FolderOpen className="w-4 h-4 mr-2" />
                                   Load Preset
                                 </button>
-                                <button type="button" onClick={() => setIsSavePresetModalOpen(true)} className="btn btn-secondary">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSavedPresetForDownload(null);
+                                    setPresetError(null);
+                                    setIsSavePresetModalOpen(true);
+                                  }}
+                                  className="btn btn-secondary"
+                                >
                                   <Save className="w-4 h-4 mr-2" />
                                   Save Preset
                                 </button>
@@ -987,9 +1024,12 @@ function EditInstanceConfigModal({
       {/* Save Preset Modal */}
       <SavePresetModal
         isOpen={isSavePresetModalOpen}
-        onClose={() => setIsSavePresetModalOpen(false)}
+        onClose={handleSavePresetModalClose}
         onSave={handleSavePreset}
         isSaving={isSavingPreset}
+        savedPreset={savedPresetForDownload}
+        onDownload={handleDownloadSavedPreset}
+        isDownloading={isDownloadingPreset}
         zIndexClass="z-[60]"
         initialDescription=""
       />

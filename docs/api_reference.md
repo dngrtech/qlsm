@@ -678,6 +678,7 @@ Config presets are stored on the filesystem at `configs/presets/<name>/`. The da
 | `/presets/<id>` | GET | Get preset with config content (reads from filesystem) |
 | `/presets/<id>` | PUT | Update preset |
 | `/presets/<id>` | DELETE | Delete preset (removes DB record + folder) |
+| `/presets/<id>/download` | GET | Download preset export |
 | `/presets/validate-name` | GET | Check preset name availability |
 
 ### Validate Name Request
@@ -725,6 +726,18 @@ GET /presets/validate-name?name=my-preset
 `factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving.
 
 `binary_meta_source` is optional on `POST /presets` and `PUT /presets/<id>`. When provided, matching `.so` file descriptions are copied from the source context into the target preset context. Use this when saving an instance or another preset as a new preset.
+
+### Download Preset Export
+
+`GET /api/presets/{preset_id}/download`
+
+Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, checked selection JSON files, and generated export metadata.
+
+Responses:
+
+- `200 OK` — `application/zip` attachment named `<safe-preset-name>.zip`
+- `404 Not Found` — preset id does not exist
+- `500 Internal Server Error` — preset directory is missing, invalid, or archive generation failed
 
 ### Preset Response (GET /presets/<id>)
 ```json

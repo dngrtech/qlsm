@@ -561,6 +561,31 @@ export const deletePreset = async (presetId) => {
   }
 };
 
+export const downloadPreset = async (presetId) => {
+  try {
+    const response = await apiClient.get(`/presets/${presetId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to download preset ${presetId}:`, error.response ? error.response.data : error.message);
+    // responseType: 'blob' applies to error responses too, so a JSON error body
+    // arrives as a Blob. Parse it back so the caller sees the server's message.
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text();
+        throw JSON.parse(text);
+      } catch (parseError) {
+        if (!(parseError instanceof SyntaxError)) {
+          throw parseError;
+        }
+        // Blob wasn't JSON; fall through to the generic error below.
+      }
+    }
+    throw error.response ? error.response.data : new Error('Failed to download preset');
+  }
+};
+
 // Validate preset name availability
 export const validatePresetName = async (name) => {
   try {

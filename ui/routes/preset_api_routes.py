@@ -1,7 +1,11 @@
+import fnmatch
+import io
 import json
 import os
+import re
 import shutil
-from flask import Blueprint, request, jsonify, current_app
+import zipfile
+from flask import Blueprint, request, jsonify, current_app, send_file
 from flask_jwt_extended import jwt_required
 from ui import db
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
@@ -30,6 +34,148 @@ ALLOWED_PRESET_FACTORY_EXTENSIONS = {'.factories'}
 PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
 RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories', 'user-hooks'}
 MAX_CONFIG_PATH_DEPTH = 2
+EXPORT_FORMAT_VERSION = 1
+EXPORT_EXCLUDED_DIRS = {'__pycache__'}
+EXPORT_EXCLUDED_FILES = {'.DS_Store'}
+EXPORT_EXCLUDED_PATTERNS = ('*.pyc', '*.pyo', '*.swp', '*.tmp', '*~')
+
+
+def _safe_export_filename(name):
+    """Return a filesystem/browser-safe base filename for preset exports."""
+    safe = re.sub(r'\s+', '-', name or '')
+    safe = re.sub(r'[^A-Za-z0-9._-]+', '-', safe)
+    safe = re.sub(r'-+', '-', safe).strip('.-')
+    return safe or 'preset'
+
+
+def _should_skip_export_path(relative_path, is_dir=False):
+    """Return True for generated/editor junk that should not enter exports."""
+    parts = relative_path.replace(os.sep, '/').split('/')
+    if any(part in EXPORT_EXCLUDED_DIRS for part in parts):
+        return True
+    name = parts[-1]
+    if is_dir:
+        return name in EXPORT_EXCLUDED_DIRS
+    if name in EXPORT_EXCLUDED_FILES:
+        return True
+    return any(fnmatch.fnmatch(name, pattern) for pattern in EXPORT_EXCLUDED_PATTERNS)
+
+
+def _resolve_export_root(preset_path):
+    """Resolve and validate that an export root stays under PRESETS_DIR."""
+    root = os.path.realpath(preset_path)
+    presets_root = os.path.realpath(PRESETS_DIR)
+    try:
+        if os.path.commonpath([presets_root, root]) != presets_root:
+            raise ValueError("Preset path is outside presets directory")
+    except ValueError as exc:
+        raise ValueError("Preset path is outside presets directory") from exc
+    return root
+
+
+def _preset_export_manifest(preset, binary_metadata_count):
+    return {
+        'type': 'qlsm-preset-export',
+        'format_version': EXPORT_FORMAT_VERSION,
+        'preset': {
+            'id': preset.id,
+            'name': preset.name,
+            'description': preset.description,
+            'is_builtin': bool(preset.is_builtin),
+            'created_at': preset.created_at.isoformat() if preset.created_at else None,
+            'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
+        },
+        'includes': {
+            'preset_directory': True,
+            'configs': True,
+            'factories': True,
+            'scripts': True,
+            'user_hooks': True,
+            'checked_plugins': True,
+            'checked_factories': True,
+            'binary_metadata': True,
+        },
+        'counts': {
+            'binary_metadata': binary_metadata_count,
+        },
+    }
+
+
+def _preset_binary_metadata_export(preset_name):
+    rows = BinaryMetadata.query.filter_by(
+        context_type='preset',
+        context_key=preset_name,
+    ).order_by(BinaryMetadata.file_path.asc()).all()
+    return {
+        'format_version': EXPORT_FORMAT_VERSION,
+        'metadata': [
+            {
+                'file_path': row.file_path,
+                'description': row.description or '',
+            }
+            for row in rows
+        ],
+    }
+
+
+def _build_preset_export_zip(preset, root):
+    """Build an in-memory ZIP containing preset.path plus export metadata."""
+    binary_metadata = _preset_binary_metadata_export(preset.name)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            'manifest.json',
+            json.dumps(
+                _preset_export_manifest(preset, len(binary_metadata['metadata'])),
+                indent=2,
+                sort_keys=True,
+            ) + '\n',
+        )
+        archive.writestr(
+            'binary_metadata.json',
+            json.dumps(binary_metadata, indent=2, sort_keys=True) + '\n',
+        )
+
+        for current_root, dirs, files in os.walk(root):
+            dirs[:] = [
+                dirname for dirname in dirs
+                if not os.path.islink(os.path.join(current_root, dirname))
+                and not _should_skip_export_path(
+                    os.path.relpath(os.path.join(current_root, dirname), root),
+                    is_dir=True,
+                )
+            ]
+            for filename in sorted(files):
+                full_path = os.path.join(current_root, filename)
+                if os.path.islink(full_path):
+                    current_app.logger.debug(
+                        'Skipping preset export symlink: %s', full_path
+                    )
+                    continue
+                full_real = os.path.realpath(full_path)
+                try:
+                    inside_root = os.path.commonpath([root, full_real]) == root
+                except ValueError:
+                    inside_root = False
+                if not inside_root:
+                    current_app.logger.warning(
+                        'Skipping preset export path outside root: %s', full_real
+                    )
+                    continue
+                rel_path = os.path.relpath(full_real, root).replace(os.sep, '/')
+                if _should_skip_export_path(rel_path):
+                    continue
+                if rel_path in {'manifest.json', 'binary_metadata.json'}:
+                    continue
+                try:
+                    archive.write(full_real, rel_path)
+                except FileNotFoundError:
+                    current_app.logger.warning(
+                        'Skipping disappeared preset export path: %s', full_path
+                    )
+
+    buffer.seek(0)
+    return buffer
 
 
 def _validate_flat_filename(filename, allowed_extensions, label):
@@ -725,6 +871,43 @@ def get_preset_api(preset_id):
     response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
 
     return jsonify({"data": response_data})
+
+
+@preset_api_bp.route('/<int:preset_id>/download', methods=['GET'], endpoint='download_preset_api')
+@jwt_required()
+def download_preset_api(preset_id):
+    """Download a saved preset directory as a portable ZIP archive."""
+    preset = get_preset(preset_id)
+    if not preset:
+        return jsonify({"error": {"message": "Preset not found."}}), 404
+
+    try:
+        root = _resolve_export_root(preset.path)
+    except ValueError:
+        current_app.logger.error(
+            "Preset export path outside presets directory for preset %s", preset_id
+        )
+        return jsonify({"error": {"message": "Preset path is invalid."}}), 500
+
+    if not os.path.isdir(root):
+        current_app.logger.error(
+            "Preset folder missing for preset %s", preset_id
+        )
+        return jsonify({"error": {"message": "Preset configuration files not found."}}), 500
+
+    try:
+        archive = _build_preset_export_zip(preset, root)
+        return send_file(
+            archive,
+            as_attachment=True,
+            download_name=f'{_safe_export_filename(preset.name)}.zip',
+            mimetype='application/zip',
+        )
+    except Exception as e:
+        current_app.logger.error(
+            "Error exporting preset %s: %s", preset_id, e, exc_info=True
+        )
+        return jsonify({"error": {"message": "Failed to export preset archive."}}), 500
 
 
 @preset_api_bp.route('/<int:preset_id>', methods=['PUT'], endpoint='update_preset_api')

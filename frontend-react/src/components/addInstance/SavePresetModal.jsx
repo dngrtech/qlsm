@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
-import { LoaderCircle, Save, X } from 'lucide-react';
+import { Download, LoaderCircle, Save, X } from 'lucide-react';
 import { validatePresetName } from '../../services/api';
 import { classNames } from '../../utils/uiUtils';
+import InfoTooltip from '../common/InfoTooltip';
 
 // Valid preset name pattern (matches backend)
 const PRESET_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -13,7 +14,10 @@ function SavePresetModal({
   onSave,
   isSaving = false,
   zIndexClass = 'z-50',
-  initialDescription = ''
+  initialDescription = '',
+  savedPreset = null,
+  onDownload = null,
+  isDownloading = false
 }) {
   const [presetName, setPresetName] = useState('');
   const [description, setDescription] = useState('');
@@ -57,6 +61,8 @@ function SavePresetModal({
   };
 
   const handleSave = async () => {
+    if (savedPreset) return;
+
     // Client-side validation first
     const localError = validateNameLocally(presetName);
     if (localError) {
@@ -85,12 +91,12 @@ function SavePresetModal({
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !isSaving && !isValidating && presetName.trim()) {
+    if (e.key === 'Enter' && !savedPreset && !isSaving && !isValidating && presetName.trim()) {
       handleSave();
     }
   };
 
-  const isSubmitDisabled = isSaving || isValidating || !presetName.trim() || !!validateNameLocally(presetName);
+  const isSubmitDisabled = Boolean(savedPreset) || isSaving || isValidating || !presetName.trim() || !!validateNameLocally(presetName);
 
   return (
     <Dialog open={isOpen} as="div" className={classNames("relative", zIndexClass)} onClose={onClose}>
@@ -98,7 +104,7 @@ function SavePresetModal({
 
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Dialog.Panel transition className="modal-panel w-full max-w-md transform p-6 text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95">
+              <Dialog.Panel transition className="modal-panel w-full max-w-lg transform p-6 text-left align-middle transition-all transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0 data-[closed]:scale-95">
                 <div className="accent-line-top" />
                 <Dialog.Title
                   as="h3"
@@ -181,6 +187,31 @@ function SavePresetModal({
                       </>
                     )}
                   </button>
+                  {onDownload && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => savedPreset && onDownload(savedPreset)}
+                        disabled={!savedPreset || isDownloading}
+                      >
+                        {isDownloading ? (
+                          <>
+                            <LoaderCircle className="w-4 h-4 mr-1 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 mr-1" />
+                            Download Preset
+                          </>
+                        )}
+                      </button>
+                      {!savedPreset && (
+                        <InfoTooltip text="Download will be available after you save the preset." />
+                      )}
+                    </div>
+                  )}
                 </div>
               </Dialog.Panel>
           </div>
