@@ -18,6 +18,7 @@ This document outlines the technical stack, development environment setup, key t
    *   `lucide-react` (for icons, including sort icons, button icons, and dropdown indicators)
    *   `CodeMirrorEditor.jsx` (reusable component for text editing with syntax highlighting, used by the unified file manager)
    *   `FileManager.jsx` and `frontend-react/src/components/fileManager/` (shared file tree, editor panel, upload/create/rename/delete controls, binary details panel, and adapter-based state handling for configs, plugins, and factories)
+   *   `frontend-react/src/components/presetManager/` (`PresetManagerModal`, load/save tabs, preset-name combobox, and rename modal) provides the unified Load / Save / Overwrite / Rename preset workflow shared by Deploy New Instance and Edit Config.
    *   `InstanceBasicInfoForm.jsx` plus add/edit instance containers that embed the shared file manager for config, plugin, and factory editing
 * **Styling (New):** Tailwind CSS. Modernized styling for dropdowns (Listboxes) and Tabs on the Add Instance page.
 * **Frontend Features:**

@@ -351,6 +351,27 @@ body {
   @apply opacity-40 cursor-not-allowed;
 }
 
+.btn-caution {
+  background-color: var(--accent-warning);
+  @apply text-white font-semibold;
+}
+
+.btn-caution:hover {
+  filter: brightness(1.08);
+}
+
+.dark .btn-caution {
+  color: var(--surface-base);
+}
+
+.btn-caution:focus-visible {
+  @apply outline-none ring-2 ring-offset-2 ring-[var(--accent-warning)];
+}
+
+.btn-caution:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
 .btn-ghost {
   @apply bg-transparent;
   color: var(--text-secondary);
@@ -395,6 +416,15 @@ body {
 
 .dark .input-error:focus {
   box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+}
+
+.input-caution {
+  border-color: var(--accent-warning) !important;
+}
+
+.input-caution:focus {
+  border-color: var(--accent-warning) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-warning) 18%, transparent) !important;
 }
 
 /* ============================================
