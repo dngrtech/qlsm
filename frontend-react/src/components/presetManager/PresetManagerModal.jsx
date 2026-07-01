@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { FolderOpen, LayoutGrid, LoaderCircle, Save } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
-import { deletePreset } from '../../services/api';
+import { deletePreset, updatePreset } from '../../services/api';
 import { triggerPresetDownload } from '../../utils/presetDownload';
 import ConfirmationModal from '../ConfirmationModal';
 import PresetLoadTab from './PresetLoadTab';
+import PresetRenameModal from './PresetRenameModal';
 import PresetSaveTab from './PresetSaveTab';
 
 const TABS = [
@@ -27,6 +28,7 @@ function PresetManagerModal({
   isSaving = false,
   savedPreset = null,
   onPresetDeleted,
+  onPresetRenamed,
   initialOverwriteName = null,
 }) {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -35,7 +37,11 @@ function PresetManagerModal({
   const [isDownloadingSaved, setIsDownloadingSaved] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
   const [showLoadConfirm, setShowLoadConfirm] = useState(false);
+  const [pendingRename, setPendingRename] = useState(null);
+  const [renameError, setRenameError] = useState(null);
+  const [isRenaming, setIsRenaming] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -43,7 +49,11 @@ function PresetManagerModal({
       setSelectedId(null);
       setPendingDelete(null);
       setDeleteError(null);
+      setDownloadError(null);
       setShowLoadConfirm(false);
+      setPendingRename(null);
+      setRenameError(null);
+      setIsRenaming(false);
     }
   }, [isOpen, initialTab]);
 
@@ -51,12 +61,26 @@ function PresetManagerModal({
 
   const handleDownload = async (preset) => {
     setDownloadingId(preset.id);
-    try { await triggerPresetDownload(preset); } finally { setDownloadingId(null); }
+    setDownloadError(null);
+    try {
+      await triggerPresetDownload(preset);
+    } catch (err) {
+      setDownloadError(`Failed to download "${preset.name}": ${err.error?.message || err.message || 'Unknown error.'}`);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleDownloadSaved = async (preset) => {
     setIsDownloadingSaved(true);
-    try { await triggerPresetDownload(preset); } finally { setIsDownloadingSaved(false); }
+    setDownloadError(null);
+    try {
+      await triggerPresetDownload(preset);
+    } catch (err) {
+      setDownloadError(`Failed to download "${preset.name}": ${err.error?.message || err.message || 'Unknown error.'}`);
+    } finally {
+      setIsDownloadingSaved(false);
+    }
   };
 
   const handleConfirmDelete = async () => {
@@ -77,6 +101,22 @@ function PresetManagerModal({
   const handleConfirmLoad = () => {
     setShowLoadConfirm(false);
     if (selectedId != null) onLoadPreset(selectedId);
+  };
+
+  const handleConfirmRename = async (newName) => {
+    const target = pendingRename;
+    if (!target) return;
+    setRenameError(null);
+    setIsRenaming(true);
+    try {
+      await updatePreset(target.id, { name: newName });
+      onPresetRenamed?.(target.id, newName);
+      setPendingRename(null);
+    } catch (err) {
+      setRenameError(err.error?.message || err.message || 'Failed to rename preset.');
+    } finally {
+      setIsRenaming(false);
+    }
   };
 
   return (
@@ -113,24 +153,32 @@ function PresetManagerModal({
                 ))}
               </div>
 
-              <div className="relative z-10 p-6">
+              <div className="relative z-10 flex min-h-[27rem] flex-col p-6">
                 {activeTab === 'load' ? (
                   <>
-                    <PresetLoadTab
-                      presets={presets}
-                      isLoading={isLoading}
-                      selectedId={selectedId}
-                      onSelect={setSelectedId}
-                      onRequestDelete={(p) => { setDeleteError(null); setPendingDelete(p); }}
-                      onDownload={handleDownload}
-                      downloadingId={downloadingId}
-                    />
-                    {deleteError && (
-                      <p role="alert" className="mt-3 rounded-md border border-[var(--accent-danger)]/35 bg-[var(--accent-danger)]/10 px-3 py-2 text-sm text-[var(--accent-danger)]">
-                        {deleteError}
-                      </p>
-                    )}
-                    <div className="mt-6 flex items-center justify-end gap-3">
+                    <div className="flex-1">
+                      <PresetLoadTab
+                        presets={presets}
+                        isLoading={isLoading}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onRequestDelete={(p) => { setDeleteError(null); setPendingDelete(p); }}
+                        onRequestRename={(p) => { setRenameError(null); setPendingRename(p); }}
+                        onDownload={handleDownload}
+                        downloadingId={downloadingId}
+                      />
+                      {deleteError && (
+                        <p role="alert" className="mt-3 rounded-md border border-[var(--accent-danger)]/35 bg-[var(--accent-danger)]/10 px-3 py-2 text-sm text-[var(--accent-danger)]">
+                          {deleteError}
+                        </p>
+                      )}
+                      {downloadError && (
+                        <p role="alert" className="mt-3 rounded-md border border-[var(--accent-danger)]/35 bg-[var(--accent-danger)]/10 px-3 py-2 text-sm text-[var(--accent-danger)]">
+                          {downloadError}
+                        </p>
+                      )}
+                    </div>
+                    <div className="mt-auto flex items-center justify-end gap-3 pt-6">
                       <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
                       <button
                         type="button"
@@ -145,18 +193,25 @@ function PresetManagerModal({
                     </div>
                   </>
                 ) : (
-                  <PresetSaveTab
-                    key={`${isOpen ? 'open' : 'closed'}-${initialOverwriteName || 'new'}`}
-                    presets={presets}
-                    initialOverwriteName={initialOverwriteName}
-                    onSavePreset={onSavePreset}
-                    onOverwritePreset={onOverwritePreset}
-                    isSaving={isSaving}
-                    savedPreset={savedPreset}
-                    onDownloadSaved={handleDownloadSaved}
-                    isDownloadingSaved={isDownloadingSaved}
-                    onCancel={onClose}
-                  />
+                  <>
+                    <PresetSaveTab
+                      key={`${isOpen ? 'open' : 'closed'}-${initialOverwriteName || 'new'}`}
+                      presets={presets}
+                      initialOverwriteName={initialOverwriteName}
+                      onSavePreset={onSavePreset}
+                      onOverwritePreset={onOverwritePreset}
+                      isSaving={isSaving}
+                      savedPreset={savedPreset}
+                      onDownloadSaved={handleDownloadSaved}
+                      isDownloadingSaved={isDownloadingSaved}
+                      onCancel={onClose}
+                    />
+                    {downloadError && (
+                      <p role="alert" className="mt-3 rounded-md border border-[var(--accent-danger)]/35 bg-[var(--accent-danger)]/10 px-3 py-2 text-sm text-[var(--accent-danger)]">
+                        {downloadError}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </Dialog.Panel>
@@ -174,6 +229,16 @@ function PresetManagerModal({
         cancelButtonText="Cancel"
         confirmButtonVariant="danger"
         zIndexClass="z-[70]"
+      />
+
+      <PresetRenameModal
+        isOpen={Boolean(pendingRename)}
+        onClose={() => { setPendingRename(null); setRenameError(null); }}
+        onRename={handleConfirmRename}
+        currentName={pendingRename?.name || ''}
+        existingNames={presets.map((p) => p.name)}
+        isSaving={isRenaming}
+        error={renameError}
       />
 
       <ConfirmationModal

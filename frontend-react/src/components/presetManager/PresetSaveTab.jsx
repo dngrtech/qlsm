@@ -95,7 +95,7 @@ function PresetSaveTab({
     || !name.trim() || (!isOverwrite && !!validateNameLocally(name));
 
   return (
-    <div>
+    <div className="flex h-full flex-1 flex-col">
       <div className="relative z-10">
         <div className="mb-1.5 flex items-center justify-between">
           <label className="label-tech">Preset Name</label>
@@ -155,7 +155,7 @@ function PresetSaveTab({
         )}
       </div>
 
-      <div className="relative z-10 mt-6 flex items-center justify-end gap-3">
+      <div className="relative z-10 mt-auto flex items-center justify-end gap-3 pt-6">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={isSaving}>
           Cancel
         </button>

@@ -143,7 +143,7 @@ function AddInstanceForm({
   const [isPresetManagerOpen, setIsPresetManagerOpen] = useState(false);
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
-  const [, setIsLoadingPreset] = useState(false);
+  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
 
   // Local presets state (allows filtering after deletion without refetching)
   const [presets, setPresets] = useState(initialData.presets || []);
@@ -675,6 +675,12 @@ function AddInstanceForm({
     }
   }, [loadedPreset]);
 
+  // Handle preset rename from PresetManagerModal
+  const handlePresetRenamed = useCallback((presetId, newName) => {
+    setPresets(prev => prev.map(p => (p.id === presetId ? { ...p, name: newName } : p)));
+    setLoadedPreset(prev => (prev?.id === presetId ? { ...prev, name: newName } : prev));
+  }, []);
+
   // Handle main tab change
   const handleMainTabChange = useCallback((tab) => {
     setActiveMainTab(tab);
@@ -991,12 +997,14 @@ function AddInstanceForm({
         zIndexClass="z-[60]"
         presets={presets}
         isLoading={false}
+        isLoadingPreset={isLoadingPreset}
         onLoadPreset={handleLoadPreset}
         onSavePreset={handleSavePreset}
         onOverwritePreset={handleOverwritePreset}
         isSaving={isSavingPreset || isUpdatingPreset}
         savedPreset={null}
         onPresetDeleted={handlePresetDeleted}
+        onPresetRenamed={handlePresetRenamed}
         initialOverwriteName={loadedPreset && !loadedPreset.is_builtin ? loadedPreset.name : null}
       />
 

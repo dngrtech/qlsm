@@ -28,8 +28,8 @@ vi.mock('../../ConfirmationModal', () => ({
       </div>
     ) : null,
 }));
-const mocks = vi.hoisted(() => ({ deletePreset: vi.fn(), triggerPresetDownload: vi.fn() }));
-vi.mock('../../../services/api', () => ({ deletePreset: mocks.deletePreset }));
+const mocks = vi.hoisted(() => ({ deletePreset: vi.fn(), updatePreset: vi.fn(), triggerPresetDownload: vi.fn() }));
+vi.mock('../../../services/api', () => ({ deletePreset: mocks.deletePreset, updatePreset: mocks.updatePreset }));
 vi.mock('../../../utils/presetDownload', () => ({ triggerPresetDownload: mocks.triggerPresetDownload }));
 
 const presets = [{ id: 1, name: 'duel-cfg', description: 'd', is_builtin: false }];

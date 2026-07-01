@@ -552,6 +552,11 @@ function EditInstanceConfigModal({
     showSuccess('Preset deleted successfully.');
   }, [selectedPresetId, showSuccess]);
 
+  const handlePresetRenamed = useCallback((presetId, newName) => {
+    setPresets(prevPresets => prevPresets.map(p => (p.id === presetId ? { ...p, name: newName } : p)));
+    showSuccess('Preset renamed successfully.');
+  }, [showSuccess]);
+
   // Handle main tab change
   const handleMainTabChange = useCallback((tab) => {
     setActiveMainTab(tab);
@@ -1034,6 +1039,7 @@ function EditInstanceConfigModal({
         isSaving={isSavingPreset}
         savedPreset={savedPresetForDownload}
         onPresetDeleted={handlePresetDeleted}
+        onPresetRenamed={handlePresetRenamed}
       />
     </>
   );

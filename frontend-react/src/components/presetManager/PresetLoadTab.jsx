@@ -1,6 +1,103 @@
 import React from 'react';
-import { Download, LoaderCircle, Trash2 } from 'lucide-react';
+import { Menu } from '@headlessui/react';
+import { Download, LoaderCircle, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
+
+function PresetRowMenu({ preset, onDownload, onRename, onRequestDelete, isDownloading, boundaryRef }) {
+  const buttonRef = React.useRef(null);
+  const [placement, setPlacement] = React.useState('bottom end');
+
+  const updatePlacement = () => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const btnRect = btn.getBoundingClientRect();
+    // Approx menu height: 3 items (~30px each) + vertical padding.
+    const estimatedMenuHeight = 3 * 30 + 8;
+    const bottomLimit = boundaryRef?.current
+      ? boundaryRef.current.getBoundingClientRect().bottom
+      : window.innerHeight;
+    const spaceBelow = bottomLimit - btnRect.bottom;
+    setPlacement(spaceBelow < estimatedMenuHeight ? 'top end' : 'bottom end');
+  };
+
+  const items = [
+    {
+      key: 'download',
+      label: 'Download',
+      icon: isDownloading ? LoaderCircle : Download,
+      iconClass: isDownloading ? 'animate-spin' : '',
+      onClick: () => onDownload(preset),
+      disabled: isDownloading,
+    },
+    {
+      key: 'rename',
+      label: 'Rename',
+      icon: Pencil,
+      onClick: () => onRename(preset),
+      disabled: preset.is_builtin,
+      disabledTitle: 'Cannot rename a built-in preset',
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      icon: Trash2,
+      onClick: () => onRequestDelete(preset),
+      danger: true,
+      disabled: preset.is_builtin,
+      disabledTitle: 'Cannot delete a built-in preset',
+    },
+  ];
+
+  return (
+    <Menu as="div" className="relative">
+      <Menu.Button
+        ref={buttonRef}
+        className="p-1 rounded text-[var(--text-muted)] hover:bg-[var(--surface-base)] hover:text-[var(--text-primary)] data-[open]:bg-[var(--surface-base)]"
+        onPointerDown={updatePlacement}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={`${preset.name} actions`}
+      >
+        <MoreVertical className="h-3.5 w-3.5" />
+      </Menu.Button>
+      <Menu.Items
+        transition
+        anchor={{ to: placement, gap: 4 }}
+        className={classNames(
+          'w-44 rounded-md bg-[var(--surface-elevated)] border border-[var(--surface-border)] shadow-lg focus:outline-none z-50',
+          'origin-top data-[anchor~=top]:origin-bottom transition ease-out',
+          'data-[closed]:scale-95 data-[closed]:opacity-0',
+          'data-[enter]:duration-100 data-[leave]:duration-75 data-[leave]:ease-in'
+        )}
+      >
+        <div className="py-1">
+            {items.map((item) => (
+              <Menu.Item key={item.key} disabled={item.disabled}>
+                {({ active, disabled }) => (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    title={disabled ? item.disabledTitle : undefined}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      item.onClick?.();
+                    }}
+                    className={classNames(
+                      'flex w-full items-center gap-2 px-3 py-1.5 text-xs',
+                      active ? 'bg-black/10 dark:bg-white/10' : '',
+                      disabled ? 'opacity-40 cursor-not-allowed' : '',
+                      item.danger ? 'text-[var(--accent-danger)]' : 'text-[var(--text-secondary)]'
+                    )}
+                  >
+                    <item.icon className={classNames('h-3.5 w-3.5', item.iconClass)} /> {item.label}
+                  </button>
+                )}
+              </Menu.Item>
+            ))}
+        </div>
+      </Menu.Items>
+    </Menu>
+  );
+}
 
 function PresetLoadTab({
   presets = [],
@@ -8,9 +105,11 @@ function PresetLoadTab({
   selectedId = null,
   onSelect,
   onRequestDelete,
+  onRequestRename,
   onDownload,
   downloadingId = null,
 }) {
+  const listRef = React.useRef(null);
   if (isLoading) {
     return (
       <div className="flex items-center justify-center gap-2 py-10 text-sm text-[var(--text-muted)]">
@@ -23,7 +122,7 @@ function PresetLoadTab({
   }
 
   return (
-    <div className="max-h-[20rem] overflow-y-auto rounded-md border border-[var(--surface-border)] scrollbar-thin">
+    <div ref={listRef} className="max-h-[20rem] overflow-y-auto rounded-md border border-[var(--surface-border)] scrollbar-thin">
       {presets.map((preset) => {
         const selected = preset.id === selectedId;
         return (
@@ -45,28 +144,15 @@ function PresetLoadTab({
                 {preset.description || 'No description'}
               </div>
             </div>
-            <div className={classNames('flex items-center gap-1.5 transition-opacity', selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
-              <button
-                type="button"
-                aria-label={`Download ${preset.name}`}
-                onClick={(e) => { e.stopPropagation(); onDownload(preset); }}
-                disabled={downloadingId === preset.id}
-                className="rounded border border-[var(--surface-border)] p-1.5 text-[var(--text-muted)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]"
-              >
-                {downloadingId === preset.id
-                  ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  : <Download className="h-3.5 w-3.5" />}
-              </button>
-              <button
-                type="button"
-                aria-label={`Delete ${preset.name}`}
-                onClick={(e) => { e.stopPropagation(); onRequestDelete(preset); }}
-                disabled={preset.is_builtin}
-                title={preset.is_builtin ? 'Cannot delete a built-in preset' : 'Delete preset'}
-                className="rounded border border-[var(--surface-border)] p-1.5 text-[var(--text-muted)] enabled:hover:border-[var(--accent-danger)] enabled:hover:text-[var(--accent-danger)] disabled:opacity-40"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+            <div>
+              <PresetRowMenu
+                preset={preset}
+                onDownload={onDownload}
+                onRename={onRequestRename}
+                onRequestDelete={onRequestDelete}
+                isDownloading={downloadingId === preset.id}
+                boundaryRef={listRef}
+              />
             </div>
           </div>
         );

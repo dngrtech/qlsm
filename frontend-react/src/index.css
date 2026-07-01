@@ -365,8 +365,7 @@ body {
 }
 
 .btn-caution:focus-visible {
-  @apply outline-none ring-2 ring-offset-2;
-  ring-color: var(--accent-warning);
+  @apply outline-none ring-2 ring-offset-2 ring-[var(--accent-warning)];
 }
 
 .btn-caution:disabled {
