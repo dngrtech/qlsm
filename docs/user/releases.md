@@ -4,7 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.13.2` | 2026-06-29 | [#131](https://github.com/dngrtech/qlsm/pull/131) | Replace the separate Load, Save, and Update preset dialogs with a unified two-tab Preset Manager shared by Deploy New Instance and Edit Config. The Save tab now switches between new-preset and overwrite mode from the preset-name combobox; Load keeps download/delete actions, rename, and load confirmation. |
+| `v1.13.2` | 2026-06-29 | [#131](https://github.com/dngrtech/qlsm/pull/131) | Replace the separate Load, Save, and Update preset dialogs with a unified two-tab Preset Manager. |
 | `v1.13.1` | 2026-06-27 | [#130](https://github.com/dngrtech/qlsm/pull/130) | Add preset ZIP export. Download Preset is available both after saving a preset (Preset Manager Save tab) and for any selected preset in the Preset Manager Load tab; the archive includes the full preset directory, including custom config files, factories, scripts, user hooks, checked selections, and export metadata. |
 | `v1.12.13` | 2026-06-26 | [#129](https://github.com/dngrtech/qlsm/pull/129) | Keep `STOPPED` instances stopped across host reboots: stopping an instance now disables its systemd unit (and starting/restarting re-enables it), so the auto-restart reboot no longer brings stopped servers back up and leaves the panel showing the wrong status. Adds `flask reconcile-service-enablement` to backfill already-stopped instances. |
 | `v1.12.12` | 2026-06-24 | [#128](https://github.com/dngrtech/qlsm/pull/128) | Add retry handling to `force_rate.so` so the LD_PRELOAD hook waits briefly for qzeroded's target text page before giving up on the LAN-rate patch. |
