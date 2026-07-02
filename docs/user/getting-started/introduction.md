@@ -18,7 +18,7 @@ QLSM supports three ways to run your Quake Live servers:
 - **In-browser config editors** — CodeMirror-powered editors for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`. Syntax highlighting, search/replace, and inline validation.
 - **minqlx plugin management** — enable plugins with checkboxes. Python validation built in.
 - **Factory file management** — select which factory files deploy to each instance.
-- **[Presets](../presets/overview.md)** — save a full config/plugin/factory set as a reusable preset. Spin up new instances with consistent baselines.
+- **[Presets](../presets/overview.md)** — save a full config/plugin/factory set as a reusable preset. Export/import presets as ZIP archives to backup/restore configuration or move setups between QLSM installs.
 - **[RCON Console](../operations/rcon-console.md)** — send commands and watch live server events in the browser.
 - **Logs** — [server logs](../operations/server-logs.md) and [chat logs](../operations/chat-logs.md) (including rotated archives), searchable.
 - **Workshop management** — push updates manually or schedule [automatic restarts](../operations/auto-restart.md) that also pull the latest Steam Workshop content.
