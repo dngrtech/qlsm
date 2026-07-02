@@ -63,10 +63,19 @@ def _read_text(archive, info, label):
             f"{label} file {info.filename} exceeds {MAX_TEXT_ENTRY_BYTES // 1024}KB."
         )
     try:
-        return archive.read(info).decode('utf-8')
+        return _read_entry(archive, info).decode('utf-8')
     except UnicodeDecodeError as exc:
         raise PresetImportError(
             f"{label} file {info.filename} is not valid UTF-8 text."
+        ) from exc
+
+
+def _read_entry(archive, info):
+    try:
+        return archive.read(info)
+    except (RuntimeError, zipfile.BadZipFile) as exc:
+        raise PresetImportError(
+            f"Archive entry {info.filename} could not be read."
         ) from exc
 
 
@@ -98,7 +107,7 @@ def _read_user_hook(archive, info, filename):
         raise PresetImportError(
             f"User hook {filename} exceeds {MAX_BINARY_FILE_SIZE // (1024 * 1024)}MB."
         )
-    content = archive.read(info)
+    content = _read_entry(archive, info)
     if not content.startswith(ELF_MAGIC):
         raise PresetImportError(f"User hook {filename} is not a valid ELF binary.")
     return content

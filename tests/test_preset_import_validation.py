@@ -93,6 +93,16 @@ def test_rejects_non_zip_bytes():
         parse_import_archive(b'this is not a zip file')
 
 
+def test_rejects_corrupt_zip_entry():
+    raw = bytearray(build_zip(extra={'motd.cfg': 'SENTINEL-CONTENT\n'}))
+    offset = raw.find(b'SENTINEL-CONTENT')
+    assert offset != -1
+    raw[offset] = ord('X')
+
+    with pytest.raises(PresetImportError, match='could not be read'):
+        parse_import_archive(bytes(raw))
+
+
 def test_rejects_missing_manifest():
     raw = build_zip(manifest=None)
     with pytest.raises(PresetImportError, match='manifest.json'):
