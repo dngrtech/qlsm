@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { FolderOpen, LayoutGrid, LoaderCircle, Save } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
-import { deletePreset, updatePreset } from '../../services/api';
+import { deletePreset, importPreset, updatePreset } from '../../services/api';
 import { triggerPresetDownload } from '../../utils/presetDownload';
 import ConfirmationModal from '../ConfirmationModal';
+import PresetImportPanel from './PresetImportPanel';
 import PresetLoadTab from './PresetLoadTab';
 import PresetRenameModal from './PresetRenameModal';
 import PresetSaveTab from './PresetSaveTab';
@@ -29,6 +30,7 @@ function PresetManagerModal({
   savedPreset = null,
   onPresetDeleted,
   onPresetRenamed,
+  onPresetImported,
   initialOverwriteName = null,
 }) {
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -42,6 +44,11 @@ function PresetManagerModal({
   const [pendingRename, setPendingRename] = useState(null);
   const [renameError, setRenameError] = useState(null);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importConflict, setImportConflict] = useState(null);
+  const [importError, setImportError] = useState(null);
+  const [importedPresetPreview, setImportedPresetPreview] = useState(null);
+  const pendingImportFileRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -54,10 +61,16 @@ function PresetManagerModal({
       setPendingRename(null);
       setRenameError(null);
       setIsRenaming(false);
+      setIsImporting(false);
+      setImportConflict(null);
+      setImportError(null);
+      setImportedPresetPreview(null);
+      pendingImportFileRef.current = null;
     }
   }, [isOpen, initialTab]);
 
-  const selectedPreset = presets.find((p) => p.id === selectedId) || null;
+  const selectedPreset = presets.find((p) => p.id === selectedId)
+    || (importedPresetPreview?.id === selectedId ? importedPresetPreview : null);
 
   const handleDownload = async (preset) => {
     setDownloadingId(preset.id);
@@ -119,6 +132,49 @@ function PresetManagerModal({
     }
   };
 
+  const runImport = async (options = {}) => {
+    const file = pendingImportFileRef.current;
+    if (!file) return;
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      const result = await importPreset(file, options);
+      const imported = result.data;
+      setImportConflict(null);
+      pendingImportFileRef.current = null;
+      setImportedPresetPreview(imported);
+      onPresetImported?.(imported);
+      setSelectedId(imported.id);
+      setShowLoadConfirm(true);
+    } catch (err) {
+      if (err?.conflict) {
+        setImportConflict(err.conflict);
+      } else {
+        setImportError(err.error?.message || err.message || 'Failed to import preset.');
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportFile = (file) => {
+    pendingImportFileRef.current = file;
+    setImportConflict(null);
+    runImport();
+  };
+
+  const handleResolveImportConflict = ({ overwrite, newName }) => {
+    runImport(overwrite
+      ? { overwritePresetId: importConflict.preset_id }
+      : { name: newName });
+  };
+
+  const handleCancelImportConflict = () => {
+    setImportConflict(null);
+    setImportError(null);
+    pendingImportFileRef.current = null;
+  };
+
   return (
     <>
       <Dialog open={isOpen} as="div" className={classNames('relative', zIndexClass)} onClose={onClose}>
@@ -157,6 +213,14 @@ function PresetManagerModal({
                 {activeTab === 'load' ? (
                   <>
                     <div className="flex-1">
+                      <PresetImportPanel
+                        conflict={importConflict}
+                        isImporting={isImporting}
+                        error={importError}
+                        onImportFile={handleImportFile}
+                        onResolveConflict={handleResolveImportConflict}
+                        onCancelConflict={handleCancelImportConflict}
+                      />
                       <PresetLoadTab
                         presets={presets}
                         isLoading={isLoading}

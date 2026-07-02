@@ -557,6 +557,15 @@ function EditInstanceConfigModal({
     showSuccess('Preset renamed successfully.');
   }, [showSuccess]);
 
+  const handlePresetImported = useCallback(async () => {
+    try {
+      const refreshed = await getPresets();
+      setPresets(refreshed || []);
+    } catch (err) {
+      console.error('Failed to refresh presets after import:', err);
+    }
+  }, []);
+
   // Handle main tab change
   const handleMainTabChange = useCallback((tab) => {
     setActiveMainTab(tab);
@@ -1040,6 +1049,7 @@ function EditInstanceConfigModal({
         savedPreset={savedPresetForDownload}
         onPresetDeleted={handlePresetDeleted}
         onPresetRenamed={handlePresetRenamed}
+        onPresetImported={handlePresetImported}
       />
     </>
   );

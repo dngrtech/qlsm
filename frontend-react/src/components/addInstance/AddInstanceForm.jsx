@@ -681,6 +681,15 @@ function AddInstanceForm({
     setLoadedPreset(prev => (prev?.id === presetId ? { ...prev, name: newName } : prev));
   }, []);
 
+  const handlePresetImported = useCallback(async () => {
+    try {
+      const refreshed = await getPresets();
+      setPresets(refreshed || []);
+    } catch (err) {
+      console.error('Failed to refresh presets after import:', err);
+    }
+  }, []);
+
   // Handle main tab change
   const handleMainTabChange = useCallback((tab) => {
     setActiveMainTab(tab);
@@ -1005,6 +1014,7 @@ function AddInstanceForm({
         savedPreset={null}
         onPresetDeleted={handlePresetDeleted}
         onPresetRenamed={handlePresetRenamed}
+        onPresetImported={handlePresetImported}
         initialOverwriteName={loadedPreset && !loadedPreset.is_builtin ? loadedPreset.name : null}
       />
 
