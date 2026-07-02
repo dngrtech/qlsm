@@ -1,3 +1,4 @@
+import base64
 import os
 import shutil
 import pytest
@@ -353,6 +354,26 @@ def test_create_preset_with_scripts(client, app):
     assert response.status_code == 201
     data = response.get_json()['data']
     assert 'myscript.py' in data.get('scripts', {})
+
+
+def test_create_preset_with_so_script_round_trips_as_base64(client, app):
+    """A .so script is written as real binary on disk but stays JSON-safe in the response."""
+    raw = b'\x7fELFfake-binary-content'
+    encoded = base64.b64encode(raw).decode('ascii')
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'with-so-script',
+        'description': '',
+        'scripts': {'hook.so': encoded},
+    })
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['scripts']['hook.so'] == encoded
+
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', 'with-so-script')
+    with open(os.path.join(preset_path, 'scripts', 'hook.so'), 'rb') as f:
+        assert f.read() == raw
 
 
 def test_get_preset_scripts_merges_defaults(client, app, tmp_path):
