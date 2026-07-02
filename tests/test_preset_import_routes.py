@@ -149,6 +149,21 @@ def test_import_creates_new_preset(client, app, presets_base):
         assert [(r.file_path, r.description) for r in rows] == [('custom_hook.so', '99k hook')]
 
 
+def test_import_metadata_failure_rolls_back_row_and_folder(client, app, presets_base, monkeypatch):
+    def fail_metadata(*_args, **_kwargs):
+        raise ValueError('forced metadata failure')
+
+    monkeypatch.setattr('ui.routes.preset_import_routes._replace_binary_metadata', fail_metadata)
+
+    response = post_import(client, app, build_zip(name='broken'))
+
+    assert response.status_code == 400
+    assert 'forced metadata failure' in response.get_json()['error']['message']
+    assert not (presets_base / 'broken').exists()
+    with app.app_context():
+        assert ConfigPreset.query.filter_by(name='broken').first() is None
+
+
 def test_import_invalid_archive_leaves_no_files_or_rows(client, app, presets_base):
     zip_buffer = build_zip(extra={'malware.exe': b'MZ'})
     response = post_import(client, app, zip_buffer)
@@ -172,6 +187,20 @@ def test_import_duplicate_name_returns_conflict(client, app, presets_base):
     assert sorted(p.name for p in presets_base.iterdir()) == ['taken']
 
 
+def test_import_orphan_folder_conflict_does_not_delete_folder(client, app, presets_base):
+    orphan = presets_base / 'orphan'
+    orphan.mkdir()
+    (orphan / 'marker.txt').write_text('keep me\n')
+
+    response = post_import(client, app, build_zip(name='orphan'))
+
+    assert response.status_code == 409
+    assert response.get_json()['conflict']['type'] == 'invalid'
+    assert (orphan / 'marker.txt').read_text() == 'keep me\n'
+    with app.app_context():
+        assert ConfigPreset.query.filter_by(name='orphan').first() is None
+
+
 def test_import_overwrite_replaces_existing(client, app, presets_base):
     preset_id = existing_preset(app, presets_base, name='taken')
 
@@ -188,6 +217,23 @@ def test_import_overwrite_replaces_existing(client, app, presets_base):
     assert not (preset_dir / 'old-only.cfg').exists()
     assert (preset_dir / 'server.cfg').read_text() == BASE_CONFIGS['server.cfg']
     assert not (presets_base / 'taken.import-old').exists()
+
+
+def test_import_overwrite_ignores_stale_backup_directory(client, app, presets_base):
+    preset_id = existing_preset(app, presets_base, name='taken')
+    stale_backup = presets_base / 'taken.import-old'
+    stale_backup.mkdir()
+    (stale_backup / 'marker.txt').write_text('stale backup\n')
+
+    response = post_import(
+        client, app, build_zip(name='taken'),
+        form={'overwrite_preset_id': str(preset_id)},
+    )
+
+    assert response.status_code == 200
+    assert (presets_base / 'taken' / 'server.cfg').read_text() == BASE_CONFIGS['server.cfg']
+    assert not (presets_base / 'taken' / 'old-only.cfg').exists()
+    assert (stale_backup / 'marker.txt').read_text() == 'stale backup\n'
 
 
 def test_import_overwrite_builtin_returns_403(client, app, presets_base):

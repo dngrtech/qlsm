@@ -81,6 +81,22 @@ def test_parses_full_valid_archive():
     ]
 
 
+def test_deduplicates_binary_metadata_entries():
+    raw = build_zip(extra={
+        'user-hooks/custom_hook.so': b'\x7fELFfake',
+        'binary_metadata.json': json.dumps({'format_version': 1, 'metadata': [
+            {'file_path': 'custom_hook.so', 'description': 'first'},
+            {'file_path': 'custom_hook.so', 'description': 'second'},
+        ]}),
+    })
+
+    bundle = parse_import_archive(raw)
+
+    assert bundle['binary_metadata'] == [
+        {'file_path': 'custom_hook.so', 'description': 'first'},
+    ]
+
+
 def test_skips_known_junk_files():
     raw = build_zip(extra={'.DS_Store': b'junk', 'scripts/temp.tmp': 'junk'})
     bundle = parse_import_archive(raw)

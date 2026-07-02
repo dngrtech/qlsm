@@ -154,12 +154,18 @@ def _normalize_binary_metadata(payload, user_hooks):
     if not isinstance(payload, dict) or not isinstance(payload.get('metadata'), list):
         raise PresetImportError("binary_metadata.json has an unexpected structure.")
     entries = []
+    seen_paths = set()
     for row in payload['metadata']:
         if not isinstance(row, dict):
             continue
         file_path = row.get('file_path')
-        if not isinstance(file_path, str) or file_path not in user_hooks:
+        if (
+            not isinstance(file_path, str)
+            or file_path not in user_hooks
+            or file_path in seen_paths
+        ):
             continue
+        seen_paths.add(file_path)
         description = row.get('description')
         entries.append({
             'file_path': file_path,

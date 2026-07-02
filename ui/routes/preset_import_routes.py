@@ -1,4 +1,5 @@
 """Import endpoint: turn an exported preset ZIP back into a ConfigPreset."""
+import datetime
 import os
 import shutil
 import tempfile
@@ -8,8 +9,8 @@ from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 
 from ui import db
-from ui.database import create_preset, get_preset, get_preset_by_name, update_preset
-from ui.models import BinaryMetadata
+from ui.database import get_preset, get_preset_by_name
+from ui.models import BinaryMetadata, ConfigPreset
 from ui.preset_support import PRESETS_DIR, validate_user_preset_name
 from ui.routes.preset_api_routes import (
     _read_preset_checked_factories,
@@ -125,14 +126,23 @@ def _preset_response(preset):
     return data
 
 
-def _cleanup_after_failure(mode, staging_dir, target_path, old_dir, existing):
+def _cleanup_after_failure(
+    mode, staging_dir, target_path, old_dir, existing, moved_staging, moved_existing,
+):
     shutil.rmtree(staging_dir, ignore_errors=True)
-    if mode == 'create' and target_path and os.path.isdir(target_path):
+    if mode == 'create' and moved_staging and target_path and os.path.isdir(target_path):
         shutil.rmtree(target_path, ignore_errors=True)
-    if mode == 'overwrite' and old_dir and os.path.isdir(old_dir):
-        if target_path and os.path.isdir(target_path):
+    if mode == 'overwrite':
+        if moved_staging and target_path and os.path.isdir(target_path):
             shutil.rmtree(target_path, ignore_errors=True)
-        os.rename(old_dir, existing.path)
+        if moved_existing and old_dir and os.path.isdir(old_dir):
+            os.rename(old_dir, target_path)
+
+
+def _make_backup_path():
+    backup_dir = tempfile.mkdtemp(prefix='.qlsm-import-old-', dir=PRESETS_DIR)
+    os.rmdir(backup_dir)
+    return backup_dir
 
 
 @preset_import_bp.route('/import', methods=['POST'], endpoint='import_preset_api')
@@ -167,28 +177,45 @@ def import_preset_api():
     description = bundle['manifest']['preset'].get('description') or ''
 
     os.makedirs(PRESETS_DIR, exist_ok=True)
+    if mode == 'create':
+        target_path = os.path.join(PRESETS_DIR, name)
+        if os.path.exists(target_path):
+            return _conflict_response(
+                'invalid', name, message=f"Preset storage for '{name}' already exists."
+            )
+
     staging_dir = tempfile.mkdtemp(prefix='.qlsm-import-', dir=PRESETS_DIR)
     target_path = None
     old_dir = None
+    moved_staging = False
+    moved_existing = False
     try:
         _write_import_bundle(staging_dir, bundle)
 
         if mode == 'overwrite':
             target_path = _resolve_export_root(existing.path)
-            old_dir = target_path + '.import-old'
+            old_dir = _make_backup_path()
             if os.path.exists(target_path):
                 os.rename(target_path, old_dir)
+                moved_existing = True
             os.rename(staging_dir, target_path)
-            preset = update_preset(existing.id, description=description, path=target_path)
+            moved_staging = True
+            preset = existing
+            preset.description = description
+            preset.path = target_path
+            preset.last_updated = datetime.datetime.utcnow()
         else:
             target_path = os.path.join(PRESETS_DIR, name)
             os.rename(staging_dir, target_path)
-            preset = create_preset(name=name, description=description, path=target_path)
+            moved_staging = True
+            preset = ConfigPreset(name=name, description=description, path=target_path)
+            db.session.add(preset)
+            db.session.flush()
 
         _replace_binary_metadata(name, bundle['binary_metadata'])
         db.session.commit()
 
-        if old_dir and os.path.isdir(old_dir):
+        if moved_existing and old_dir and os.path.isdir(old_dir):
             shutil.rmtree(old_dir, ignore_errors=True)
 
         current_app.logger.info("Imported preset '%s' (%s) from archive.", name, mode)
@@ -199,11 +226,15 @@ def import_preset_api():
         }), status
 
     except ValueError as e:
-        _cleanup_after_failure(mode, staging_dir, target_path, old_dir, existing)
+        _cleanup_after_failure(
+            mode, staging_dir, target_path, old_dir, existing, moved_staging, moved_existing,
+        )
         db.session.rollback()
         return jsonify({'error': {'message': str(e)}}), 400
     except Exception as e:
-        _cleanup_after_failure(mode, staging_dir, target_path, old_dir, existing)
+        _cleanup_after_failure(
+            mode, staging_dir, target_path, old_dir, existing, moved_staging, moved_existing,
+        )
         db.session.rollback()
         current_app.logger.error('Error importing preset: %s', e, exc_info=True)
         return jsonify({'error': {'message': 'Failed to import preset archive.'}}), 500
