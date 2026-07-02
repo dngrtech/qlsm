@@ -157,3 +157,82 @@ def test_import_invalid_archive_leaves_no_files_or_rows(client, app, presets_bas
     assert list(presets_base.iterdir()) == []
     with app.app_context():
         assert ConfigPreset.query.count() == 0
+
+
+def test_import_duplicate_name_returns_conflict(client, app, presets_base):
+    preset_id = existing_preset(app, presets_base, name='taken')
+
+    response = post_import(client, app, build_zip(name='taken'))
+
+    assert response.status_code == 409
+    body = response.get_json()
+    assert body['conflict'] == {'type': 'duplicate', 'name': 'taken', 'preset_id': preset_id}
+    # No side effects: original untouched, no staging leftovers
+    assert (presets_base / 'taken' / 'old-only.cfg').exists()
+    assert sorted(p.name for p in presets_base.iterdir()) == ['taken']
+
+
+def test_import_overwrite_replaces_existing(client, app, presets_base):
+    preset_id = existing_preset(app, presets_base, name='taken')
+
+    response = post_import(
+        client, app, build_zip(name='taken'),
+        form={'overwrite_preset_id': str(preset_id)},
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['id'] == preset_id
+    assert data['description'] == 'Imported preset'
+    preset_dir = presets_base / 'taken'
+    assert not (preset_dir / 'old-only.cfg').exists()
+    assert (preset_dir / 'server.cfg').read_text() == BASE_CONFIGS['server.cfg']
+    assert not (presets_base / 'taken.import-old').exists()
+
+
+def test_import_overwrite_builtin_returns_403(client, app, presets_base):
+    preset_id = existing_preset(app, presets_base, name='housed', is_builtin=True)
+
+    response = post_import(
+        client, app, build_zip(name='housed'),
+        form={'overwrite_preset_id': str(preset_id)},
+    )
+
+    assert response.status_code == 403
+    assert 'built-in' in response.get_json()['error']['message']
+
+
+def test_import_with_explicit_new_name(client, app, presets_base):
+    existing_preset(app, presets_base, name='taken')
+
+    response = post_import(
+        client, app, build_zip(name='taken'), form={'name': 'taken-v2'},
+    )
+
+    assert response.status_code == 201
+    assert response.get_json()['data']['name'] == 'taken-v2'
+    assert (presets_base / 'taken-v2' / 'server.cfg').exists()
+
+
+def test_import_builtin_manifest_name_conflicts_rename_only(client, app, presets_base):
+    existing_preset(app, presets_base, name='default', is_builtin=True)
+
+    response = post_import(client, app, build_zip(name='default'))
+
+    assert response.status_code == 409
+    conflict = response.get_json()['conflict']
+    assert conflict['type'] == 'builtin'
+    assert 'preset_id' not in conflict
+
+
+def test_import_invalid_manifest_name_asks_for_rename(client, app):
+    response = post_import(client, app, build_zip(name='bad name!'))
+
+    assert response.status_code == 409
+    assert response.get_json()['conflict']['type'] == 'invalid'
+
+
+def test_import_rejects_invalid_explicit_name(client, app):
+    response = post_import(client, app, build_zip(), form={'name': 'bad name!'})
+
+    assert response.status_code == 400
