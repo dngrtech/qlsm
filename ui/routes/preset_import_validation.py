@@ -23,6 +23,8 @@ MAX_TOTAL_UNCOMPRESSED_BYTES = 150 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 200
 MAX_SCRIPT_PATH_DEPTH = 4
 ELF_MAGIC = b'\x7fELF'
+SCRIPT_TEXT_EXTENSIONS = ('.py', '.txt')
+SCRIPT_BINARY_EXTENSIONS = ('.so',)
 
 
 class PresetImportError(ValueError):
@@ -95,8 +97,21 @@ def _validate_script_path(rel_path):
             _validate_path_segment(segment, None, 'script')
         except ValueError as exc:
             raise PresetImportError(str(exc)) from exc
-    if not rel_path.lower().endswith(('.py', '.txt')):
+    if not rel_path.lower().endswith(SCRIPT_TEXT_EXTENSIONS + SCRIPT_BINARY_EXTENSIONS):
         raise PresetImportError(f"Unsupported script file: scripts/{rel_path}")
+
+
+def _read_script_entry(archive, info, rel_path):
+    if rel_path.lower().endswith(SCRIPT_BINARY_EXTENSIONS):
+        if info.file_size > MAX_BINARY_FILE_SIZE:
+            raise PresetImportError(
+                f"Script {rel_path} exceeds {MAX_BINARY_FILE_SIZE // (1024 * 1024)}MB."
+            )
+        content = _read_entry(archive, info)
+        if not content.startswith(ELF_MAGIC):
+            raise PresetImportError(f"Script {rel_path} is not a valid ELF binary.")
+        return content
+    return _read_text(archive, info, 'Script')
 
 
 def _read_user_hook(archive, info, filename):
@@ -224,7 +239,7 @@ def parse_import_archive(raw_bytes):
             elif name.startswith('scripts/'):
                 rel_path = name[len('scripts/'):]
                 _validate_script_path(rel_path)
-                bundle['scripts'][rel_path] = _read_text(archive, info, 'Script')
+                bundle['scripts'][rel_path] = _read_script_entry(archive, info, rel_path)
             elif name.startswith('user-hooks/'):
                 filename = name[len('user-hooks/'):]
                 if '/' in filename:

@@ -414,8 +414,12 @@ def _write_preset_scripts(preset_path, scripts_data):
 
         # Create parent directories if needed
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        if isinstance(content, bytes):
+            with open(full_path, 'wb') as f:
+                f.write(content)
+        else:
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
         current_app.logger.info(f"Wrote preset script: {full_path}")
 
 
