@@ -27,7 +27,8 @@ function PresetRowMenu({ preset, onDownload, onRename, onRequestDelete, isDownlo
       icon: isDownloading ? LoaderCircle : Download,
       iconClass: isDownloading ? 'animate-spin' : '',
       onClick: () => onDownload(preset),
-      disabled: isDownloading,
+      disabled: isDownloading || preset.is_builtin,
+      disabledTitle: preset.is_builtin ? 'Cannot download a built-in preset' : undefined,
     },
     {
       key: 'rename',
