@@ -201,10 +201,10 @@ function PresetManagerModal({
                 ))}
               </div>
 
-              <div className="relative z-10 flex min-h-[27rem] flex-col p-6">
+              <div className="relative z-10 flex h-[27rem] flex-col p-6">
                 {activeTab === 'load' ? (
                   <>
-                    <div className="flex-1">
+                    <div className="min-h-0 flex-1 overflow-y-auto">
                       <PresetImportPanel
                         conflict={importConflict}
                         isImporting={isImporting}
