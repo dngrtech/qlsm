@@ -881,6 +881,9 @@ def download_preset_api(preset_id):
     if not preset:
         return jsonify({"error": {"message": "Preset not found."}}), 404
 
+    if preset.is_builtin:
+        return jsonify({"error": {"message": "Cannot download a built-in preset."}}), 403
+
     try:
         root = _resolve_export_root(preset.path)
     except ValueError:

@@ -242,3 +242,19 @@ def test_download_preset_missing_directory_returns_500(client, app, presets_base
 
     assert response.status_code == 500
     assert response.get_json()['error']['message'] == 'Preset configuration files not found.'
+
+
+def test_download_builtin_preset_returns_403(client, app, tmp_path):
+    preset_id, _preset_dir = create_preset(app, tmp_path, name='builtin-locked')
+    with app.app_context():
+        preset = db.session.get(ConfigPreset, preset_id)
+        preset.is_builtin = True
+        db.session.commit()
+
+    response = client.get(
+        f'/api/presets/{preset_id}/download',
+        headers=auth_headers(app),
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()['error']['message'] == 'Cannot download a built-in preset.'
