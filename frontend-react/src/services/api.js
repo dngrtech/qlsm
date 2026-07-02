@@ -592,8 +592,9 @@ export const importPreset = async (file, { name, overwritePresetId } = {}) => {
     formData.append('file', file);
     if (name) formData.append('name', name);
     if (overwritePresetId != null) formData.append('overwrite_preset_id', String(overwritePresetId));
-    // Let axios set the multipart boundary itself — do not set Content-Type manually.
-    const response = await apiClient.post('/presets/import', formData);
+    const response = await apiClient.post('/presets/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data; // { data: {...}, message: "..." }
   } catch (error) {
     console.error('Failed to import preset:', error.response ? error.response.data : error.message);

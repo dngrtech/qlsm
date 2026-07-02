@@ -26,6 +26,7 @@ vi.mock('axios', () => ({
 import {
   fetchInstanceHooks,
   getSelfHostDefaults,
+  importPreset,
   resizeHost,
   saveInstanceHooks,
   updateInstanceConfig,
@@ -158,5 +159,24 @@ describe('instance hook API helpers', () => {
 
     await expect(saveInstanceHooks(12, ['a.so'])).resolves.toEqual({ task_id: 'job-1' });
     expect(mocks.put).toHaveBeenCalledWith('/instances/12/hooks', { enabled: ['a.so'] });
+  });
+});
+
+describe('importPreset', () => {
+  beforeEach(() => {
+    mocks.post.mockReset();
+  });
+
+  it('forces a multipart Content-Type so the file survives the shared JSON-default apiClient', async () => {
+    mocks.post.mockResolvedValueOnce({ data: { data: { id: 9 }, message: 'ok' } });
+    const file = new File(['zip-bytes'], 'preset.zip');
+
+    await importPreset(file);
+
+    expect(mocks.post).toHaveBeenCalledWith(
+      '/presets/import',
+      expect.any(FormData),
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
   });
 });
