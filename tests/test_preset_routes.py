@@ -356,7 +356,7 @@ def test_create_preset_with_scripts(client, app):
     assert 'myscript.py' in data.get('scripts', {})
 
 
-def test_create_preset_with_so_script_round_trips_as_base64(client, app):
+def test_create_preset_with_so_script_round_trips_as_base64(client, app, tmp_path):
     """A .so script is written as real binary on disk but stays JSON-safe in the response."""
     raw = b'\x7fELFfake-binary-content'
     encoded = base64.b64encode(raw).decode('ascii')
@@ -370,10 +370,33 @@ def test_create_preset_with_so_script_round_trips_as_base64(client, app):
     data = response.get_json()['data']
     assert data['scripts']['hook.so'] == encoded
 
-    with app.app_context():
-        preset_path = os.path.join('configs', 'presets', 'with-so-script')
+    preset_path = os.path.join(str(tmp_path), 'configs', 'presets', 'with-so-script')
     with open(os.path.join(preset_path, 'scripts', 'hook.so'), 'rb') as f:
         assert f.read() == raw
+
+
+def test_create_preset_rejects_non_elf_so_script(client, app):
+    """A .so payload that isn't a real ELF binary is rejected with a 400, not silently dropped."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'bad-so-script',
+        'description': '',
+        'scripts': {'hook.so': base64.b64encode(b'not-an-elf').decode('ascii')},
+    })
+    assert response.status_code == 400
+    assert 'not a valid ELF' in response.get_json()['error']['message']
+
+
+def test_create_preset_rejects_invalid_base64_so_script(client, app):
+    """Malformed base64 for a .so script is a 400, not a silently-succeeding save."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'bad-base64-script',
+        'description': '',
+        'scripts': {'hook.so': 'not-valid-base64!!!'},
+    })
+    assert response.status_code == 400
+    assert 'not valid base64' in response.get_json()['error']['message']
 
 
 def test_get_preset_scripts_merges_defaults(client, app, tmp_path):

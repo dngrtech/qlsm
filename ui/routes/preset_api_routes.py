@@ -17,6 +17,7 @@ from ui.preset_support import (
     resolve_preset_subdir,
     validate_user_preset_name,
 )
+from ui.routes.draft_routes import ELF_MAGIC, MAX_BINARY_FILE_SIZE
 
 preset_api_bp = Blueprint('preset_api_routes', __name__)  # url_prefix will be /presets
 
@@ -434,11 +435,19 @@ def _write_preset_scripts(preset_path, scripts_data):
                 f.write(content)
         elif rel_path.endswith('.so'):
             # .so content from the API is base64 text (see _read_script_file).
+            # Validated the same way ZIP-imported .so files are: size cap and
+            # ELF magic. Raising ValueError surfaces a 400 to the caller
+            # instead of silently saving a preset with a dropped plugin.
             try:
                 decoded = base64.b64decode(content, validate=True)
             except (ValueError, TypeError):
-                current_app.logger.warning(f"Skipping .so script with invalid base64: {rel_path}")
-                continue
+                raise ValueError(f"Script {rel_path} is not valid base64.")
+            if len(decoded) > MAX_BINARY_FILE_SIZE:
+                raise ValueError(
+                    f"Script {rel_path} exceeds {MAX_BINARY_FILE_SIZE // (1024 * 1024)}MB."
+                )
+            if not decoded.startswith(ELF_MAGIC):
+                raise ValueError(f"Script {rel_path} is not a valid ELF binary.")
             with open(full_path, 'wb') as f:
                 f.write(decoded)
         else:
