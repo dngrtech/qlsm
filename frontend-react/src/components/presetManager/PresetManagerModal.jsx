@@ -61,16 +61,13 @@ function PresetManagerModal({
       setPendingRename(null);
       setRenameError(null);
       setIsRenaming(false);
-      setIsImporting(false);
-      setImportConflict(null);
-      setImportError(null);
-      setImportedPresetPreview(null);
+      setIsImporting(false); setImportConflict(null);
+      setImportError(null); setImportedPresetPreview(null);
       pendingImportFileRef.current = null;
     }
   }, [isOpen, initialTab]);
 
-  const selectedPreset = presets.find((p) => p.id === selectedId)
-    || (importedPresetPreview?.id === selectedId ? importedPresetPreview : null);
+  const selectedPreset = presets.find((p) => p.id === selectedId) || (importedPresetPreview?.id === selectedId ? importedPresetPreview : null);
 
   const handleDownload = async (preset) => {
     setDownloadingId(preset.id);
@@ -140,12 +137,10 @@ function PresetManagerModal({
     try {
       const result = await importPreset(file, options);
       const imported = result.data;
-      setImportConflict(null);
-      pendingImportFileRef.current = null;
+      setImportConflict(null); pendingImportFileRef.current = null;
       setImportedPresetPreview(imported);
       onPresetImported?.(imported);
-      setSelectedId(imported.id);
-      setShowLoadConfirm(true);
+      setSelectedId(imported.id); setShowLoadConfirm(true);
     } catch (err) {
       if (err?.conflict) {
         setImportConflict(err.conflict);
@@ -158,8 +153,7 @@ function PresetManagerModal({
   };
 
   const handleImportFile = (file) => {
-    pendingImportFileRef.current = file;
-    setImportConflict(null);
+    pendingImportFileRef.current = file; setImportConflict(null);
     runImport();
   };
 
@@ -170,9 +164,7 @@ function PresetManagerModal({
   };
 
   const handleCancelImportConflict = () => {
-    setImportConflict(null);
-    setImportError(null);
-    pendingImportFileRef.current = null;
+    setImportConflict(null); setImportError(null); pendingImportFileRef.current = null;
   };
 
   return (
