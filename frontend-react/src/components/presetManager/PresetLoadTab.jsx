@@ -123,7 +123,7 @@ function PresetLoadTab({
   }
 
   return (
-    <div ref={listRef} className="max-h-[20rem] overflow-y-auto rounded-md border border-[var(--surface-border)] scrollbar-thin">
+    <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto rounded-md border border-[var(--surface-border)] scrollbar-thin">
       {presets.map((preset) => {
         const selected = preset.id === selectedId;
         return (
