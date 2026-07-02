@@ -205,6 +205,7 @@ def create_app(test_config=None):
     from ui.routes.host_routes import host_api_bp
     from ui.routes.auth_api_routes import auth_api_bp
     from ui.routes.preset_api_routes import preset_api_bp
+    from ui.routes.preset_import_routes import preset_import_bp
     from ui.routes.user_routes import user_api_bp
     from ui.routes.script_routes import script_api_bp
     from ui.routes.index_routes import index_bp
@@ -221,6 +222,7 @@ def create_app(test_config=None):
     api_bp.register_blueprint(instance_hooks_files_bp, url_prefix='/instances')
     api_bp.register_blueprint(auth_api_bp, url_prefix='/auth')
     api_bp.register_blueprint(preset_api_bp, url_prefix='/presets')
+    api_bp.register_blueprint(preset_import_bp, url_prefix='/presets')
     api_bp.register_blueprint(user_api_bp, url_prefix='/users')
     api_bp.register_blueprint(script_api_bp, url_prefix='/scripts')
 

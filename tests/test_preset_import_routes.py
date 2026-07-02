@@ -1,0 +1,159 @@
+import io
+import json
+import os
+import zipfile
+
+import pytest
+from flask_jwt_extended import create_access_token
+
+from ui import db
+from ui.models import BinaryMetadata, ConfigPreset
+
+BASE_CONFIGS = {
+    'server.cfg': 'set sv_hostname "Imported"\n',
+    'mappool.txt': 'campgrounds\n',
+    'access.txt': '\n',
+    'workshop.txt': '\n',
+}
+
+
+@pytest.fixture(autouse=True)
+def presets_base(tmp_path, monkeypatch):
+    base = tmp_path / 'configs' / 'presets'
+    base.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr('ui.routes.preset_api_routes.PRESETS_DIR', str(base))
+    monkeypatch.setattr('ui.routes.preset_import_routes.PRESETS_DIR', str(base))
+    return base
+
+
+def auth_headers(app):
+    with app.app_context():
+        token = create_access_token(identity='tester')
+    return {'Authorization': f'Bearer {token}'}
+
+
+def make_manifest(name='imported', description='Imported preset'):
+    return {
+        'type': 'qlsm-preset-export',
+        'format_version': 1,
+        'preset': {
+            'id': 1, 'name': name, 'description': description,
+            'is_builtin': False, 'created_at': None, 'last_updated': None,
+        },
+        'includes': {}, 'counts': {'binary_metadata': 0},
+    }
+
+
+def build_zip(name='imported', extra=None, manifest=...):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        if manifest is ...:
+            manifest = make_manifest(name)
+        if manifest is not None:
+            archive.writestr('manifest.json', json.dumps(manifest))
+        for path, content in BASE_CONFIGS.items():
+            archive.writestr(path, content)
+        for path, content in (extra or {}).items():
+            archive.writestr(path, content)
+    buffer.seek(0)
+    return buffer
+
+
+def post_import(client, app, zip_buffer, filename='preset.zip', form=None):
+    data = {'file': (zip_buffer, filename)}
+    data.update(form or {})
+    return client.post(
+        '/api/presets/import',
+        data=data,
+        headers=auth_headers(app),
+        content_type='multipart/form-data',
+    )
+
+
+def existing_preset(app, presets_base, name='taken', is_builtin=False):
+    preset_dir = presets_base / name
+    preset_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in BASE_CONFIGS.items():
+        (preset_dir / filename).write_text(content)
+    (preset_dir / 'old-only.cfg').write_text('stale\n')
+    with app.app_context():
+        preset = ConfigPreset(
+            name=name, description='Old description',
+            path=str(preset_dir), is_builtin=is_builtin,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        return preset.id
+
+
+def test_import_requires_authentication(client):
+    response = client.post('/api/presets/import', data={})
+    assert response.status_code == 401
+
+
+def test_import_requires_file(client, app):
+    response = client.post(
+        '/api/presets/import', data={},
+        headers=auth_headers(app), content_type='multipart/form-data',
+    )
+    assert response.status_code == 400
+    assert 'No file provided' in response.get_json()['error']['message']
+
+
+def test_import_rejects_non_zip_extension(client, app):
+    response = post_import(client, app, build_zip(), filename='preset.tar.gz')
+    assert response.status_code == 400
+    assert '.zip' in response.get_json()['error']['message']
+
+
+def test_import_rejects_corrupt_zip(client, app):
+    response = post_import(client, app, io.BytesIO(b'garbage-bytes'))
+    assert response.status_code == 400
+    assert 'not a valid ZIP' in response.get_json()['error']['message']
+
+
+def test_import_creates_new_preset(client, app, presets_base):
+    zip_buffer = build_zip(extra={
+        'motd.cfg': 'welcome\n',
+        'factories/ca.factories': '{"id": "ca"}\n',
+        'scripts/balance.py': 'class balance: pass\n',
+        'user-hooks/custom_hook.so': b'\x7fELFfake',
+        'checked_plugins.json': json.dumps(['balance.py']),
+        'checked_factories.json': json.dumps(['ca.factories']),
+        'binary_metadata.json': json.dumps({'format_version': 1, 'metadata': [
+            {'file_path': 'custom_hook.so', 'description': '99k hook'},
+            {'file_path': 'stale.so', 'description': 'dropped'},
+        ]}),
+    })
+    response = post_import(client, app, zip_buffer)
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['name'] == 'imported'
+    assert data['description'] == 'Imported preset'
+    assert data['configs']['motd.cfg'] == 'welcome\n'
+    assert data['factories'] == {'ca.factories': '{"id": "ca"}\n'}
+    assert data['checked_plugins'] == ['balance.py']
+    assert data['checked_factories'] == ['ca.factories']
+
+    preset_dir = presets_base / 'imported'
+    assert (preset_dir / 'server.cfg').read_text() == BASE_CONFIGS['server.cfg']
+    assert (preset_dir / 'user-hooks' / 'custom_hook.so').read_bytes() == b'\x7fELFfake'
+
+    with app.app_context():
+        preset = ConfigPreset.query.filter_by(name='imported').one()
+        assert preset.path == str(preset_dir)
+        rows = BinaryMetadata.query.filter_by(
+            context_type='preset', context_key='imported',
+        ).all()
+        assert [(r.file_path, r.description) for r in rows] == [('custom_hook.so', '99k hook')]
+
+
+def test_import_invalid_archive_leaves_no_files_or_rows(client, app, presets_base):
+    zip_buffer = build_zip(extra={'malware.exe': b'MZ'})
+    response = post_import(client, app, zip_buffer)
+
+    assert response.status_code == 400
+    assert list(presets_base.iterdir()) == []
+    with app.app_context():
+        assert ConfigPreset.query.count() == 0
