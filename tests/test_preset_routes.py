@@ -387,6 +387,18 @@ def test_create_preset_rejects_non_elf_so_script(client, app):
     assert 'not a valid ELF' in response.get_json()['error']['message']
 
 
+def test_create_preset_rejects_non_elf_uppercase_so_script(client, app):
+    """The .so check is case-insensitive, matching the ZIP import validator."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'bad-uppercase-so-script',
+        'description': '',
+        'scripts': {'hook.SO': base64.b64encode(b'not-an-elf').decode('ascii')},
+    })
+    assert response.status_code == 400
+    assert 'not a valid ELF' in response.get_json()['error']['message']
+
+
 def test_create_preset_rejects_invalid_base64_so_script(client, app):
     """Malformed base64 for a .so script is a 400, not a silently-succeeding save."""
     headers = auth_headers(app, DEFAULT_USER)

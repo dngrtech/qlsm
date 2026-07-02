@@ -431,9 +431,11 @@ def _write_preset_scripts(preset_path, scripts_data):
         # Create parent directories if needed
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         if isinstance(content, bytes):
+            # Only reached via the ZIP-import bundle, which already ran the
+            # ELF magic + size checks in preset_import_validation.py.
             with open(full_path, 'wb') as f:
                 f.write(content)
-        elif rel_path.endswith('.so'):
+        elif rel_path.lower().endswith('.so'):
             # .so content from the API is base64 text (see _read_script_file).
             # Validated the same way ZIP-imported .so files are: size cap and
             # ELF magic. Raising ValueError surfaces a 400 to the caller
