@@ -17,9 +17,18 @@ import time
 import uuid
 
 import minqlx
+from redis.exceptions import RedisError as _RedisError
 
 PLAYER_KEY = "minqlx:players:{}"
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def zadd_compat(db, key, member, score):
+    """Support both redis-py 2.x (raises RedisError) and 3.x+ (dict mapping) zadd signatures."""
+    try:
+        return db.zadd(key, {member: score})
+    except (TypeError, _RedisError):
+        return db.zadd(key, score, member)
 
 
 class kickban(minqlx.Plugin):
@@ -105,7 +114,7 @@ class kickban(minqlx.Plugin):
         ts = time.time()
         # Use a UUID as the member so two kicks within the same float-timestamp
         # resolution are stored as distinct sorted set entries.
-        self.db.zadd(self._kicks_key(steam_id), ts, str(uuid.uuid4()))
+        zadd_compat(self.db, self._kicks_key(steam_id), str(uuid.uuid4()), ts)
         count += 1
 
         if count >= self._threshold():
@@ -163,7 +172,7 @@ class kickban(minqlx.Plugin):
         ban_id = self.db.zcard(base_key)
 
         pipe = self.db.pipeline()
-        pipe.zadd(base_key, time.time() + duration * 60, ban_id)
+        zadd_compat(pipe, base_key, ban_id, time.time() + duration * 60)
         pipe.hset(
             base_key + ":{}".format(ban_id),
             mapping={

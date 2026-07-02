@@ -8,7 +8,7 @@ import pytest
 
 
 def _load_serverchecker_module(monkeypatch):
-    fake_minqlx = types.SimpleNamespace(Plugin=type('Plugin', (), {}))
+    fake_minqlx = types.SimpleNamespace(Plugin=type('Plugin', (), {}), thread=lambda fn: fn)
     monkeypatch.setitem(sys.modules, 'minqlx', fake_minqlx)
 
     module_path = (

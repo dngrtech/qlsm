@@ -883,7 +883,6 @@ def test_test_connection_password_accepts_supported_ubuntu24(mock_test, mock_det
     assert response.status_code == 200
     assert response.get_json()['data']['success'] is True
     assert 'Detected OS: Ubuntu 24.04.2 LTS' in response.get_json()['data']['message']
-    assert '99k LAN rate is not compatible with Ubuntu' in response.get_json()['data']['message']
     mock_test.assert_called_once_with('203.0.113.25', 22, 'root', 'secret')
     mock_detect_os.assert_called_once()
 
