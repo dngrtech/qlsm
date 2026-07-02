@@ -679,6 +679,7 @@ Config presets are stored on the filesystem at `configs/presets/<name>/`. The da
 | `/presets/<id>` | PUT | Update preset |
 | `/presets/<id>` | DELETE | Delete preset (removes DB record + folder) |
 | `/presets/<id>/download` | GET | Download preset export |
+| `/presets/import` | POST | Import preset from export ZIP |
 | `/presets/validate-name` | GET | Check preset name availability |
 
 ### Validate Name Request
@@ -736,8 +737,30 @@ Downloads the saved preset as a ZIP archive. The archive contains the full saved
 Responses:
 
 - `200 OK` — `application/zip` attachment named `<safe-preset-name>.zip`
+- `403 Forbidden` — built-in presets cannot be downloaded
 - `404 Not Found` — preset id does not exist
 - `500 Internal Server Error` — preset directory is missing, invalid, or archive generation failed
+
+### Import Preset Export
+
+`POST /api/presets/import`
+
+Imports a preset from a previously exported ZIP archive. The archive must contain a `manifest.json` with `type: "qlsm-preset-export"` and all four base config files: `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`.
+
+Multipart form fields:
+
+- `file` (required) — `.zip` archive, maximum 150 MB.
+- `name` (optional) — import under this preset name instead of the manifest name.
+- `overwrite_preset_id` (optional) — replace an existing non-built-in preset's contents.
+
+Responses:
+
+- `201 Created` — new preset created. Body matches the preset response shape, including metadata, configs, scripts, factories, and checked selections.
+- `200 OK` — existing preset overwritten. Body matches the preset response shape.
+- `400 Bad Request` — invalid request, corrupt archive, failed archive validation, or invalid explicit `name`.
+- `403 Forbidden` — `overwrite_preset_id` targets a built-in preset.
+- `404 Not Found` — `overwrite_preset_id` targets a missing preset.
+- `409 Conflict` — manifest name conflicts or is invalid. Body includes `conflict`: `{"type": "duplicate"|"builtin"|"invalid", "name": "...", "preset_id": <id>}` where `preset_id` is present only for duplicate user presets. Resubmit with `name` or `overwrite_preset_id`.
 
 ### Preset Response (GET /presets/<id>)
 ```json
