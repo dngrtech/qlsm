@@ -586,6 +586,22 @@ export const downloadPreset = async (presetId) => {
   }
 };
 
+export const importPreset = async (file, { name, overwritePresetId } = {}) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (name) formData.append('name', name);
+    if (overwritePresetId != null) formData.append('overwrite_preset_id', String(overwritePresetId));
+    // Let axios set the multipart boundary itself — do not set Content-Type manually.
+    const response = await apiClient.post('/presets/import', formData);
+    return response.data; // { data: {...}, message: "..." }
+  } catch (error) {
+    console.error('Failed to import preset:', error.response ? error.response.data : error.message);
+    // 409 bodies carry a `conflict` field the modal uses to offer overwrite/rename.
+    throw error.response ? error.response.data : new Error('Failed to import preset');
+  }
+};
+
 // Validate preset name availability
 export const validatePresetName = async (name) => {
   try {
