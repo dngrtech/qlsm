@@ -4,7 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.14.0` | 2026-07-02 | — | Add preset ZIP import: upload a previously exported preset archive from the Preset Manager Load tab. Archives are validated before anything is written, and name conflicts offer overwrite or rename. Built-in presets can no longer be downloaded. |
+| `v1.13.3` | 2026-07-02 | — | Add preset ZIP import: upload a previously exported preset archive from the Preset Manager Load tab. Archives are validated before anything is written, and name conflicts offer overwrite or rename. Built-in presets can no longer be downloaded. |
 | `v1.13.2` | 2026-06-29 | [#131](https://github.com/dngrtech/qlsm/pull/131) | Replace the separate Load, Save, and Update preset dialogs with a unified two-tab Preset Manager. |
 | `v1.13.1` | 2026-06-27 | [#130](https://github.com/dngrtech/qlsm/pull/130) | Add preset ZIP export. Download Preset is available both after saving a preset (Preset Manager Save tab) and for any selected preset in the Preset Manager Load tab; the archive includes the full preset directory, including custom config files, factories, scripts, user hooks, checked selections, and export metadata. |
 | `v1.12.13` | 2026-06-26 | [#129](https://github.com/dngrtech/qlsm/pull/129) | Keep `STOPPED` instances stopped across host reboots: stopping an instance now disables its systemd unit (and starting/restarting re-enables it), so the auto-restart reboot no longer brings stopped servers back up and leaves the panel showing the wrong status. Adds `flask reconcile-service-enablement` to backfill already-stopped instances. |
