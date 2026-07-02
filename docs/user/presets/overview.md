@@ -48,12 +48,22 @@ The saved preset keeps both the files and the selection state. A plugin or facto
 
 Use **Load Preset** in the deploy form or in **Edit Config** to open the Preset Manager on the **Load Preset** tab.
 
-<img src="../../images/load-preset-modal.png" width="463" />
-
 Loading a preset overwrites the current draft with the saved config files, plugin file tree, plugin selections, factory files, and factory selections.
 
-- Built-in presets (e.g., `default`) are always available and cannot be deleted.
-- User-created presets can be downloaded or deleted from this tab.
+- Built-in presets (e.g., `default`) are always available and cannot be deleted or downloaded.
+- User-created presets can be downloaded, renamed, or deleted from the row menu on this tab.
+
+## Export A Preset
+
+Any user-created preset can be downloaded as a ZIP archive from the row menu (⋮) on the **Load Preset** tab, or via **Download** right after saving one from the **Save / Overwrite** tab. Built-in presets cannot be downloaded.
+
+The archive contains the full preset directory: config files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, and any custom `.cfg`/`.txt` files), plugin files and factory files, checked plugin/factory selections, and export metadata. Use this to back up a preset or move it to another QLSM instance.
+
+## Import A Preset
+
+Click **Import from ZIP** on the **Load Preset** tab and choose a previously exported archive. QLSM validates the archive before writing anything — corrupt or unreadable entries are rejected up front.
+
+If the archive's preset name collides with an existing one, or isn't usable as-is, you're prompted to either **overwrite** the existing preset or **import as new** under a different name.
 
 ## Custom Preset Workflow
 

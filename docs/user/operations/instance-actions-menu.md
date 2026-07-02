@@ -94,6 +94,8 @@ Use these actions based on intent:
 - **Start** appears instead of **Stop** when the instance is already stopped.
 - **Delete** is for permanent removal, not troubleshooting.
 
+A stopped instance stays stopped through host reboots, including scheduled [Auto-Restart](auto-restart.md) windows — it will not come back up on its own until you click **Start**.
+
 If you only changed config and skipped restart in the editor, use **Restart** afterward to apply the new runtime state.
 
 ## When Actions Are Disabled

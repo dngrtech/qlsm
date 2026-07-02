@@ -14,6 +14,8 @@ Scheduled restarts serve two purposes:
 
 **2. General maintenance.** Long-running game server processes can accumulate state. A scheduled daily or weekly restart gives a clean slate.
 
+Instances you've manually stopped are skipped — auto-restart does not bring a stopped instance back online.
+
 ## Schedule Modes
 
 - **Disabled**: no scheduled restart.

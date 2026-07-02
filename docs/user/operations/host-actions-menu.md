@@ -7,7 +7,7 @@ Open from host row **Actions** in the Servers page.
 ## Actions In This Menu
 
 - **View Details**: opens host details drawer.
-- **Restart Host**: queues host reboot flow.
+- **Restart Host**: queues host reboot flow. If the host takes longer than expected to come back and briefly shows **Error**, QLSM keeps probing it and restores it to **Active** automatically once it's reachable again — no manual action needed in that case.
 - **[Configure Auto-Restart](auto-restart.md)**: opens restart schedule modal.
 - **[Update Workshop Item](update-workshop-item.md)**: triggers workshop update on this host.
 - **[Install/Uninstall QLFilter](../features/qlfilter.md)**: depends on current QLFilter state.
