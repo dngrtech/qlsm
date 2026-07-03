@@ -38,7 +38,7 @@ RESERVED_CONFIG_FOLDER_NAMES = {'scripts', 'factories', 'user-hooks'}
 MAX_CONFIG_PATH_DEPTH = 2
 EXPORT_FORMAT_VERSION = 1
 EXPORT_EXCLUDED_DIRS = {'__pycache__'}
-EXPORT_EXCLUDED_FILES = {'.DS_Store'}
+EXPORT_EXCLUDED_FILES = {'.DS_Store', '.gitkeep'}
 EXPORT_EXCLUDED_PATTERNS = ('*.pyc', '*.pyo', '*.swp', '*.tmp', '*~')
 
 

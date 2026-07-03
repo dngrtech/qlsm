@@ -45,6 +45,7 @@ def create_preset(app, tmp_path, name='export-me'):
     write_file(preset_dir / 'checked_factories.json', json.dumps(['ca.factories']))
     write_file(preset_dir / 'scripts' / '__pycache__' / 'balance.cpython-311.pyc', b'junk', mode='wb')
     write_file(preset_dir / 'scripts' / 'temp.tmp', 'junk\n')
+    write_file(preset_dir / 'scripts' / 'empty_dir' / '.gitkeep', '')
 
     with app.app_context():
         preset = ConfigPreset(
@@ -100,6 +101,7 @@ def test_download_preset_returns_zip_with_full_preset_directory(client, app, tmp
         assert 'checked_factories.json' in names
         assert 'scripts/__pycache__/balance.cpython-311.pyc' not in names
         assert 'scripts/temp.tmp' not in names
+        assert 'scripts/empty_dir/.gitkeep' not in names
 
         manifest = json.loads(archive.read('manifest.json').decode('utf-8'))
         assert manifest['type'] == 'qlsm-preset-export'

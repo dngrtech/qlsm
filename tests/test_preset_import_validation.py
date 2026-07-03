@@ -100,10 +100,17 @@ def test_deduplicates_binary_metadata_entries():
 
 
 def test_skips_known_junk_files():
-    raw = build_zip(extra={'.DS_Store': b'junk', 'scripts/temp.tmp': 'junk'})
+    raw = build_zip(extra={
+        '.DS_Store': b'junk',
+        'scripts/temp.tmp': 'junk',
+        'scripts/.gitkeep': '',
+        'scripts/empty_dir/.gitkeep': '',
+    })
     bundle = parse_import_archive(raw)
     assert '.DS_Store' not in bundle['configs']
     assert 'temp.tmp' not in bundle['scripts']
+    assert '.gitkeep' not in bundle['scripts']
+    assert 'empty_dir/.gitkeep' not in bundle['scripts']
 
 
 def test_rejects_non_zip_bytes():
