@@ -11,6 +11,7 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 - Any custom flat `.cfg` or `.txt` config files you add
 - Plugin files under the preset's plugin tree, including `.py`, `.txt`, and `.so`
 - Factory files under the preset's factory set
+- LD_PRELOAD user hooks (`.so` files) from the [Hooks tab](../features/hooks.md)
 - A set of selected minqlx plugins
 - A set of selected factory files
 
@@ -62,7 +63,7 @@ Another way to download a preset is to click **Download** button right after sav
 
 Built-in presets cannot be downloaded.
 
-The archive contains the full preset directory: config files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, and any custom `.cfg`/`.txt` files), plugin files and factory files, checked plugin/factory selections, and export metadata. Use this to back up a preset or move it to another QLSM instance.
+The archive contains the full preset directory: config files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, and any custom `.cfg`/`.txt` files), plugin files and factory files, LD_PRELOAD user hooks, checked plugin/factory selections, and export metadata. Use this to back up a preset or move it to another QLSM instance.
 
 ## Import A Preset
 
@@ -101,3 +102,4 @@ A preset is only input at deploy time. After the instance is created, it keeps i
 
 - [Deploy A New Instance](../getting-started/deploy-new-instance.md)
 - [Instance Actions Menu](../operations/instance-actions-menu.md)
+- [LD_PRELOAD Hooks](../features/hooks.md)
