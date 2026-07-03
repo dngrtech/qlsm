@@ -56,6 +56,7 @@ def test_parses_full_valid_archive():
         'factories/ca.factories': '{"id": "ca"}\n',
         'scripts/discord_extensions/balance.py': 'class balance: pass\n',
         'scripts/requirements.txt': 'redis==5.0.0\n',
+        'scripts/highfps_hook.so': b'\x7fELFfake',
         'user-hooks/custom_hook.so': b'\x7fELFfake',
         'checked_plugins.json': json.dumps(['balance.py']),
         'checked_factories.json': json.dumps(['ca.factories']),
@@ -72,6 +73,7 @@ def test_parses_full_valid_archive():
     assert bundle['scripts'] == {
         'discord_extensions/balance.py': 'class balance: pass\n',
         'requirements.txt': 'redis==5.0.0\n',
+        'highfps_hook.so': b'\x7fELFfake',
     }
     assert bundle['user_hooks'] == {'custom_hook.so': b'\x7fELFfake'}
     assert bundle['checked_plugins'] == ['balance.py']
@@ -157,6 +159,12 @@ def test_rejects_unsupported_file_type():
 
 def test_rejects_non_elf_user_hook():
     raw = build_zip(extra={'user-hooks/fake.so': b'not-an-elf'})
+    with pytest.raises(PresetImportError, match='not a valid ELF'):
+        parse_import_archive(raw)
+
+
+def test_rejects_non_elf_script_binary():
+    raw = build_zip(extra={'scripts/fake.so': b'not-an-elf'})
     with pytest.raises(PresetImportError, match='not a valid ELF'):
         parse_import_archive(raw)
 

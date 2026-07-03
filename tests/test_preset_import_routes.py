@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -117,6 +118,7 @@ def test_import_creates_new_preset(client, app, presets_base):
         'motd.cfg': 'welcome\n',
         'factories/ca.factories': '{"id": "ca"}\n',
         'scripts/balance.py': 'class balance: pass\n',
+        'scripts/highfps_hook.so': b'\x7fELFfake',
         'user-hooks/custom_hook.so': b'\x7fELFfake',
         'checked_plugins.json': json.dumps(['balance.py']),
         'checked_factories.json': json.dumps(['ca.factories']),
@@ -135,10 +137,14 @@ def test_import_creates_new_preset(client, app, presets_base):
     assert data['factories'] == {'ca.factories': '{"id": "ca"}\n'}
     assert data['checked_plugins'] == ['balance.py']
     assert data['checked_factories'] == ['ca.factories']
+    # .so scripts must stay visible in the API response (base64, since raw
+    # bytes aren't JSON-safe), not silently dropped after import.
+    assert data['scripts']['highfps_hook.so'] == base64.b64encode(b'\x7fELFfake').decode('ascii')
 
     preset_dir = presets_base / 'imported'
     assert (preset_dir / 'server.cfg').read_text() == BASE_CONFIGS['server.cfg']
     assert (preset_dir / 'user-hooks' / 'custom_hook.so').read_bytes() == b'\x7fELFfake'
+    assert (preset_dir / 'scripts' / 'highfps_hook.so').read_bytes() == b'\x7fELFfake'
 
     with app.app_context():
         preset = ConfigPreset.query.filter_by(name='imported').one()

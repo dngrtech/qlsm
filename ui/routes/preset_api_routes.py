@@ -1,3 +1,4 @@
+import base64
 import fnmatch
 import io
 import json
@@ -16,6 +17,7 @@ from ui.preset_support import (
     resolve_preset_subdir,
     validate_user_preset_name,
 )
+from ui.routes.draft_routes import ELF_MAGIC, MAX_BINARY_FILE_SIZE
 
 preset_api_bp = Blueprint('preset_api_routes', __name__)  # url_prefix will be /presets
 
@@ -354,8 +356,24 @@ def _read_preset_configs(preset_path):
     }
 
 
+SCRIPT_READ_EXTENSIONS = ('.py', '.txt', '.so')
+
+
+def _read_script_file(filepath):
+    """Read a plugin script for API responses.
+
+    .so files are binary and JSON responses must stay JSON-safe, so they are
+    base64-encoded here. _write_preset_scripts decodes them back on save.
+    """
+    if filepath.lower().endswith('.so'):
+        with open(filepath, 'rb') as f:
+            return base64.b64encode(f.read()).decode('ascii')
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
 def _read_preset_scripts(preset_path):
-    """Read all .py scripts from a preset's scripts/ folder.
+    """Read all plugin scripts from a preset's scripts/ folder.
 
     For non-default presets that have their own scripts folder, the default
     preset's scripts are merged in first so they are not lost. Preset-specific
@@ -374,24 +392,22 @@ def _read_preset_scripts(preset_path):
     if os.path.basename(preset_path) != 'default' and os.path.exists(default_scripts_dir):
         for root, _, files in os.walk(default_scripts_dir):
             for filename in files:
-                if filename.endswith(('.py', '.txt')):
+                if filename.lower().endswith(SCRIPT_READ_EXTENSIONS):
                     filepath = os.path.join(root, filename)
                     rel_path = os.path.relpath(filepath, default_scripts_dir)
                     try:
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            scripts[rel_path] = f.read()
+                        scripts[rel_path] = _read_script_file(filepath)
                     except Exception as e:
                         current_app.logger.error(f"Error reading default script {filepath}: {e}")
 
     for root, _, files in os.walk(scripts_dir):
         for filename in files:
-            if filename.endswith(('.py', '.txt')):
+            if filename.lower().endswith(SCRIPT_READ_EXTENSIONS):
                 filepath = os.path.join(root, filename)
                 # Get relative path from scripts_dir
                 rel_path = os.path.relpath(filepath, scripts_dir)
                 try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        scripts[rel_path] = f.read()
+                    scripts[rel_path] = _read_script_file(filepath)
                 except Exception as e:
                     current_app.logger.error(f"Error reading script {filepath}: {e}")
     return scripts
@@ -414,8 +430,31 @@ def _write_preset_scripts(preset_path, scripts_data):
 
         # Create parent directories if needed
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        if isinstance(content, bytes):
+            # Only reached via the ZIP-import bundle, which already ran the
+            # ELF magic + size checks in preset_import_validation.py.
+            with open(full_path, 'wb') as f:
+                f.write(content)
+        elif rel_path.lower().endswith('.so'):
+            # .so content from the API is base64 text (see _read_script_file).
+            # Validated the same way ZIP-imported .so files are: size cap and
+            # ELF magic. Raising ValueError surfaces a 400 to the caller
+            # instead of silently saving a preset with a dropped plugin.
+            try:
+                decoded = base64.b64decode(content, validate=True)
+            except (ValueError, TypeError):
+                raise ValueError(f"Script {rel_path} is not valid base64.")
+            if len(decoded) > MAX_BINARY_FILE_SIZE:
+                raise ValueError(
+                    f"Script {rel_path} exceeds {MAX_BINARY_FILE_SIZE // (1024 * 1024)}MB."
+                )
+            if not decoded.startswith(ELF_MAGIC):
+                raise ValueError(f"Script {rel_path} is not a valid ELF binary.")
+            with open(full_path, 'wb') as f:
+                f.write(decoded)
+        else:
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
         current_app.logger.info(f"Wrote preset script: {full_path}")
 
 

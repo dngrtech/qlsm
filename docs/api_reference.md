@@ -797,6 +797,8 @@ Responses:
 
 For legacy presets, `checked_plugins` or `checked_factories` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility.
 
+`scripts` values are UTF-8 text for `.py`/`.txt` files. `.so` plugin files are binary, so their value is base64-encoded; write requests must send `.so` content the same way (raw bytes are only accepted for `.so` files arriving through preset ZIP import, not through this JSON API).
+
 ### Preset Name Validation
 - Pattern: `^[a-zA-Z0-9_-]+$` (letters, numbers, hyphens, underscores)
 - Reserved names: `default`
