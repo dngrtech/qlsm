@@ -115,6 +115,25 @@ def _validate_factories_map(factories_data):
     return None, None
 
 
+def _validate_enabled_hooks_payload(enabled_hooks):
+    """Validate an enabled_hooks list. Returns (error_message, status_code) or (None, None)."""
+    if (
+        not isinstance(enabled_hooks, list) or
+        not all(isinstance(h, str) and h.lower().endswith('.so') for h in enabled_hooks)
+    ):
+        return "enabled_hooks must be a list of .so filenames", 400
+    return None, None
+
+
+def _filtered_enabled_hooks(enabled_hooks, instance_user_hooks_dir):
+    """Keep only hook filenames that actually exist on disk after the copy step."""
+    on_disk = (
+        set(os.listdir(instance_user_hooks_dir))
+        if os.path.isdir(instance_user_hooks_dir) else set()
+    )
+    return [name for name in enabled_hooks if name in on_disk]
+
+
 def _should_sync_configs(configs_data):
     """Return True when the payload represents the full file-manager config set."""
     if not isinstance(configs_data, dict):
@@ -304,6 +323,12 @@ def add_instance_api():
         if qlx_err:
             return jsonify({"error": {"message": qlx_err}}), 400
 
+    enabled_hooks_data = data.get('enabled_hooks')
+    if enabled_hooks_data is not None:
+        err, code = _validate_enabled_hooks_payload(enabled_hooks_data)
+        if err:
+            return jsonify({"error": {"message": err}}), code
+
     # Basic validation
     if not name or not host_id or not port or not hostname:
         return jsonify({"error": {"message": "Name, Host ID, Port, and Server Hostname are required."}}), 400
@@ -380,14 +405,22 @@ def add_instance_api():
 
         # --- Handle scripts via draft ---
         instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
+        instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
 
         if draft_id:
-            from ui.routes.draft_routes import _get_draft_scripts_path, _get_draft_base_path
+            from ui.routes.draft_routes import (
+                _get_draft_base_path, _get_draft_scripts_path, _get_draft_user_hooks_path,
+            )
 
             draft_scripts = _get_draft_scripts_path(draft_id)
             if os.path.exists(draft_scripts):
                 shutil.copytree(draft_scripts, instance_scripts_dir, dirs_exist_ok=True)
                 current_app.logger.info(f"Copied draft {draft_id} scripts to {instance_scripts_dir}")
+
+            draft_user_hooks = _get_draft_user_hooks_path(draft_id)
+            if os.path.exists(draft_user_hooks):
+                shutil.copytree(draft_user_hooks, instance_user_hooks_dir, dirs_exist_ok=True)
+                current_app.logger.info(f"Copied draft {draft_id} user-hooks to {instance_user_hooks_dir}")
 
             shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
         else:
@@ -405,9 +438,12 @@ def add_instance_api():
         instance_factories_dir = os.path.join(instance_config_dir, 'factories')
         os.makedirs(instance_factories_dir, exist_ok=True)
 
-        instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
         os.makedirs(instance_user_hooks_dir, exist_ok=True)
-        
+
+        if enabled_hooks_data is not None:
+            filtered_hooks = _filtered_enabled_hooks(enabled_hooks_data, instance_user_hooks_dir)
+            instance.ld_preload_hooks = ",".join(filtered_hooks) if filtered_hooks else None
+
         if 'factories' in data:
             # User explicitly provided factory selection - only deploy what they selected
             factories_data = data.get('factories', {})
@@ -959,6 +995,12 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                     return jsonify({"error": {"message": qlx_err}}), 400
                 update_kwargs['qlx_plugins'] = validated_plugins
 
+            enabled_hooks_data = data.get('enabled_hooks')
+            if enabled_hooks_data is not None:
+                err, code = _validate_enabled_hooks_payload(enabled_hooks_data)
+                if err:
+                    return jsonify({"error": {"message": err}}), code
+
             if configs_present:
                 _sync_configs_to_disk(
                     instance_config_dir,
@@ -971,9 +1013,10 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 )
 
             # Handle scripts via draft or legacy
+            instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
             if draft_id:
                 from ui.routes.draft_routes import (
-                    _get_draft_scripts_path, _get_draft_base_path
+                    _get_draft_base_path, _get_draft_scripts_path, _get_draft_user_hooks_path,
                 )
 
                 instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
@@ -982,6 +1025,11 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                     if os.path.exists(instance_scripts_dir):
                         shutil.rmtree(instance_scripts_dir)
                     shutil.copytree(draft_scripts, instance_scripts_dir)
+
+                draft_user_hooks = _get_draft_user_hooks_path(draft_id)
+                if os.path.exists(draft_user_hooks):
+                    shutil.copytree(draft_user_hooks, instance_user_hooks_dir, dirs_exist_ok=True)
+
                 shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
 
             elif scripts_to_save:
@@ -994,6 +1042,10 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                     with open(script_path, 'w') as f:
                         f.write(content)
                 current_app.logger.info(f"Saved updated scripts for instance {instance.id}")
+
+            if enabled_hooks_data is not None:
+                filtered_hooks = _filtered_enabled_hooks(enabled_hooks_data, instance_user_hooks_dir)
+                update_kwargs['ld_preload_hooks'] = ",".join(filtered_hooks) if filtered_hooks else None
 
             # Handle factories updates when the client sends the full factories map.
             if factories_present:

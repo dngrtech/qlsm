@@ -55,8 +55,13 @@ When an instance starts, QLSM builds the `LD_PRELOAD` value in this order:
 1. Enabled system hooks (e.g. `force_rate.so` when 99k LAN rate is on)
 2. Enabled user hooks in the order shown in the Hooks tab
 
+## Hooks In Presets
+
+Saving a preset from an instance also records which user hooks were enabled (and their load order). Loading that preset onto another instance and saving replaces the target instance's enabled hooks to match — see [Presets And Default Config](../presets/overview.md).
+
 ## Related Pages
 
 - [99k LAN Rate](99k-lan-rate.md) — uses `force_rate.so` as a system hook
 - [Edit Configs, Plugins, And Factories](../operations/edit-configs.md)
 - [Instance Actions Menu](../operations/instance-actions-menu.md)
+- [Presets And Default Config](../presets/overview.md)

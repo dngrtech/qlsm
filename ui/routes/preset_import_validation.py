@@ -161,6 +161,19 @@ def _validate_checked_lists(bundle):
         raise PresetImportError(
             "checked_factories.json must contain a list of .factories filenames."
         )
+    enabled_hooks = bundle['enabled_hooks']
+    if enabled_hooks is not None and (
+        not isinstance(enabled_hooks, list)
+        or not all(isinstance(h, str) and h.lower().endswith('.so') for h in enabled_hooks)
+    ):
+        raise PresetImportError("enabled_hooks.json must contain a list of .so filenames.")
+
+
+def _normalize_enabled_hooks(enabled_hooks, user_hooks):
+    """Drop entries that don't correspond to a hook actually present in the archive."""
+    if enabled_hooks is None:
+        return None
+    return [name for name in enabled_hooks if name in user_hooks]
 
 
 def _normalize_binary_metadata(payload, user_hooks):
@@ -202,7 +215,7 @@ def parse_import_archive(raw_bytes):
 
     bundle = {
         'configs': {}, 'factories': {}, 'scripts': {}, 'user_hooks': {},
-        'checked_plugins': None, 'checked_factories': None,
+        'checked_plugins': None, 'checked_factories': None, 'enabled_hooks': None,
         'manifest': None, 'binary_metadata': None,
     }
 
@@ -227,6 +240,8 @@ def parse_import_archive(raw_bytes):
                 bundle['checked_plugins'] = _read_json(archive, info, 'Checked plugins')
             elif name == 'checked_factories.json':
                 bundle['checked_factories'] = _read_json(archive, info, 'Checked factories')
+            elif name == 'enabled_hooks.json':
+                bundle['enabled_hooks'] = _read_json(archive, info, 'Enabled hooks')
             elif name.startswith('factories/'):
                 filename = name[len('factories/'):]
                 try:
@@ -256,6 +271,9 @@ def parse_import_archive(raw_bytes):
     _validate_checked_lists(bundle)
     bundle['binary_metadata'] = _normalize_binary_metadata(
         bundle['binary_metadata'], bundle['user_hooks']
+    )
+    bundle['enabled_hooks'] = _normalize_enabled_hooks(
+        bundle['enabled_hooks'], bundle['user_hooks']
     )
 
     missing = PROTECTED_CONFIG_FILES - set(bundle['configs'])
