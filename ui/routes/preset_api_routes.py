@@ -365,7 +365,7 @@ def _read_script_file(filepath):
     .so files are binary and JSON responses must stay JSON-safe, so they are
     base64-encoded here. _write_preset_scripts decodes them back on save.
     """
-    if filepath.endswith('.so'):
+    if filepath.lower().endswith('.so'):
         with open(filepath, 'rb') as f:
             return base64.b64encode(f.read()).decode('ascii')
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -392,7 +392,7 @@ def _read_preset_scripts(preset_path):
     if os.path.basename(preset_path) != 'default' and os.path.exists(default_scripts_dir):
         for root, _, files in os.walk(default_scripts_dir):
             for filename in files:
-                if filename.endswith(SCRIPT_READ_EXTENSIONS):
+                if filename.lower().endswith(SCRIPT_READ_EXTENSIONS):
                     filepath = os.path.join(root, filename)
                     rel_path = os.path.relpath(filepath, default_scripts_dir)
                     try:
@@ -402,7 +402,7 @@ def _read_preset_scripts(preset_path):
 
     for root, _, files in os.walk(scripts_dir):
         for filename in files:
-            if filename.endswith(SCRIPT_READ_EXTENSIONS):
+            if filename.lower().endswith(SCRIPT_READ_EXTENSIONS):
                 filepath = os.path.join(root, filename)
                 # Get relative path from scripts_dir
                 rel_path = os.path.relpath(filepath, scripts_dir)

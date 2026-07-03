@@ -399,6 +399,25 @@ def test_create_preset_rejects_non_elf_uppercase_so_script(client, app):
     assert 'not a valid ELF' in response.get_json()['error']['message']
 
 
+def test_create_preset_with_valid_uppercase_so_script(client, app, tmp_path):
+    """A valid ELF .SO file round-trips through write and read, not just validation."""
+    raw = b'\x7fELFfake-binary-content'
+    encoded = base64.b64encode(raw).decode('ascii')
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'uppercase-so-script',
+        'description': '',
+        'scripts': {'hook.SO': encoded},
+    })
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['scripts']['hook.SO'] == encoded
+
+    preset_path = os.path.join(str(tmp_path), 'configs', 'presets', 'uppercase-so-script')
+    with open(os.path.join(preset_path, 'scripts', 'hook.SO'), 'rb') as f:
+        assert f.read() == raw
+
+
 def test_create_preset_rejects_invalid_base64_so_script(client, app):
     """Malformed base64 for a .so script is a 400, not a silently-succeeding save."""
     headers = auth_headers(app, DEFAULT_USER)
