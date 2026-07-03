@@ -738,7 +738,7 @@ GET /presets/validate-name?name=my-preset
 
 `GET /api/presets/{preset_id}/download`
 
-Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, checked selection JSON files, and generated export metadata.
+Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, selection JSON files (`checked_plugins.json`, `checked_factories.json`, `enabled_hooks.json`), and generated export metadata.
 
 Responses:
 

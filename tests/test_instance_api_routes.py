@@ -561,6 +561,43 @@ def test_update_config_enabled_hooks_replaces_existing_selection(
         assert updated.ld_preload_hooks == 'preset_hook.so'
 
 
+def test_update_config_enabled_hooks_without_draft_filters_to_existing_files(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    """
+    GIVEN an instance with a hook file already on disk, and no draft_id in the
+          request (e.g. a client resubmitting enabled_hooks on its own)
+    WHEN PUT /api/instances/<id>/config is called with enabled_hooks but no draft_id
+    THEN ld_preload_hooks is filtered against the instance's existing user-hooks/
+         directory — names not already on disk are dropped, not treated as an error
+    """
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+
+    instance_hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    instance_hooks_dir.mkdir(parents=True)
+    (instance_hooks_dir / 'existing_hook.so').write_bytes(b'\x7fELF' + b'\x00' * 16)
+
+    payload = {
+        'configs': _full_configs(),
+        'enabled_hooks': ['existing_hook.so', 'ghost_hook.so'],
+        'restart': False,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    with app.app_context():
+        updated = db.session.get(QLInstance, instance.id)
+        assert updated.ld_preload_hooks == 'existing_hook.so'
+
+
 @pytest.mark.parametrize(
     ('configs', 'message'),
     [
