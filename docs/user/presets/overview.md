@@ -24,9 +24,11 @@ The `default` preset is always available as the standard baseline. Additional bu
 To customize a built-in preset, load it and save it under a new name from the Preset Manager's **Save / Overwrite** tab.
 
 Use **Save Preset** when you want to turn the current draft into a reusable preset:
+
 <img src="../../images/save-preset-button.png" width="146" />
 
 Use **Load Preset** any time you want to replace the default draft with one of your saved configurations:
+
 <img src="../../images/load-preset-button.png" width="146" />
 
 ## Plugin and Factory Selection
@@ -46,6 +48,7 @@ The saved preset keeps both the files and the selection state. A plugin or facto
 ## Load A Saved Preset
 
 Use **Load Preset** in the deploy form or in **Edit Config** to open the Preset Manager on the **Load Preset** tab:
+
 <img src="../../images/preset-manager-load.png" />
 
 Loading a preset overwrites the current draft with the saved config files, plugin file tree, plugin selections, factory files, and factory selections.
@@ -56,9 +59,11 @@ Loading a preset overwrites the current draft with the saved config files, plugi
 ## Export A Preset
 
 Any user-created preset can be downloaded as a ZIP archive from the row menu (⋮) on the **Load Preset** tab:
+
 <img src="../../images/preset-manager-download.png" />
 
 Another way to download a preset is to click **Download** button right after saving one from the **Save / Overwrite** tab:
+
 <img src="../../images/preset-manager-download-button.png" />
 
 Built-in presets cannot be downloaded.
@@ -68,6 +73,7 @@ The archive contains the full preset directory: config files (`server.cfg`, `map
 ## Import A Preset
 
 Click **Import from ZIP** on the **Load Preset** tab and choose a previously exported archive: 
+
 <img src="../../images/preset-manager-import-button.png" />
 
 QLSM validates the archive before writing anything — corrupt or unreadable entries are rejected up front.
