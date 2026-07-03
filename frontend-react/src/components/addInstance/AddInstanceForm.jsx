@@ -179,6 +179,7 @@ function AddInstanceForm({
   const initialCheckedPluginsRef = useRef(new Set(initialData.defaultCheckedPlugins || []));
   const loadedPresetConfigRef = useRef(null); // Stores config contents when preset is loaded, for modification detection
   const loadedPresetCheckedPluginsRef = useRef(new Set(initialData.defaultCheckedPlugins || []));
+  const loadedPresetEnabledHooksRef = useRef(null); // null = no preset loaded; array = preset's enabled hook filenames
 
   const readFactoryServerContent = useCallback(async (path) => {
     const data = await getFactoryContent(path, { preset: draftPreset || 'default' });
@@ -362,6 +363,7 @@ function AddInstanceForm({
     setLanRateEnabled(false);
     setLoadedPreset(null);
     loadedPresetConfigRef.current = null;
+    loadedPresetEnabledHooksRef.current = null;
     setIsPresetModified(false);
 
     const defaultCheckedPlugins = new Set(initialData.defaultCheckedPlugins || []);
@@ -548,6 +550,7 @@ function AddInstanceForm({
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
+      loadedPresetEnabledHooksRef.current = presetData.enabled_hooks ?? null;
       // checked_factories: null = legacy preset (use all factory files); [] or [...] = explicit selection
       const factoriesToLoad = presetData.checked_factories != null
         ? Object.fromEntries(
@@ -813,6 +816,9 @@ function AddInstanceForm({
 
     if (pluginDraftId) {
       submitData.draft_id = pluginDraftId;
+    }
+    if (loadedPresetEnabledHooksRef.current !== null) {
+      submitData.enabled_hooks = loadedPresetEnabledHooksRef.current;
     }
 
     await onSubmit(submitData, { consumeDraft: pluginConsume });

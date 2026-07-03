@@ -155,6 +155,35 @@ def test_import_creates_new_preset(client, app, presets_base):
         assert [(r.file_path, r.description) for r in rows] == [('custom_hook.so', '99k hook')]
 
 
+def test_import_creates_preset_with_enabled_hooks(client, app, presets_base):
+    zip_buffer = build_zip(extra={
+        'user-hooks/custom_hook.so': b'\x7fELFfake',
+        'enabled_hooks.json': json.dumps(['custom_hook.so', 'missing_hook.so']),
+    })
+    response = post_import(client, app, zip_buffer)
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    # missing_hook.so isn't in the archive's user-hooks/, so it's dropped —
+    # a preset should never claim a hook is enabled that it doesn't ship.
+    assert data['enabled_hooks'] == ['custom_hook.so']
+
+    preset_dir = presets_base / 'imported'
+    with open(preset_dir / 'enabled_hooks.json') as f:
+        assert json.load(f) == ['custom_hook.so']
+
+
+def test_import_preset_without_enabled_hooks_json(client, app, presets_base):
+    """Legacy/no-hooks exports don't write enabled_hooks.json and return null."""
+    response = post_import(client, app, build_zip())
+
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data['enabled_hooks'] is None
+    preset_dir = presets_base / 'imported'
+    assert not (preset_dir / 'enabled_hooks.json').exists()
+
+
 def test_import_metadata_failure_rolls_back_row_and_folder(client, app, presets_base, monkeypatch):
     def fail_metadata(*_args, **_kwargs):
         raise ValueError('forced metadata failure')

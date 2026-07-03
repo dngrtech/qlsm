@@ -60,6 +60,7 @@ def test_parses_full_valid_archive():
         'user-hooks/custom_hook.so': b'\x7fELFfake',
         'checked_plugins.json': json.dumps(['balance.py']),
         'checked_factories.json': json.dumps(['ca.factories']),
+        'enabled_hooks.json': json.dumps(['custom_hook.so']),
         'binary_metadata.json': json.dumps({'format_version': 1, 'metadata': [
             {'file_path': 'custom_hook.so', 'description': '99k hook'},
             {'file_path': 'stale.so', 'description': 'dropped'},
@@ -78,6 +79,7 @@ def test_parses_full_valid_archive():
     assert bundle['user_hooks'] == {'custom_hook.so': b'\x7fELFfake'}
     assert bundle['checked_plugins'] == ['balance.py']
     assert bundle['checked_factories'] == ['ca.factories']
+    assert bundle['enabled_hooks'] == ['custom_hook.so']
     assert bundle['binary_metadata'] == [
         {'file_path': 'custom_hook.so', 'description': '99k hook'},
     ]
@@ -222,3 +224,24 @@ def test_rejects_invalid_checked_factories():
     raw = build_zip(extra={'checked_factories.json': json.dumps(['notafactory.txt'])})
     with pytest.raises(PresetImportError, match='checked_factories'):
         parse_import_archive(raw)
+
+
+def test_rejects_invalid_enabled_hooks():
+    raw = build_zip(extra={'enabled_hooks.json': json.dumps(['not_a_hook.py'])})
+    with pytest.raises(PresetImportError, match='enabled_hooks'):
+        parse_import_archive(raw)
+
+
+def test_enabled_hooks_filtered_to_hooks_present_in_archive():
+    raw = build_zip(extra={
+        'user-hooks/custom_hook.so': b'\x7fELFfake',
+        'enabled_hooks.json': json.dumps(['custom_hook.so', 'ghost_hook.so']),
+    })
+    bundle = parse_import_archive(raw)
+    assert bundle['enabled_hooks'] == ['custom_hook.so']
+
+
+def test_enabled_hooks_none_when_absent():
+    raw = build_zip()
+    bundle = parse_import_archive(raw)
+    assert bundle['enabled_hooks'] is None

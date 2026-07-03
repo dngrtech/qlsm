@@ -1,3 +1,6 @@
+import os
+import uuid
+
 import pytest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -331,6 +334,97 @@ def test_create_instance_hostname_exactly_64_chars(mock_enqueue, mock_lock, clie
     assert response.status_code == 201
 
 
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+@patch('ui.routes.instance_routes.enqueue_task')
+def test_create_instance_from_draft_copies_user_hooks(mock_enqueue, mock_lock, client, app, tmp_path, monkeypatch):
+    """
+    GIVEN a draft seeded from a preset with a user-hooks/ file (e.g. imported via
+          preset ZIP import, then loaded when creating a new instance)
+    WHEN POST /api/instances/ is called with that draft_id
+    THEN the draft's user-hooks/ directory is copied to the new instance, not discarded
+    """
+    monkeypatch.chdir(tmp_path)
+
+    draft_id = str(uuid.uuid4())
+    draft_dir = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    os.makedirs(os.path.join(draft_dir, 'scripts'), exist_ok=True)
+    hooks_dir = os.path.join(draft_dir, 'user-hooks')
+    os.makedirs(hooks_dir, exist_ok=True)
+    with open(os.path.join(hooks_dir, 'my_hook.so'), 'wb') as f:
+        f.write(b'\x7fELF' + b'\x00' * 16)
+
+    with app.app_context():
+        host = create_host(name='host-draft-hooks', provider='vultr', status=HostStatus.ACTIVE)
+        db.session.commit()
+        host_id = host.id
+        host_name = host.name
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {
+        'name': 'draft-hooks-inst',
+        'host_id': host_id,
+        'port': 27974,
+        'hostname': 'draft.hooks.host',
+        'draft_id': draft_id,
+    }
+    mock_enqueue.return_value = type('Job', (), {'id': 'fake-job-id'})()
+    response = client.post('/api/instances/', json=data, headers=headers)
+
+    assert response.status_code == 201, response.get_json()
+    instance_id = response.get_json()['data']['id']
+    instance_hooks_dir = tmp_path / 'configs' / host_name / str(instance_id) / 'user-hooks'
+    assert (instance_hooks_dir / 'my_hook.so').exists(), (
+        "user-hooks/ from the draft (seeded from a preset) must be copied to the new instance"
+    )
+
+
+@patch('ui.routes.instance_routes.acquire_lock', return_value=True)
+@patch('ui.routes.instance_routes.enqueue_task')
+def test_create_instance_applies_enabled_hooks_filtered_to_existing_files(
+    mock_enqueue, mock_lock, client, app, tmp_path, monkeypatch
+):
+    """
+    GIVEN a draft with two hook files, and enabled_hooks naming one real hook
+          plus one hook that doesn't actually exist in the draft
+    WHEN POST /api/instances/ is called with draft_id + enabled_hooks
+    THEN ld_preload_hooks is set to only the hook(s) that actually landed on disk
+    """
+    monkeypatch.chdir(tmp_path)
+
+    draft_id = str(uuid.uuid4())
+    draft_dir = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    os.makedirs(os.path.join(draft_dir, 'scripts'), exist_ok=True)
+    hooks_dir = os.path.join(draft_dir, 'user-hooks')
+    os.makedirs(hooks_dir, exist_ok=True)
+    with open(os.path.join(hooks_dir, 'real_hook.so'), 'wb') as f:
+        f.write(b'\x7fELF' + b'\x00' * 16)
+
+    with app.app_context():
+        host = create_host(name='host-enabled-hooks', provider='vultr', status=HostStatus.ACTIVE)
+        db.session.commit()
+        host_id = host.id
+        token = create_access_token(identity='testuser')
+
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {
+        'name': 'enabled-hooks-inst',
+        'host_id': host_id,
+        'port': 27975,
+        'hostname': 'enabled.hooks.host',
+        'draft_id': draft_id,
+        'enabled_hooks': ['real_hook.so', 'ghost_hook.so'],
+    }
+    mock_enqueue.return_value = type('Job', (), {'id': 'fake-job-id'})()
+    response = client.post('/api/instances/', json=data, headers=headers)
+
+    assert response.status_code == 201, response.get_json()
+    instance_id = response.get_json()['data']['id']
+    with app.app_context():
+        instance = db.session.get(QLInstance, instance_id)
+        assert instance.ld_preload_hooks == 'real_hook.so'
+
+
 def test_update_instance_hostname_exactly_64_chars(client, app):
     """
     GIVEN an existing instance
@@ -377,6 +471,94 @@ def test_update_config_accepts_custom_cfg_and_syncs_removed_files(
     assert response.status_code == 202, response.get_json()
     assert (instance_dir / 'custom.cfg').read_text() == '// custom\n'
     assert not (instance_dir / 'old_custom.cfg').exists()
+
+
+def test_update_config_from_draft_copies_user_hooks(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    """
+    GIVEN a draft seeded from a preset with a user-hooks/ file (loaded into the
+          "Load Preset" flow when editing an existing instance)
+    WHEN PUT /api/instances/<id>/config is called with that draft_id
+    THEN the draft's user-hooks/ directory is copied to the instance, not discarded
+    """
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+
+    draft_id = str(uuid.uuid4())
+    draft_dir = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    os.makedirs(os.path.join(draft_dir, 'scripts'), exist_ok=True)
+    hooks_dir = os.path.join(draft_dir, 'user-hooks')
+    os.makedirs(hooks_dir, exist_ok=True)
+    with open(os.path.join(hooks_dir, 'my_hook.so'), 'wb') as f:
+        f.write(b'\x7fELF' + b'\x00' * 16)
+
+    payload = {
+        'configs': _full_configs(),
+        'draft_id': draft_id,
+        'restart': False,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    instance_hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    assert (instance_hooks_dir / 'my_hook.so').exists(), (
+        "user-hooks/ from the draft (seeded from a preset) must be copied to the instance"
+    )
+
+
+def test_update_config_enabled_hooks_replaces_existing_selection(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    """
+    GIVEN an instance that already has a hook enabled, and a loaded preset whose
+          enabled_hooks names a different (also real) hook
+    WHEN PUT /api/instances/<id>/config is called with draft_id + enabled_hooks
+    THEN ld_preload_hooks is fully replaced to match the preset's enabled_hooks
+         (mirrors how checked_plugins/checked_factories replace on preset load)
+    """
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+
+    with app.app_context():
+        db_instance = db.session.get(QLInstance, instance.id)
+        db_instance.ld_preload_hooks = 'old_hook.so'
+        db.session.commit()
+
+    draft_id = str(uuid.uuid4())
+    draft_dir = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    os.makedirs(os.path.join(draft_dir, 'scripts'), exist_ok=True)
+    hooks_dir = os.path.join(draft_dir, 'user-hooks')
+    os.makedirs(hooks_dir, exist_ok=True)
+    with open(os.path.join(hooks_dir, 'preset_hook.so'), 'wb') as f:
+        f.write(b'\x7fELF' + b'\x00' * 16)
+
+    payload = {
+        'configs': _full_configs(),
+        'draft_id': draft_id,
+        'enabled_hooks': ['preset_hook.so', 'ghost_hook.so'],
+        'restart': False,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    with app.app_context():
+        updated = db.session.get(QLInstance, instance.id)
+        assert updated.ld_preload_hooks == 'preset_hook.so'
 
 
 @pytest.mark.parametrize(

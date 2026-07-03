@@ -95,6 +95,7 @@ def _preset_export_manifest(preset, binary_metadata_count):
             'user_hooks': True,
             'checked_plugins': True,
             'checked_factories': True,
+            'enabled_hooks': True,
             'binary_metadata': True,
         },
         'counts': {
@@ -321,6 +322,18 @@ def _validate_checked_factories_payload(data):
         not all(isinstance(f, str) and f.lower().endswith('.factories') for f in checked_factories)
     ):
         return "checked_factories must be a list of .factories filenames"
+    return None
+
+
+def _validate_enabled_hooks_payload(data):
+    if 'enabled_hooks' not in data:
+        return None
+    enabled_hooks = data['enabled_hooks']
+    if (
+        not isinstance(enabled_hooks, list) or
+        not all(isinstance(h, str) and h.lower().endswith('.so') for h in enabled_hooks)
+    ):
+        return "enabled_hooks must be a list of .so filenames"
     return None
 
 
@@ -572,6 +585,34 @@ def _write_preset_checked_factories(preset_path, checked_factories):
         current_app.logger.error(f"Error writing checked_factories.json to {filepath}: {e}")
 
 
+def _read_preset_enabled_hooks(preset_path):
+    """Read enabled_hooks.json from a preset folder.
+    Returns a list of hook filenames (LD_PRELOAD order), or None if the file
+    does not exist — None means the preset never recorded an enabled-hooks state.
+    """
+    filepath = os.path.join(preset_path, 'enabled_hooks.json')
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        current_app.logger.error(f"Error reading enabled_hooks.json from {filepath}: {e}")
+        return None
+
+
+def _write_preset_enabled_hooks(preset_path, enabled_hooks):
+    """Write enabled_hooks.json to a preset folder."""
+    os.makedirs(preset_path, exist_ok=True)
+    filepath = os.path.join(preset_path, 'enabled_hooks.json')
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(enabled_hooks, f)
+        current_app.logger.info(f"Wrote enabled_hooks.json: {filepath}")
+    except Exception as e:
+        current_app.logger.error(f"Error writing enabled_hooks.json to {filepath}: {e}")
+
+
 def _list_preset_config_files(preset_path):
     """Yield relative managed config paths, excluding reserved preset subdirs."""
     if not os.path.isdir(preset_path):
@@ -784,6 +825,10 @@ def create_preset_api():
     if checked_factories_error:
         return jsonify({"error": {"message": checked_factories_error}}), 400
 
+    enabled_hooks_error = _validate_enabled_hooks_payload(data)
+    if enabled_hooks_error:
+        return jsonify({"error": {"message": enabled_hooks_error}}), 400
+
     description = data.get('description', '')
     preset_path = os.path.join(PRESETS_DIR, name)
 
@@ -837,6 +882,9 @@ def create_preset_api():
         if 'checked_factories' in data:
             _write_preset_checked_factories(preset_path, data['checked_factories'])
 
+        if 'enabled_hooks' in data:
+            _write_preset_enabled_hooks(preset_path, data['enabled_hooks'])
+
         # Step 2: Create DB record
         preset_data = {
             'name': name,
@@ -861,6 +909,7 @@ def create_preset_api():
         response_data['factories'] = _read_preset_factories(preset_path)
         response_data['checked_plugins'] = _read_preset_checked_plugins(preset_path)
         response_data['checked_factories'] = _read_preset_checked_factories(preset_path)
+        response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset_path)
 
         if metadata_copied:
             db.session.commit()
@@ -908,6 +957,7 @@ def get_preset_api(preset_id):
     response_data['factories'] = _read_preset_factories(preset.path)
     response_data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
     response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
+    response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset.path)
 
     return jsonify({"data": response_data})
 
@@ -984,6 +1034,10 @@ def update_preset_api(preset_id):
     if checked_factories_error:
         return jsonify({"error": {"message": checked_factories_error}}), 400
 
+    enabled_hooks_error = _validate_enabled_hooks_payload(data)
+    if enabled_hooks_error:
+        return jsonify({"error": {"message": enabled_hooks_error}}), 400
+
     # Check for name change
     if name_provided and new_name != original_preset_name:
         is_valid, error, reason = validate_user_preset_name(
@@ -1046,6 +1100,9 @@ def update_preset_api(preset_id):
         if 'checked_factories' in data:
             _write_preset_checked_factories(preset.path, data['checked_factories'])
 
+        if 'enabled_hooks' in data:
+            _write_preset_enabled_hooks(preset.path, data['enabled_hooks'])
+
         # Handle name change (rename folder)
         renamed_preset = name_provided and new_name != original_preset_name
         if renamed_preset:
@@ -1093,6 +1150,7 @@ def update_preset_api(preset_id):
             response_data['factories'] = _read_preset_factories(updated_preset.path)
             response_data['checked_plugins'] = _read_preset_checked_plugins(updated_preset.path)
             response_data['checked_factories'] = _read_preset_checked_factories(updated_preset.path)
+            response_data['enabled_hooks'] = _read_preset_enabled_hooks(updated_preset.path)
 
             if metadata_copied or metadata_renamed:
                 db.session.commit()

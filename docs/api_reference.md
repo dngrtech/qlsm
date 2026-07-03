@@ -307,6 +307,7 @@ Example success response:
   "config_folders": ["custom_entities"],
   "checked_plugins": ["balance", "server_status"],
   "draft_id": "79e69985-8998-4881-a8ce-1f4fba712fe9",
+  "enabled_hooks": ["ql_netfix.so"],
   "factories": {
     "duel.factories": "{...}"
   }
@@ -317,7 +318,9 @@ Example success response:
 
 `config_folders` is an optional list of top-level subfolder names to create alongside the `configs` map. Folder names must not collide with the reserved names `scripts` and `factories`, must be at most one path segment, and may not start with `.`. If omitted by an older client, existing folders on disk are left untouched. Invalid `config_folders` are rejected with 400 before any database write occurs.
 
-`checked_plugins` is a list of plugin names used to build the instance `qlx_plugins` value. `draft_id` is optional and commits a plugin draft workspace into the instance. The legacy `scripts` payload is no longer accepted on create. `factories` is optional; when omitted, QLSM copies default factories for legacy compatibility. When present, QLSM deploys exactly the provided flat `.factories` map.
+`checked_plugins` is a list of plugin names used to build the instance `qlx_plugins` value. `draft_id` is optional and commits a plugin draft workspace into the instance — its sibling `user-hooks/` directory is copied to the instance's `user-hooks/` directory alongside `scripts/`. The legacy `scripts` payload is no longer accepted on create. `factories` is optional; when omitted, QLSM copies default factories for legacy compatibility. When present, QLSM deploys exactly the provided flat `.factories` map.
+
+`enabled_hooks` is an optional list of `.so` filenames (typically a preset's `enabled_hooks`) to enable in LD_PRELOAD order. QLSM filters it to hook files that actually exist in the instance's `user-hooks/` directory after the draft copy step and fully replaces `ld_preload_hooks` with the filtered list — filenames that don't correspond to a copied hook file are silently dropped, never surfaced as an error.
 
 ### Update LAN Rate Request
 ```json
@@ -390,7 +393,7 @@ Example success response:
 
 `config_folders` is returned alongside the flat `configs` map. It lists every top-level subfolder present in the instance config directory (excluding the reserved `scripts` and `factories` folders).
 
-`PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles top-level subfolders: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed.
+`PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `enabled_hooks`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles top-level subfolders: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed. When `draft_id` is present, its `user-hooks/` directory is copied into the instance's `user-hooks/` directory. When `enabled_hooks` is present (typically from a loaded preset), `ld_preload_hooks` is fully replaced with that list filtered to hooks that actually exist on disk after the copy — same replace-on-load semantics as `checked_plugins`/`checked_factories`. When `enabled_hooks` is omitted, the instance's current hook enablement (managed separately via the Hooks tab) is left untouched.
 
 ### LD_PRELOAD Hooks
 
@@ -715,6 +718,7 @@ GET /presets/validate-name?name=my-preset
     "duel.factories": "{...}"
   },
   "checked_factories": ["duel.factories"],
+  "enabled_hooks": ["ql_netfix.so"],
   "binary_meta_source": {
     "context_type": "preset",
     "context_key": "default"
@@ -724,7 +728,9 @@ GET /presets/validate-name?name=my-preset
 
 `configs` is the preferred format for preset writes. It accepts flat `.cfg` and `.txt` filenames and syncs the preset config set, removing unprotected config files omitted from the map. The protected baseline files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` cannot be removed. The legacy keys `server_cfg`, `mappool_txt`, `access_txt`, and `workshop_txt` are still accepted for compatibility, but they are partial writes and do not support custom files.
 
-`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving.
+`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving — its sibling `user-hooks/` directory is merge-copied into the preset's `user-hooks/` directory the same way.
+
+`enabled_hooks` is an optional list of `.so` filenames (LD_PRELOAD order) recording which of the preset's `user-hooks/` files should be enabled when the preset is loaded onto an instance. It must be a list of `.so` filenames. When saving a preset from an instance's current state, the frontend populates this from that instance's currently-enabled hooks. `null`/absent means the preset predates this feature or was saved without any hooks captured.
 
 `binary_meta_source` is optional on `POST /presets` and `PUT /presets/<id>`. When provided, matching `.so` file descriptions are copied from the source context into the target preset context. Use this when saving an instance or another preset as a new preset.
 
@@ -789,13 +795,14 @@ Responses:
     },
     "checked_plugins": [],
     "checked_factories": [],
+    "enabled_hooks": [],
     "last_updated": "2026-01-20T12:00:00",
     "created_at": "2026-01-20T12:00:00"
   }
 }
 ```
 
-For legacy presets, `checked_plugins` or `checked_factories` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility.
+For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility. A `null` `enabled_hooks` value means the preset was saved without recording hook enablement — loading it does not touch the target instance's current `ld_preload_hooks`.
 
 `scripts` values are UTF-8 text for `.py`/`.txt` files. `.so` plugin files are binary, so their value is base64-encoded; write requests must send `.so` content the same way (raw bytes are only accepted for `.so` files arriving through preset ZIP import, not through this JSON API).
 

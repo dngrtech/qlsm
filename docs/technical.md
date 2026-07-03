@@ -199,7 +199,7 @@ class QLInstance(db.Model):
 
 ```
 
-**ConfigPreset Model:** Stores preset metadata. File contents are stored on the filesystem; the model holds a `path` pointer to the preset directory. Built-in presets (e.g., `default`) are flagged with `is_builtin = True` and are read-only — the API rejects any attempt to rename, update, or delete them. Presets can include the protected baseline config files, additional `.cfg`/`.txt` files, plugin files under `scripts/`, factory files under `factories/`, and selection metadata in `checked_plugins.json` and `checked_factories.json`.
+**ConfigPreset Model:** Stores preset metadata. File contents are stored on the filesystem; the model holds a `path` pointer to the preset directory. Built-in presets (e.g., `default`) are flagged with `is_builtin = True` and are read-only — the API rejects any attempt to rename, update, or delete them. Presets can include the protected baseline config files, additional `.cfg`/`.txt` files, plugin files under `scripts/`, factory files under `factories/`, LD_PRELOAD hook `.so` files under `user-hooks/`, and selection metadata in `checked_plugins.json`, `checked_factories.json`, and `enabled_hooks.json`.
 
 ```python
 class ConfigPreset(db.Model):

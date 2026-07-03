@@ -343,6 +343,81 @@ def test_get_preset_checked_plugins_none_when_absent(client, app, tmp_path, monk
     assert response.get_json()['data'].get('checked_plugins') is None
 
 
+def test_create_preset_with_enabled_hooks(client, app):
+    """Preset created with enabled_hooks persists and returns the list."""
+    headers = auth_headers(app, DEFAULT_USER)
+    hooks = ['ql_netfix.so', 'spec_switch_guard.so']
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'hooked',
+        'description': '',
+        'enabled_hooks': hooks,
+    })
+    assert response.status_code == 201
+    data = response.get_json()['data']
+    assert data.get('enabled_hooks') == hooks
+
+
+def test_create_preset_enabled_hooks_invalid_type(client, app):
+    """enabled_hooks entries must be .so filenames."""
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'badhooks',
+        'description': '',
+        'enabled_hooks': ['not_a_hook.py'],
+    })
+    assert response.status_code == 400
+    assert 'enabled_hooks must be a list of .so filenames' in response.get_json()['error']['message']
+
+
+def test_get_preset_returns_enabled_hooks(client, app, tmp_path, monkeypatch):
+    """GET preset returns enabled_hooks saved with it."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', 'ehtest')
+        os.makedirs(preset_path, exist_ok=True)
+        import json as _json
+        with open(os.path.join(preset_path, 'enabled_hooks.json'), 'w') as f:
+            _json.dump(['ql_netfix.so'], f)
+        preset = create_preset(name='ehtest', description='', path=preset_path)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+    assert response.status_code == 200
+    assert response.get_json()['data'].get('enabled_hooks') == ['ql_netfix.so']
+
+
+def test_get_preset_enabled_hooks_none_when_absent(client, app, tmp_path, monkeypatch):
+    """GET preset returns enabled_hooks=null when absent (legacy preset)."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', 'legacyhooks')
+        os.makedirs(preset_path, exist_ok=True)
+        preset = create_preset(name='legacyhooks', description='', path=preset_path)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+    assert response.status_code == 200
+    assert response.get_json()['data'].get('enabled_hooks') is None
+
+
+def test_update_preset_enabled_hooks(client, app, tmp_path, monkeypatch):
+    """PUT preset with enabled_hooks persists and returns updated list."""
+    monkeypatch.chdir(tmp_path)
+    preset_id, _ = _create_preset_folder(app, 'ehupdate', files=BASE_CONFIG_MAP)
+    headers = auth_headers(app, DEFAULT_USER)
+    hooks = ['new_hook.so']
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'enabled_hooks': hooks,
+    })
+    assert response.status_code == 200
+    assert response.get_json()['data'].get('enabled_hooks') == hooks
+
+    get_response = client.get(f'/api/presets/{preset_id}', headers=headers)
+    assert get_response.get_json()['data'].get('enabled_hooks') == hooks
+
+
 def test_create_preset_with_scripts(client, app):
     """Preset with scripts data writes script files."""
     headers = auth_headers(app, DEFAULT_USER)

@@ -45,6 +45,8 @@ This means you can have completely different plugin and factory sets per instanc
 
 The saved preset keeps both the files and the selection state. A plugin or factory file can exist in the preset without being selected for deployment. When you deploy from that preset, only selected plugins and selected factories are applied.
 
+The same applies to [LD_PRELOAD user hooks](../features/hooks.md): saving a preset also records which of its hook files were enabled (and their load order) on the instance you saved from. Loading that preset onto another instance and saving replaces that instance's enabled hooks to match — the same replace-on-load behavior as plugin and factory selections. Presets saved before this feature existed don't have a recorded hook selection; loading one leaves the target instance's hook enablement untouched.
+
 ## Load A Saved Preset
 
 Use **Load Preset** in the deploy form or in **Edit Config** to open the Preset Manager on the **Load Preset** tab:
@@ -68,7 +70,7 @@ Another way to download a preset is to click **Download** button right after sav
 
 Built-in presets cannot be downloaded.
 
-The archive contains the full preset directory: config files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, and any custom `.cfg`/`.txt` files), plugin files and factory files, LD_PRELOAD user hooks, checked plugin/factory selections, and export metadata. Use this to back up a preset or move it to another QLSM instance.
+The archive contains the full preset directory: config files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, and any custom `.cfg`/`.txt` files), plugin files and factory files, LD_PRELOAD user hooks, checked plugin/factory selections, enabled-hooks selection, and export metadata. Use this to back up a preset or move it to another QLSM instance.
 
 ## Import A Preset
 

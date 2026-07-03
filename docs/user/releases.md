@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.13.6` | 2026-07-03 | [#136](https://github.com/dngrtech/qlsm/pull/136) | Fix presets losing their LD_PRELOAD hook files when loaded onto an instance, and make presets remember which hooks were enabled. |
 | `v1.13.5` | 2026-07-03 | [#135](https://github.com/dngrtech/qlsm/pull/135) | Fix preset ZIP import rejecting `.so` plugin scripts, and surface `.so` scripts correctly in the preset API instead of silently dropping them. |
 | `v1.13.4` | 2026-07-02 | — | Bug fixes and improvements. |
 | `v1.13.3` | 2026-07-02 | [#133](https://github.com/dngrtech/qlsm/pull/133) | Add preset ZIP import: upload a previously exported preset archive from the Preset Manager Load tab. Archives are validated before anything is written, and name conflicts offer overwrite or rename. Built-in presets can no longer be downloaded. |

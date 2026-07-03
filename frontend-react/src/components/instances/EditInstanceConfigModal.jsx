@@ -3,7 +3,7 @@ import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
-import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent } from '../../services/api';
+import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent, fetchInstanceHooks } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
@@ -48,6 +48,10 @@ const getFactoryLinterSource = (fileName) => (
   fileName?.toLowerCase().endsWith('.factories') ? FACTORY_LINTER_SOURCE : null
 );
 const getServerHostname = (serverCfg = '') => serverCfg.match(/set sv_hostname "([^"]*)"/)?.[1] || '';
+const enabledHookFilenames = (hooksData) => (hooksData.available || [])
+  .filter((hook) => hook.enabled)
+  .sort((a, b) => a.order - b.order)
+  .map((hook) => hook.filename);
 const setsEqual = (a, b) => a.size === b.size && [...a].every(value => b.has(value));
 
 // Mapping between frontend config keys and backend preset API keys
@@ -126,6 +130,7 @@ function EditInstanceConfigModal({
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
   const [draftPreset, setDraftPreset] = useState(null); // null = seed from instance; string = seed from preset
+  const [presetEnabledHooks, setPresetEnabledHooks] = useState(null); // null = no preset loaded this session
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const pluginFileManagerRef = useRef(null);
   const pluginsSyncedRef = useRef(false);
@@ -259,6 +264,7 @@ function EditInstanceConfigModal({
         setActiveMainTab(initialTab);
         setScriptHostName(null);
         setDraftPreset(null);
+        setPresetEnabledHooks(null);
         pluginsSyncedRef.current = false;
         setFactoryServerTree([]);
 
@@ -438,6 +444,7 @@ function EditInstanceConfigModal({
       resetFactories(factoriesToLoad);
       setCheckedPlugins(new Set(presetData.checked_plugins || []));
       setDraftPreset(presetData.name);
+      setPresetEnabledHooks(presetData.enabled_hooks ?? null);
 
       // Refresh the factory tree to show the preset's available factories
       try {
@@ -484,6 +491,12 @@ function EditInstanceConfigModal({
         presetData.checked_plugins = Array.from(checkedPlugins);
       }
 
+      try {
+        presetData.enabled_hooks = enabledHookFilenames(await fetchInstanceHooks(instanceId));
+      } catch {
+        // Best-effort: skip enabled_hooks if the fetch fails, don't block preset save
+      }
+
       presetData.binary_meta_source = {
         context_type: 'instance',
         context_key: String(instanceId),
@@ -528,6 +541,11 @@ function EditInstanceConfigModal({
       if (pluginDraftId) {
         presetData.draft_id = pluginDraftId;
         presetData.checked_plugins = Array.from(checkedPlugins);
+      }
+      try {
+        presetData.enabled_hooks = enabledHookFilenames(await fetchInstanceHooks(instanceId));
+      } catch {
+        // Best-effort: skip enabled_hooks if the fetch fails, don't block preset save
       }
       presetData.binary_meta_source = { context_type: 'instance', context_key: String(instanceId) };
       const response = await updatePreset(presetId, presetData);
@@ -597,6 +615,9 @@ function EditInstanceConfigModal({
           .filter(p => p.endsWith('.py') && !p.endsWith('__init__.py'))
           .map(p => p.replace(/\.py$/, '').replace(/^.*\//, '')),
       };
+      if (presetEnabledHooks !== null) {
+        configPayload.enabled_hooks = presetEnabledHooks;
+      }
 
       // Pass restart parameter to updateInstanceConfig
       const response = await updateInstanceConfig(instanceId, configPayload, restartAfterSave);
