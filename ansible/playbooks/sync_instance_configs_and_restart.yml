@@ -58,6 +58,26 @@
       delegate_to: localhost
       become: false
 
+    - name: Ensure user-hooks directory exists on host
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/user-hooks"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Sync user LD_PRELOAD hooks from UI server to instance user-hooks dir
+      ansible.builtin.synchronize:
+        src: "../../configs/{{ host_name }}/{{ qlds_id }}/user-hooks/"
+        dest: "{{ qlds_dir }}/user-hooks/"
+        delete: yes
+        rsync_path: "sudo -u ql rsync"
+        rsync_opts:
+          - "--include=*.so"
+          - "--exclude=*"
+      delegate_to: localhost
+      become: false
+
     - name: Backfill common minqlx-plugins to instance directory
       ansible.builtin.command:
         argv:

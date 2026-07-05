@@ -598,6 +598,36 @@ def test_update_config_enabled_hooks_without_draft_filters_to_existing_files(
         assert updated.ld_preload_hooks == 'existing_hook.so'
 
 
+def test_update_config_creates_user_hooks_source_dir_when_absent(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    """
+    GIVEN an instance whose local configs/<host>/<id>/user-hooks/ dir does not
+          exist (e.g. deployed before the hook feature)
+    WHEN PUT /api/instances/<id>/config is called with enabled_hooks
+    THEN the request succeeds AND the user-hooks/ source dir is created, so the
+         general-save rsync source is never missing (spec §5.4).
+    """
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+
+    hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    assert not hooks_dir.exists()
+
+    payload = {'configs': _full_configs(), 'enabled_hooks': [], 'restart': False}
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    assert hooks_dir.is_dir()
+
+
 @pytest.mark.parametrize(
     ('configs', 'message'),
     [

@@ -1014,6 +1014,7 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
 
             # Handle scripts via draft or legacy
             instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
+            os.makedirs(instance_user_hooks_dir, exist_ok=True)  # rsync source must exist (spec §5.4)
             if draft_id:
                 from ui.routes.draft_routes import (
                     _get_draft_base_path, _get_draft_scripts_path, _get_draft_user_hooks_path,
