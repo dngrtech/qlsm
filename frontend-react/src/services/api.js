@@ -314,6 +314,7 @@ export const updateInstanceConfig = async (instanceId, configData, restart = tru
       draft_id,
       checked_plugins,
       lan_rate_enabled,
+      enabled_hooks,
       name,
       hostname,
       ...configs
@@ -345,6 +346,9 @@ export const updateInstanceConfig = async (instanceId, configData, restart = tru
     }
     if (lan_rate_enabled !== undefined) {
       payload.lan_rate_enabled = lan_rate_enabled;
+    }
+    if (enabled_hooks !== undefined) {
+      payload.enabled_hooks = enabled_hooks;
     }
     const response = await apiClient.put(`/instances/${instanceId}/config`, payload);
     return response.data; // Assuming API returns { "message": "..." }

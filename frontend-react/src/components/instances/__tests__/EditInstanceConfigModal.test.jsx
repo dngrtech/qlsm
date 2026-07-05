@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(),
   downloadPreset: vi.fn(),
   flushEdits: vi.fn(),
+  fetchInstanceHooks: vi.fn(),
   getBinaryMeta: vi.fn(),
   getFactoryContent: vi.fn(),
   getFactoryTree: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock('../../../services/api', () => ({
   downloadPreset: mocks.downloadPreset,
   getFactoryContent: mocks.getFactoryContent,
   getFactoryTree: mocks.getFactoryTree,
+  fetchInstanceHooks: mocks.fetchInstanceHooks,
   getInstanceById: mocks.getInstanceById,
   getInstanceConfig: mocks.getInstanceConfig,
   getPresetById: mocks.getPresetById,
@@ -121,8 +123,8 @@ vi.mock('../HooksTab', () => ({
     return (
       <div>
         <div>hooks-tab</div>
-        <button type="button" onClick={() => props.onApplied?.()}>
-          Mock Apply Hooks
+        <button type="button" onClick={() => props.onToggleHook?.('c.so')}>
+          Mock Toggle c.so
         </button>
       </div>
     );
@@ -212,13 +214,22 @@ describe('EditInstanceConfigModal preset saving', () => {
     mocks.createPreset.mockResolvedValue({ message: 'saved', data: { id: 42, name: 'saved-from-edit' } });
     mocks.downloadPreset.mockResolvedValue(new Blob(['zip-bytes'], { type: 'application/zip' }));
     mocks.flushEdits.mockResolvedValue(undefined);
+    mocks.fetchInstanceHooks.mockResolvedValue({
+      available: [
+        { filename: 'a.so', size: 1, modified: 1, enabled: true, order: 1, description: '' },
+        { filename: 'c.so', size: 1, modified: 1, enabled: false, order: null, description: '' },
+      ],
+      missing: [],
+      system_hooks_active: [],
+    });
     mocks.getBinaryMeta.mockResolvedValue({});
     mocks.getFactoryContent.mockResolvedValue({ content: '' });
     mocks.getFactoryTree.mockResolvedValue([]);
     mocks.getInstanceById.mockResolvedValue({
       host_name: 'test-host',
       lan_rate_enabled: false,
-      name: 'Test123',
+      status: 'running',
+      name: 'inst',
       qlx_plugins: 'balance',
     });
     mocks.getInstanceConfig.mockResolvedValue({
@@ -232,7 +243,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     mocks.getPresets.mockResolvedValue([]);
     mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.updateInstance.mockResolvedValue({});
-    mocks.updateInstanceConfig.mockResolvedValue({ message: 'saved' });
+    mocks.updateInstanceConfig.mockResolvedValue({ message: 'ok' });
     mocks.updatePreset.mockResolvedValue({ message: 'updated', data: { id: 42, name: 'saved-from-edit' } });
     mocks.useDraftWorkspace.mockReturnValue({
       draftId: 'draft-123',
@@ -383,6 +394,82 @@ describe('EditInstanceConfigModal preset saving', () => {
       }),
       true,
     );
+  });
+
+  it('shows the Save Configuration button on the Hooks tab', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /save configuration/i })).toBeInTheDocument();
+  });
+
+  it('Save payload carries enabled_hooks reflecting toggles', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /mock toggle c.so/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].enabled_hooks).toEqual(['a.so', 'c.so']);
+  });
+
+  it('does NOT send enabled_hooks when the hooks fetch failed on open', async () => {
+    mocks.fetchInstanceHooks.mockRejectedValueOnce(new Error('hooks unavailable'));
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+        initialTab="config"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1]).not.toHaveProperty('enabled_hooks');
+  });
+
+  it('an unrelated Save preserves the loaded hooks', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+        initialTab="config"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].enabled_hooks).toEqual(['a.so']);
   });
 
   it('disables enabling 99k lan rate for ubuntu hosts', async () => {
@@ -575,7 +662,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(factoryManagerProps.onExpandEditor).toEqual(expect.any(Function));
   });
 
-  it('opens on the hooks tab and closes after hook apply', async () => {
+  it('opens on the hooks tab with controlled hook props', async () => {
     const onClose = vi.fn();
     const onConfigSaved = vi.fn();
 
@@ -592,12 +679,12 @@ describe('EditInstanceConfigModal preset saving', () => {
 
     await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /^hooks$/i })).toHaveClass('text-[var(--accent-primary)]');
-
-    fireEvent.click(screen.getByRole('button', { name: /mock apply hooks/i }));
-
-    expect(mocks.showSuccess).toHaveBeenCalledWith('LD_PRELOAD hooks saved. Apply task queued.');
-    expect(onConfigSaved).toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
-    expect(mocks.hooksTabProps.at(-1).instanceId).toBe(1);
+    expect(onConfigSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mocks.hooksTabProps.at(-1)).toEqual(expect.objectContaining({
+      instanceId: 1,
+      enabledOrder: ['a.so'],
+      dirty: false,
+    }));
   });
 });

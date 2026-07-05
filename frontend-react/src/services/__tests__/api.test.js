@@ -103,6 +103,7 @@ describe('updateInstanceConfig', () => {
         draft_id: 'draft-456',
         checked_plugins: ['balance.py'],
         lan_rate_enabled: true,
+        enabled_hooks: ['a.so', 'b.so'],
       },
       true,
     );
@@ -118,6 +119,7 @@ describe('updateInstanceConfig', () => {
       draft_id: 'draft-456',
       checked_plugins: ['balance.py'],
       lan_rate_enabled: true,
+      enabled_hooks: ['a.so', 'b.so'],
       factories: { 'base.factories': 'factory contents' },
     });
   });

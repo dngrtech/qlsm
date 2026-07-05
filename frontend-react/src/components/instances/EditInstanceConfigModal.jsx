@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
@@ -130,10 +130,19 @@ function EditInstanceConfigModal({
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
   const [draftPreset, setDraftPreset] = useState(null); // null = seed from instance; string = seed from preset
-  const [presetEnabledHooks, setPresetEnabledHooks] = useState(null); // null = no preset loaded this session
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const pluginFileManagerRef = useRef(null);
   const pluginsSyncedRef = useRef(false);
+  const hookLoadSeqRef = useRef(0);
+
+  // Hooks tab state
+  const [hookAvailable, setHookAvailable] = useState([]);
+  const [hookMissing, setHookMissing] = useState([]);
+  const [hookSystem, setHookSystem] = useState([]);
+  const [hookEnabledOrder, setHookEnabledOrder] = useState([]);
+  const [initialHookEnabledOrder, setInitialHookEnabledOrder] = useState([]);
+  const [hooksLoaded, setHooksLoaded] = useState(false);
+  const [instanceStatus, setInstanceStatus] = useState(null);
 
   // Factories tab state
   const [factoryServerTree, setFactoryServerTree] = useState([]);
@@ -249,9 +258,41 @@ function EditInstanceConfigModal({
     [pluginDraftId, instanceId],
   );
 
+  const loadHooks = useCallback(async ({ seedInitial } = {}) => {
+    const loadSeq = hookLoadSeqRef.current + 1;
+    hookLoadSeqRef.current = loadSeq;
+    try {
+      const data = await fetchInstanceHooks(instanceId);
+      if (hookLoadSeqRef.current !== loadSeq) return;
+      const all = data.available || [];
+      const available = all.filter((hook) => !hook.missing);
+      const missing = all.filter((hook) => hook.missing).map((hook) => hook.filename);
+      const present = new Set(available.map((hook) => hook.filename));
+
+      setHookAvailable(available);
+      setHookMissing(missing);
+      setHookSystem(data.system_hooks_active || []);
+      if (seedInitial) {
+        const initOrder = available
+          .filter((hook) => hook.enabled)
+          .sort((a, b) => a.order - b.order)
+          .map((hook) => hook.filename);
+        setHookEnabledOrder(initOrder);
+        setInitialHookEnabledOrder(initOrder);
+      } else {
+        setHookEnabledOrder((prev) => prev.filter((filename) => present.has(filename)));
+      }
+      setHooksLoaded(true);
+    } catch (err) {
+      if (hookLoadSeqRef.current !== loadSeq) return;
+      if (seedInitial) setHooksLoaded(false);
+      console.error('EditInstanceConfigModal: Hooks fetch error:', err);
+    }
+  }, [instanceId]);
 
   useEffect(() => {
     if (isOpen && instanceId) {
+      let cancelled = false;
       setCurrentInstanceName(initialInstanceName || `Instance ${instanceId}`);
       const fetchInitialData = async () => {
         setLoading(true);
@@ -264,7 +305,13 @@ function EditInstanceConfigModal({
         setActiveMainTab(initialTab);
         setScriptHostName(null);
         setDraftPreset(null);
-        setPresetEnabledHooks(null);
+        setHookAvailable([]);
+        setHookMissing([]);
+        setHookSystem([]);
+        setHookEnabledOrder([]);
+        setInitialHookEnabledOrder([]);
+        setHooksLoaded(false);
+        setInstanceStatus(null);
         pluginsSyncedRef.current = false;
         setFactoryServerTree([]);
 
@@ -277,6 +324,7 @@ function EditInstanceConfigModal({
             getInstanceConfig(instanceId),
             getPresets(),
           ]);
+          if (cancelled) return;
 
           // Store raw plugin names — they'll be resolved to full tree paths
           // once the draft tree loads (via the effect below).
@@ -295,6 +343,7 @@ function EditInstanceConfigModal({
           setScriptHostName(fetchedHostName);
           setHostOsType(instanceDetails.host_os_type || null);
           setHostLanRateUsesHook(instanceDetails.host_lan_rate_uses_hook === true);
+          setInstanceStatus(instanceDetails.status || null);
           const incomingFolders = Array.isArray(configData?.config_folders)
             ? configData.config_folders
             : [];
@@ -327,17 +376,27 @@ function EditInstanceConfigModal({
           setOriginalLanRateEnabled(instanceDetails.lan_rate_enabled || false);
           setIsDirty(false); // Reset dirty state
           setPresets(presetsData || []);
+          await loadHooks({ seedInitial: true });
         } catch (err) {
-          setError(err.message || `Failed to fetch initial data for instance ${instanceId}`);
-          console.error("EditInstanceConfigModal: Initial data fetch error:", err);
+          if (!cancelled) {
+            setError(err.message || `Failed to fetch initial data for instance ${instanceId}`);
+            console.error("EditInstanceConfigModal: Initial data fetch error:", err);
+          }
         } finally {
-          setLoading(false);
-          setLoadingPresets(false);
+          if (!cancelled) {
+            setLoading(false);
+            setLoadingPresets(false);
+          }
         }
       };
       fetchInitialData();
+      return () => {
+        cancelled = true;
+        hookLoadSeqRef.current += 1;
+      };
     }
-  }, [isOpen, instanceId, initialInstanceName, initialTab, resetConfigs, resetFactories]);
+    return undefined;
+  }, [isOpen, instanceId, initialInstanceName, initialTab, resetConfigs, resetFactories, loadHooks]);
 
   // Sync effect: Update serverHostname when server.cfg changes (unless it's an internal update)
   useEffect(() => {
@@ -396,6 +455,11 @@ function EditInstanceConfigModal({
   };
 
   const checkedPluginsChanged = !setsEqual(checkedPlugins, initialCheckedPlugins);
+  const hooksDirty = useMemo(
+    () => hookEnabledOrder.length !== initialHookEnabledOrder.length
+      || hookEnabledOrder.some((filename, index) => initialHookEnabledOrder[index] !== filename),
+    [hookEnabledOrder, initialHookEnabledOrder],
+  );
   const metadataChanged =
     currentInstanceName !== originalInstanceName ||
     serverHostname !== originalServerHostname ||
@@ -410,12 +474,14 @@ function EditInstanceConfigModal({
       factoriesHaveChanges ||
       pluginsHaveChanges ||
       checkedPluginsChanged ||
+      hooksDirty ||
       metadataChanged
     ));
   }, [
     checkedPluginsChanged,
     configsHaveChanges,
     factoriesHaveChanges,
+    hooksDirty,
     isOpen,
     loading,
     metadataChanged,
@@ -444,7 +510,10 @@ function EditInstanceConfigModal({
       resetFactories(factoriesToLoad);
       setCheckedPlugins(new Set(presetData.checked_plugins || []));
       setDraftPreset(presetData.name);
-      setPresetEnabledHooks(presetData.enabled_hooks ?? null);
+      if (presetData.enabled_hooks !== undefined && presetData.enabled_hooks !== null) {
+        setHookEnabledOrder(presetData.enabled_hooks);
+        setHooksLoaded(true);
+      }
 
       // Refresh the factory tree to show the preset's available factories
       try {
@@ -615,8 +684,8 @@ function EditInstanceConfigModal({
           .filter(p => p.endsWith('.py') && !p.endsWith('__init__.py'))
           .map(p => p.replace(/\.py$/, '').replace(/^.*\//, '')),
       };
-      if (presetEnabledHooks !== null) {
-        configPayload.enabled_hooks = presetEnabledHooks;
+      if (hooksLoaded) {
+        configPayload.enabled_hooks = hookEnabledOrder;
       }
 
       // Pass restart parameter to updateInstanceConfig
@@ -646,12 +715,20 @@ function EditInstanceConfigModal({
     }
   };
 
-  const handleHooksApplied = () => {
-    showSuccess('LD_PRELOAD hooks saved. Apply task queued.');
-    onConfigSaved?.();
-    setIsDirty(false);
-    onClose();
-  };
+  const handleToggleHook = useCallback((filename) => {
+    setHookEnabledOrder((cur) => (
+      cur.includes(filename) ? cur.filter((name) => name !== filename) : [...cur, filename]
+    ));
+  }, []);
+
+  const handleReorderHooks = useCallback((nextOrder) => setHookEnabledOrder(nextOrder), []);
+
+  const handleRemoveMissingHook = useCallback((filename) => {
+    setHookMissing((cur) => cur.filter((name) => name !== filename));
+    setHookEnabledOrder((cur) => cur.filter((name) => name !== filename));
+  }, []);
+
+  const handleRefreshHooks = useCallback(() => loadHooks(), [loadHooks]);
 
   const handleExpandEditor = (selectedFile, content = '') => {
     const fileNameToExpand = typeof selectedFile === 'string'
@@ -968,7 +1045,19 @@ function EditInstanceConfigModal({
                           </div>
                           {activeMainTab === 'hooks' && (
                             <div className="flex-1 min-h-0">
-                              <HooksTab instanceId={instanceId} onApplied={handleHooksApplied} />
+                              <HooksTab
+                                instanceId={instanceId}
+                                available={hookAvailable}
+                                missing={hookMissing}
+                                systemHooks={hookSystem}
+                                enabledOrder={hookEnabledOrder}
+                                dirty={hooksDirty}
+                                onToggleHook={handleToggleHook}
+                                onReorderHooks={handleReorderHooks}
+                                onRemoveMissing={handleRemoveMissingHook}
+                                onRefresh={handleRefreshHooks}
+                                instanceStatus={instanceStatus}
+                              />
                             </div>
                           )}
                         </div>
@@ -998,7 +1087,7 @@ function EditInstanceConfigModal({
                             )}
                           </div>
 
-                          {/* Right side - Esc hint + Cancel + Save (Save hidden on hooks tab) */}
+                          {/* Right side - Esc hint + Cancel + Save */}
                           <div className="flex items-center gap-3">
                             <span className="font-mono text-xs text-[var(--text-muted)] tracking-wide hidden sm:inline-flex items-center gap-1.5">
                               <kbd className="px-1.5 py-0.5 rounded bg-[var(--surface-elevated)] border border-[var(--surface-border)] text-[10px] font-bold">Esc</kbd>
@@ -1007,20 +1096,18 @@ function EditInstanceConfigModal({
                             <button type="button" onClick={handleAttemptClose} className="btn btn-secondary">
                               Cancel
                             </button>
-                            {activeMainTab !== 'hooks' && (
-                              <button
-                                type="submit"
-                                disabled={saving || loading}
-                                className="btn btn-primary"
-                              >
-                                {saving ? (
-                                  <span className="flex items-center">
-                                    <LoaderCircle size={16} className="animate-spin mr-2" />
-                                    Saving...
-                                  </span>
-                                ) : 'Save Configuration'}
-                              </button>
-                            )}
+                            <button
+                              type="submit"
+                              disabled={saving || loading}
+                              className="btn btn-primary"
+                            >
+                              {saving ? (
+                                <span className="flex items-center">
+                                  <LoaderCircle size={16} className="animate-spin mr-2" />
+                                  Saving...
+                                </span>
+                              ) : 'Save Configuration'}
+                            </button>
                           </div>
                         </div>
                       </form>
