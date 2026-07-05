@@ -100,7 +100,7 @@ The Flask application follows the application factory pattern, which provides se
     -   `index_routes.py`: Handles the main index page.
     *   `host_routes.py`: Handles CRUD operations for Hosts, protected by `@jwt_required()`.
     *   `instance_routes.py`: Handles CRUD operations for QLInstances, protected by `@jwt_required()`.
-    *   `instance_hooks_routes.py`: Lists and updates per-instance LD_PRELOAD hook selections from uploaded `.so` files.
+    *   `instance_hooks_routes.py`: Lists and manages per-instance LD_PRELOAD hook files from uploaded `.so` files. Hook selection writes use `PUT /instances/<id>/config` rather than a separate user-facing apply route.
     *   `preset_api_routes.py`: Handles CRUD operations for ConfigPresets, protected by `@jwt_required()`. Preset writes accept generic config and factory maps, plugin draft IDs, checked plugin lists, and checked factory lists. Mutating operations (rename, content update, delete) are rejected with `403` for any preset where `is_builtin = True`.
     *   `server_status_routes.py`: Handles live status retrieval (`GET /api/server-status`) and workshop preview lookup (`GET /api/server-status/workshop-preview/<workshop_id>`).
     *   `settings_routes.py`: Handles application settings management (API keys, rate limit config).
@@ -238,7 +238,8 @@ The project uses pytest for testing, with fixtures defined in `tests/conftest.py
 -   **Playbook Structure:**
     -   **`ansible/playbooks/setup_host.yml`:** Performs the initial one-time setup on a newly provisioned host. Installs prerequisites (including `iptables-persistent`, and `redis-server` only when the host runtime needs its own Redis), configures the firewall using a template (`ansible/templates/iptables.rules.j2`) that defines both filter and NAT rules which are applied atomically via `iptables-restore` and persisted, creates the `ql` user, installs base SteamCMD/QLDS/minqlx to shared locations (`/home/ql/qlds-base`, `/home/ql/minqlx-shared`), and syncs common assets (`/home/ql/assets/common`).
     -   **`ansible/playbooks/add_qlds_instance.yml`:** Adds a new QLDS instance to a pre-configured host. Creates the instance directory (`/home/ql/qlds-{id}`), copies shared resources (QLDS base, minqlx, common assets) into the instance directory, syncs instance-specific configuration files from the UI server (`configs/<host>/<id>/`), installs instance-specific Python dependencies, and manages the systemd service.
-    -   **`ansible/playbooks/update_instance_hooks.yml`:** Re-renders a QLDS instance systemd unit with the current LD_PRELOAD value and daemon-reloads systemd. It restarts the service only when the accepted hook update came from a non-stopped instance.
+    -   **`ansible/playbooks/sync_instance_configs_and_restart.yml`:** Applies saved configuration changes to an existing instance. It syncs configs, factories, plugin drafts, and `user-hooks/` to the host, re-renders the service unit with the current `LD_PRELOAD`, and restarts only when requested/required.
+    -   **`ansible/playbooks/update_instance_hooks.yml`:** System-hook maintenance path used by backend tasks to re-render a QLDS instance systemd unit with the current LD_PRELOAD value and daemon-reload systemd when a system hook changes outside the user Save Configuration flow.
     -   **`ansible/playbooks/manage_qlds_service.yml`:** Manages the `qlds@<id>.service` systemd service (start, stop, restart, delete service file).
     -   **`ansible/playbooks/get_qlds_logs.yml`:** Retrieves logs for a specific instance service.
     -   **`ansible/playbooks/setup_qlfilter.yml`:** Installs QLFilter (eBPF/XDP packet filter) on a target host.
@@ -265,23 +266,29 @@ The project uses pytest for testing, with fixtures defined in `tests/conftest.py
 
 ### LD_PRELOAD Hooks
 
-Per-instance LD_PRELOAD hooks are stored on `QLInstance.ld_preload_hooks` as a
-comma-separated list of uploaded `.so` filenames. `_build_ld_preload_paths()` in
-`ui/task_logic/ansible_instance_mgmt.py` converts that list into a colon-joined
-path string, prepending any active system hooks. The system hook registry is
-empty today; `force_rate.so` is reserved so a future built-in hook cannot be
-shadowed by a user upload.
+Per-instance user hook selections are stored on `QLInstance.ld_preload_hooks` as
+a comma-separated list of uploaded `.so` filenames. In the user-facing save flow,
+the Hooks tab sends those selections as `enabled_hooks` through
+`PUT /instances/<id>/config`; the normal **Save Configuration** path validates the
+list, drops entries whose binaries are not present in the instance `user-hooks/`
+directory, persists the filtered order, and queues the config sync/restart task.
+The dedicated user-facing `PUT /instances/<id>/hooks` route/client apply path has
+been removed; hook file CRUD routes remain for upload, download, replace, rename,
+delete, and description edits.
+
+`_build_ld_preload_paths()` in `ui/task_logic/ansible_instance_mgmt.py` converts
+the stored user hook list into a colon-joined path string, prepending any active
+system hooks. The system-hook task path remains available for backend-managed
+system hooks such as `force_rate.so` when their predicates change outside the
+user Save Configuration flow.
 
 The `qlds@.service.j2` template emits `Environment=LD_PRELOAD=...` only when
-the computed value is non-empty. Existing deploy, restart, config apply, and
-LAN-rate reconfigure flows pass the same `ld_preload_paths` extra-var so later
-unit re-renders preserve hook state.
-
-The `apply_instance_hooks` RQ task delegates to
-`ui/task_logic/ansible_instance_hooks.py`. It re-validates enabled hooks with a
-pre-flight existence and ELF-magic check, preserves CPU affinity while
-re-rendering the unit, and leaves stopped instances stopped by passing
-`restart_service=false` to `update_instance_hooks.yml`.
+the computed value is non-empty. Deploy, restart, LAN-rate reconfigure, and Save
+Configuration flows pass the same `ld_preload_paths` extra-var so later unit
+re-renders preserve hook state. `sync_instance_configs_and_restart.yml` now syncs
+`user-hooks/` to the game host as part of Save Configuration before templating the
+unit; running instances with hook changes force a restart, while stopped instances
+are templated and left stopped.
 -   **Terraform Run Logging:**
     *   Detailed stdout and stderr from Terraform CLI executions (triggered by tasks in `ui/task_logic/terraform_provision.py` and `ui/task_logic/terraform_destroy.py`) are no longer stored directly in the `Host.logs` database field.
     *   Instead, these verbose logs are saved to individual files within the `logs/terraform_runs/` directory (e.g., `logs/terraform_runs/host_<host_id>_<task_name>_<command>_<job_id>_<timestamp>.log`). This is managed by the `save_terraform_run_log` function in `ui/task_logic/file_logger.py`.

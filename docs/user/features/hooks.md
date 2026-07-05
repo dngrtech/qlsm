@@ -32,21 +32,37 @@ QLSM validates that uploaded files are ELF binaries (checks the magic bytes). No
 
 After uploading, the hook appears in the list in disabled state.
 
+Uploads are stored immediately on the QLSM server. The new binary is copied to the game host the next time you click **Save Configuration**.
+
 ### Enable Or Disable A Hook
 
-Toggle the switch on the hook row. The change takes effect on the next instance restart (or immediately if "Restart after saving" is enabled).
+Toggle the switch on the hook row, then click **Save Configuration**. Hook selections are saved with the rest of the instance configuration.
 
 ### Reorder Hooks
 
 Drag hook rows to change the load order. Hooks are passed to `LD_PRELOAD` in top-to-bottom order. System hooks always load before user hooks regardless of position.
 
+Reordering is also saved through **Save Configuration**.
+
 ### Delete A Hook
 
 Click the delete (trash) icon on the hook row and confirm in the modal. Deleting a hook removes it from the host on the next sync.
 
+Deletes happen immediately on the QLSM server. The removed binary and any resulting `LD_PRELOAD` changes are reflected on the game host the next time you click **Save Configuration**.
+
+## Saving Hook Changes
+
+Hook enable/disable and reorder changes use the same **Save Configuration** button as config, plugin, factory, and basic instance settings.
+
+- **Running instances:** hook changes require the QLDS process to restart so `LD_PRELOAD` can be rebuilt. QLSM forces the restart toggle on and disables it for that save; clicking **Save Configuration** syncs files, templates the systemd unit, and restarts the instance automatically.
+- **Stopped instances:** clicking **Save Configuration** syncs files and templates the systemd unit, but the instance stays stopped. Start it manually when you are ready to run with the new hook set.
+- **File uploads/deletes:** upload and delete operations happen immediately on the QLSM server, but hook binaries are copied to or removed from the game host only on the next **Save Configuration**.
+
 ## Missing Hooks
 
 If a hook file exists in the database but its binary is missing from the host filesystem, QLSM shows a warning row with the filename highlighted. Click the remove button on that row to delete the stale entry. This can happen if host files were deleted out-of-band.
+
+If a missing hook remains selected, QLSM drops it on the next **Save Configuration**. Stale `LD_PRELOAD` entries can block the server from starting, so missing binaries are not preserved indefinitely.
 
 ## Load Order
 
