@@ -46,7 +46,7 @@ Reordering is also saved through **Save Configuration**.
 
 ### Delete A Hook
 
-Click the delete (trash) icon on the hook row and confirm in the modal. Deleting a hook removes it from the host on the next sync.
+Click the delete (trash) icon on the hook row and confirm in the modal. Deleting a hook removes it from the game host on the next **Save Configuration** sync.
 
 Deletes happen immediately on the QLSM server. The removed binary and any resulting `LD_PRELOAD` changes are reflected on the game host the next time you click **Save Configuration**.
 

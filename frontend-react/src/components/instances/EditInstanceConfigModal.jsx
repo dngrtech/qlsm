@@ -456,11 +456,13 @@ function EditInstanceConfigModal({
     [hookEnabledOrder, initialHookEnabledOrder],
   );
   const hooksForceRestart = hooksDirty && instanceStatus === 'running';
-  const restartForced = lanRateChanged || hooksForceRestart;
+  const hooksKeepStopped = hooksDirty && instanceStatus === 'stopped' && !lanRateChanged;
+  const restartForced = lanRateChanged || hooksForceRestart || hooksKeepStopped;
 
   useEffect(() => {
     if (hooksForceRestart) setRestartAfterSave(true);
-  }, [hooksForceRestart]);
+    if (hooksKeepStopped) setRestartAfterSave(false);
+  }, [hooksForceRestart, hooksKeepStopped]);
 
   const handleRestartToggle = () => {
     if (restartForced) return;
@@ -965,7 +967,15 @@ function EditInstanceConfigModal({
                                   Restart after saving
                                 </span>
                                 {restartForced && (
-                                  <InfoTooltip text={lanRateChanged ? 'Changing 99k LAN Rate requires an instance restart' : 'Changing hooks requires an instance restart'} variant="warning" size={14} />
+                                  <InfoTooltip
+                                    text={lanRateChanged
+                                      ? 'Changing 99k LAN Rate requires an instance restart'
+                                      : hooksForceRestart
+                                        ? 'Changing hooks requires an instance restart'
+                                        : 'Stopped instances stay stopped when hook changes are saved'}
+                                    variant="warning"
+                                    size={14}
+                                  />
                                 )}
                               </div>
                             </div>

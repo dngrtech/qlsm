@@ -99,9 +99,8 @@ def test_get_ignores_legacy_scripts_so_files(client, headers, instance_with_scri
 def test_legacy_hook_in_scripts_still_applies_but_not_listed(
     app, client, headers, instance_with_scripts, tmp_path, monkeypatch
 ):
-    """Pre-existing instances with a .so only in scripts/ must continue to Apply
-    (via LD_PRELOAD resolver fallback) but must NOT appear in GET /hooks."""
-    from unittest.mock import patch, MagicMock
+    """Pre-existing instances with a .so only in scripts/ must continue to resolve
+    through the LD_PRELOAD fallback but must NOT appear in GET /hooks."""
     from ui.task_logic import ansible_instance_mgmt
 
     scripts = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts"

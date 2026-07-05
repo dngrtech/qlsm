@@ -452,14 +452,14 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(screen.getByText('Changing hooks requires an instance restart')).toBeInTheDocument();
   });
 
-  it('does NOT force restart when hooks change on a STOPPED instance', async () => {
+  it('keeps restart off and disabled when hooks change on a STOPPED instance', async () => {
     mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'stopped', name: 'i' });
 
     render(
       <EditInstanceConfigModal
         isOpen={true}
-        instanceId={1}
         onClose={vi.fn()}
+        instanceId={1}
         initialTab="hooks"
       />
     );
@@ -467,7 +467,9 @@ describe('EditInstanceConfigModal preset saving', () => {
     await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Mock Toggle c.so'));
     const toggle = screen.getByRole('button', { name: /toggle restart after save/i });
-    expect(toggle).not.toBeDisabled();
+    await waitFor(() => expect(toggle).toBeDisabled());
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Stopped instances stay stopped when hook changes are saved')).toBeInTheDocument();
   });
 
   it('does NOT send enabled_hooks when the hooks fetch failed on open', async () => {

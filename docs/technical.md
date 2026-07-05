@@ -269,7 +269,7 @@ The project uses pytest for testing, with fixtures defined in `tests/conftest.py
 Per-instance user hook selections are stored on `QLInstance.ld_preload_hooks` as
 a comma-separated list of uploaded `.so` filenames. In the user-facing save flow,
 the Hooks tab sends those selections as `enabled_hooks` through
-`PUT /instances/<id>/config`; the normal **Save Configuration** path validates the
+`PUT /api/instances/<id>/config`; the normal **Save Configuration** path validates the
 list, drops entries whose binaries are not present in the instance `user-hooks/`
 directory, persists the filtered order, and queues the config sync/restart task.
 The dedicated user-facing `PUT /instances/<id>/hooks` route/client apply path has
@@ -289,10 +289,14 @@ re-renders preserve hook state. `sync_instance_configs_and_restart.yml` now sync
 `user-hooks/` to the game host as part of Save Configuration before templating the
 unit; running instances with hook changes force a restart, while stopped instances
 are templated and left stopped.
--   **Terraform Run Logging:**
-    *   Detailed stdout and stderr from Terraform CLI executions (triggered by tasks in `ui/task_logic/terraform_provision.py` and `ui/task_logic/terraform_destroy.py`) are no longer stored directly in the `Host.logs` database field.
-    *   Instead, these verbose logs are saved to individual files within the `logs/terraform_runs/` directory (e.g., `logs/terraform_runs/host_<host_id>_<task_name>_<command>_<job_id>_<timestamp>.log`). This is managed by the `save_terraform_run_log` function in `ui/task_logic/file_logger.py`.
-    *   The `Host.logs` database field now stores concise, timestamped status messages, including a reference to the path of the detailed log file for each Terraform command executed.
+
+### Terraform Run Logging
+
+Detailed stdout and stderr from Terraform CLI executions (triggered by tasks in `ui/task_logic/terraform_provision.py` and `ui/task_logic/terraform_destroy.py`) are no longer stored directly in the `Host.logs` database field.
+
+Instead, these verbose logs are saved to individual files within the `logs/terraform_runs/` directory (e.g., `logs/terraform_runs/host_<host_id>_<task_name>_<command>_<job_id>_<timestamp>.log`). This is managed by the `save_terraform_run_log` function in `ui/task_logic/file_logger.py`.
+
+The `Host.logs` database field now stores concise, timestamped status messages, including a reference to the path of the detailed log file for each Terraform command executed.
 
 ### QLDS CPU Affinity
 
@@ -359,18 +363,23 @@ re-run later.
 
 ## 99k LAN Rate Mode
 
-The 99k LAN Rate Mode is a per-instance configurable feature that enables high-bandwidth LAN server functionality using NAT-based iptables rules. This allows servers to bypass the default 25k rate limit for clients connecting over the internet.
+The 99k LAN Rate Mode is a per-instance option that lets QLDS offer LAN-rate
+settings to internet clients. On hosts migrated to the hook mechanism
+(`Host.lan_rate_uses_hook = true`), QLSM enables this by activating the reserved
+system hook `force_rate.so` through the same LD_PRELOAD/system-hook pipeline used
+for hook maintenance. On legacy hosts, QLSM falls back to the older NAT-based
+iptables path.
 
 ### Overview
 
 When enabled, LAN rate mode:
 1. Configures the QLDS server with LAN-specific settings (`sv_serverType 1`, `sv_lanForceRate 1`)
-2. Sets up NAT iptables rules to redirect external traffic through localhost
-3. Enables the `route_localnet` kernel parameter to allow routing to 127.0.0.1
+2. On migrated hosts, enables the `force_rate.so` system hook when templating the service unit
+3. On legacy hosts, applies NAT/`route_localnet` rules so external clients appear as LAN clients
 
 When disabled (default for internet servers):
 1. Configures the QLDS server for internet mode (`sv_serverType 2`, `sv_lanForceRate 0`)
-2. No NAT rules are applied - traffic goes directly to the server
+2. Removes the migrated-host system-hook predicate or legacy NAT behavior from the active service config
 
 ### Server Arguments
 
@@ -384,43 +393,13 @@ When disabled (default for internet servers):
 +set sv_serverType 2 +set sv_lanForceRate 0
 ```
 
-### Network Configuration
-
-The LAN rate mode uses iptables NAT rules to make external clients appear as localhost connections:
-
-**NAT Rules (per port with LAN rate enabled):**
-```bash
-# PREROUTING: Redirect incoming packets to localhost
-iptables -t nat -A PREROUTING -p udp --dport <port> -j DNAT --to-destination 127.0.0.1
-
-# POSTROUTING: Source NAT for responses
-iptables -t nat -A POSTROUTING -p udp -d 127.0.0.1 --dport <port> -j SNAT --to-source 127.0.0.1
-
-# INPUT (required for NAT to work properly)
-iptables -t nat -A INPUT -d 127.0.0.1 -j SNAT --to-source 127.0.0.1
-```
-
-**Kernel Parameter:**
-```bash
-sysctl -w net.ipv4.conf.all.route_localnet=1
-```
-
 ### Implementation Details
 
--   **Database:** `lan_rate_enabled` boolean field on `QLInstance` model (default: `false`)
--   **API Endpoint:** `PUT /api/instances/<id>/lan-rate` to toggle LAN rate on existing instances
--   **Ansible Playbooks:**
-    -   `add_qlds_instance.yml`: Conditionally sets up route_localnet when deploying with LAN rate enabled
-    -   `update_instance_lan_rate.yml`: Toggles LAN rate on existing instances (updates systemd service, adds/removes NAT rules, restarts service)
--   **Task Logic:** `reconfigure_instance_lan_rate_logic()` in `ui/task_logic/ansible_instance_mgmt.py`
-
-### Host-Wide Settings
-
-The `route_localnet` sysctl setting is host-wide. Once enabled for any instance with LAN rate, it remains enabled. This is safe because:
-- Enabling it when not needed is harmless
-- Disabling it when any instance still needs it would break those instances
-
-The NAT iptables rules are per-instance (per-port) and are added/removed individually.
+-   **Database:** `lan_rate_enabled` boolean field on `QLInstance` model (default: `false`); `Host.lan_rate_uses_hook` selects migrated hook-based handling versus the legacy NAT path.
+-   **API Endpoint:** `PUT /api/instances/<id>/lan-rate` toggles LAN rate on existing instances.
+-   **Migrated host path:** `reconfigure_instance_lan_rate_logic()` delegates to `apply_instance_hooks_logic(..., restart_service=True)`, which re-renders the unit with current LD_PRELOAD paths and restarts the instance.
+-   **Legacy host path:** `update_instance_lan_rate.yml` updates systemd arguments, reconciles per-instance NAT rules, and restarts the service.
+-   **Host setup/migration:** setup and migration tasks install/sync `force_rate.so` and mark hosts as hook-capable when the system-hook path is available.
 
 ### Frontend
 
