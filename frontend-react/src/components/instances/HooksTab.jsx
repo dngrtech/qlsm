@@ -51,7 +51,7 @@ export default function HooksTab({
     setError(null);
     try {
       await uploadInstanceHook(instanceId, file);
-      onRefresh?.();
+      onRefresh?.({ hooksChanged: enabledSet.has(file.name) });
     } catch (err) {
       setError(errorMessage(err, 'Upload failed.'));
     } finally {

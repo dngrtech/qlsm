@@ -598,6 +598,72 @@ def test_update_config_enabled_hooks_without_draft_filters_to_existing_files(
         assert updated.ld_preload_hooks == 'existing_hook.so'
 
 
+def test_update_config_forces_restart_for_running_hook_changes(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+    hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / 'existing_hook.so').write_bytes(b'\x7fELF' + b'\x00' * 16)
+
+    with app.app_context():
+        db_instance = db.session.get(QLInstance, instance.id)
+        db_instance.status = InstanceStatus.RUNNING
+        db.session.commit()
+
+    payload = {
+        'configs': _full_configs(),
+        'enabled_hooks': ['existing_hook.so'],
+        'restart': False,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')) as enqueue:
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    assert enqueue.call_args.kwargs['restart'] is True
+    assert enqueue.call_args.kwargs['previous_status'] == 'running'
+
+
+def test_update_config_keeps_stopped_hook_changes_stopped(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+    hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / 'existing_hook.so').write_bytes(b'\x7fELF' + b'\x00' * 16)
+
+    with app.app_context():
+        db_instance = db.session.get(QLInstance, instance.id)
+        db_instance.status = InstanceStatus.STOPPED
+        db.session.commit()
+
+    payload = {
+        'configs': _full_configs(),
+        'enabled_hooks': ['existing_hook.so'],
+        'restart': True,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')) as enqueue:
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    assert enqueue.call_args.kwargs['restart'] is False
+    assert enqueue.call_args.kwargs['previous_status'] == 'stopped'
+
+
 def test_update_config_creates_user_hooks_source_dir_when_absent(
     client, app, auth_token, sample_instance, tmp_path, monkeypatch
 ):

@@ -535,7 +535,7 @@ def start_instance_logic(instance_id):
         return f"Error during instance {instance_id} start: {e}"
 
 
-def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_network=False):
+def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_network=False, previous_status=None):
     """
     Logic for applying configuration to a QL instance via Ansible.
     This involves syncing config files and optionally restarting the service.
@@ -558,7 +558,10 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
             db.session.commit()
             return f"Error during instance {instance.id} config apply: Host not found"
 
-        original_status = instance.status # Store original status
+        if previous_status is not None:
+            original_status = InstanceStatus(previous_status)
+        else:
+            original_status = instance.status
         append_log(instance, f"Task started: apply_instance_config (Job ID: {job_id}, Restart: {restart})")
         instance.status = InstanceStatus.CONFIGURING
         db.session.commit()

@@ -965,6 +965,10 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
             if not _draft_exists(draft_id):
                 return jsonify({"error": {"message": "Draft not found. It may have expired."}}), 400
 
+        original_status = instance.status
+        original_ld_preload_hooks = instance.ld_preload_hooks or None
+        original_lan_rate_enabled = instance.lan_rate_enabled
+
         update_kwargs = dict(status=InstanceStatus.CONFIGURING)
         update_kwargs.update(metadata_update_kwargs)
         if 'lan_rate_enabled' in data:
@@ -1044,9 +1048,12 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                         f.write(content)
                 current_app.logger.info(f"Saved updated scripts for instance {instance.id}")
 
+            hooks_changed = False
             if enabled_hooks_data is not None:
                 filtered_hooks = _filtered_enabled_hooks(enabled_hooks_data, instance_user_hooks_dir)
-                update_kwargs['ld_preload_hooks'] = ",".join(filtered_hooks) if filtered_hooks else None
+                next_ld_preload_hooks = ",".join(filtered_hooks) if filtered_hooks else None
+                hooks_changed = next_ld_preload_hooks != original_ld_preload_hooks
+                update_kwargs['ld_preload_hooks'] = next_ld_preload_hooks
 
             # Handle factories updates when the client sends the full factories map.
             if factories_present:
@@ -1061,12 +1068,22 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
 
             restart = data.get('restart', True)
+            lan_rate_changed = (
+                'lan_rate_enabled' in data
+                and bool(data.get('lan_rate_enabled')) != original_lan_rate_enabled
+            )
+            if hooks_changed:
+                if original_status == InstanceStatus.RUNNING:
+                    restart = True
+                elif original_status == InstanceStatus.STOPPED and not lan_rate_changed:
+                    restart = False
             reconcile_lan_rate_network = 'lan_rate_enabled' in data
             job = enqueue_task(
                 apply_instance_config,
                 instance.id,
                 restart=restart,
                 reconcile_lan_rate_network=reconcile_lan_rate_network,
+                previous_status=original_status.value,
                 lock_token=lock_token,
                 on_failure=instance_job_failure_handler,
             )

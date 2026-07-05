@@ -94,7 +94,17 @@ describe('HooksTab', () => {
     fireEvent.change(screen.getByTestId('hook-upload-input'), { target: { files: [file] } });
 
     await waitFor(() => expect(api.uploadInstanceHook).toHaveBeenCalledWith(1, file));
-    expect(props.onRefresh).toHaveBeenCalledTimes(1);
+    expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: false });
+  });
+
+  it('uploading over an enabled hook marks hook files changed for restart forcing', async () => {
+    const { props } = renderTab();
+
+    const file = new File(['ELF content'], 'a.so', { type: 'application/octet-stream' });
+    fireEvent.change(screen.getByTestId('hook-upload-input'), { target: { files: [file] } });
+
+    await waitFor(() => expect(api.uploadInstanceHook).toHaveBeenCalledWith(1, file));
+    expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: true });
   });
 
   it('shows error banner when upload fails', async () => {

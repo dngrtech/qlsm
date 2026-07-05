@@ -278,7 +278,6 @@ Example success response:
 | `/instances/<id>/config` | GET | Get instance config files |
 | `/instances/<id>/config` | PUT | Update config and apply (triggers Ansible sync) |
 | `/instances/<id>/hooks` | GET | List available LD_PRELOAD hook shared objects |
-| `/instances/<id>/hooks` | PUT | Replace enabled LD_PRELOAD hook list and queue apply |
 | `/instances/<id>/hooks/files` | POST | Upload a new hook `.so` file |
 | `/instances/<id>/hooks/files/<filename>` | GET/PUT/PATCH/DELETE | Download, replace, rename, or delete a hook file |
 | `/instances/<id>/hooks/files/<filename>/description` | PATCH | Set a hook file description |
@@ -423,37 +422,25 @@ BinaryMetadata description, and active system hooks.
 }
 ```
 
-```
-PUT /api/instances/<id>/hooks
-```
+Hook enable/order changes are saved through the shared config endpoint:
 
-Replaces the ordered LD_PRELOAD hook list. Files in `scripts/` that are absent
-from `enabled` are disabled.
+```http
+PUT /api/instances/<id>/config
+```
 
 ```json
 {
-  "enabled": ["highfps_hook.so", "timer_hook.so"]
+  "configs": { "server.cfg": "...", "mappool.txt": "...", "access.txt": "...", "workshop.txt": "..." },
+  "enabled_hooks": ["highfps_hook.so", "timer_hook.so"],
+  "restart": true
 }
 ```
 
-Validation requires each filename to be a unique `.so` basename with no path
-separators, no `..`, not reserved for a system hook, present under `user-hooks/`
-(or `scripts/` for legacy instances), and an ELF file. Validation failures
-return `400`; held instance locks return `409`.
-
-Success returns `202 Accepted` and queues `apply_instance_hooks`.
-
-```json
-{
-  "data": {
-    "task_id": "rq-job-id"
-  }
-}
-```
-
-Running instances restart after the unit is re-rendered with
-`Environment=LD_PRELOAD=...`; stopped instances update the unit and remain
-stopped.
+`enabled_hooks` replaces the ordered LD_PRELOAD hook list after filtering to
+`.so` basenames that exist in the instance `user-hooks/` directory. Running
+instances with changed hooks are forced to restart even if a client submits
+`"restart": false`; stopped instances with hook-only changes are applied with
+`restart=false` and remain stopped.
 
 ### Hook File CRUD
 

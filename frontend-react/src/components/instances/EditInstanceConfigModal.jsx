@@ -141,6 +141,7 @@ function EditInstanceConfigModal({
   const [hookSystem, setHookSystem] = useState([]);
   const [hookEnabledOrder, setHookEnabledOrder] = useState([]);
   const [initialHookEnabledOrder, setInitialHookEnabledOrder] = useState([]);
+  const [hookDiskChanged, setHookDiskChanged] = useState(false);
   const [hooksLoaded, setHooksLoaded] = useState(false);
   const [instanceStatus, setInstanceStatus] = useState(null);
 
@@ -310,6 +311,7 @@ function EditInstanceConfigModal({
         setHookSystem([]);
         setHookEnabledOrder([]);
         setInitialHookEnabledOrder([]);
+        setHookDiskChanged(false);
         setHooksLoaded(false);
         setInstanceStatus(null);
         pluginsSyncedRef.current = false;
@@ -451,9 +453,10 @@ function EditInstanceConfigModal({
 
   const checkedPluginsChanged = !setsEqual(checkedPlugins, initialCheckedPlugins);
   const hooksDirty = useMemo(
-    () => hookEnabledOrder.length !== initialHookEnabledOrder.length
+    () => hookDiskChanged
+      || hookEnabledOrder.length !== initialHookEnabledOrder.length
       || hookEnabledOrder.some((filename, index) => initialHookEnabledOrder[index] !== filename),
-    [hookEnabledOrder, initialHookEnabledOrder],
+    [hookDiskChanged, hookEnabledOrder, initialHookEnabledOrder],
   );
   const hooksForceRestart = hooksDirty && instanceStatus === 'running';
   const hooksKeepStopped = hooksDirty && instanceStatus === 'stopped' && !lanRateChanged;
@@ -737,7 +740,10 @@ function EditInstanceConfigModal({
     setHookEnabledOrder((cur) => cur.filter((name) => name !== filename));
   }, []);
 
-  const handleRefreshHooks = useCallback(() => loadHooks(), [loadHooks]);
+  const handleRefreshHooks = useCallback((options = {}) => {
+    if (options.hooksChanged) setHookDiskChanged(true);
+    return loadHooks();
+  }, [loadHooks]);
 
   const handleExpandEditor = (selectedFile, content = '') => {
     const fileNameToExpand = typeof selectedFile === 'string'

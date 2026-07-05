@@ -273,3 +273,26 @@ def test_apply_instance_config_pip_warning_no_restart(
     assert mock_instance.status == InstanceStatus.UPDATED
     logged_messages = [str(call) for call in mock_append_log.call_args_list]
     assert any('pip install failed' in msg for msg in logged_messages)
+
+
+@patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook')
+@patch(f'{TASK_LOGIC_MODULE}._build_qlds_args_string', return_value='mock_qlds_args')
+@patch(f'{TASK_LOGIC_MODULE}._prepare_instance_zmq')
+@patch(f'{TASK_LOGIC_MODULE}.append_log')
+@patch(f'{TASK_LOGIC_MODULE}.db.session')
+@patch(f'{TASK_LOGIC_MODULE}.get_current_job')
+def test_apply_instance_config_previous_stopped_status_remains_stopped_without_restart(
+    mock_get_job, mock_session, mock_append_log, mock_prep_zmq,
+    mock_build_args, mock_run_playbook, test_app
+):
+    mock_job = MagicMock(); mock_job.id = 'test-job-id'
+    mock_get_job.return_value = mock_job
+
+    mock_instance = _make_mock_instance(status=InstanceStatus.CONFIGURING)
+    mock_session.get.return_value = mock_instance
+    mock_run_playbook.return_value = (SimpleAnsibleResult(0, 'ok', ''), None)
+
+    result = apply_instance_config(12, restart=False, previous_status='stopped')
+
+    assert mock_instance.status == InstanceStatus.STOPPED
+    assert 'Status: stopped' in result
