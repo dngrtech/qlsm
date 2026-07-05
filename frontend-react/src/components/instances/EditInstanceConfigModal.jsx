@@ -449,17 +449,24 @@ function EditInstanceConfigModal({
     setIsDirty(true);
   };
 
-  const handleRestartToggle = () => {
-    if (lanRateChanged) return;
-    setRestartAfterSave(prev => !prev);
-  };
-
   const checkedPluginsChanged = !setsEqual(checkedPlugins, initialCheckedPlugins);
   const hooksDirty = useMemo(
     () => hookEnabledOrder.length !== initialHookEnabledOrder.length
       || hookEnabledOrder.some((filename, index) => initialHookEnabledOrder[index] !== filename),
     [hookEnabledOrder, initialHookEnabledOrder],
   );
+  const hooksForceRestart = hooksDirty && instanceStatus === 'running';
+  const restartForced = lanRateChanged || hooksForceRestart;
+
+  useEffect(() => {
+    if (hooksForceRestart) setRestartAfterSave(true);
+  }, [hooksForceRestart]);
+
+  const handleRestartToggle = () => {
+    if (restartForced) return;
+    setRestartAfterSave(prev => !prev);
+  };
+
   const metadataChanged =
     currentInstanceName !== originalInstanceName ||
     serverHostname !== originalServerHostname ||
@@ -944,7 +951,7 @@ function EditInstanceConfigModal({
                                 <button
                                   type="button"
                                   onClick={handleRestartToggle}
-                                  disabled={saving || loading || lanRateChanged}
+                                  disabled={saving || loading || restartForced}
                                   className="neu-toggle"
                                   aria-pressed={restartAfterSave}
                                 >
@@ -953,12 +960,12 @@ function EditInstanceConfigModal({
                                     <span className={`neu-toggle__knob ${restartAfterSave ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
                                   </span>
                                 </button>
-                                <span className={`flex items-center text-sm font-medium ${lanRateChanged ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
+                                <span className={`flex items-center text-sm font-medium ${restartForced ? 'text-[var(--text-muted)]' : 'text-[var(--text-primary)]'}`}>
                                   <RotateCw size={16} className={`mr-2 ${restartAfterSave ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}`} />
                                   Restart after saving
                                 </span>
-                                {lanRateChanged && (
-                                  <InfoTooltip text="Changing 99k LAN Rate requires an instance restart" variant="warning" size={14} />
+                                {restartForced && (
+                                  <InfoTooltip text={lanRateChanged ? 'Changing 99k LAN Rate requires an instance restart' : 'Changing hooks requires an instance restart'} variant="warning" size={14} />
                                 )}
                               </div>
                             </div>

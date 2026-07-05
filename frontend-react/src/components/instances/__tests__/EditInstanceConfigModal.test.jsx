@@ -432,6 +432,44 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(mocks.updateInstanceConfig.mock.calls[0][1].enabled_hooks).toEqual(['a.so', 'c.so']);
   });
 
+  it('forces + disables restart toggle when hooks change on a RUNNING instance', async () => {
+    mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'running', name: 'i' });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        instanceId={1}
+        onClose={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Mock Toggle c.so'));
+    const toggle = screen.getByRole('button', { name: /toggle restart after save/i });
+    await waitFor(() => expect(toggle).toBeDisabled());
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Changing hooks requires an instance restart')).toBeInTheDocument();
+  });
+
+  it('does NOT force restart when hooks change on a STOPPED instance', async () => {
+    mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'stopped', name: 'i' });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        instanceId={1}
+        onClose={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Mock Toggle c.so'));
+    const toggle = screen.getByRole('button', { name: /toggle restart after save/i });
+    expect(toggle).not.toBeDisabled();
+  });
+
   it('does NOT send enabled_hooks when the hooks fetch failed on open', async () => {
     mocks.fetchInstanceHooks.mockRejectedValueOnce(new Error('hooks unavailable'));
 
