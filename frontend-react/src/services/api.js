@@ -381,21 +381,6 @@ export const fetchInstanceHooks = async (instanceId, draftId) => {
   }
 };
 
-export const saveInstanceHooks = async (instanceId, enabledFilenames, draftId) => {
-  try {
-    const body = { enabled: enabledFilenames };
-    if (draftId) body.draft_id = draftId;
-    const response = await apiClient.put(
-      `/instances/${instanceId}/hooks`,
-      body,
-    );
-    return response.data.data;
-  } catch (error) {
-    console.error(`Failed to save hooks for instance ${instanceId}:`, error.response ? error.response.data : error.message);
-    throw error.response ? error.response.data : new Error(`Failed to save hooks for instance ${instanceId}`);
-  }
-};
-
 export const uploadInstanceHook = async (instanceId, file) => {
   const form = new FormData();
   form.append('file', file);

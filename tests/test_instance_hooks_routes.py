@@ -1,7 +1,4 @@
-import json
 import os
-from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
@@ -47,14 +44,6 @@ def instance_with_scripts(app, tmp_path, monkeypatch):
             str(tmp_path / "configs"),
         )
         yield inst
-
-
-def _put(client, headers, instance_id, body):
-    return client.put(
-        f"/api/instances/{instance_id}/hooks",
-        data=json.dumps(body),
-        headers={**headers, "Content-Type": "application/json"},
-    )
 
 
 def test_get_lists_available_with_enabled_and_order(client, headers, instance_with_scripts):
@@ -147,113 +136,11 @@ def test_get_requires_auth(client, instance_with_scripts):
     assert response.status_code == 401
 
 
-def test_put_rejects_missing_body(client, headers, instance_with_scripts):
-    response = client.put(
-        f"/api/instances/{instance_with_scripts.id}/hooks",
-        data="not json",
-        headers={**headers, "Content-Type": "application/json"},
-    )
-    assert response.status_code == 400
+def test_put_hooks_route_removed(client):
+    resp = client.put('/api/instances/1/hooks', json={'enabled': []})
+    assert resp.status_code == 405
 
 
-def test_put_rejects_non_list(client, headers, instance_with_scripts):
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": "a.so"})
-    assert response.status_code == 400
-
-
-def test_put_rejects_path_traversal(client, headers, instance_with_scripts):
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["../etc/passwd.so"]})
-    assert response.status_code == 400
-
-
-def test_put_rejects_non_so_extension(client, headers, instance_with_scripts):
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["evil.txt"]})
-    assert response.status_code == 400
-
-
-def test_put_rejects_reserved_filename(client, headers, instance_with_scripts):
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["force_rate.so"]})
-    assert response.status_code == 400
-    assert "reserved" in response.get_json()["error"]["message"].lower()
-
-
-def test_put_rejects_nonexistent_file(client, headers, instance_with_scripts):
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["nope.so"]})
-    assert response.status_code == 400
-
-
-def test_put_rejects_non_elf(client, headers, instance_with_scripts, tmp_path):
-    bad = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "user-hooks" / "bad.so"
-    bad.write_bytes(b"NOT_ELF")
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["bad.so"]})
-    assert response.status_code == 400
-
-
-def test_put_rejects_duplicates(client, headers, instance_with_scripts):
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["a.so", "a.so"]})
-    assert response.status_code == 400
-
-
-def test_put_returns_409_when_instance_lock_held(client, headers, instance_with_scripts):
-    with patch("ui.routes.instance_hooks_routes.acquire_lock", return_value=False):
-        response = _put(client, headers, instance_with_scripts.id, {"enabled": ["a.so"]})
-    assert response.status_code == 409
-
-
-def test_put_enqueue_failure_reverts_hooks_and_marks_error(
-    app,
-    client,
-    headers,
-    instance_with_scripts,
-):
-    original = instance_with_scripts.ld_preload_hooks
-    with patch("ui.routes.instance_hooks_routes.acquire_lock", return_value=True), \
-            patch("ui.routes.instance_hooks_routes.release_lock") as release, \
-            patch("ui.routes.instance_hooks_routes.enqueue_apply_hooks", return_value=None):
-        response = _put(client, headers, instance_with_scripts.id, {"enabled": ["b.so"]})
-
-    assert response.status_code == 500
-    with app.app_context():
-        fresh = db.session.get(QLInstance, instance_with_scripts.id)
-        assert fresh.ld_preload_hooks == original
-        assert fresh.status == InstanceStatus.ERROR
-    release.assert_called_once()
-
-
-def test_put_stopped_instance_enqueues_without_restart(app, client, headers, instance_with_scripts):
-    with app.app_context():
-        instance_with_scripts.status = InstanceStatus.STOPPED
-        db.session.commit()
-
-    with patch("ui.routes.instance_hooks_routes.acquire_lock", return_value=True), \
-            patch("ui.routes.instance_hooks_routes.release_lock"), \
-            patch("ui.routes.instance_hooks_routes.enqueue_apply_hooks") as enq:
-        enq.return_value = SimpleNamespace(id="job-id-stopped")
-        response = _put(client, headers, instance_with_scripts.id, {"enabled": ["a.so"]})
-
-    assert response.status_code == 202
-    assert enq.call_args.kwargs["restart_service"] is False
-
-
-def test_put_rejects_file_present_only_in_legacy_scripts(client, headers, instance_with_scripts, tmp_path):
-    scripts = tmp_path / "configs" / "h1" / str(instance_with_scripts.id) / "scripts"
-    scripts.mkdir(parents=True)
-    (scripts / "legacy.so").write_bytes(b"\x7fELF")
-    response = _put(client, headers, instance_with_scripts.id, {"enabled": ["legacy.so"]})
-    assert response.status_code == 400
-    assert "not found" in response.get_json()["error"]["message"].lower()
-
-
-def test_put_happy_path_persists_and_enqueues(app, client, headers, instance_with_scripts):
-    with patch("ui.routes.instance_hooks_routes.acquire_lock", return_value=True), \
-            patch("ui.routes.instance_hooks_routes.release_lock"), \
-            patch("ui.routes.instance_hooks_routes.enqueue_apply_hooks") as enq:
-        enq.return_value = SimpleNamespace(id="job-id-123")
-        response = _put(client, headers, instance_with_scripts.id, {"enabled": ["b.so", "a.so"]})
-
-    assert response.status_code == 202
-    assert response.get_json()["data"]["task_id"] == "job-id-123"
-    with app.app_context():
-        fresh = db.session.get(QLInstance, instance_with_scripts.id)
-        assert fresh.ld_preload_hooks == "b.so,a.so"
-        assert fresh.status == InstanceStatus.CONFIGURING
+def test_apply_instance_hooks_task_still_importable():
+    from ui.tasks import apply_instance_hooks
+    assert callable(apply_instance_hooks)

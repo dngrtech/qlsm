@@ -1,14 +1,11 @@
 import os
 import re
-import shutil
-import uuid
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 from ui import db
-from ui.models import BinaryMetadata, InstanceStatus, QLInstance
-from ui.task_lock import acquire_lock, release_lock
+from ui.models import BinaryMetadata, QLInstance
 from ui.task_logic.ansible_instance_mgmt import RESERVED_HOOK_FILENAMES, _SYSTEM_HOOKS
 from ui.task_logic.ansible_instance_hooks import _system_hook_source_path
 from ui.task_logic.hook_paths import user_hooks_dir as _user_hooks_dir, draft_user_hooks_dir as _draft_user_hooks_dir
@@ -78,19 +75,6 @@ def _is_elf_file(path):
         return False
 
 
-def enqueue_apply_hooks(instance_id, *, restart_service, lock_token):
-    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
-    from ui.tasks import apply_instance_hooks, enqueue_task
-
-    return enqueue_task(
-        apply_instance_hooks,
-        instance_id,
-        restart_service=restart_service,
-        lock_token=lock_token,
-        on_failure=instance_job_failure_handler,
-    )
-
-
 @instance_hooks_bp.route("/<int:instance_id>/hooks", methods=["GET"])
 @jwt_required()
 def get_instance_hooks(instance_id):
@@ -150,84 +134,3 @@ def get_instance_hooks(instance_id):
             "system_hooks_active": system_hooks_active,
         },
     }), 200
-
-
-@instance_hooks_bp.route("/<int:instance_id>/hooks", methods=["PUT"])
-@jwt_required()
-def put_instance_hooks(instance_id):
-    instance = db.session.get(QLInstance, instance_id)
-    if not instance:
-        return jsonify({"error": {"message": "Instance not found"}}), 404
-
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict) or "enabled" not in payload:
-        return jsonify({"error": {"message": 'Body must be JSON {"enabled": [...]}'}}), 400
-
-    enabled = payload["enabled"]
-    if not isinstance(enabled, list) or not all(isinstance(item, str) for item in enabled):
-        return jsonify({"error": {"message": "enabled must be a list of strings"}}), 400
-    if len(enabled) != len(set(enabled)):
-        return jsonify({"error": {"message": "duplicate filenames in enabled list"}}), 400
-
-    for name in enabled:
-        error = _validate_filename(name)
-        if error:
-            return jsonify({"error": {"message": f"{name}: {error}"}}), 400
-
-    hooks_dir = _user_hooks_dir(instance)
-    draft_id = payload.get('draft_id', '') or ''
-    use_draft = bool(draft_id and _DRAFT_ID_RE.match(draft_id))
-    draft_dir = _draft_user_hooks_dir(draft_id) if use_draft else None
-
-    for name in enabled:
-        full_path = os.path.join(hooks_dir, name)
-        if not os.path.isfile(full_path):
-            if draft_dir:
-                draft_path = os.path.join(draft_dir, name)
-                if os.path.isfile(draft_path):
-                    os.makedirs(hooks_dir, exist_ok=True)
-                    shutil.copy2(draft_path, full_path)
-                else:
-                    return jsonify({"error": {"message": f"{name}: file not found in user-hooks/"}}), 400
-            else:
-                return jsonify({"error": {"message": f"{name}: file not found in user-hooks/"}}), 400
-        if not _is_elf_file(full_path):
-            return jsonify({"error": {"message": f"{name}: not a valid ELF binary"}}), 400
-
-    lock_token = str(uuid.uuid4())
-    if not acquire_lock("instance", instance.id, lock_token, ttl=360):
-        msg = f'Another operation is running on instance "{instance.name}". Please wait for it to complete.'
-        return jsonify({"error": {"message": msg}}), 409
-
-    original_hooks = instance.ld_preload_hooks
-    restart_service = instance.status != InstanceStatus.STOPPED
-    lock_transferred = False
-    instance.ld_preload_hooks = ",".join(enabled) if enabled else None
-    instance.status = InstanceStatus.CONFIGURING
-    db.session.commit()
-
-    try:
-        job = enqueue_apply_hooks(
-            instance.id,
-            restart_service=restart_service,
-            lock_token=lock_token,
-        )
-        if job:
-            lock_transferred = True
-            return jsonify({"data": {"task_id": job.id}}), 202
-
-        instance.ld_preload_hooks = original_hooks
-        instance.status = InstanceStatus.ERROR
-        db.session.commit()
-        return jsonify({"error": {"message": "Error queuing hook apply task."}}), 500
-    except Exception:
-        db.session.rollback()
-        current = db.session.get(QLInstance, instance_id)
-        if current:
-            current.ld_preload_hooks = original_hooks
-            current.status = InstanceStatus.ERROR
-            db.session.commit()
-        return jsonify({"error": {"message": "Error queuing hook apply task."}}), 500
-    finally:
-        if not lock_transferred:
-            release_lock("instance", instance_id, lock_token)

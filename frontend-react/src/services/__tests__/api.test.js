@@ -28,7 +28,6 @@ import {
   getSelfHostDefaults,
   importPreset,
   resizeHost,
-  saveInstanceHooks,
   updateInstanceConfig,
 } from '../api';
 
@@ -154,13 +153,6 @@ describe('instance hook API helpers', () => {
       system_hooks_active: [],
     });
     expect(mocks.get).toHaveBeenCalledWith('/instances/12/hooks');
-  });
-
-  it('saveInstanceHooks uses the shared api client for PUT', async () => {
-    mocks.put.mockResolvedValueOnce({ data: { data: { task_id: 'job-1' } } });
-
-    await expect(saveInstanceHooks(12, ['a.so'])).resolves.toEqual({ task_id: 'job-1' });
-    expect(mocks.put).toHaveBeenCalledWith('/instances/12/hooks', { enabled: ['a.so'] });
   });
 });
 
