@@ -134,7 +134,9 @@ function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
     setActionError(null);
     try {
       await replaceInstanceHook(instanceId, hook.filename, file);
-      onChanged?.();
+      // Replacing an enabled hook's binary is a hook change: flag it so a running
+      // instance is forced to restart on the next Save Configuration.
+      onChanged?.({ hooksChanged: hook.enabled });
     } catch (err) {
       setActionError(err?.error?.message || 'Replace failed');
     }
@@ -235,7 +237,9 @@ function HookRowContent({ hook, onToggle, dragHandleProps = null, style = undefi
     setActionError(null);
     try {
       await replaceInstanceHook(instanceId, hook.filename, file);
-      onChanged?.();
+      // Replacing an enabled hook's binary is a hook change: flag it so a running
+      // instance is forced to restart on the next Save Configuration.
+      onChanged?.({ hooksChanged: hook.enabled });
     } catch (err) {
       setActionError(err?.error?.message || 'Replace failed');
     }
