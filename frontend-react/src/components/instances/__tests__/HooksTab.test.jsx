@@ -33,6 +33,7 @@ describe('HooksTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.uploadInstanceHook.mockResolvedValue({});
+    api.replaceInstanceHook.mockResolvedValue({});
     api.deleteInstanceHook.mockResolvedValue({});
     api.renameInstanceHook.mockResolvedValue({});
     api.setInstanceHookDescription.mockResolvedValue({});
@@ -105,6 +106,30 @@ describe('HooksTab', () => {
 
     await waitFor(() => expect(api.uploadInstanceHook).toHaveBeenCalledWith(1, file));
     expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: true });
+  });
+
+  it('replacing an ENABLED hook binary marks hook files changed for restart forcing', async () => {
+    const { props } = renderTab();
+
+    const row = screen.getByTestId('hook-row-a.so');
+    const input = row.querySelector('input[type="file"]');
+    const file = new File(['ELF content'], 'a.so', { type: 'application/octet-stream' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(api.replaceInstanceHook).toHaveBeenCalledWith(1, 'a.so', file));
+    expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: true });
+  });
+
+  it('replacing a DISABLED hook binary does not force a restart', async () => {
+    const { props } = renderTab();
+
+    const row = screen.getByTestId('hook-row-c.so');
+    const input = row.querySelector('input[type="file"]');
+    const file = new File(['ELF content'], 'c.so', { type: 'application/octet-stream' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(api.replaceInstanceHook).toHaveBeenCalledWith(1, 'c.so', file));
+    expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: false });
   });
 
   it('shows error banner when upload fails', async () => {
