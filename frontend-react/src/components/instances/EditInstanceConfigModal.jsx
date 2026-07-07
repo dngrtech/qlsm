@@ -48,10 +48,6 @@ const getFactoryLinterSource = (fileName) => (
   fileName?.toLowerCase().endsWith('.factories') ? FACTORY_LINTER_SOURCE : null
 );
 const getServerHostname = (serverCfg = '') => serverCfg.match(/set sv_hostname "([^"]*)"/)?.[1] || '';
-const enabledHookFilenames = (hooksData) => (hooksData.available || [])
-  .filter((hook) => hook.enabled)
-  .sort((a, b) => a.order - b.order)
-  .map((hook) => hook.filename);
 const setsEqual = (a, b) => a.size === b.size && [...a].every(value => b.has(value));
 
 // Mapping between frontend config keys and backend preset API keys
@@ -572,10 +568,10 @@ function EditInstanceConfigModal({
         presetData.checked_plugins = Array.from(checkedPlugins);
       }
 
-      try {
-        presetData.enabled_hooks = enabledHookFilenames(await fetchInstanceHooks(instanceId));
-      } catch {
-        // Best-effort: skip enabled_hooks if the fetch fails, don't block preset save
+      // Capture the live hook draft (enablement + order) so a preset saved from
+      // the Hooks tab reflects the current selection, matching Save Configuration.
+      if (hooksLoaded) {
+        presetData.enabled_hooks = hookEnabledOrder;
       }
 
       presetData.binary_meta_source = {
@@ -601,7 +597,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [checkedPlugins, instanceId, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
+  }, [checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
   const handleOverwritePreset = useCallback(async (presetId, { description }) => {
     setIsSavingPreset(true);
@@ -623,10 +619,8 @@ function EditInstanceConfigModal({
         presetData.draft_id = pluginDraftId;
         presetData.checked_plugins = Array.from(checkedPlugins);
       }
-      try {
-        presetData.enabled_hooks = enabledHookFilenames(await fetchInstanceHooks(instanceId));
-      } catch {
-        // Best-effort: skip enabled_hooks if the fetch fails, don't block preset save
+      if (hooksLoaded) {
+        presetData.enabled_hooks = hookEnabledOrder;
       }
       presetData.binary_meta_source = { context_type: 'instance', context_key: String(instanceId) };
       const response = await updatePreset(presetId, presetData);
@@ -641,7 +635,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [checkedPlugins, instanceId, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
+  }, [checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
   const handlePresetDeleted = useCallback((deletedPresetId) => {
     setPresets(prevPresets => prevPresets.filter(p => p.id !== deletedPresetId));
@@ -1086,28 +1080,24 @@ function EditInstanceConfigModal({
                         </div>
 
                         <div className="mt-4 flex justify-between items-center flex-shrink-0">
-                          {/* Left side - Preset management buttons (non-hooks tabs only) */}
+                          {/* Left side - Preset management buttons */}
                           <div className="flex gap-2">
-                            {activeMainTab !== 'hooks' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => { setSavedPresetForDownload(null); setPresetError(null); setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
-                                  className="btn btn-secondary"
-                                >
-                                  <FolderOpen className="w-4 h-4 mr-2" />
-                                  Load Preset
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => { setSavedPresetForDownload(null); setPresetError(null); setPresetManagerTab('save'); setIsPresetManagerOpen(true); }}
-                                  className="btn btn-secondary"
-                                >
-                                  <Save className="w-4 h-4 mr-2" />
-                                  Save Preset
-                                </button>
-                              </>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => { setSavedPresetForDownload(null); setPresetError(null); setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
+                              className="btn btn-secondary"
+                            >
+                              <FolderOpen className="w-4 h-4 mr-2" />
+                              Load Preset
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSavedPresetForDownload(null); setPresetError(null); setPresetManagerTab('save'); setIsPresetManagerOpen(true); }}
+                              className="btn btn-secondary"
+                            >
+                              <Save className="w-4 h-4 mr-2" />
+                              Save Preset
+                            </button>
                           </div>
 
                           {/* Right side - Esc hint + Cancel + Save */}

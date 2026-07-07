@@ -73,7 +73,9 @@ When an instance starts, QLSM builds the `LD_PRELOAD` value in this order:
 
 ## Hooks In Presets
 
-Saving a preset from an instance also records which user hooks were enabled (and their load order). Loading that preset onto another instance and saving replaces the target instance's enabled hooks to match — see [Presets And Default Config](../presets/overview.md).
+The **Load Preset** and **Save Preset** buttons are available on the Hooks tab, the same as every other tab in the editor.
+
+Saving a preset from an instance also records which user hooks were enabled (and their load order) — capturing the current selection shown in the Hooks tab, including changes you haven't saved yet. Loading that preset onto another instance and saving replaces the target instance's enabled hooks to match — see [Presets And Default Config](../presets/overview.md).
 
 ## Related Pages
 

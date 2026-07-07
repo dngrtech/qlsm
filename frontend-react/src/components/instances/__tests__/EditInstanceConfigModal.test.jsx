@@ -432,6 +432,32 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(mocks.updateInstanceConfig.mock.calls[0][1].enabled_hooks).toEqual(['a.so', 'c.so']);
   });
 
+  it('shows the preset buttons on the hooks tab and Save Preset captures the live hook draft', async () => {
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    // Preset buttons must be present on the hooks tab, same as every other tab.
+    expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save preset/i })).toBeInTheDocument();
+
+    // A hook toggle made on this tab must be reflected in the saved preset.
+    fireEvent.click(screen.getByRole('button', { name: /mock toggle c.so/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
+
+    await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledTimes(1));
+    expect(mocks.createPreset.mock.calls[0][0].enabled_hooks).toEqual(['a.so', 'c.so']);
+  });
+
   it('forces + disables restart toggle when hooks change on a RUNNING instance', async () => {
     mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'running', name: 'i' });
 
