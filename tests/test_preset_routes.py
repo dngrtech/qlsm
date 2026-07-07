@@ -1,6 +1,7 @@
 import base64
 import os
 import shutil
+import uuid
 import pytest
 from tests.helpers import make_user, auth_headers
 from ui.models import ConfigPreset
@@ -429,6 +430,59 @@ def test_create_preset_with_scripts(client, app):
     assert response.status_code == 201
     data = response.get_json()['data']
     assert 'myscript.py' in data.get('scripts', {})
+
+
+def test_create_preset_from_draft_excludes_python_cache_cruft(client, app):
+    """Draft script cache artifacts are not copied into saved presets."""
+    draft_id = str(uuid.uuid4())
+    draft_scripts = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'scripts')
+    os.makedirs(os.path.join(draft_scripts, '__pycache__'), exist_ok=True)
+    with open(os.path.join(draft_scripts, 'keeper.py'), 'w') as f:
+        f.write('print("keep")')
+    with open(os.path.join(draft_scripts, '__pycache__', 'keeper.cpython-310.pyc'), 'wb') as f:
+        f.write(b'cached')
+    with open(os.path.join(draft_scripts, 'loose.pyc'), 'wb') as f:
+        f.write(b'loose cache')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'draft-clean-create',
+        'description': '',
+        'draft_id': draft_id,
+    })
+
+    assert response.status_code == 201
+    preset_scripts = os.path.join('configs', 'presets', 'draft-clean-create', 'scripts')
+    assert os.path.exists(os.path.join(preset_scripts, 'keeper.py'))
+    assert not os.path.exists(os.path.join(preset_scripts, '__pycache__'))
+    assert not os.path.exists(os.path.join(preset_scripts, 'loose.pyc'))
+
+
+def test_update_preset_from_draft_excludes_python_cache_cruft(client, app):
+    """Updating from a draft does not copy stale Python cache artifacts."""
+    draft_id = str(uuid.uuid4())
+    draft_scripts = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'scripts')
+    os.makedirs(os.path.join(draft_scripts, '__pycache__'), exist_ok=True)
+    with open(os.path.join(draft_scripts, 'updated.py'), 'w') as f:
+        f.write('print("updated")')
+    with open(os.path.join(draft_scripts, '__pycache__', 'updated.cpython-311.pyc'), 'wb') as f:
+        f.write(b'cached')
+
+    preset_id, preset_path = _create_preset_folder(app, 'draft-clean-update')
+    existing_scripts = os.path.join(preset_path, 'scripts')
+    os.makedirs(existing_scripts, exist_ok=True)
+    with open(os.path.join(existing_scripts, 'old.pyc'), 'wb') as f:
+        f.write(b'old cache')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'draft_id': draft_id,
+    })
+
+    assert response.status_code == 200
+    assert os.path.exists(os.path.join(existing_scripts, 'updated.py'))
+    assert not os.path.exists(os.path.join(existing_scripts, '__pycache__'))
+    assert not os.path.exists(os.path.join(existing_scripts, 'old.pyc'))
 
 
 def test_create_preset_with_so_script_round_trips_as_base64(client, app, tmp_path):

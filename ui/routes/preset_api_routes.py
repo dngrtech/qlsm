@@ -63,6 +63,16 @@ def _should_skip_export_path(relative_path, is_dir=False):
     return any(fnmatch.fnmatch(name, pattern) for pattern in EXPORT_EXCLUDED_PATTERNS)
 
 
+def _ignore_generated_script_cruft(directory, names):
+    """Return generated/editor junk to skip when saving draft scripts."""
+    ignored = []
+    for name in names:
+        path = os.path.join(directory, name)
+        if _should_skip_export_path(name, is_dir=os.path.isdir(path)):
+            ignored.append(name)
+    return ignored
+
+
 def _resolve_export_root(preset_path):
     """Resolve and validate that an export root stays under PRESETS_DIR."""
     root = os.path.realpath(preset_path)
@@ -862,7 +872,11 @@ def create_preset_api():
             if os.path.exists(draft_scripts):
                 if os.path.exists(preset_scripts_dir):
                     shutil.rmtree(preset_scripts_dir)
-                shutil.copytree(draft_scripts, preset_scripts_dir)
+                shutil.copytree(
+                    draft_scripts,
+                    preset_scripts_dir,
+                    ignore=_ignore_generated_script_cruft,
+                )
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset_path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
@@ -1080,7 +1094,11 @@ def update_preset_api(preset_id):
             if os.path.exists(draft_scripts):
                 if os.path.exists(preset_scripts_dir):
                     shutil.rmtree(preset_scripts_dir)
-                shutil.copytree(draft_scripts, preset_scripts_dir)
+                shutil.copytree(
+                    draft_scripts,
+                    preset_scripts_dir,
+                    ignore=_ignore_generated_script_cruft,
+                )
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset.path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
