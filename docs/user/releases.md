@@ -4,8 +4,8 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.13.8` | 2026-07-07 | — | Add Load Preset and Save Preset buttons to the Hooks tab; Save Preset captures the current hook selection. |
-| `v1.13.7` | 2026-07-05 | — | Hooks now save through Save Configuration; removed the separate Apply & Restart button. |
+| `v1.13.8` | 2026-07-07 | [#137](https://github.com/dngrtech/qlsm/pull/137) | Add Load Preset and Save Preset buttons to the Hooks tab; Save Preset captures the current hook draft (enablement and order) instead of re-fetching persisted hooks. |
+| `v1.13.7` | 2026-07-05 | [#137](https://github.com/dngrtech/qlsm/pull/137) | Fold LD_PRELOAD hook enablement and order into the normal Save Configuration flow, sync `user-hooks/` during config save, remove the separate Apply & Restart hook path, force restarts for running instances when hooks change, and keep stopped instances stopped. |
 | `v1.13.6` | 2026-07-03 | [#136](https://github.com/dngrtech/qlsm/pull/136) | Fix presets losing their LD_PRELOAD hook files when loaded onto an instance, and make presets remember which hooks were enabled. |
 | `v1.13.5` | 2026-07-03 | [#135](https://github.com/dngrtech/qlsm/pull/135) | Fix preset ZIP import rejecting `.so` plugin scripts, and surface `.so` scripts correctly in the preset API instead of silently dropping them. |
 | `v1.13.4` | 2026-07-02 | — | Bug fixes and improvements. |
