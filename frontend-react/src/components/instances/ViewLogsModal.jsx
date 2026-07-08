@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogBackdrop, RadioGroup } from '@headlessui/react';
-import { X, RefreshCw, Terminal, AlertCircle, Clock, List, Maximize, DatabaseZap } from 'lucide-react';
+import { Dialog, DialogBackdrop } from '@headlessui/react';
+import { X, RefreshCw, Terminal, AlertCircle, Maximize } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import ExpandedEditorModal from '../ExpandedEditorModal';
+import LogFilterControls from './LogFilterControls';
+import { getFilterDescription } from './logFilterOptions';
 import { logLanguage } from '../../utils/logLanguage';
 import { fetchInstanceRemoteLogs } from '../../services/api';
 
@@ -11,26 +13,6 @@ import { fetchInstanceRemoteLogs } from '../../services/api';
  * Uses CodeMirror in read-only mode with search functionality.
  * Supports filtering by time range or line count.
  */
-
-// Filter mode options
-const FILTER_MODES = [
-    { value: 'lines', label: 'Last N Lines', icon: List },
-    { value: 'time', label: 'Time Range', icon: Clock },
-    { value: 'all', label: 'All', icon: DatabaseZap },
-];
-
-// Line count options
-const LINE_OPTIONS = [100, 250, 500, 1000, 2500];
-
-// Time range options
-const TIME_OPTIONS = [
-    { value: '15 minutes ago', label: '15 min' },
-    { value: '30 minutes ago', label: '30 min' },
-    { value: '1 hour ago', label: '1 hour' },
-    { value: '3 hours ago', label: '3 hours' },
-    { value: '12 hours ago', label: '12 hours' },
-    { value: '24 hours ago', label: '24 hours' },
-];
 
 function ViewLogsModal({ isOpen, onClose, instance }) {
     const [logs, setLogs] = useState('');
@@ -95,14 +77,6 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
         }
     }, [logs, isLoading]);
 
-    // Get current filter description
-    const getFilterDescription = () => {
-        if (filterMode === 'lines') return `Last ${lineCount} lines`;
-        if (filterMode === 'all') return 'All entries';
-        const option = TIME_OPTIONS.find(o => o.value === timeRange);
-        return option ? `Last ${option.label}` : timeRange;
-    };
-
     return (
         <>
             <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
@@ -129,7 +103,7 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                                                 Instance Logs
                                             </Dialog.Title>
                                             <p className="font-mono text-xs text-theme-secondary mt-0.5">
-                                                {instance?.name} <span className="text-theme-muted">•</span> Port {instance?.port} <span className="text-theme-muted">•</span> {getFilterDescription()}
+                                                {instance?.name} <span className="text-theme-muted">•</span> Port {instance?.port} <span className="text-theme-muted">•</span> {getFilterDescription(filterMode, lineCount, timeRange)}
                                             </p>
                                         </div>
                                     </div>
@@ -152,79 +126,16 @@ function ViewLogsModal({ isOpen, onClose, instance }) {
                                 </div>
 
                                 {/* Filter Controls */}
-                                <div className="px-6 py-3 border-b border-theme bg-theme-elevated flex-shrink-0">
-                                    <div className="flex flex-wrap items-center gap-4">
-                                        {/* Filter Mode Toggle */}
-                                        <div className="flex items-center gap-2">
-                                            <span className="label-tech">Filter by:</span>
-                                            <RadioGroup value={filterMode} onChange={setFilterMode} className="flex gap-1">
-                                                {FILTER_MODES.map((mode) => (
-                                                    <RadioGroup.Option
-                                                        key={mode.value}
-                                                        value={mode.value}
-                                                        className={({ checked }) =>
-                                                            `logs-modal-filter-option ${checked ? 'logs-modal-filter-option-active' : ''}`
-                                                        }
-                                                    >
-                                                        <mode.icon className="h-3.5 w-3.5" strokeWidth={2} />
-                                                        {mode.label}
-                                                    </RadioGroup.Option>
-                                                ))}
-                                            </RadioGroup>
-                                        </div>
-
-                                        {/* Line Count Options */}
-                                        {filterMode === 'lines' && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="label-tech">Lines:</span>
-                                                <div className="flex gap-1">
-                                                    {LINE_OPTIONS.map((count) => (
-                                                        <button
-                                                            key={count}
-                                                            onClick={() => setLineCount(count)}
-                                                            className={`logs-modal-value-btn ${lineCount === count ? 'logs-modal-value-btn-active' : ''}`}
-                                                        >
-                                                            {count}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Time Range Options */}
-                                        {filterMode === 'time' && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="label-tech">Time:</span>
-                                                <div className="flex gap-1">
-                                                    {TIME_OPTIONS.map((option) => (
-                                                        <button
-                                                            key={option.value}
-                                                            onClick={() => setTimeRange(option.value)}
-                                                            className={`logs-modal-value-btn ${timeRange === option.value ? 'logs-modal-value-btn-active' : ''}`}
-                                                        >
-                                                            {option.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {filterMode === 'all' && (
-                                            <span className="font-mono text-xs" style={{ color: 'var(--accent-warning, #f59e0b)' }}>
-                                                ⚠ May fetch a very large log — slow on long-running servers
-                                            </span>
-                                        )}
-
-                                        {/* Apply Button */}
-                                        <button
-                                            onClick={fetchLogs}
-                                            disabled={isLoading}
-                                            className="logs-modal-apply-btn"
-                                        >
-                                            Apply
-                                        </button>
-                                    </div>
-                                </div>
+                                <LogFilterControls
+                                    filterMode={filterMode}
+                                    setFilterMode={setFilterMode}
+                                    lineCount={lineCount}
+                                    setLineCount={setLineCount}
+                                    timeRange={timeRange}
+                                    setTimeRange={setTimeRange}
+                                    onApply={fetchLogs}
+                                    isLoading={isLoading}
+                                />
 
                                 {/* Content */}
                                 <div className="flex-1 p-4 overflow-hidden bg-theme-base">

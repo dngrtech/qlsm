@@ -475,13 +475,15 @@ export const fetchInstanceRemoteLogs = async (instanceId, options = {}) => {
 
 export const fetchInstanceChatLogs = async (instanceId, options = {}) => {
   try {
-    const { lines = 500, filename = 'chat.log' } = options;
+    const { filterMode = 'lines', since = '1 hour ago', lines = 500, filename = 'chat.log' } = options;
     const params = new URLSearchParams({
+      filter_mode: filterMode,
+      since: since,
       lines: lines.toString(),
       filename: filename
     });
     const response = await apiClient.get(`/instances/${instanceId}/chat-logs?${params.toString()}`);
-    return response.data.data; // { logs, instance_name, port, lines, filename }
+    return response.data.data; // { logs, instance_name, port, filter_mode, since, lines, filename }
   } catch (error) {
     console.error(`Failed to fetch chat logs for instance ${instanceId}:`, error.response ? error.response.data : error.message);
     throw error.response ? error.response.data : new Error(`Failed to fetch chat logs for instance ${instanceId}`);

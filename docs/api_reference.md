@@ -284,7 +284,7 @@ Example success response:
 | `/instances/<id>/lan-rate` | PUT | Toggle 99k LAN rate mode |
 | `/instances/<id>/logs` | GET | Get instance task logs |
 | `/instances/<id>/remote-logs` | GET | Fetch live logs via Ansible (`?filter_mode=`, `?since=`, `?lines=`) |
-| `/instances/<id>/chat-logs` | GET | Fetch chat logs (`?lines=`, `?filename=`) |
+| `/instances/<id>/chat-logs` | GET | Fetch chat logs (`?filter_mode=`, `?since=`, `?lines=`, `?filename=`) |
 | `/instances/<id>/chat-logs/list` | GET | List available chat log files |
 
 ### Create Instance Request
