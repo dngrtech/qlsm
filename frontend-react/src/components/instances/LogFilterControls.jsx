@@ -6,9 +6,6 @@ import { FILTER_MODES, LINE_OPTIONS, TIME_OPTIONS } from './logFilterOptions';
  * Shared filter control bar for the instance-log and chat-log modals.
  * Renders the Filter By toggle plus the mode-specific line/time selectors and
  * an Apply button. Filters are applied on demand (via Apply), never reactively.
- *
- * `leading` lets a caller inject an extra control (e.g. the chat-log archive
- * file selector) at the start of the bar.
  */
 function LogFilterControls({
     filterMode,
@@ -19,13 +16,10 @@ function LogFilterControls({
     setTimeRange,
     onApply,
     isLoading,
-    leading = null,
 }) {
     return (
         <div className="px-6 py-3 border-b border-theme bg-theme-elevated flex-shrink-0">
             <div className="flex flex-wrap items-center gap-4">
-                {leading}
-
                 {/* Filter Mode Toggle */}
                 <div className="flex items-center gap-2">
                     <span className="label-tech">Filter by:</span>
