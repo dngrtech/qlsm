@@ -17,7 +17,12 @@ Environment=LD_PRELOAD={{ ld_preload_paths }}
 ExecStart=/home/ql/qlds-%i/run_server_x64_minqlx.sh {{ qlds_args | default('') }} 
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=10 
+# qzeroded/minqlx does not exit cleanly on SIGTERM. Treat fast hard-kill
+# restarts as intentional for QLDS config/hook applies instead of burning a
+# 10s stop timeout. Do not mark SIGKILL as a clean exit globally: external
+# kill -9/OOM exits should still be failures under Restart=on-failure.
+KillSignal=SIGKILL
+TimeoutStopSec=2
 
 # Standard output and error logging (optional, defaults to journald)
 StandardOutput=journal
