@@ -546,9 +546,13 @@ describe('AddInstanceForm draft lifecycle', () => {
     // No instance yet -> no upload/delete affordances.
     expect(screen.queryByRole('button', { name: /upload \.so/i })).not.toBeInTheDocument();
 
-    // Enabling b.so appends it to the LD_PRELOAD order sent on create.
+    // Enabling b.so appends it to the LD_PRELOAD order sent on create. Once the
+    // toggle commits, b.so moves into the enabled (sortable) section and gains a
+    // reorder handle — wait on that instead of an arbitrary sleep.
     fireEvent.click(screen.getByRole('button', { name: /enable b.so/i }));
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /reorder b.so/i })).toBeInTheDocument()
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
 

@@ -168,6 +168,16 @@ function AddInstanceForm({
   const [availableHooks, setAvailableHooks] = useState(initialData.defaultAvailableHooks || []);
   const [enabledHookOrder, setEnabledHookOrder] = useState(initialData.defaultEnabledHooks || []);
   const initialEnabledHookOrderRef = useRef(initialData.defaultEnabledHooks || []);
+  // True when the hook enablement/order differs from the loaded (or default)
+  // preset baseline. Feeds both the unsaved-changes guard and the "(modified)"
+  // preset indicator.
+  const hooksChanged = useMemo(() => {
+    const baseline = initialEnabledHookOrderRef.current;
+    return (
+      enabledHookOrder.length !== baseline.length ||
+      enabledHookOrder.some((filename, index) => baseline[index] !== filename)
+    );
+  }, [enabledHookOrder]);
 
   const isUpdatingFromServerCfg = useRef(false);
   const prevHostnameRef = useRef(hostname);
@@ -442,10 +452,6 @@ function AddInstanceForm({
 
   useEffect(() => {
     const checkedPluginsChanged = !areSetsEqual(checkedPlugins, initialCheckedPluginsRef.current);
-    const baselineHooks = initialEnabledHookOrderRef.current;
-    const hooksChanged =
-      enabledHookOrder.length !== baselineHooks.length ||
-      enabledHookOrder.some((filename, index) => baselineHooks[index] !== filename);
     const isDirty =
       name !== initialNameRef.current ||
       selectedHostId !== initialSelectedHostIdRef.current ||
@@ -463,8 +469,8 @@ function AddInstanceForm({
     checkedPlugins,
     configContents,
     configsHaveChanges,
-    enabledHookOrder,
     factoriesHaveChanges,
+    hooksChanged,
     hostname,
     lanRateEnabled,
     name,
@@ -477,10 +483,6 @@ function AddInstanceForm({
   // Track if loaded preset has been modified
   useEffect(() => {
     if (loadedPreset && loadedPresetConfigRef.current) {
-      const baselineHooks = initialEnabledHookOrderRef.current;
-      const hooksChanged =
-        enabledHookOrder.length !== baselineHooks.length ||
-        enabledHookOrder.some((filename, index) => baselineHooks[index] !== filename);
       const modified =
         JSON.stringify(configContents) !== JSON.stringify(loadedPresetConfigRef.current) ||
         configsHaveChanges ||
@@ -494,8 +496,8 @@ function AddInstanceForm({
     checkedPlugins,
     configContents,
     configsHaveChanges,
-    enabledHookOrder,
     factoriesHaveChanges,
+    hooksChanged,
     loadedPreset,
     pluginsHaveChanges,
   ]);

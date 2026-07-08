@@ -67,7 +67,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
             defaultEnabledHooks = detail.enabled_hooks;
           }
         } catch (presetErr) {
-          console.error('Failed to fetch default preset checked_plugins:', presetErr);
+          console.error('Failed to fetch default preset details (checked_plugins / hooks):', presetErr);
           defaultCheckedPlugins = [
             'balance.py', 'ban.py', 'clan.py', 'essentials.py', 'log.py',
             'motd.py', 'names.py', 'permission.py', 'plugin_manager.py',
