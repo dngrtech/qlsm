@@ -1014,16 +1014,18 @@ def fetch_instance_remote_logs(instance_id, filter_mode='lines', since='1 hour a
         return False, "", str(e)
 
 
-def fetch_instance_chat_logs(instance_id, lines=500, filename='chat.log'):
+def fetch_instance_chat_logs(instance_id, filter_mode='lines', since='1 hour ago', lines=500, filename='chat.log'):
     """
     Fetch chat logs from a remote QLDS instance via Ansible.
     This is a synchronous function (not an RQ task) for quick log retrieval.
-    
+
     Args:
         instance_id: ID of the instance
+        filter_mode: 'time' for time-based filtering, 'lines' for line count, 'all' for the full file
+        since: Time period for time-based filtering (e.g., '1 hour ago', '15 minutes ago')
         lines: Number of lines for line-based filtering
         filename: Name of the log file to fetch (default: chat.log)
-    
+
     Returns a tuple: (success: bool, logs: str, error_msg: str or None)
     """
     import re
@@ -1052,6 +1054,8 @@ def fetch_instance_chat_logs(instance_id, lines=500, filename='chat.log'):
             'port': instance.port,
             'ansible_ssh_user': host.ssh_user,
             'ansible_ssh_private_key_file': os.path.abspath(host.ssh_key_path),
+            'filter_mode': filter_mode,
+            'since': since,
             'lines': lines,
             'filename': filename
         }

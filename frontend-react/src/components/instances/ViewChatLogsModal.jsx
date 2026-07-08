@@ -2,24 +2,28 @@ import React, { Fragment, useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, Transition, Listbox } from '@headlessui/react';
 import { X, RefreshCw, ChevronDown, Check, FileText, Terminal, AlertCircle } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
+import LogFilterControls from './LogFilterControls';
+import { getFilterDescription } from './logFilterOptions';
 import { chatLogLanguage } from '../../utils/chatLogLanguage';
 import { fetchInstanceChatLogs, listInstanceChatLogs } from '../../services/api';
 
 /**
  * Modal for viewing QLDS instance chat logs fetched from the remote server.
  * Uses CodeMirror in read-only mode with search functionality.
- * Supports filtering by line count and selecting archived logs.
+ * Supports filtering by line count, time range, or all entries, and selecting
+ * archived logs. Filters apply via the Apply button (not reactively); switching
+ * the selected archive file reloads immediately.
  */
-
-// Line count options
-const LINE_OPTIONS = [100, 250, 500, 1000, 2500];
 
 function ViewChatLogsModal({ isOpen, onClose, instance }) {
     const [logs, setLogs] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // Filter state
+    const [filterMode, setFilterMode] = useState('lines');
     const [lineCount, setLineCount] = useState(500);
+    const [timeRange, setTimeRange] = useState('1 hour ago');
 
     // Archived logs state
     const [availableFiles, setAvailableFiles] = useState(['chat.log']);
@@ -35,6 +39,8 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
 
         try {
             const data = await fetchInstanceChatLogs(instance.id, {
+                filterMode,
+                since: timeRange,
                 lines: lineCount,
                 filename: selectedFile
             });
@@ -102,15 +108,21 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
             setError(null);
             setSelectedFile('chat.log');
             setAvailableFiles(['chat.log']);
+            setFilterMode('lines');
+            setTimeRange('1 hour ago');
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, instance?.id]);
 
-    // Fetch logs when selectedFile, lineCount changes (and isOpen is true)
+    // Auto-load on open and whenever the selected archive file changes. Filter
+    // changes (mode/lines/time) apply via the Apply button, matching the
+    // instance-logs modal.
     useEffect(() => {
         if (isOpen && instance?.id) {
             fetchLogs();
         }
-    }, [isOpen, instance?.id, lineCount, selectedFile]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, instance?.id, selectedFile]);
 
     // Scroll to bottom of logs after load
     useEffect(() => {
@@ -150,10 +162,8 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
                                             >
                                                 Chat Logs
                                             </Dialog.Title>
-                                            <p className="font-mono text-xs text-theme-secondary mt-0.5 flex items-center">
-                                                {instance?.name}
-                                                <span className="text-theme-muted mx-2">|</span>
-                                                <span className="text-theme-muted font-mono">{instance?.port}</span>
+                                            <p className="font-mono text-xs text-theme-secondary mt-0.5">
+                                                {instance?.name} <span className="text-theme-muted">•</span> Port {instance?.port} <span className="text-theme-muted">•</span> {getFilterDescription(filterMode, lineCount, timeRange)}
                                             </p>
                                         </div>
                                     </div>
@@ -213,12 +223,6 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
                                             </Listbox>
                                         </div>
 
-                                        {/* Line Count Selector using Listbox */}
-                                        <div className="relative w-32">
-                                            {/* (Simple line count buttons as before, or loop if you prefer Listbox here too) */}
-                                            {/* Keeping the buttons as they are nice and quick access */}
-                                        </div>
-
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={fetchLogs}
@@ -238,34 +242,17 @@ function ViewChatLogsModal({ isOpen, onClose, instance }) {
                                     </div>
                                 </div>
 
-                                {/* Filter Controls (kept line count here for now) */}
-                                <div className="px-6 py-3 border-b border-theme bg-theme-elevated flex-shrink-0">
-                                    <div className="flex flex-wrap items-center gap-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="label-tech">Lines:</span>
-                                            <div className="flex gap-1">
-                                                {LINE_OPTIONS.map((count) => (
-                                                    <button
-                                                        key={count}
-                                                        onClick={() => setLineCount(count)}
-                                                        className={`logs-modal-value-btn ${lineCount === count ? 'logs-modal-value-btn-active' : ''}`}
-                                                    >
-                                                        {count}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Apply Button */}
-                                        <button
-                                            onClick={fetchLogs}
-                                            disabled={isLoading}
-                                            className="logs-modal-apply-btn"
-                                        >
-                                            Apply
-                                        </button>
-                                    </div>
-                                </div>
+                                {/* Filter Controls */}
+                                <LogFilterControls
+                                    filterMode={filterMode}
+                                    setFilterMode={setFilterMode}
+                                    lineCount={lineCount}
+                                    setLineCount={setLineCount}
+                                    timeRange={timeRange}
+                                    setTimeRange={setTimeRange}
+                                    onApply={fetchLogs}
+                                    isLoading={isLoading}
+                                />
 
                                 {/* Content */}
                                 <div className="flex-1 p-4 overflow-hidden bg-theme-base">

@@ -808,16 +808,27 @@ def fetch_remote_logs_api(instance_id):
         current_app.logger.error(f"Failed to fetch remote logs for instance {instance_id}: {error_msg}")
         return jsonify({"error": {"message": error_msg}}), 500
 
+# Supported time windows for chat-log time-range filtering. Kept in sync with
+# TIME_OPTIONS in frontend-react/src/components/instances/logFilterOptions.js.
+ALLOWED_CHAT_LOG_SINCE = frozenset({
+    '15 minutes ago', '30 minutes ago', '1 hour ago',
+    '3 hours ago', '12 hours ago', '24 hours ago',
+})
+
+
 @instance_api_bp.route('/<int:instance_id>/chat-logs', methods=['GET'], endpoint='fetch_remote_chat_logs_api')
 @jwt_required()
 def fetch_remote_chat_logs_api(instance_id):
     """Fetches chat logs from the remote QLDS instance.
-    
+
     Query parameters:
+        filter_mode: 'time', 'lines', or 'all' (default: 'lines')
+        since: Time period for time-based filtering (default: '1 hour ago')
         lines: Number of lines to fetch (default: 500)
+        filename: Chat log file to read (default: 'chat.log')
     """
     from ui.task_logic.ansible_instance_mgmt import fetch_instance_chat_logs
-    
+
     instance = get_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
@@ -827,23 +838,43 @@ def fetch_remote_chat_logs_api(instance_id):
         return jsonify({"error": {"message": "Instance has no associated host."}}), 400
 
     # Get query parameters
+    filter_mode = request.args.get('filter_mode', 'lines')
+    since = request.args.get('since', '1 hour ago')
     lines = request.args.get('lines', 500, type=int)
     filename = request.args.get('filename', 'chat.log')
-    
-    # Validate lines (sensible range)
-    if lines < 10 or lines > 10000:
+
+    # Validate filter_mode
+    if filter_mode not in ('time', 'lines', 'all'):
+        return jsonify({"error": {"message": "filter_mode must be 'time', 'lines', or 'all'"}}), 400
+
+    # Validate filename — only the rotated chat log files are permitted. This
+    # value reaches a remote shell command, so restrict it to the exact set of
+    # real filenames to prevent path traversal / command injection.
+    if not re.fullmatch(r'chat\.log(\.\d+)?', filename):
+        return jsonify({"error": {"message": "Invalid chat log filename."}}), 400
+
+    # Validate 'since' against the fixed set of supported windows (time mode
+    # only). It is interpolated into `date -d` on the remote host, so it must
+    # never carry arbitrary shell input.
+    if filter_mode == 'time' and since not in ALLOWED_CHAT_LOG_SINCE:
+        return jsonify({"error": {"message": "Invalid time range."}}), 400
+
+    # Validate lines (sensible range) — not applicable for 'all' mode
+    if filter_mode != 'all' and (lines < 10 or lines > 10000):
         return jsonify({"error": {"message": "lines must be between 10 and 10000"}}), 400
 
-    current_app.logger.info(f"Fetching chat logs for instance {instance_id} ({instance.name}) - lines: {lines}, filename: {filename}")
+    current_app.logger.info(f"Fetching chat logs for instance {instance_id} ({instance.name}) - mode: {filter_mode}, since: {since}, lines: {lines}, filename: {filename}")
 
     success, logs, error_msg = fetch_instance_chat_logs(
-        instance_id, 
+        instance_id,
+        filter_mode=filter_mode,
+        since=since,
         lines=lines,
         filename=filename
     )
 
     if success:
-        return jsonify({"data": {"logs": logs, "instance_name": instance.name, "port": instance.port, "lines": lines, "filename": filename}})
+        return jsonify({"data": {"logs": logs, "instance_name": instance.name, "port": instance.port, "filter_mode": filter_mode, "since": since, "lines": lines, "filename": filename}})
     else:
         current_app.logger.error(f"Failed to fetch chat logs for instance {instance_id}: {error_msg}")
         return jsonify({"error": {"message": error_msg}}), 500

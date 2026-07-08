@@ -6,6 +6,10 @@
 
   vars:
     game_port: "{{ port }}"
+    # Log filter mode: 'lines', 'time', or 'all'
+    log_mode: "{{ filter_mode | default('lines') }}"
+    # Time period for time-based filtering (e.g., '1 hour ago', '15 minutes ago')
+    log_since: "{{ since | default('1 hour ago') }}"
     # Number of lines to filter (tail)
     log_lines: "{{ lines | default(500) }}"
     # Specific log filename (default to chat.log)
@@ -19,17 +23,47 @@
         path: "{{ log_file }}"
       register: log_stat
 
-    - name: Fetch chat logs using tail
+    - name: Fetch chat logs by line count (when log_mode is 'lines')
       ansible.builtin.command:
         cmd: "tail -n {{ log_lines }} {{ log_file }}"
-      register: tail_output
+      register: chat_output_lines
       changed_when: false
       failed_when: false
-      when: log_stat.stat.exists
+      when: log_stat.stat.exists and log_mode == 'lines'
+
+    - name: Fetch all chat logs (when log_mode is 'all')
+      ansible.builtin.command:
+        cmd: "cat {{ log_file }}"
+      register: chat_output_all
+      changed_when: false
+      failed_when: false
+      when: log_stat.stat.exists and log_mode == 'all'
+
+    # Chat log lines start with a fixed-width "[YYYY-MM-DD HH:MM:SS]" prefix, so
+    # comparing chars 2-20 of each line against a host-computed cutoff (same clock,
+    # same format) filters chronologically via a plain string comparison.
+    # SINCE/LOGFILE are passed as environment variables (not interpolated into the
+    # shell string) so the Jinja values can never be expanded as shell syntax.
+    - name: Fetch chat logs by time range (when log_mode is 'time')
+      ansible.builtin.shell:
+        cmd: |
+          cutoff="$(date -d "$SINCE" '+%Y-%m-%d %H:%M:%S')" &&
+          awk -v cutoff="$cutoff" '(""substr($0,2,19)) >= (""cutoff)' "$LOGFILE"
+      environment:
+        SINCE: "{{ log_since }}"
+        LOGFILE: "{{ log_file }}"
+      register: chat_output_time
+      changed_when: false
+      failed_when: false
+      when: log_stat.stat.exists and log_mode == 'time'
 
     - name: Set output variable
       ansible.builtin.set_fact:
-        chat_logs_output: "{{ tail_output.stdout if log_stat.stat.exists else '-- Chat log file not found --' }}"
+        chat_logs_output: >-
+          {{ '-- Chat log file not found --' if not log_stat.stat.exists
+             else (chat_output_time.stdout | default('')) if log_mode == 'time'
+             else (chat_output_all.stdout | default('')) if log_mode == 'all'
+             else (chat_output_lines.stdout | default('')) }}
 
     - name: Output logs to stdout for capture
       ansible.builtin.debug:
