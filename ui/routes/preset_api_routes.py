@@ -611,6 +611,43 @@ def _read_preset_enabled_hooks(preset_path):
         return None
 
 
+def _read_preset_user_hooks(preset):
+    """List the .so hook files in a preset's user-hooks/ directory.
+
+    Mirrors the shape returned by the per-instance hooks endpoint so the
+    Add-Instance Hooks tab can reuse the same HooksTab component. enabled/order
+    are left unset here — the client derives them from enabled_hooks.
+    """
+    hooks_dir = os.path.join(preset.path, 'user-hooks')
+    if not os.path.isdir(hooks_dir):
+        return []
+    descriptions = {
+        row.file_path: row.description or ''
+        for row in BinaryMetadata.query.filter_by(
+            context_type='preset',
+            context_key=preset.name,
+        ).all()
+    }
+    hooks = []
+    for name in sorted(os.listdir(hooks_dir)):
+        if not name.endswith('.so'):
+            continue
+        try:
+            stat = os.stat(os.path.join(hooks_dir, name))
+        except OSError:
+            continue
+        hooks.append({
+            'filename': name,
+            'size': stat.st_size,
+            'modified': int(stat.st_mtime),
+            'description': descriptions.get(name, ''),
+            'enabled': False,
+            'order': None,
+            'missing': False,
+        })
+    return hooks
+
+
 def _write_preset_enabled_hooks(preset_path, enabled_hooks):
     """Write enabled_hooks.json to a preset folder."""
     os.makedirs(preset_path, exist_ok=True)
@@ -972,6 +1009,7 @@ def get_preset_api(preset_id):
     response_data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
     response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
     response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset.path)
+    response_data['user_hooks'] = _read_preset_user_hooks(preset)
 
     return jsonify({"data": response_data})
 

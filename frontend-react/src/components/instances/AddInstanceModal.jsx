@@ -16,6 +16,8 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
     presets: [],
     defaultConfigContents: CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {}),
     defaultCheckedPlugins: [],
+    defaultAvailableHooks: [],
+    defaultEnabledHooks: [],
   });
   const [isLoadingSubmit, setIsLoadingSubmit] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -49,12 +51,20 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
       }
 
       let defaultCheckedPlugins = [];
+      let defaultAvailableHooks = [];
+      let defaultEnabledHooks = [];
       const defaultPreset = (presetsData || []).find(p => p.is_builtin && p.name === 'default');
       if (defaultPreset) {
         try {
           const detail = await getPresetById(defaultPreset.id);
           if (Array.isArray(detail?.checked_plugins)) {
             defaultCheckedPlugins = detail.checked_plugins;
+          }
+          if (Array.isArray(detail?.user_hooks)) {
+            defaultAvailableHooks = detail.user_hooks;
+          }
+          if (Array.isArray(detail?.enabled_hooks)) {
+            defaultEnabledHooks = detail.enabled_hooks;
           }
         } catch (presetErr) {
           console.error('Failed to fetch default preset checked_plugins:', presetErr);
@@ -71,6 +81,8 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
         presets: presetsData || [],
         defaultConfigContents,
         defaultCheckedPlugins,
+        defaultAvailableHooks,
+        defaultEnabledHooks,
       });
     } catch (error) {
       console.error('Failed to load initial data for AddInstanceModal:', error);

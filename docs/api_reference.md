@@ -783,11 +783,16 @@ Responses:
     "checked_plugins": [],
     "checked_factories": [],
     "enabled_hooks": [],
+    "user_hooks": [
+      { "filename": "ql_netfix.so", "size": 15880, "modified": 1737374400, "description": "", "enabled": false, "order": null, "missing": false }
+    ],
     "last_updated": "2026-01-20T12:00:00",
     "created_at": "2026-01-20T12:00:00"
   }
 }
 ```
+
+`user_hooks` lists the `.so` files present in the preset's `user-hooks/` directory (shape mirrors the per-instance hooks endpoint; `enabled`/`order` are always unset here — the client derives enabled state from `enabled_hooks`). It is `[]` when the preset has no `user-hooks/` directory. The Add-Instance Hooks tab uses this list — together with `enabled_hooks` — to show a preset's hooks, their order, and enabled/disabled status before any instance exists.
 
 For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility. A `null` `enabled_hooks` value means the preset was saved without recording hook enablement — loading it does not touch the target instance's current `ld_preload_hooks`.
 

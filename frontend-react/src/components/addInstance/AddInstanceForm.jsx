@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, Webhook, CheckCircle } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, getPresets, savePreset, updatePreset } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import InstanceBasicInfoForm from './InstanceBasicInfoForm';
+import HooksTab from '../instances/HooksTab';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
 import FullScreenConfigEditorModal from '../config/FullScreenConfigEditorModal';
 import {
@@ -160,6 +161,14 @@ function AddInstanceForm({
   const [draftPreset, setDraftPreset] = useState('default');
   const [factoryServerTree, setFactoryServerTree] = useState(initialData.defaultFactoryTree || []);
 
+  // Hooks tab state. There is no instance yet, so hook files come from the
+  // preset (default preset on first open); HooksTab renders in its instance-less
+  // mode (view + toggle + reorder). enabledHookOrder is the LD_PRELOAD order sent
+  // on create as enabled_hooks.
+  const [availableHooks, setAvailableHooks] = useState(initialData.defaultAvailableHooks || []);
+  const [enabledHookOrder, setEnabledHookOrder] = useState(initialData.defaultEnabledHooks || []);
+  const initialEnabledHookOrderRef = useRef(initialData.defaultEnabledHooks || []);
+
   const isUpdatingFromServerCfg = useRef(false);
   const prevHostnameRef = useRef(hostname);
   const hostnameRef = useRef(hostname);
@@ -179,7 +188,6 @@ function AddInstanceForm({
   const initialCheckedPluginsRef = useRef(new Set(initialData.defaultCheckedPlugins || []));
   const loadedPresetConfigRef = useRef(null); // Stores config contents when preset is loaded, for modification detection
   const loadedPresetCheckedPluginsRef = useRef(new Set(initialData.defaultCheckedPlugins || []));
-  const loadedPresetEnabledHooksRef = useRef(null); // null = no preset loaded; array = preset's enabled hook filenames
 
   const readFactoryServerContent = useCallback(async (path) => {
     const data = await getFactoryContent(path, { preset: draftPreset || 'default' });
@@ -363,8 +371,13 @@ function AddInstanceForm({
     setLanRateEnabled(false);
     setLoadedPreset(null);
     loadedPresetConfigRef.current = null;
-    loadedPresetEnabledHooksRef.current = null;
     setIsPresetModified(false);
+
+    const defaultAvailableHooks = initialData.defaultAvailableHooks || [];
+    const defaultEnabledHooks = initialData.defaultEnabledHooks || [];
+    setAvailableHooks(defaultAvailableHooks);
+    setEnabledHookOrder(defaultEnabledHooks);
+    initialEnabledHookOrderRef.current = defaultEnabledHooks;
 
     const defaultCheckedPlugins = new Set(initialData.defaultCheckedPlugins || []);
     setCheckedPlugins(defaultCheckedPlugins);
@@ -383,8 +396,10 @@ function AddInstanceForm({
     return () => { portFetchAbortRef.current?.abort(); };
   }, [
     handleHostChange,
+    initialData.defaultAvailableHooks,
     initialData.defaultCheckedPlugins,
     initialData.defaultConfigContents,
+    initialData.defaultEnabledHooks,
     initialData.defaultFactories,
     initialData.defaultFactoryTree,
     initialHostId,
@@ -427,6 +442,10 @@ function AddInstanceForm({
 
   useEffect(() => {
     const checkedPluginsChanged = !areSetsEqual(checkedPlugins, initialCheckedPluginsRef.current);
+    const baselineHooks = initialEnabledHookOrderRef.current;
+    const hooksChanged =
+      enabledHookOrder.length !== baselineHooks.length ||
+      enabledHookOrder.some((filename, index) => baselineHooks[index] !== filename);
     const isDirty =
       name !== initialNameRef.current ||
       selectedHostId !== initialSelectedHostIdRef.current ||
@@ -437,12 +456,14 @@ function AddInstanceForm({
       configsHaveChanges ||
       factoriesHaveChanges ||
       pluginsHaveChanges ||
-      checkedPluginsChanged;
+      checkedPluginsChanged ||
+      hooksChanged;
     if (onDirtyStateChange) onDirtyStateChange(isDirty);
   }, [
     checkedPlugins,
     configContents,
     configsHaveChanges,
+    enabledHookOrder,
     factoriesHaveChanges,
     hostname,
     lanRateEnabled,
@@ -456,18 +477,24 @@ function AddInstanceForm({
   // Track if loaded preset has been modified
   useEffect(() => {
     if (loadedPreset && loadedPresetConfigRef.current) {
+      const baselineHooks = initialEnabledHookOrderRef.current;
+      const hooksChanged =
+        enabledHookOrder.length !== baselineHooks.length ||
+        enabledHookOrder.some((filename, index) => baselineHooks[index] !== filename);
       const modified =
         JSON.stringify(configContents) !== JSON.stringify(loadedPresetConfigRef.current) ||
         configsHaveChanges ||
         factoriesHaveChanges ||
         pluginsHaveChanges ||
-        !areSetsEqual(checkedPlugins, loadedPresetCheckedPluginsRef.current);
+        !areSetsEqual(checkedPlugins, loadedPresetCheckedPluginsRef.current) ||
+        hooksChanged;
       setIsPresetModified(modified);
     }
   }, [
     checkedPlugins,
     configContents,
     configsHaveChanges,
+    enabledHookOrder,
     factoriesHaveChanges,
     loadedPreset,
     pluginsHaveChanges,
@@ -550,7 +577,13 @@ function AddInstanceForm({
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
-      loadedPresetEnabledHooksRef.current = presetData.enabled_hooks ?? null;
+
+      // Reflect the preset's hooks: available files + enabled order/status.
+      const presetAvailableHooks = Array.isArray(presetData.user_hooks) ? presetData.user_hooks : [];
+      const presetEnabledHooks = Array.isArray(presetData.enabled_hooks) ? presetData.enabled_hooks : [];
+      setAvailableHooks(presetAvailableHooks);
+      setEnabledHookOrder(presetEnabledHooks);
+      initialEnabledHookOrderRef.current = presetEnabledHooks;
       // checked_factories: null = legacy preset (use all factory files); [] or [...] = explicit selection
       const factoriesToLoad = presetData.checked_factories != null
         ? Object.fromEntries(
@@ -618,6 +651,8 @@ function AddInstanceForm({
       // Always persist the checked plugins state so loading the preset
       // restores which plugins were ticked (including newly ticked or uploaded ones)
       presetData.checked_plugins = Array.from(checkedPlugins);
+      // Persist the hook enablement/order so a preset saved here round-trips.
+      presetData.enabled_hooks = enabledHookOrder;
 
       await savePreset(presetData);
       setIsPresetManagerOpen(false);
@@ -628,7 +663,7 @@ function AddInstanceForm({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [checkedPlugins, draftPreset, pluginDraftId, serializeConfigs, serializeFactories]);
+  }, [checkedPlugins, draftPreset, enabledHookOrder, pluginDraftId, serializeConfigs, serializeFactories]);
 
   const handleOverwritePreset = useCallback(async (presetId, { description }) => {
     setIsUpdatingPreset(true);
@@ -647,6 +682,7 @@ function AddInstanceForm({
       }
       if (pluginDraftId) presetData.draft_id = pluginDraftId;
       presetData.checked_plugins = Array.from(checkedPlugins);
+      presetData.enabled_hooks = enabledHookOrder;
       await updatePreset(presetId, presetData);
       const refreshed = await getPresets();
       setPresets(refreshed || []);
@@ -663,7 +699,7 @@ function AddInstanceForm({
     } finally {
       setIsUpdatingPreset(false);
     }
-  }, [checkedPlugins, loadedPreset, pluginDraftId, serializeConfigs, serializeFactories]);
+  }, [checkedPlugins, enabledHookOrder, loadedPreset, pluginDraftId, serializeConfigs, serializeFactories]);
 
   // Handle preset deletion from PresetManagerModal
   const handlePresetDeleted = useCallback((deletedPresetId) => {
@@ -696,6 +732,25 @@ function AddInstanceForm({
   // Handle main tab change
   const handleMainTabChange = useCallback((tab) => {
     setActiveMainTab(tab);
+  }, []);
+
+  // Hooks tab handlers (instance-less mode: toggle/reorder/remove-missing only).
+  const availableHookNames = useMemo(
+    () => new Set(availableHooks.map((hook) => hook.filename)),
+    [availableHooks],
+  );
+  const missingHooks = useMemo(
+    () => enabledHookOrder.filter((filename) => !availableHookNames.has(filename)),
+    [availableHookNames, enabledHookOrder],
+  );
+  const handleToggleHook = useCallback((filename) => {
+    setEnabledHookOrder((cur) => (
+      cur.includes(filename) ? cur.filter((name) => name !== filename) : [...cur, filename]
+    ));
+  }, []);
+  const handleReorderHooks = useCallback((nextOrder) => setEnabledHookOrder(nextOrder), []);
+  const handleRemoveMissingHook = useCallback((filename) => {
+    setEnabledHookOrder((cur) => cur.filter((name) => name !== filename));
   }, []);
 
   const handleConfigContentUpdate = useCallback((fileName, newContent) => {
@@ -817,9 +872,7 @@ function AddInstanceForm({
     if (pluginDraftId) {
       submitData.draft_id = pluginDraftId;
     }
-    if (loadedPresetEnabledHooksRef.current !== null) {
-      submitData.enabled_hooks = loadedPresetEnabledHooksRef.current;
-    }
+    submitData.enabled_hooks = enabledHookOrder;
 
     await onSubmit(submitData, { consumeDraft: pluginConsume });
   };
@@ -881,6 +934,7 @@ function AddInstanceForm({
               { key: 'config', icon: Settings, label: 'Configuration Files' },
               { key: 'scripts', icon: Code2, label: 'Plugins' },
               { key: 'factories', icon: LayoutGrid, label: 'Factories' },
+              { key: 'hooks', icon: Webhook, label: 'Hooks' },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -941,6 +995,21 @@ function AddInstanceForm({
                 getLinterSourceForFile={getFactoryLinterSource}
               />
             </div>
+            {activeMainTab === 'hooks' && (
+              <div className="flex-1 min-h-0">
+                <HooksTab
+                  instanceId={null}
+                  available={availableHooks}
+                  missing={missingHooks}
+                  systemHooks={[]}
+                  enabledOrder={enabledHookOrder}
+                  dirty={false}
+                  onToggleHook={handleToggleHook}
+                  onReorderHooks={handleReorderHooks}
+                  onRemoveMissing={handleRemoveMissingHook}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

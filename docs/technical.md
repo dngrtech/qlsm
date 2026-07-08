@@ -276,6 +276,16 @@ The dedicated user-facing `PUT /instances/<id>/hooks` route/client apply path ha
 been removed; hook file CRUD routes remain for upload, download, replace, rename,
 delete, and description edits.
 
+The **Add Instance** modal has the same Hooks tab, reusing the `HooksTab`
+component in its instance-less mode (no `instanceId`, so file upload/delete/rename
+are hidden — view, toggle, and reorder only). Because no instance exists yet, its
+hook files come from the preset instead: `GET /api/presets/<id>` returns a
+`user_hooks` list alongside `enabled_hooks`, seeded from the `default` preset on
+open and refreshed whenever a preset is loaded. Toggling/reordering updates the
+`enabled_hooks` array sent on `POST /api/instances`, which the create path filters
+against the draft's copied `user-hooks/` — same replace-on-load semantics as the
+edit flow.
+
 `_build_ld_preload_paths()` in `ui/task_logic/ansible_instance_mgmt.py` converts
 the stored user hook list into a colon-joined path string, prepending any active
 system hooks. The system-hook task path remains available for backend-managed

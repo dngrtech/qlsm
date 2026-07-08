@@ -403,6 +403,46 @@ def test_get_preset_enabled_hooks_none_when_absent(client, app, tmp_path, monkey
     assert response.get_json()['data'].get('enabled_hooks') is None
 
 
+def test_get_preset_returns_user_hooks(client, app, tmp_path, monkeypatch):
+    """GET preset lists the .so files in its user-hooks/ directory."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', 'hookfiles')
+        hooks_dir = os.path.join(preset_path, 'user-hooks')
+        os.makedirs(hooks_dir, exist_ok=True)
+        with open(os.path.join(hooks_dir, 'a.so'), 'wb') as f:
+            f.write(b'\x7fELF-a')
+        with open(os.path.join(hooks_dir, 'b.so'), 'wb') as f:
+            f.write(b'\x7fELF-bb')
+        # Non-.so files are ignored.
+        with open(os.path.join(hooks_dir, 'notes.txt'), 'w') as f:
+            f.write('ignore me')
+        preset = create_preset(name='hookfiles', description='', path=preset_path)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+    assert response.status_code == 200
+    user_hooks = response.get_json()['data'].get('user_hooks')
+    assert [h['filename'] for h in user_hooks] == ['a.so', 'b.so']
+    assert all(h['enabled'] is False and h['missing'] is False for h in user_hooks)
+
+
+def test_get_preset_user_hooks_empty_when_absent(client, app, tmp_path, monkeypatch):
+    """GET preset returns user_hooks=[] when the directory is absent."""
+    monkeypatch.chdir(tmp_path)
+    with app.app_context():
+        preset_path = os.path.join('configs', 'presets', 'nohooks')
+        os.makedirs(preset_path, exist_ok=True)
+        preset = create_preset(name='nohooks', description='', path=preset_path)
+        preset_id = preset.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/presets/{preset_id}', headers=headers)
+    assert response.status_code == 200
+    assert response.get_json()['data'].get('user_hooks') == []
+
+
 def test_update_preset_enabled_hooks(client, app, tmp_path, monkeypatch):
     """PUT preset with enabled_hooks persists and returns updated list."""
     monkeypatch.chdir(tmp_path)

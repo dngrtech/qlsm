@@ -508,6 +508,54 @@ describe('AddInstanceForm draft lifecycle', () => {
     expect(pluginManagerProps.onExpandEditor).toEqual(expect.any(Function));
   });
 
+  it('reflects preset hooks in the Hooks tab and submits enabled_hooks order', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+          defaultAvailableHooks: [
+            { filename: 'a.so', size: 1024, modified: 1, enabled: false, order: null, description: '' },
+            { filename: 'b.so', size: 2048, modified: 1, enabled: false, order: null, description: '' },
+          ],
+          defaultEnabledHooks: ['a.so'],
+        }}
+        initialHostId={null}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^hooks$/i }));
+
+    // Reflects the (default) preset config: a.so enabled, b.so disabled.
+    expect(screen.getByRole('button', { name: /enable a.so/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /enable b.so/i })).toHaveAttribute('aria-pressed', 'false');
+    // No instance yet -> no upload/delete affordances.
+    expect(screen.queryByRole('button', { name: /upload \.so/i })).not.toBeInTheDocument();
+
+    // Enabling b.so appends it to the LD_PRELOAD order sent on create.
+    fireEvent.click(screen.getByRole('button', { name: /enable b.so/i }));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].enabled_hooks).toEqual(['a.so', 'b.so']);
+  });
+
   it('uses JSON highlighting and linting for factory files', async () => {
     render(
       <AddInstanceForm
