@@ -20,3 +20,12 @@ def test_qlds_service_renders_cpu_affinity_when_set():
     rendered = _render_service(qlds_args="+set net_port 27960", cpu_affinity=1)
 
     assert "CPUAffinity=1" in rendered
+
+
+def test_qlds_service_uses_fast_intentional_hard_kill_restart_policy():
+    rendered = _render_service(qlds_args="+set net_port 27960")
+
+    assert "KillSignal=SIGKILL" in rendered
+    assert "SuccessExitStatus=SIGKILL" not in rendered
+    assert "TimeoutStopSec=2" in rendered
+    assert "TimeoutStopSec=10" not in rendered
