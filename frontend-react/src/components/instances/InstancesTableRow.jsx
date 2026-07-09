@@ -16,6 +16,7 @@ function InstancesTableRow({
   onOpenHostDrawer, // This prop IS used to open the drawer on InstancesPage
   onViewLogs, // Added for view logs modal
   onViewChatLogs, // Added for chat logs modal
+  onViewMinqlxLogs, // Added for MinQLX logs modal
   onOpenRconConsole, // RCON console callback
   POLLABLE_INSTANCE_STATUSES,
 }) {
@@ -145,6 +146,7 @@ function InstancesTableRow({
             onViewInstanceDetails={() => onViewInstanceDetails(instance.id)} // Pass to actions menu
             onViewLogs={onViewLogs} // Pass to actions menu for View Logs
             onViewChatLogs={onViewChatLogs} // Pass to actions menu for Chat Logs
+            onViewMinqlxLogs={onViewMinqlxLogs} // Pass to actions menu for MinQLX Logs
             onOpenRconConsole={onOpenRconConsole}
             POLLABLE_INSTANCE_STATUSES={POLLABLE_INSTANCE_STATUSES}
           />
