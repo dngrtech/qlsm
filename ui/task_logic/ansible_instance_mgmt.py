@@ -1337,6 +1337,7 @@ def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, file
         env['ANSIBLE_REMOTE_TMP'] = '/tmp'
         env['ANSIBLE_BECOME_FLAGS'] = '-H -S -n'
         env['ANSIBLE_ALLOW_WORLD_READABLE_TMPFILES'] = 'True'
+        env['ANSIBLE_NOCOLOR'] = 'True'
 
         cmd = ['ansible-playbook', playbook_path, '-i', inventory_path, '-l', host.name, '-e', json.dumps(extravars)]
 
