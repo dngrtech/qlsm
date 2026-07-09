@@ -66,16 +66,19 @@ The repository has `.claude/skills/pre-implementation-review-loop/SKILL.md`. Bef
 **Files:**
 - Create: `tests/test_minqlx_logs_validation.py`
 
-- [ ] **Step 1: Write failing tests for MinQLX log API validation**
+- [ ] **Step 1: Write failing tests for MinQLX log API validation, list behavior, and rejection-before-task safety**
 
 Create `tests/test_minqlx_logs_validation.py`:
 
 ```python
-"""Validation tests for the minqlx-logs endpoint.
+"""Validation tests for the minqlx-logs endpoints.
 
-These guard GET /api/instances/<id>/minqlx-logs input handling:
+These guard GET /api/instances/<id>/minqlx-logs and
+GET /api/instances/<id>/minqlx-logs/list input handling:
 filter_mode is limited to lines/all, filename is limited to minqlx.log
-rotations, and rejection paths return 400 before Ansible execution.
+rotations, lines is an integer in range for lines mode, missing
+instance/host state is classified before task execution, and rejection
+paths return before Ansible execution.
 """
 from unittest.mock import patch
 
@@ -97,6 +100,16 @@ def _make_instance(app):
         return instance.id, token
 
 
+def _make_instance_without_host(app):
+    with app.app_context():
+        instance = create_instance(
+            name='minqlx-no-host', host_id=None, port=27961, hostname='minqlx.nohost',
+        )
+        db.session.commit()
+        token = create_access_token(identity='testuser')
+        return instance.id, token
+
+
 def _headers(token):
     return {'Authorization': f'Bearer {token}'}
 
@@ -109,28 +122,99 @@ def _get(client, instance_id, token, **params):
     )
 
 
-def test_invalid_filter_mode_rejected(client, app):
+def _get_list(client, instance_id, token):
+    return client.get(
+        f'/api/instances/{instance_id}/minqlx-logs/list',
+        headers=_headers(token),
+    )
+
+
+def test_invalid_filter_mode_rejected_before_task_logic(client, app):
     instance_id, token = _make_instance(app)
-    resp = _get(client, instance_id, token, filter_mode='bogus')
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='bogus')
     assert resp.status_code == 400
+    mock_fetch.assert_not_called()
 
 
-def test_time_filter_mode_rejected(client, app):
+def test_time_filter_mode_rejected_before_task_logic(client, app):
     instance_id, token = _make_instance(app)
-    resp = _get(client, instance_id, token, filter_mode='time')
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='time')
     assert resp.status_code == 400
+    mock_fetch.assert_not_called()
 
 
-def test_path_traversal_filename_rejected(client, app):
+def test_path_traversal_filename_rejected_before_task_logic(client, app):
     instance_id, token = _make_instance(app)
-    resp = _get(client, instance_id, token, filter_mode='lines', filename='../../../../etc/passwd')
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='lines', filename='../../../../etc/passwd')
     assert resp.status_code == 400
+    mock_fetch.assert_not_called()
 
 
-def test_malformed_filename_rejected(client, app):
+def test_malformed_filename_rejected_before_task_logic(client, app):
     instance_id, token = _make_instance(app)
-    resp = _get(client, instance_id, token, filter_mode='lines', filename='minqlx.log.old')
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='lines', filename='minqlx.log.old')
     assert resp.status_code == 400
+    mock_fetch.assert_not_called()
+
+
+def test_lines_below_minimum_rejected_before_task_logic(client, app):
+    instance_id, token = _make_instance(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='lines', lines=9)
+    assert resp.status_code == 400
+    mock_fetch.assert_not_called()
+
+
+def test_lines_above_maximum_rejected_before_task_logic(client, app):
+    instance_id, token = _make_instance(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='lines', lines=10001)
+    assert resp.status_code == 400
+    mock_fetch.assert_not_called()
+
+
+def test_non_integer_lines_rejected_before_task_logic(client, app):
+    instance_id, token = _make_instance(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='lines', lines='abc')
+    assert resp.status_code == 400
+    mock_fetch.assert_not_called()
+
+
+def test_missing_instance_fetch_returns_404_before_task_logic(client, app):
+    _, token = _make_instance(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, 999999, token, filter_mode='lines')
+    assert resp.status_code == 404
+    mock_fetch.assert_not_called()
+
+
+def test_missing_host_fetch_returns_400_before_task_logic(client, app):
+    instance_id, token = _make_instance_without_host(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs') as mock_fetch:
+        resp = _get(client, instance_id, token, filter_mode='lines')
+    assert resp.status_code == 400
+    mock_fetch.assert_not_called()
+
+
+def test_missing_instance_list_returns_404_before_task_logic(client, app):
+    _, token = _make_instance(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.list_instance_minqlx_logs') as mock_list:
+        resp = _get_list(client, 999999, token)
+    assert resp.status_code == 404
+    mock_list.assert_not_called()
+
+
+def test_missing_host_list_returns_400_before_task_logic(client, app):
+    instance_id, token = _make_instance_without_host(app)
+    with patch('ui.task_logic.ansible_instance_mgmt.list_instance_minqlx_logs') as mock_list:
+        resp = _get_list(client, instance_id, token)
+    assert resp.status_code == 400
+    mock_list.assert_not_called()
 
 
 @patch('ui.task_logic.ansible_instance_mgmt.fetch_instance_minqlx_logs',
@@ -153,6 +237,19 @@ def test_valid_all_request_passes_validation(mock_fetch, client, app):
     assert resp.status_code == 200
     assert resp.get_json()['data']['logs'] == 'all log lines'
     assert mock_fetch.call_args.kwargs['filter_mode'] == 'all'
+
+
+@patch('ui.task_logic.ansible_instance_mgmt.list_instance_minqlx_logs',
+       return_value=(True, ['minqlx.log', 'minqlx.log.1'], None))
+def test_list_request_passes_validation(mock_list, client, app):
+    instance_id, token = _make_instance(app)
+    resp = _get_list(client, instance_id, token)
+    assert resp.status_code == 200
+    assert resp.get_json()['data'] == {
+        'files': ['minqlx.log', 'minqlx.log.1'],
+        'instance_name': 'minqlx-inst',
+    }
+    mock_list.assert_called_once_with(instance_id)
 ```
 
 - [ ] **Step 2: Run tests and verify they fail because the route/function is missing**
@@ -333,6 +430,20 @@ def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, file
             log.error(f"Host {host.id} is missing required details for Ansible.")
             return False, "", "Host details missing (IP, SSH key, or user)."
 
+        if filter_mode not in ('lines', 'all'):
+            return False, "", "filter_mode must be 'lines' or 'all'."
+        if not re.fullmatch(r'minqlx\.log(\.\d+)?', str(filename or '')):
+            return False, "", "Invalid MinQLX log filename."
+        if instance.port is None:
+            return False, "", "Instance port is missing."
+        if filter_mode == 'lines':
+            try:
+                lines = int(lines)
+            except (TypeError, ValueError):
+                return False, "", "lines must be an integer."
+            if lines < 10 or lines > 10000:
+                return False, "", "lines must be between 10 and 10000."
+
         playbook_path = os.path.abspath('ansible/playbooks/fetch_minqlx_logs.yml')
         inventory_path = os.path.abspath('ansible/inventory/')
 
@@ -426,6 +537,9 @@ def list_instance_minqlx_logs(instance_id):
 
         if not host.ip_address or not host.ssh_key_path or not host.ssh_user:
             return False, [], "Host details missing."
+
+        if instance.port is None:
+            return False, [], "Instance port is missing."
 
         playbook_path = os.path.abspath('ansible/playbooks/list_minqlx_logs.yml')
         inventory_path = os.path.abspath('ansible/inventory/')
@@ -526,7 +640,7 @@ def fetch_remote_minqlx_logs_api(instance_id):
     if not re.fullmatch(r'minqlx\.log(\.\d+)?', filename):
         return jsonify({"error": {"message": "Invalid MinQLX log filename."}}), 400
 
-    if filter_mode != 'all' and (lines < 10 or lines > 10000):
+    if filter_mode != 'all' and (lines is None or lines < 10 or lines > 10000):
         return jsonify({"error": {"message": "lines must be between 10 and 10000"}}), 400
 
     current_app.logger.info(
@@ -566,6 +680,9 @@ def list_remote_minqlx_logs_api(instance_id):
     instance = get_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
+
+    if not instance.host:
+        return jsonify({"error": {"message": "Instance has no associated host."}}), 400
 
     current_app.logger.info(f"Listing MinQLX logs for instance {instance_id} ({instance.name})")
 
@@ -1058,7 +1175,7 @@ git commit -m "test(instances): cover minqlx logs action"
 ## Task 8: Verification and release metadata
 
 **Files:**
-- Modify if required by repo release workflow: `VERSION`, `docs/user/version.json`, `docs/user/releases.md`
+- Modify for the implementation PR path: `VERSION`, `docs/user/version.json`, `docs/user/releases.md`
 
 - [ ] **Step 1: Run targeted backend tests**
 
@@ -1101,9 +1218,9 @@ git diff main...HEAD -- ui/routes/instance_routes.py ui/task_logic/ansible_insta
 
 Expected: diff only contains MinQLX log feature changes and the earlier spec/plan docs.
 
-- [ ] **Step 5: Update release metadata if this will be PR'd as a user-visible feature**
+- [ ] **Step 5: Update release metadata for the implementation PR**
 
-If following repo PR workflow, bump all three version/release files together in one commit. Use the next patch version after the current `VERSION`. Add a concise release note:
+For the repo PR/release workflow, bump all three version/release files together in one commit. This step is mandatory for the implementation PR unless the work is explicitly not going through the repo PR/release workflow. Use the next patch version after the current `VERSION`. Add a concise release note:
 
 ```markdown
 - Added MinQLX log viewing from instance actions, including rotated `minqlx.log.N` files.
@@ -1126,6 +1243,13 @@ git log --oneline main..HEAD
 ```
 
 Expected: working tree clean; commits show test, implementation, and docs/release commits.
+
+---
+
+## Deferred follow-ups
+
+- Finding 2, `InstancesTable.jsx` callback hop: deferred because assessment found the component appears unreachable today. If implementation touches table wiring anyway, thread `onViewMinqlxLogs` through `frontend-react/src/components/instances/InstancesTable.jsx` the same way `onViewChatLogs` is threaded; otherwise this is not blocking.
+- Finding 5, list playbook initialization/isdir guard: deferred because the current planned `default([])` behavior should handle the no-directory path. If implementation touches `list_minqlx_logs.yml` beyond the planned content, the low-cost cleanup is to initialize `minqlx_log_files: []` and run `find` only when `log_dir_stat.stat.exists and log_dir_stat.stat.isdir`.
 
 ---
 
@@ -1158,4 +1282,11 @@ Names are consistent across tasks:
 
 ## Execution Gate
 
-Before any product code changes, run `.claude/skills/pre-implementation-review-loop/SKILL.md` against this spec and plan. Fold accepted findings into both documents and commit the review artifacts. Only then start Task 1.
+The pre-implementation review loop is closed by the trailer below. Before any product code changes, ensure the folded spec/plan updates and review artifacts are committed; only then start Task 1.
+
+---
+**Review loop closed:** 2026-07-09
+- Findings: `/home/rage/qlsm/docs/findings/2026-07-08-minqlx-logs-findings.md`
+- Assessment: `/home/rage/qlsm/docs/assess-review-findings/2026-07-08-minqlx-logs-assessment.md`
+- Accepted findings folded in: 1. List endpoint missing-host behavior; 3. Expanded validation/list tests; 4. Task-logic validation before Ansible; 6. Mandatory PR release metadata
+- Deferred: 2. InstancesTable.jsx callback hop; 5. List playbook initialization/isdir guard

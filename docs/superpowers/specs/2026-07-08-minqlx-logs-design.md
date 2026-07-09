@@ -154,6 +154,8 @@ Both endpoints keep the existing response shape:
 {"error": {"message": "..."}}
 ```
 
+The list endpoint must perform the same route-level instance and host validation as the fetch endpoint. In particular, `GET /api/instances/<id>/minqlx-logs/list` returns `404` when the instance is missing and `400 {"error":{"message":"Instance has no associated host."}}` when the instance exists without an associated host; it must not defer missing-host handling to task logic and convert it into a 500.
+
 ## Backend Task Logic
 
 Add task-logic functions in `ui/task_logic/ansible_instance_mgmt.py`, copying the Chat Logs structure:
@@ -169,6 +171,15 @@ Both use the instance host's existing Ansible details:
 - instance `port`.
 
 The functions execute dedicated playbooks synchronously and parse Ansible debug output the same way Chat Logs does.
+
+Task logic is also a safety boundary before Ansible execution. `fetch_instance_minqlx_logs` must defensively validate its direct inputs before building extra-vars or invoking the playbook:
+
+- `filter_mode` is exactly `lines` or `all`;
+- `filename` matches `minqlx\.log(\.\d+)?`;
+- when `filter_mode='lines'`, `lines` is an integer between `10` and `10000`;
+- the instance exists, has a host, and has a valid port.
+
+`list_instance_minqlx_logs` must likewise validate that the instance exists, has a host, and has a valid port before invoking Ansible. Playbook-level `assert` tasks may be added as extra defense, but the required enforcement point is the Python task logic before Ansible is called.
 
 ## Ansible Design
 
@@ -231,8 +242,13 @@ Backend:
   - `time` mode rejected;
   - path traversal filename rejected;
   - malformed filename rejected;
+  - invalid `lines` rejected for below-minimum, above-maximum, and non-integer values when `filter_mode=lines`;
+  - missing instance returns 404 for fetch and list;
+  - missing host returns 400 for fetch and list;
+  - every rejection path asserts the MinQLX task function was not called;
   - valid `lines` request calls task logic;
-  - valid `all` request calls task logic.
+  - valid `all` request calls task logic;
+  - list success returns sorted safe filenames and `instance_name`.
 
 Frontend:
 
@@ -247,4 +263,11 @@ Verification:
 
 ## Documentation
 
-After implementation, update user-facing docs or release notes if this becomes part of a PR/release flow. The design spec itself is the planning artifact for this slice.
+After implementation, update user-facing docs or release notes for the repo PR/release workflow. Release metadata is mandatory for the PR path unless the work is explicitly not going through the repo PR/release workflow. The design spec itself is the planning artifact for this slice.
+
+---
+**Review loop closed:** 2026-07-09
+- Findings: `/home/rage/qlsm/docs/findings/2026-07-08-minqlx-logs-findings.md`
+- Assessment: `/home/rage/qlsm/docs/assess-review-findings/2026-07-08-minqlx-logs-assessment.md`
+- Accepted findings folded in: 1. List endpoint missing-host behavior; 3. Expanded validation/list tests; 4. Task-logic validation before Ansible; 6. Mandatory PR release metadata
+- Deferred: 2. InstancesTable.jsx callback hop; 5. List playbook initialization/isdir guard
