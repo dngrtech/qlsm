@@ -4,7 +4,7 @@ import { X, RefreshCw, ChevronDown, Check, FileText, Terminal, AlertCircle } fro
 import CodeMirrorEditor from '../CodeMirrorEditor';
 import LogFilterControls from './LogFilterControls';
 import { getFilterDescription } from './logFilterOptions';
-import { logLanguage } from '../../utils/logLanguage';
+import { minqlxLogLanguage } from '../../utils/minqlxLogLanguage';
 import { fetchInstanceMinqlxLogs, listInstanceMinqlxLogs } from '../../services/api';
 
 /**
@@ -270,7 +270,7 @@ function ViewMinqlxLogsModal({ isOpen, onClose, instance }) {
                                                 <CodeMirrorEditor
                                                     value={logs}
                                                     onChange={() => { }}
-                                                    language={logLanguage}
+                                                    language={minqlxLogLanguage}
                                                     height="100%"
                                                     readOnly={true}
                                                 />

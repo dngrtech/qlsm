@@ -27,6 +27,7 @@ import {
 } from '../codemirror-lang-qlaccess';
 
 import { chatLogLanguage, chatDarkHighlighting, chatLightHighlighting } from '../utils/chatLogLanguage';
+import { minqlxLogLanguage, minqlxDarkHighlighting, minqlxLightHighlighting } from '../utils/minqlxLogLanguage';
 
 // Dark highlight style
 const darkHighlightStyle = HighlightStyle.define([
@@ -161,6 +162,11 @@ const getExtensions = (currentLanguage, currentLinterSource, onChangeCallback, i
     // Add dedicated chat log highlighting (non-fallback, so custom tags are styled)
     if (currentLanguage === chatLogLanguage) {
       baseExtensions.push(isDark ? chatDarkHighlighting : chatLightHighlighting);
+    }
+
+    // Add dedicated minqlx log highlighting (non-fallback, so custom tags are styled)
+    if (currentLanguage === minqlxLogLanguage) {
+      baseExtensions.push(isDark ? minqlxDarkHighlighting : minqlxLightHighlighting);
     }
 
     // Determine the linter function to use
