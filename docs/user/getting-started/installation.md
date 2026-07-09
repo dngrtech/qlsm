@@ -39,15 +39,20 @@ Paste your key between the quotes before saving the script.
 ## Option 2 — One-Line Install Script
 
 For any Debian 12 machine where you have SSH access:
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
 ```
 
 With a custom domain (enables automatic HTTPS via Caddy):
-
 ```bash
 SITE_ADDRESS=qlsm.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+```
+
+With a custom HTTPS port:
+```bash
+SITE_ADDRESS=qlsm.example.com:444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+# or let the installer append the port to a bare domain:
+SITE_ADDRESS=qlsm.example.com PUBLIC_HTTPS_PORT=444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
 With Vultr provisioning enabled from the start:
@@ -99,7 +104,9 @@ cd ~/qlsm && docker compose up -d
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SITE_ADDRESS` | Domain name or `:port`. A bare domain enables automatic HTTPS via Let's Encrypt. Use `:80` for HTTP-only. | `:80` |
+| `SITE_ADDRESS` | Domain, `domain:port`, or `:port`. A bare domain enables automatic HTTPS via Let's Encrypt. Use `:80` for HTTP-only. | `:80` |
+| `PUBLIC_HTTP_PORT` | Host HTTP port published by Caddy. | `80` |
+| `PUBLIC_HTTPS_PORT` | Host HTTPS port published by Caddy; inferred from `SITE_ADDRESS=domain:port` by the installer. | `443` |
 | `SECRET_KEY` | Signs JWT tokens and session cookies. Auto-generated on first run and persisted to disk. | auto-generated |
 | `DEFAULT_ADMIN_USER` | Username of the bootstrap admin account created on first run. | `admin` |
 | `FLASK_ENV` | Runtime profile: `production` or `development`. | `production` |

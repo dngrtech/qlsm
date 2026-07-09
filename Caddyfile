@@ -1,8 +1,9 @@
 # QLDS UI — Caddyfile
 #
 # SITE_ADDRESS controls TLS behaviour (set in .env):
-#   Automatic HTTPS:  SITE_ADDRESS=qlds.example.com
-#   HTTP only:        SITE_ADDRESS=:80
+#   Automatic HTTPS:   SITE_ADDRESS=qlds.example.com
+#   Custom HTTPS port: SITE_ADDRESS=qlds.example.com:444 with PUBLIC_HTTPS_PORT=444
+#   HTTP only:         SITE_ADDRESS=:80
 #
 # Caddy obtains and renews Let's Encrypt certificates automatically when a
 # domain name is set. No Certbot or manual cert management required.

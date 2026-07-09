@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.14.2` | 2026-07-09 | [#143](https://github.com/dngrtech/qlsm/pull/143) | Add installer and Docker Compose support for custom public Caddy HTTP/HTTPS ports via `PUBLIC_HTTP_PORT` and `PUBLIC_HTTPS_PORT`, including one-line install examples for URLs such as `https://qlsm.example.com:444`. |
 | `v1.14.1` | 2026-07-09 | [#142](https://github.com/dngrtech/qlsm/pull/142) | Added MinQLX log viewing from instance actions, including rotated `minqlx.log.N` files, Last N Lines/All filters, and syntax highlighting. |
 | `v1.13.12` | 2026-07-08 | [#141](https://github.com/dngrtech/qlsm/pull/141) | Give the Chat Logs modal the same Filter By controls as the Instance Logs modal (Last N Lines, Time Range, All), applied via Apply; add `filter_mode`/`since` support to chat-log fetching with a hardened, injection-safe time-range filter. |
 | `v1.13.10` | 2026-07-07 | [#139](https://github.com/dngrtech/qlsm/pull/139) | Make QLDS restarts intentionally fast-kill `qzeroded` instead of waiting for the old 10 second stop timeout, while preserving failure detection for unexpected external kills. |

@@ -79,6 +79,14 @@ With a custom domain (enables HTTPS via Caddy):
 SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
+With a custom HTTPS port:
+
+```bash
+SITE_ADDRESS=qlds.example.com:444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+# or, if SITE_ADDRESS is a bare domain, let the installer append the port:
+SITE_ADDRESS=qlds.example.com PUBLIC_HTTPS_PORT=444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+```
+
 ### Option 3 — git clone
 
 ```bash

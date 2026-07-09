@@ -8,15 +8,20 @@
 # Install (HTTPS with domain):
 #   SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 #
+# Install (HTTPS with domain on custom public port):
+#   SITE_ADDRESS=qlds.example.com:444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+#
 # Update existing installation:
 #   curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash -s -- --update
 #
 # Environment variables (all optional):
-#   SITE_ADDRESS      Domain or :port  (default: :80)
-#   VULTR_API_KEY     Vultr API key    (leave blank to skip VM provisioning)
-#   INSTALL_DIR       Install path     (default: ~/qlsm)
-#   ADMIN_USER        Bootstrap admin  (default: admin)
-#   NO_COLOR          Set to any value to disable colour output
+#   SITE_ADDRESS       Domain, domain:port, or :port  (default: :80)
+#   PUBLIC_HTTP_PORT   Host HTTP port published by Caddy (default: 80)
+#   PUBLIC_HTTPS_PORT  Host HTTPS port published by Caddy; inferred from SITE_ADDRESS when present
+#   VULTR_API_KEY      Vultr API key    (leave blank to skip VM provisioning)
+#   INSTALL_DIR        Install path     (default: ~/qlsm)
+#   ADMIN_USER         Bootstrap admin  (default: admin)
+#   NO_COLOR           Set to any value to disable colour output
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -42,9 +47,43 @@ die()     { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 
 # ── Config from env ───────────────────────────────────────────────────────────
 SITE_ADDRESS="${SITE_ADDRESS:-:80}"
+PUBLIC_HTTP_PORT="${PUBLIC_HTTP_PORT:-80}"
+PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-}"
 VULTR_API_KEY="${VULTR_API_KEY:-}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/qlsm}"
 ADMIN_USER="${ADMIN_USER:-admin}"
+
+infer_public_https_port_from_site_address() {
+    local address="$1"
+    if [[ "$address" == :* ]]; then
+        echo ""
+        return
+    fi
+    if [[ "$address" =~ ^\[[^]]+\]:([0-9]+)$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return
+    fi
+    if [[ "$address" =~ ^[^/:]+:([0-9]+)$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return
+    fi
+    echo ""
+}
+
+site_address_has_explicit_port() {
+    local address="$1"
+    [[ "$address" == :* ]] && return 0
+    [[ "$address" =~ ^\[[^]]+\]:[0-9]+$ ]] && return 0
+    [[ "$address" =~ ^[^/:]+:[0-9]+$ ]] && return 0
+    return 1
+}
+
+if [[ -z "$PUBLIC_HTTPS_PORT" ]]; then
+    PUBLIC_HTTPS_PORT="$(infer_public_https_port_from_site_address "$SITE_ADDRESS")"
+    PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-443}"
+elif [[ "$PUBLIC_HTTPS_PORT" != "443" ]] && ! site_address_has_explicit_port "$SITE_ADDRESS"; then
+    SITE_ADDRESS="${SITE_ADDRESS}:${PUBLIC_HTTPS_PORT}"
+fi
 
 echo ""
 echo -e "${BOLD}  QLSM — Quake Live Server Manager${RESET}"
@@ -183,8 +222,12 @@ else
     printf '# ─────────────────────────────────────────────────────────────────────────────\n\n' >> .env
     printf '# Site address — controls HTTPS behaviour (Caddy):\n' >> .env
     printf '#   Domain  -> automatic HTTPS:  SITE_ADDRESS=qlds.example.com\n' >> .env
+    printf '#   Custom HTTPS port:           SITE_ADDRESS=qlds.example.com:444\n' >> .env
     printf '#   HTTP only / custom port:     SITE_ADDRESS=:80\n' >> .env
     printf 'SITE_ADDRESS=%s\n\n' "${SITE_ADDRESS}" >> .env
+    printf '# Public ports published by Caddy on the Docker host\n' >> .env
+    printf 'PUBLIC_HTTP_PORT=%s\n' "${PUBLIC_HTTP_PORT}" >> .env
+    printf 'PUBLIC_HTTPS_PORT=%s\n\n' "${PUBLIC_HTTPS_PORT}" >> .env
     printf '# Redis password (auto-generated — do not share)\n' >> .env
     printf 'REDIS_PASSWORD=%s\n\n' "${REDIS_PASSWORD}" >> .env
     printf '# Bootstrap admin username (password is '\''admin'\'', change on first login)\n' >> .env

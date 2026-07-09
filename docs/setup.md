@@ -28,6 +28,14 @@ With a domain (enables automatic HTTPS via Caddy):
 SITE_ADDRESS=qlds.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
+With a custom HTTPS port:
+
+```bash
+SITE_ADDRESS=qlds.example.com:444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+# or let the installer append the port to a bare domain:
+SITE_ADDRESS=qlds.example.com PUBLIC_HTTPS_PORT=444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
+```
+
 The script will:
 1. Create `~/qlsm/` with the required directory structure
 2. Download `docker-compose.yml` and `Caddyfile`
@@ -54,7 +62,9 @@ You will be prompted to change your password on first login.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SITE_ADDRESS` | Domain or `:port` — controls HTTPS | `:80` |
+| `SITE_ADDRESS` | Domain, `domain:port`, or `:port` — controls HTTPS | `:80` |
+| `PUBLIC_HTTP_PORT` | Host HTTP port published by Caddy | `80` |
+| `PUBLIC_HTTPS_PORT` | Host HTTPS port published by Caddy; inferred from `SITE_ADDRESS=domain:port` by the installer | `443` |
 | `REDIS_PASSWORD` | Redis auth password | auto-generated |
 | `DEFAULT_ADMIN_USER` | Bootstrap admin username | `admin` |
 | `VULTR_API_KEY` | Vultr API key for VM provisioning | (blank) |
