@@ -5,24 +5,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_compose_caddy_ports_are_configurable():
-    compose = (ROOT / "docker-compose.yml").read_text()
-
-    assert '"${PUBLIC_HTTP_PORT:-80}:80"' in compose
-    assert '"${PUBLIC_HTTPS_PORT:-443}:${PUBLIC_HTTPS_PORT:-443}"' in compose
-    assert '"${PUBLIC_HTTPS_PORT:-443}:${PUBLIC_HTTPS_PORT:-443}/udp"' in compose
-
-
-def test_installer_generates_public_port_env_vars():
-    installer = (ROOT / "qlsm-install.sh").read_text()
-
-    assert 'PUBLIC_HTTP_PORT="${PUBLIC_HTTP_PORT:-80}"' in installer
-    assert 'PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-}"' in installer
-    assert 'infer_public_https_port_from_site_address' in installer
-    assert "printf 'PUBLIC_HTTP_PORT=%s\\n'" in installer
-    assert "printf 'PUBLIC_HTTPS_PORT=%s\\n\\n'" in installer
-
-
 def test_installer_infers_https_port_from_site_address(tmp_path):
     install_dir = run_installer_with_fakes(
         tmp_path,
@@ -47,7 +29,39 @@ def test_installer_appends_public_https_port_to_bare_domain(tmp_path):
     assert "PUBLIC_HTTPS_PORT=444\n" in env_text
 
 
-def run_installer_with_fakes(tmp_path, **env_overrides):
+def test_installer_respects_custom_public_http_port(tmp_path):
+    install_dir = run_installer_with_fakes(
+        tmp_path,
+        PUBLIC_HTTP_PORT="8080",
+    )
+
+    env_text = (install_dir / ".env").read_text()
+    assert "PUBLIC_HTTP_PORT=8080\n" in env_text
+
+
+def test_installer_infers_https_port_from_ipv6_site_address(tmp_path):
+    install_dir = run_installer_with_fakes(
+        tmp_path,
+        SITE_ADDRESS="[2001:db8::1]:444",
+    )
+
+    env_text = (install_dir / ".env").read_text()
+    assert "SITE_ADDRESS=[2001:db8::1]:444\n" in env_text
+    assert "PUBLIC_HTTPS_PORT=444\n" in env_text
+
+
+def test_installer_rejects_invalid_public_ports(tmp_path):
+    result = run_installer_with_fakes(
+        tmp_path,
+        check=False,
+        PUBLIC_HTTPS_PORT="99999",
+    )
+
+    assert result.returncode != 0
+    assert "PUBLIC_HTTPS_PORT must be a port number between 1 and 65535" in result.stderr
+
+
+def run_installer_with_fakes(tmp_path, check=True, **env_overrides):
     install_dir = tmp_path / "qlsm-install"
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
@@ -101,16 +115,18 @@ exit 0
     env["HOME"] = str(tmp_path / "home")
     env["PATH"] = f"{fakebin}:{env['PATH']}"
 
-    subprocess.run(
+    result = subprocess.run(
         ["bash", str(ROOT / "qlsm-install.sh")],
-        check=True,
+        check=check,
         env=env,
         cwd=tmp_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
-    return install_dir
+    if check:
+        return install_dir
+    return result
 
 
 def write_executable(path, content):

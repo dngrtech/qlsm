@@ -39,16 +39,19 @@ Paste your key between the quotes before saving the script.
 ## Option 2 — One-Line Install Script
 
 For any Debian 12 machine where you have SSH access:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh | bash
 ```
 
 With a custom domain (enables automatic HTTPS via Caddy):
+
 ```bash
 SITE_ADDRESS=qlsm.example.com bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 ```
 
 With a custom HTTPS port:
+
 ```bash
 SITE_ADDRESS=qlsm.example.com:444 bash <(curl -fsSL https://raw.githubusercontent.com/dngrtech/qlsm/main/qlsm-install.sh)
 # or let the installer append the port to a bare domain:

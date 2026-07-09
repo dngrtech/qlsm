@@ -78,9 +78,23 @@ site_address_has_explicit_port() {
     return 1
 }
 
+validate_port() {
+    local var_name="$1"
+    local value="$2"
+    if ! [[ "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 65535 )); then
+        die "$var_name must be a port number between 1 and 65535 (got: '$value')"
+    fi
+}
+
+validate_port PUBLIC_HTTP_PORT "$PUBLIC_HTTP_PORT"
+if [[ -n "$PUBLIC_HTTPS_PORT" ]]; then
+    validate_port PUBLIC_HTTPS_PORT "$PUBLIC_HTTPS_PORT"
+fi
+
 if [[ -z "$PUBLIC_HTTPS_PORT" ]]; then
     PUBLIC_HTTPS_PORT="$(infer_public_https_port_from_site_address "$SITE_ADDRESS")"
     PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-443}"
+    validate_port PUBLIC_HTTPS_PORT "$PUBLIC_HTTPS_PORT"
 elif [[ "$PUBLIC_HTTPS_PORT" != "443" ]] && ! site_address_has_explicit_port "$SITE_ADDRESS"; then
     SITE_ADDRESS="${SITE_ADDRESS}:${PUBLIC_HTTPS_PORT}"
 fi
