@@ -1,0 +1,42 @@
+---
+- name: List QLDS MinQLX Logs
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    game_port: "{{ port }}"
+    log_dir: "/home/ql/qlds-{{ game_port }}"
+
+  tasks:
+    - name: Initialize MinQLX log file list
+      ansible.builtin.set_fact:
+        minqlx_log_files: []
+
+    - name: Check if QLDS instance directory exists
+      ansible.builtin.stat:
+        path: "{{ log_dir }}"
+      register: log_dir_stat
+
+    - name: Find MinQLX log files
+      ansible.builtin.find:
+        paths: "{{ log_dir }}"
+        patterns: "minqlx.log*"
+        file_type: file
+        recurse: false
+      register: minqlx_log_find
+      when: log_dir_stat.stat.exists and log_dir_stat.stat.isdir
+
+    - name: Set MinQLX log file list
+      ansible.builtin.set_fact:
+        minqlx_log_files: >-
+          {{ (minqlx_log_find.files | default([])
+              | map(attribute='path')
+              | map('basename')
+              | select('match', '^minqlx\\.log(\\.\\d+)?$')
+              | list) }}
+      when: log_dir_stat.stat.exists and log_dir_stat.stat.isdir
+
+    - name: Output MinQLX log files to stdout for capture
+      ansible.builtin.debug:
+        msg: "{{ minqlx_log_files | to_json }}"
