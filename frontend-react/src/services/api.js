@@ -500,6 +500,32 @@ export const listInstanceChatLogs = async (instanceId) => {
   }
 };
 
+export const fetchInstanceMinqlxLogs = async (instanceId, options = {}) => {
+  try {
+    const { filterMode = 'lines', lines = 500, filename = 'minqlx.log' } = options;
+    const params = new URLSearchParams({
+      filter_mode: filterMode,
+      lines: lines.toString(),
+      filename: filename
+    });
+    const response = await apiClient.get(`/instances/${instanceId}/minqlx-logs?${params.toString()}`);
+    return response.data.data; // { logs, instance_name, port, filter_mode, lines, filename }
+  } catch (error) {
+    console.error(`Failed to fetch MinQLX logs for instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to fetch MinQLX logs for instance ${instanceId}`);
+  }
+};
+
+export const listInstanceMinqlxLogs = async (instanceId) => {
+  try {
+    const response = await apiClient.get(`/instances/${instanceId}/minqlx-logs/list`);
+    return response.data.data; // { files, instance_name }
+  } catch (error) {
+    console.error(`Failed to list MinQLX logs for instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to list MinQLX logs for instance ${instanceId}`);
+  }
+};
+
 // Config Preset APIs
 export const getPresets = async () => {
   try {

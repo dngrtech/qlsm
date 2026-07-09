@@ -16,7 +16,10 @@ function LogFilterControls({
     setTimeRange,
     onApply,
     isLoading,
+    allowedModes = ['lines', 'time', 'all'],
 }) {
+    const visibleFilterModes = FILTER_MODES.filter((mode) => allowedModes.includes(mode.value));
+
     return (
         <div className="px-6 py-3 border-b border-theme bg-theme-elevated flex-shrink-0">
             <div className="flex flex-wrap items-center gap-4">
@@ -24,7 +27,7 @@ function LogFilterControls({
                 <div className="flex items-center gap-2">
                     <span className="label-tech">Filter by:</span>
                     <RadioGroup value={filterMode} onChange={setFilterMode} className="flex gap-1">
-                        {FILTER_MODES.map((mode) => (
+                        {visibleFilterModes.map((mode) => (
                             <RadioGroup.Option
                                 key={mode.value}
                                 value={mode.value}
