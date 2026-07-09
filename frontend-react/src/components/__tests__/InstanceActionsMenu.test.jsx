@@ -38,6 +38,7 @@ vi.mock('../common/InfoTooltip', () => ({
 
 function renderMenu(instanceOverrides = {}) {
   const handleToggleLanRate = vi.fn();
+  const onViewMinqlxLogs = vi.fn();
   render(
     <InstanceActionsMenu
       instance={{
@@ -58,11 +59,12 @@ function renderMenu(instanceOverrides = {}) {
       onViewInstanceDetails={vi.fn()}
       onViewLogs={vi.fn()}
       onViewChatLogs={vi.fn()}
+      onViewMinqlxLogs={onViewMinqlxLogs}
       onOpenRconConsole={vi.fn()}
     />
   );
 
-  return { handleToggleLanRate };
+  return { handleToggleLanRate, onViewMinqlxLogs };
 }
 
 describe('InstanceActionsMenu lan rate guard', () => {
@@ -109,5 +111,18 @@ describe('InstanceActionsMenu lan rate guard', () => {
 
     fireEvent.click(actionButton);
     expect(handleToggleLanRate).toHaveBeenCalledWith(1, 'inst-1', true);
+  });
+
+  it('shows View MinQLX Logs and calls the callback with the instance', () => {
+    const { onViewMinqlxLogs } = renderMenu();
+
+    const actionButton = screen.getByRole('button', { name: /view minqlx logs/i });
+    expect(actionButton).not.toBeDisabled();
+
+    fireEvent.click(actionButton);
+    expect(onViewMinqlxLogs).toHaveBeenCalledWith(expect.objectContaining({
+      id: 1,
+      name: 'inst-1',
+    }));
   });
 });
