@@ -8,6 +8,7 @@ From instance **Actions** menu:
 
 - **View Server Logs** for service/runtime output
 - **View Chat Logs** for player chat history
+- **View MinQLX Logs** for MinQLX plugin activity (events, votes, console output)
 
 Action reference: [Instance Actions Menu](instance-actions-menu.md)
 
@@ -24,6 +25,13 @@ Action reference: [Instance Actions Menu](instance-actions-menu.md)
 - Select rotated files (`chat.log.1`, etc.) for older history.
 - Start with 500 lines and adjust.
 
+## MinQLX Logs: Practical Usage
+
+- Keep `minqlx.log` selected for current activity.
+- Select rotated files (`minqlx.log.1`, etc.) for older history.
+- Use **Last N Lines** for a quick look or **All** for a full read.
+- Syntax highlighting colors events, SteamIDs, plugin tags, and Quake `^N` color codes — see [MinQLX Logs](minqlx-logs.md).
+
 ## What To Do When You See Errors
 
 1. Copy the exact error line.
@@ -34,5 +42,6 @@ Action reference: [Instance Actions Menu](instance-actions-menu.md)
 
 - [Server Logs](server-logs.md)
 - [Chat Logs](chat-logs.md)
+- [MinQLX Logs](minqlx-logs.md)
 - [RCON Console](rcon-console.md)
 - [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

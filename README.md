@@ -19,6 +19,7 @@ Features:
   - Minqlx plugins can be enabled in the UI by selecting checkboxes. This eliminates the need to manually edit the `qlx_plugins` cvar, as QLSM handles it automatically.
   - Factories can be enabled in the UI by selecting checkboxes.
 - [Chat logs](https://dngrtech.github.io/qlsm/operations/chat-logs/) (including rotated archived chat log files) and [server logs](https://dngrtech.github.io/qlsm/operations/server-logs/) retrieval with convenient search capability.
+- [MinQLX logs](https://dngrtech.github.io/qlsm/operations/minqlx-logs/) (including rotated `minqlx.log.N` files) with syntax highlighting for events, SteamIDs, plugin tags, and authentic Quake `^N` color codes.
 - [Daily/weekly/monthly host auto-restart scheduling](https://dngrtech.github.io/qlsm/operations/auto-restart/); scheduled restarts trigger Steam workshop refresh across all deployed instances
 - [Manual workshop item update](https://dngrtech.github.io/qlsm/operations/update-workshop-item/) by Steam Workshop ID, with optional restart of selected instances
 - ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI

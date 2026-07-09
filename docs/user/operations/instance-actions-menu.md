@@ -14,6 +14,7 @@ Use this menu for day-to-day instance operations: change config, run live admin 
 | **RCON Console** | You need to run live Quake commands on a running server. | Opens the interactive console immediately. |
 | **View Server Logs** | You are debugging startup, restart, config apply, or runtime issues. | Opens the remote log viewer with filters. |
 | **View Chat Logs** | You need player chat history rather than service logs. | Opens the chat log viewer with file selection. |
+| **View MinQLX Logs** | You want MinQLX plugin activity — events, votes, console output — with syntax highlighting. | Opens the MinQLX log viewer with file selection. |
 | **View Details** | You want the drawer with metadata, live status, and quick context. | Opens the instance details panel. |
 | **99k LAN Rate** | You want to toggle the instance between standard and 99k mode. | Queues reconfiguration and restart. |
 | **Restart** | You want a clean service restart without editing config. | Queues an instance restart task. |
@@ -25,7 +26,7 @@ Use this menu for day-to-day instance operations: change config, run live admin 
 The menu is grouped by intent, which makes it faster to scan once you know the pattern:
 
 - Top section: **Edit Config** and **RCON Console** for direct administration.
-- Middle section: **View Server Logs**, **View Chat Logs**, and **View Details** for inspection.
+- Middle section: **View Server Logs**, **View Chat Logs**, **View MinQLX Logs**, and **View Details** for inspection.
 - Lower section: **99k LAN Rate**, **Restart**, and **Start / Stop** for state-changing operations.
 - Bottom section: **Delete** by itself because it is destructive.
 
@@ -57,6 +58,7 @@ These actions do not change the instance directly:
 
 - **View Server Logs** for service output and deployment diagnostics.
 - **View Chat Logs** for player chat history and rotated `chat.log` files.
+- **View MinQLX Logs** for MinQLX plugin activity and rotated `minqlx.log` files.
 - **View Details** for a broader drawer view, including live status context.
 
 Use logs when something failed. Use details when you want context. Use chat logs when the question is about player activity rather than server behavior.
@@ -124,5 +126,6 @@ If a button is disabled, wait for the transitional state to finish, then try aga
 - [Deploy A New Instance](../getting-started/deploy-new-instance.md)
 - [Presets And Default Config](../presets/overview.md)
 - [Use Logs And Chat Logs](logs-and-chat.md)
+- [MinQLX Logs](minqlx-logs.md)
 - [RCON Console](rcon-console.md)
 - [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

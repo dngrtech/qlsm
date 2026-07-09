@@ -71,6 +71,11 @@
         "id": "chat-logs",
         "title": "Chat Logs",
         "path": "/docs/operations/chat-logs.md"
+      },
+      {
+        "id": "minqlx-logs",
+        "title": "MinQLX Logs",
+        "path": "/docs/operations/minqlx-logs.md"
       }
     ]
   },
