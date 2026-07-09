@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.14.1` | 2026-07-09 | [#142](https://github.com/dngrtech/qlsm/pull/142) | Added MinQLX log viewing from instance actions, including rotated `minqlx.log.N` files, Last N Lines/All filters, and syntax highlighting. |
 | `v1.13.12` | 2026-07-08 | [#141](https://github.com/dngrtech/qlsm/pull/141) | Give the Chat Logs modal the same Filter By controls as the Instance Logs modal (Last N Lines, Time Range, All), applied via Apply; add `filter_mode`/`since` support to chat-log fetching with a hardened, injection-safe time-range filter. |
 | `v1.13.10` | 2026-07-07 | [#139](https://github.com/dngrtech/qlsm/pull/139) | Make QLDS restarts intentionally fast-kill `qzeroded` instead of waiting for the old 10 second stop timeout, while preserving failure detection for unexpected external kills. |
 | `v1.13.9` | 2026-07-07 | [#138](https://github.com/dngrtech/qlsm/pull/138) | Exclude generated Python cache files (`__pycache__` and `*.pyc`) when saving presets from draft scripts, keeping saved preset directories free of interpreter cruft. |
@@ -136,3 +137,4 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 | `v1.1.1` | 2026-04-07 | [#2](https://github.com/dngrtech/qlsm/pull/2) | Bug fixes and performance improvements. |
 | `v1.1.0` | 2026-04-07 | [#1](https://github.com/dngrtech/qlsm/pull/1) | Bug fixes and performance improvements. |
 | `v1.0.0` | Before 2026-04-07 | — | Initial QLSM baseline before tracked pull request history. |
+

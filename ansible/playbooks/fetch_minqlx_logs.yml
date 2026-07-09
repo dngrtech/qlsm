@@ -1,0 +1,45 @@
+---
+- name: Fetch QLDS MinQLX Logs
+  hosts: all
+  become: yes
+  gather_facts: false
+
+  vars:
+    game_port: "{{ port }}"
+    log_mode: "{{ filter_mode | default('lines') }}"
+    log_lines: "{{ lines | default(500) }}"
+    log_filename: "{{ filename | default('minqlx.log') }}"
+    log_file: "/home/ql/qlds-{{ game_port }}/{{ log_filename }}"
+
+  tasks:
+    - name: Check if MinQLX log file exists
+      ansible.builtin.stat:
+        path: "{{ log_file }}"
+      register: log_stat
+
+    - name: Fetch MinQLX logs by line count
+      ansible.builtin.command:
+        cmd: "tail -n {{ log_lines }} {{ log_file }}"
+      register: minqlx_output_lines
+      changed_when: false
+      failed_when: false
+      when: log_stat.stat.exists and log_mode == 'lines'
+
+    - name: Fetch all MinQLX logs
+      ansible.builtin.command:
+        cmd: "cat {{ log_file }}"
+      register: minqlx_output_all
+      changed_when: false
+      failed_when: false
+      when: log_stat.stat.exists and log_mode == 'all'
+
+    - name: Set output variable
+      ansible.builtin.set_fact:
+        minqlx_logs_output: >-
+          {{ '-- MinQLX log file not found --' if not log_stat.stat.exists
+             else (minqlx_output_all.stdout | default('')) if log_mode == 'all'
+             else (minqlx_output_lines.stdout | default('')) }}
+
+    - name: Output logs to stdout for capture
+      ansible.builtin.debug:
+        msg: "{{ minqlx_logs_output if minqlx_logs_output | length > 0 else '-- No entries --' }}"

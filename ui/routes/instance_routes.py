@@ -899,6 +899,88 @@ def list_remote_chat_logs_api(instance_id):
         current_app.logger.error(f"Failed to list chat logs for instance {instance_id}: {error_msg}")
         return jsonify({"error": {"message": error_msg}}), 500
 
+@instance_api_bp.route('/<int:instance_id>/minqlx-logs', methods=['GET'], endpoint='fetch_remote_minqlx_logs_api')
+@jwt_required()
+def fetch_remote_minqlx_logs_api(instance_id):
+    """Fetches MinQLX logs from the remote QLDS instance."""
+    from ui.task_logic.ansible_instance_mgmt import fetch_instance_minqlx_logs
+
+    instance = get_instance(instance_id)
+    if not instance:
+        return jsonify({"error": {"message": "Instance not found."}}), 404
+
+    if not instance.host:
+        return jsonify({"error": {"message": "Instance has no associated host."}}), 400
+
+    filter_mode = request.args.get('filter_mode', 'lines')
+    lines_raw = request.args.get('lines', '500')
+    filename = request.args.get('filename', 'minqlx.log')
+
+    if filter_mode not in ('lines', 'all'):
+        return jsonify({"error": {"message": "filter_mode must be 'lines' or 'all'"}}), 400
+
+    if not re.fullmatch(r'minqlx\.log(\.\d+)?', filename):
+        return jsonify({"error": {"message": "Invalid MinQLX log filename."}}), 400
+
+    try:
+        lines = int(lines_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": {"message": "lines must be an integer"}}), 400
+
+    if filter_mode != 'all' and (lines < 10 or lines > 10000):
+        return jsonify({"error": {"message": "lines must be between 10 and 10000"}}), 400
+
+    current_app.logger.info(
+        f"Fetching MinQLX logs for instance {instance_id} ({instance.name}) - "
+        f"mode: {filter_mode}, lines: {lines}, filename: {filename}"
+    )
+
+    success, logs, error_msg = fetch_instance_minqlx_logs(
+        instance_id,
+        filter_mode=filter_mode,
+        lines=lines,
+        filename=filename,
+    )
+
+    if success:
+        return jsonify({
+            "data": {
+                "logs": logs,
+                "instance_name": instance.name,
+                "port": instance.port,
+                "filter_mode": filter_mode,
+                "lines": lines,
+                "filename": filename,
+            }
+        })
+
+    current_app.logger.error(f"Failed to fetch MinQLX logs for instance {instance_id}: {error_msg}")
+    return jsonify({"error": {"message": error_msg}}), 500
+
+
+@instance_api_bp.route('/<int:instance_id>/minqlx-logs/list', methods=['GET'], endpoint='list_remote_minqlx_logs_api')
+@jwt_required()
+def list_remote_minqlx_logs_api(instance_id):
+    """Lists available MinQLX log files from the remote QLDS instance."""
+    from ui.task_logic.ansible_instance_mgmt import list_instance_minqlx_logs
+
+    instance = get_instance(instance_id)
+    if not instance:
+        return jsonify({"error": {"message": "Instance not found."}}), 404
+
+    if not instance.host:
+        return jsonify({"error": {"message": "Instance has no associated host."}}), 400
+
+    current_app.logger.info(f"Listing MinQLX logs for instance {instance_id} ({instance.name})")
+
+    success, files, error_msg = list_instance_minqlx_logs(instance_id)
+
+    if success:
+        return jsonify({"data": {"files": files, "instance_name": instance.name}})
+
+    current_app.logger.error(f"Failed to list MinQLX logs for instance {instance_id}: {error_msg}")
+    return jsonify({"error": {"message": error_msg}}), 500
+
 # Helper function to read instance-specific config files - still needed for API
 def _read_instance_config(host_name, instance_id, filename):
     """Reads content from a file in configs/<host_name>/<instance_id>/filename."""

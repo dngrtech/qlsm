@@ -14,6 +14,7 @@ function InstancesTable({
   onOpenHostDrawer, // Added for host drawer
   onViewLogs, // Added for view logs modal
   onViewChatLogs, // Added for chat logs modal
+  onViewMinqlxLogs, // Added for MinQLX logs modal
   onOpenRconConsole, // RCON console callback
   POLLABLE_INSTANCE_STATUSES,
 }) {
@@ -87,6 +88,7 @@ function InstancesTable({
               onOpenHostDrawer={onOpenHostDrawer} // Pass down handler for host drawer
               onViewLogs={onViewLogs} // Pass down handler for view logs modal
               onViewChatLogs={onViewChatLogs} // Pass down handler for chat logs modal
+              onViewMinqlxLogs={onViewMinqlxLogs} // Pass down handler for MinQLX logs modal
               onOpenRconConsole={onOpenRconConsole}
               POLLABLE_INSTANCE_STATUSES={POLLABLE_INSTANCE_STATUSES}
             />

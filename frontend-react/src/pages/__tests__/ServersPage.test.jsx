@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServersPage from '../ServersPage';
@@ -111,6 +111,15 @@ vi.mock('../../hooks/useViewChatLogs', () => ({
   }),
 }));
 
+vi.mock('../../hooks/useViewMinqlxLogs', () => ({
+  useViewMinqlxLogs: () => ({
+    selectedInstanceForMinqlxLogs: null,
+    isViewMinqlxLogsModalOpen: false,
+    openViewMinqlxLogs: mocks.noop,
+    closeViewMinqlxLogs: mocks.noop,
+  }),
+}));
+
 vi.mock('../../hooks/useInstanceLanRate', () => ({
   useInstanceLanRate: () => ({
     lanRateAction: null,
@@ -183,6 +192,7 @@ vi.mock('../../components/instances/EditInstanceConfigModal', () => ({
 }));
 vi.mock('../../components/instances/ViewLogsModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/instances/ViewChatLogsModal', () => ({ default: mocks.NullComponent }));
+vi.mock('../../components/instances/ViewMinqlxLogsModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/RconConsoleModal', () => ({ default: mocks.RconConsole }));
 vi.mock('../../components/instances/LiveServerStatusModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/hosts/ForceUpdateWorkshopModal', () => ({ default: mocks.NullComponent }));

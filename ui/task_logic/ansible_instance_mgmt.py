@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -1235,4 +1236,206 @@ def list_instance_chat_logs(instance_id):
         return False, [], "Timeout while listing chat logs."
     except Exception as e:
         log.exception(f"Exception listing chat logs for instance {instance_id}: {e}")
+        return False, [], str(e)
+
+
+def _validate_minqlx_log_request(filter_mode, lines, filename):
+    if filter_mode not in ('lines', 'all'):
+        return "filter_mode must be 'lines' or 'all'"
+
+    if not re.fullmatch(r'minqlx\.log(\.\d+)?', filename or ''):
+        return "Invalid MinQLX log filename."
+
+    if filter_mode == 'lines':
+        if not isinstance(lines, int):
+            return "lines must be an integer"
+        if lines < 10 or lines > 10000:
+            return "lines must be between 10 and 10000"
+
+    return None
+
+
+def _validate_minqlx_instance(instance_id):
+    instance = db.session.get(QLInstance, instance_id)
+    if not instance:
+        return None, None, f"Instance {instance_id} not found."
+
+    host = instance.host
+    if not host:
+        return instance, None, "Associated host not found."
+
+    if not isinstance(instance.port, int) or instance.port <= 0:
+        return instance, host, "Instance port is invalid."
+
+    if not host.ip_address or not host.ssh_key_path or not host.ssh_user:
+        return instance, host, "Host details missing (IP, SSH key, or user)."
+
+    return instance, host, None
+
+
+def _extract_ansible_debug_msg(stdout):
+    in_msg = False
+    msg_lines = []
+
+    for line in stdout.split('\n'):
+        if '"msg":' in line:
+            match = re.search(r'"msg":\s*"(.*)$', line)
+            if match:
+                content = match.group(1)
+                if content.endswith('"'):
+                    msg_lines.append(content[:-1])
+                else:
+                    msg_lines.append(content)
+                    in_msg = True
+        elif in_msg:
+            if line.strip().endswith('"'):
+                msg_lines.append(line.rstrip()[:-1])
+                in_msg = False
+            elif line.strip() == '}':
+                in_msg = False
+            else:
+                msg_lines.append(line)
+
+    if not msg_lines:
+        return ""
+
+    return '\n'.join(msg_lines).replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"')
+
+
+def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, filename='minqlx.log'):
+    """
+    Fetch MinQLX logs from a remote QLDS instance via Ansible.
+
+    Returns a tuple: (success: bool, logs: str, error_msg: str or None)
+    """
+    validation_error = _validate_minqlx_log_request(filter_mode, lines, filename)
+    if validation_error:
+        return False, "", validation_error
+
+    process = None
+
+    try:
+        instance, host, instance_error = _validate_minqlx_instance(instance_id)
+        if instance_error:
+            log.error(f"Cannot fetch MinQLX logs for instance {instance_id}: {instance_error}")
+            return False, "", instance_error
+
+        playbook_path = os.path.abspath('ansible/playbooks/fetch_minqlx_logs.yml')
+        inventory_path = os.path.abspath('ansible/inventory/')
+
+        extravars = {
+            'port': instance.port,
+            'ansible_ssh_user': host.ssh_user,
+            'ansible_ssh_private_key_file': os.path.abspath(host.ssh_key_path),
+            'filter_mode': filter_mode,
+            'lines': lines,
+            'filename': filename,
+        }
+
+        env = os.environ.copy()
+        env['ANSIBLE_PIPELINING'] = 'True'
+        env['ANSIBLE_REMOTE_TMP'] = '/tmp'
+        env['ANSIBLE_BECOME_FLAGS'] = '-H -S -n'
+        env['ANSIBLE_ALLOW_WORLD_READABLE_TMPFILES'] = 'True'
+        env['ANSIBLE_NOCOLOR'] = 'True'
+
+        cmd = ['ansible-playbook', playbook_path, '-i', inventory_path, '-l', host.name, '-e', json.dumps(extravars)]
+
+        log.info(f"Fetching MinQLX logs for instance {instance_id} on host {host.name}...")
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        stdout, stderr = process.communicate(timeout=60)
+        rc = process.returncode
+
+        if rc != 0:
+            log.error(f"Ansible failed to fetch MinQLX logs for instance {instance_id}. RC: {rc}. stderr: {stderr[-500:]}")
+            return False, "", f"Failed to fetch MinQLX logs (RC: {rc}). Check if the instance exists on the remote host."
+
+        logs = _extract_ansible_debug_msg(stdout)
+        if not logs:
+            logs = "Could not parse MinQLX log output. Raw Ansible output:\n" + stdout[-1000:]
+
+        log.info(f"Successfully fetched {len(logs)} bytes of MinQLX logs for instance {instance_id}")
+        return True, logs, None
+
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            process.kill()
+            process.communicate()
+        log.error(f"Timeout fetching MinQLX logs for instance {instance_id}")
+        return False, "", "Timeout while fetching MinQLX logs from remote host."
+    except Exception as e:
+        log.exception(f"Exception fetching MinQLX logs for instance {instance_id}: {e}")
+        return False, "", str(e)
+
+
+def list_instance_minqlx_logs(instance_id):
+    """
+    List available MinQLX log files from a remote QLDS instance.
+
+    Returns a tuple: (success: bool, files: list, error_msg: str or None)
+    """
+    process = None
+
+    try:
+        instance, host, instance_error = _validate_minqlx_instance(instance_id)
+        if instance_error:
+            log.error(f"Cannot list MinQLX logs for instance {instance_id}: {instance_error}")
+            return False, [], instance_error
+
+        playbook_path = os.path.abspath('ansible/playbooks/list_minqlx_logs.yml')
+        inventory_path = os.path.abspath('ansible/inventory/')
+
+        extravars = {
+            'port': instance.port,
+            'ansible_ssh_user': host.ssh_user,
+            'ansible_ssh_private_key_file': os.path.abspath(host.ssh_key_path),
+        }
+
+        env = os.environ.copy()
+        env['ANSIBLE_PIPELINING'] = 'True'
+        env['ANSIBLE_REMOTE_TMP'] = '/tmp'
+        env['ANSIBLE_BECOME_FLAGS'] = '-H -S -n'
+        env['ANSIBLE_ALLOW_WORLD_READABLE_TMPFILES'] = 'True'
+        env['ANSIBLE_NOCOLOR'] = 'True'
+
+        cmd = ['ansible-playbook', playbook_path, '-i', inventory_path, '-l', host.name, '-e', json.dumps(extravars)]
+
+        log.info(f"Listing MinQLX logs for instance {instance_id} on host {host.name}...")
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        stdout, stderr = process.communicate(timeout=30)
+        rc = process.returncode
+
+        if rc != 0:
+            log.error(f"Ansible failed to list MinQLX logs for instance {instance_id}. RC: {rc}. stderr: {stderr[-500:]}")
+            return False, [], f"Failed to list MinQLX logs (RC: {rc})."
+
+        msg_content = _extract_ansible_debug_msg(stdout)
+        if not msg_content:
+            log.warning(f"No 'msg' found in ansible output for instance {instance_id}. stdout: {stdout[-1000:]}")
+            return True, [], None
+
+        try:
+            files = json.loads(msg_content)
+        except json.JSONDecodeError as e:
+            log.error(f"Failed to parse MinQLX file list JSON for instance {instance_id}: {e}. Content: {msg_content[:500]}")
+            return False, [], "Failed to parse MinQLX log file list."
+
+        if not isinstance(files, list):
+            log.warning(f"Parsed MinQLX msg is not a list: {type(files)}")
+            return True, [], None
+
+        valid_files = [f for f in files if isinstance(f, str) and re.fullmatch(r'minqlx\.log(\.\d+)?', f)]
+        valid_files.sort(key=lambda f: 0 if f == 'minqlx.log' else int(f.rsplit('.', 1)[1]))
+        return True, valid_files, None
+
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            process.kill()
+            process.communicate()
+        log.error(f"Timeout listing MinQLX logs for instance {instance_id}")
+        return False, [], "Timeout while listing MinQLX logs from remote host."
+    except Exception as e:
+        log.exception(f"Exception listing MinQLX logs for instance {instance_id}: {e}")
         return False, [], str(e)
