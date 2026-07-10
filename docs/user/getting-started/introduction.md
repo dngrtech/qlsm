@@ -17,6 +17,7 @@ QLSM supports three ways to run your Quake Live servers:
 - **Live server status** — current map, gametype, match state, players, and scores visible at a glance. ZMQ credentials auto-generated and displayed.
 - **In-browser config editors** — CodeMirror-powered editors for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`. Syntax highlighting, search/replace, and inline validation.
 - **minqlx plugin management** — enable plugins with checkboxes. Python validation built in.
+- **minqlx damage hook** — QLSM ships minqlx with the `damage` event/dispatcher backported from the [mgaertne/minqlx fork](https://github.com/MinoMino/minqlx/compare/master...mgaertne:minqlx:master), available for plugins to hook.
 - **Factory file management** — select which factory files deploy to each instance.
 - **[Presets](../presets/overview.md)** — save a full config/plugin/factory set as a reusable preset. Export/import presets as ZIP archives to backup/restore configuration or move setups between QLSM installs.
 - **[RCON Console](../operations/rcon-console.md)** — send commands and watch live server events in the browser.
