@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.14.4` | 2026-07-10 | [#144](https://github.com/dngrtech/qlsm/pull/144) | Fix standalone hosts defaulting to the destructive full-table firewall mode meant for freshly-provisioned cloud VMs; standalone and self hosts now use the non-destructive helper firewall mode (and skip static network hardening) across the full host lifecycle, so pre-existing Docker workloads on a standalone host are no longer at risk. |
 | `v1.14.3` | 2026-07-10 | [#145](https://github.com/dngrtech/qlsm/pull/145) | Pin the minqlx build to a fixed upstream commit instead of a floating branch, and add a patch backporting the `damage` event/dispatcher. |
 | `v1.14.2` | 2026-07-09 | [#143](https://github.com/dngrtech/qlsm/pull/143) | Add installer and Docker Compose support for custom public Caddy HTTP/HTTPS ports via `PUBLIC_HTTP_PORT` and `PUBLIC_HTTPS_PORT`, including one-line install examples for URLs such as `https://qlsm.example.com:444`. |
 | `v1.14.1` | 2026-07-09 | [#142](https://github.com/dngrtech/qlsm/pull/142) | Added MinQLX log viewing from instance actions, including rotated `minqlx.log.N` files, Last N Lines/All filters, and syntax highlighting. |
