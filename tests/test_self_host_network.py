@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from ui.task_logic.self_host_network import (
     build_self_host_network_rules,
+    uses_helper_firewall,
     with_self_host_network_extravars,
 )
 
@@ -33,6 +34,13 @@ def test_build_network_rules_excludes_deleted_instance():
     rules = build_self_host_network_rules(_host(), exclude_instance_id=1)
 
     assert rules['lan_rate']['udp_ports'] == [27962]
+
+
+def test_uses_helper_firewall():
+    assert uses_helper_firewall(SimpleNamespace(provider='self'))
+    assert uses_helper_firewall(SimpleNamespace(provider='standalone'))
+    assert not uses_helper_firewall(SimpleNamespace(provider='vultr'))
+    assert not uses_helper_firewall(None)
 
 
 def test_with_self_host_network_extravars_adds_helper_mode():
