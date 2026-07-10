@@ -73,6 +73,16 @@ def is_self_host(host):
     return bool(host and host.provider == "self")
 
 
+def uses_helper_firewall(host):
+    """True for hosts where QLSM manages only its own scoped QLSM-* iptables
+    chains rather than owning the full filter/nat tables: self-host and
+    standalone. Deliberately separate from is_self_host, which still means
+    literally 'provider == self' for its other call site (_redis_args in
+    ansible_instance_mgmt.py) -- standalone hosts use a local redis-server +
+    Unix socket, not the co-located Docker Redis that branch assumes."""
+    return bool(host and host.provider in ("self", "standalone"))
+
+
 def build_self_host_network_rules(host, exclude_instance_id=None):
     lan_ports = []
     uses_hook = bool(getattr(host, 'lan_rate_uses_hook', False))
@@ -96,7 +106,7 @@ def build_self_host_network_rules(host, exclude_instance_id=None):
 def with_self_host_network_extravars(instance, extravars, exclude_instance_id=None):
     host = getattr(instance, "host", None)
     merged = dict(extravars)
-    if not is_self_host(host):
+    if not uses_helper_firewall(host):
         merged.setdefault("firewall_mode", "full")
         return merged
 
