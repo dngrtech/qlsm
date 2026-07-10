@@ -7,6 +7,7 @@
   vars:
     minqlx_build_dir: "/tmp/minqlx-build"
     minqlx_shared_dir: "/home/ql/minqlx-shared"
+    minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
 
   tasks:
     - name: Clean up old minqlx build directory
@@ -28,6 +29,7 @@
       git:
         repo: https://github.com/MinoMino/minqlx.git
         dest: "{{ minqlx_build_dir }}"
+        version: "{{ minqlx_git_version }}"
         depth: 1
 
     - name: Copy local minqlx patches to build host
