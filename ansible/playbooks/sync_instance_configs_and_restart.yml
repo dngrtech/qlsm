@@ -29,6 +29,7 @@
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/"
         dest: "{{ qlds_dir }}/baseq3/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
         rsync_path: "sudo -u ql rsync"
@@ -51,6 +52,7 @@
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/scripts/"
         dest: "{{ qlds_dir }}/minqlx-plugins/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
         rsync_path: "sudo -u ql rsync"
@@ -70,6 +72,7 @@
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/user-hooks/"
         dest: "{{ qlds_dir }}/user-hooks/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
         delete: yes
         rsync_path: "sudo -u ql rsync"
         rsync_opts:
@@ -102,6 +105,7 @@
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/factories/"
         dest: "{{ qlds_dir }}/baseq3/scripts/" # Factories go into baseq3/scripts
+        private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
         rsync_path: "sudo -u ql rsync"

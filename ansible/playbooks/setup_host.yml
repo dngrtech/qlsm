@@ -687,6 +687,7 @@
       synchronize:
         src: "../../ql-assets/data/minqlx-plugins/"
         dest: "{{ common_assets_dir }}/minqlx-plugins/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
         delete: yes
@@ -696,6 +697,7 @@
       synchronize:
         src: "../../ql-assets/data/steamapps"
         dest: "{{ qlds_base_dir }}/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
         delete: yes
@@ -705,6 +707,7 @@
       synchronize:
         src: "../../ql-assets/data/scripts/"
         dest: "{{ common_assets_dir }}/scripts/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
         delete: yes
