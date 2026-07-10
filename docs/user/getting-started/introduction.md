@@ -21,7 +21,7 @@ QLSM supports three ways to run your Quake Live servers:
 - **Factory file management** — select which factory files deploy to each instance.
 - **[Presets](../presets/overview.md)** — save a full config/plugin/factory set as a reusable preset. Export/import presets as ZIP archives to backup/restore configuration or move setups between QLSM installs.
 - **[RCON Console](../operations/rcon-console.md)** — send commands and watch live server events in the browser.
-- **Logs** — [server logs](../operations/server-logs.md) and [chat logs](../operations/chat-logs.md) (including rotated archives), searchable.
+- **Logs** — [server logs](../operations/server-logs.md), [chat logs](../operations/chat-logs.md), and [minqlx logs](../operations/minqlx-logs.md) (including rotated archives), searchable.
 - **Workshop management** — push updates manually or schedule [automatic restarts](../operations/auto-restart.md) that also pull the latest Steam Workshop content.
 - **[QLFilter](../features/qlfilter.md)** — optional eBPF/XDP anti-DDoS filter that drops reflection garbage before it reaches your QLDS ports.
 - **[99k LAN rate mode](../features/99k-lan-rate.md)** — patches the QLDS LAN-detection function via LD_PRELOAD so every client is treated as LAN, enabling the high-bandwidth rate path. Real improvement for LG-heavy or large CA/FFA servers.
