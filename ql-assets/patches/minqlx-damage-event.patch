@@ -32,7 +32,7 @@ index 1db8e4b..5d7d62f 100644
 +
 +    target_id = target - g_entities;
 +
-+    attacker_id = attacker - g_entities;
++    attacker_id = attacker ? (attacker - g_entities) : -1;
 +
 +    DamageDispatcher(target_id, attacker_id, damage, dflags, mod);
 +}
@@ -156,7 +156,7 @@ index 30ed72d..1d37009 100644
 +    } else {
 +        result = PyObject_CallFunction(damage_handler, "iOiii", target_id, Py_None, damage, dflags, mod);
 +    }
-+    
++
 +    Py_XDECREF(result);
 +
 +    PyGILState_Release(gstate);
