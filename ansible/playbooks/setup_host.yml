@@ -9,6 +9,7 @@
     steam_dir: "/home/ql/Steam"
     qlds_base_dir: "/home/ql/qlds-base"
     minqlx_build_dir: "/tmp/minqlx-build" # Temporary build location
+    minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
     minqlx_shared_dir: "/home/ql/minqlx-shared"
     common_assets_dir: "/home/ql/assets/common"
 
@@ -525,8 +526,8 @@
       git:
         repo: https://github.com/MinoMino/minqlx.git
         dest: "{{ minqlx_build_dir }}"
+        version: "{{ minqlx_git_version }}"
         depth: 1
-      # Consider adding 'version: master' or a specific tag/commit for reproducibility
 
     - name: Copy local minqlx patches to build host
       copy:
