@@ -27,7 +27,11 @@ def test_playbook_syncs_user_hooks_with_delete():
     assert s["src"] == "../../configs/{{ host_name }}/{{ qlds_id }}/user-hooks/"
     assert "--include=*.so" in s["rsync_opts"]
     assert "--exclude=*" in s["rsync_opts"]
+    assert sync["when"] == "user_hooks_source.stat.exists"
 
+
+def test_playbook_checks_user_hooks_source_before_sync():
+    tasks = _tasks()
     source_check = next(
         t for t in tasks
         if t.get("register") == "user_hooks_source"
@@ -37,4 +41,3 @@ def test_playbook_syncs_user_hooks_with_delete():
     )
     assert source_check["delegate_to"] == "localhost"
     assert source_check["become"] is False
-    assert sync["when"] == "user_hooks_source.stat.exists"
