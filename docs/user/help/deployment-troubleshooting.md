@@ -2,15 +2,9 @@
 
 Use this page when a new instance does not become playable or stable.
 
-## Problem: No host available in add-instance form
 
-- Add a host first: [Add A Host (Cloud Or Standalone)](../getting-started/add-host.md)
-- Wait until host status is **Active**.
+If something isn't working, start by clicking "Re-run host setup" from the [host actions menu](../operations/host-actions-menu.md). If the issue persists, restart the instance. 
 
-## Problem: No ports available
-
-- Another instance is using all listed ports on that host.
-- Stop/delete old instances or choose another host.
 
 ## Problem: Instance stuck in deploying/restarting/configuring
 
@@ -55,13 +49,3 @@ See: [Configure Auto-Restart](../operations/auto-restart.md)
 - [Host Actions Menu](../operations/host-actions-menu.md)
 - [Instance Actions Menu](../operations/instance-actions-menu.md)
 - [Deploy A New Instance](../getting-started/deploy-new-instance.md)
-
-## Escalation Bundle (What to collect)
-
-When asking for help, include:
-
-- Host name
-- Instance name
-- Current status
-- Exact error line from logs
-- What action you performed right before the issue
