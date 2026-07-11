@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.14.7` | 2026-07-11 | [#147](https://github.com/dngrtech/qlsm/pull/147) | Skip the LD_PRELOAD hooks sync when the instance has no `user-hooks/` directory yet, instead of failing the whole config sync. |
 | `v1.14.6` | 2026-07-11 | — | Fix the auto-reset accuracy/stats timer getting stuck after repeated kills or deaths, and simplify `!autoresetacc`/`!autoresetstats` to a plain on/off toggle. |
 | `v1.14.5` | 2026-07-10 | [#146](https://github.com/dngrtech/qlsm/pull/146) | Ensure Ansible config and hook syncs use their inventory SSH key. |
 | `v1.14.4` | 2026-07-10 | [#144](https://github.com/dngrtech/qlsm/pull/144) | Fix standalone hosts defaulting to the destructive full-table firewall mode meant for freshly-provisioned cloud VMs; standalone and self hosts now use the non-destructive helper firewall mode (and skip static network hardening) across the full host lifecycle, so pre-existing Docker workloads on a standalone host are no longer at risk. |
