@@ -16,8 +16,9 @@ def test_playbook_ensures_user_hooks_dir():
 
 
 def test_playbook_syncs_user_hooks_with_delete():
+    tasks = _tasks()
     sync = next(
-        t for t in _tasks()
+        t for t in tasks
         if SYNC_KEY in t and "user-hooks/" in t[SYNC_KEY].get("src", "")
     )
     s = sync[SYNC_KEY]
@@ -26,3 +27,14 @@ def test_playbook_syncs_user_hooks_with_delete():
     assert s["src"] == "../../configs/{{ host_name }}/{{ qlds_id }}/user-hooks/"
     assert "--include=*.so" in s["rsync_opts"]
     assert "--exclude=*" in s["rsync_opts"]
+
+    source_check = next(
+        t for t in tasks
+        if t.get("register") == "user_hooks_source"
+    )
+    assert source_check["ansible.builtin.stat"]["path"] == (
+        "{{ playbook_dir }}/../../configs/{{ host_name }}/{{ qlds_id }}/user-hooks/"
+    )
+    assert source_check["delegate_to"] == "localhost"
+    assert source_check["become"] is False
+    assert sync["when"] == "user_hooks_source.stat.exists"
