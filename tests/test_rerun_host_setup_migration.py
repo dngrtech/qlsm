@@ -2,7 +2,10 @@
 host's lan_rate_uses_hook flag to True and call apply_instance_hooks_logic
 for each instance with lan_rate_enabled=True — by ID, not by ORM iteration."""
 from unittest.mock import MagicMock, patch
+import os
 import tempfile
+
+import pytest
 
 from ui import create_app
 from ui.models import db, Host, HostStatus, QLInstance, InstanceStatus
@@ -10,9 +13,12 @@ from ui.models import db, Host, HostStatus, QLInstance, InstanceStatus
 CLOUD_MODULE = "ui.task_logic.ansible_host_setup"
 STANDALONE_MODULE = "ui.task_logic.standalone_host_setup"
 
+_created_apps = []
+
 
 def _make_app():
     db_fd, db_path = tempfile.mkstemp()
+    os.close(db_fd)
     app = create_app({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
@@ -21,7 +27,22 @@ def _make_app():
     })
     with app.app_context():
         db.create_all()
+    _created_apps.append((app, db_path))
     return app
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_apps():
+    """Dispose engines and remove temp db + WAL/SHM files created via _make_app()."""
+    yield
+    while _created_apps:
+        app, db_path = _created_apps.pop()
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
+        for path in (db_path, f"{db_path}-wal", f"{db_path}-shm"):
+            if os.path.exists(path):
+                os.unlink(path)
 
 
 def _build_host_with_instances(instances_spec, provider="vultr"):

@@ -35,8 +35,13 @@ def test_host_lan_rate_uses_hook_defaults_false():
             db.session.commit()
             assert host.lan_rate_uses_hook is False
     finally:
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
         os.close(db_fd)
-        os.unlink(db_path)
+        for path in (db_path, f'{db_path}-wal', f'{db_path}-shm'):
+            if os.path.exists(path):
+                os.unlink(path)
 
 
 def test_qlinstance_to_dict_exposes_host_lan_rate_uses_hook():
@@ -67,5 +72,10 @@ def test_qlinstance_to_dict_exposes_host_lan_rate_uses_hook():
             d = instance.to_dict()
             assert d['host_lan_rate_uses_hook'] is True
     finally:
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
         os.close(db_fd)
-        os.unlink(db_path)
+        for path in (db_path, f'{db_path}-wal', f'{db_path}-shm'):
+            if os.path.exists(path):
+                os.unlink(path)

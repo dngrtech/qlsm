@@ -28,10 +28,17 @@ def app(tmp_path):
         db.create_all()
     
     yield app
-    
-    # Close and remove the temporary database
+
+    # Dispose the engine first so SQLite releases its WAL/SHM files before
+    # we unlink anything — otherwise those sidecar files are orphaned in /tmp.
+    with app.app_context():
+        db.session.remove()
+        db.engine.dispose()
+
     os.close(db_fd)
-    os.unlink(db_path)
+    for path in (db_path, f'{db_path}-wal', f'{db_path}-shm'):
+        if os.path.exists(path):
+            os.unlink(path)
 
 @pytest.fixture
 def client(app):
