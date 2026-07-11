@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.14.6` | 2026-07-11 | — | Fix the auto-reset accuracy/stats timer getting stuck after repeated kills or deaths, and simplify `!autoresetacc`/`!autoresetstats` to a plain on/off toggle. |
 | `v1.14.5` | 2026-07-10 | [#146](https://github.com/dngrtech/qlsm/pull/146) | Ensure Ansible config and hook syncs use their inventory SSH key. |
 | `v1.14.4` | 2026-07-10 | [#144](https://github.com/dngrtech/qlsm/pull/144) | Fix standalone hosts defaulting to the destructive full-table firewall mode meant for freshly-provisioned cloud VMs; standalone and self hosts now use the non-destructive helper firewall mode (and skip static network hardening) across the full host lifecycle, so pre-existing Docker workloads on a standalone host are no longer at risk. |
 | `v1.14.3` | 2026-07-10 | [#145](https://github.com/dngrtech/qlsm/pull/145) | Pin the minqlx build to a fixed upstream commit instead of a floating branch, and add a patch backporting the `damage` event/dispatcher. |
