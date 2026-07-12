@@ -1,8 +1,7 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
-import { Menu, Transition } from '@headlessui/react';
+import { useEffect, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertTriangle, Check, Download, Edit2, GripVertical, MoreVertical, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Download, Edit2, GripVertical, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import {
   downloadInstanceHook,
   renameInstanceHook,
@@ -10,6 +9,7 @@ import {
   setInstanceHookDescription,
 } from '../../services/api';
 import InfoTooltip from '../common/InfoTooltip';
+import HookActionsMenu from './HookActionsMenu';
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -103,96 +103,6 @@ function DescriptionCell({ hook, instanceId, onChanged, readOnly }) {
         <X size={12} />
       </button>
     </span>
-  );
-}
-
-function HookActionsMenu({ hook, instanceId, onChanged, onDelete, onRename }) {
-  const [actionError, setActionError] = useState(null);
-  const fileInputRef = useRef(null);
-
-  const handleDownload = async () => {
-    setActionError(null);
-    try {
-      const blob = await downloadInstanceHook(instanceId, hook.filename);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = hook.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setActionError(err?.error?.message || 'Download failed');
-    }
-  };
-
-  const onReplaceFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setActionError(null);
-    try {
-      await replaceInstanceHook(instanceId, hook.filename, file);
-      // Replacing an enabled hook's binary is a hook change: flag it so a running
-      // instance is forced to restart on the next Save Configuration.
-      onChanged?.({ hooksChanged: hook.enabled });
-    } catch (err) {
-      setActionError(err?.error?.message || 'Replace failed');
-    }
-  };
-
-  const items = [
-    { key: 'download', label: 'Download', icon: Download, onClick: handleDownload },
-    { key: 'replace', label: 'Replace', icon: RefreshCw, onClick: () => fileInputRef.current?.click() },
-    { key: 'rename', label: 'Rename', icon: Edit2, onClick: onRename },
-    { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => onDelete?.(hook), danger: true },
-  ];
-
-  return (
-    <div className="relative flex-shrink-0">
-      <input ref={fileInputRef} type="file" accept=".so" className="hidden" onChange={onReplaceFile} />
-      <Menu as="div" className="relative">
-        <Menu.Button
-          aria-label={`Actions for ${hook.filename}`}
-          onClick={() => setActionError(null)}
-          className="flex h-7 w-7 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-        >
-          <MoreVertical size={16} />
-        </Menu.Button>
-        <Transition
-          as={Fragment}
-          unmount={false}
-          enter="transition ease-out duration-100"
-          enterFrom="transform opacity-0 scale-95"
-          enterTo="transform opacity-100 scale-100"
-          leave="transition ease-in duration-75"
-          leaveFrom="transform opacity-100 scale-100"
-          leaveTo="transform opacity-0 scale-95"
-        >
-          <Menu.Items unmount={false} className="absolute right-0 z-50 mt-1 w-36 origin-top-right rounded-md border border-[var(--surface-border)] bg-[var(--surface-elevated)] py-1 shadow-lg focus:outline-none">
-            {items.map((item) => (
-              <Menu.Item key={item.key}>
-                {({ active }) => (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); item.onClick(); }}
-                    className={`${active ? 'bg-black/10 dark:bg-white/10' : ''} ${item.danger ? 'text-[var(--accent-danger)]' : 'text-[var(--text-secondary)]'} flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs`}
-                  >
-                    <item.icon size={14} /> {item.label}
-                  </button>
-                )}
-              </Menu.Item>
-            ))}
-          </Menu.Items>
-        </Transition>
-      </Menu>
-      {actionError && (
-        <div className="absolute right-0 z-20 mt-1 w-48 rounded border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-theme-danger shadow-lg">
-          {actionError}
-        </div>
-      )}
-    </div>
   );
 }
 
