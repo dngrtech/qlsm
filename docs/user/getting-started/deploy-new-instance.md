@@ -42,7 +42,17 @@ Reference: [Instance Actions Menu](../operations/instance-actions-menu.md)
 
 Config editing details live here: [Edit Configs, Plugins, And Factories](../operations/edit-configs.md)
 
-The deploy form uses the same file manager as **Edit Config**. Before creating the instance you can add custom `.cfg` or `.txt` config files, create subfolders with `.ent` entity override files, stage plugin file changes, choose checked plugins, and select the `.factories` files that should be deployed.
+The deploy form uses the same file manager as **Edit Config**. Before creating the instance you can add custom `.cfg` or `.txt` config files, create subfolders with `.ent` entity override files, stage plugin file changes, choose checked plugins, select the `.factories` files that should be deployed, and configure preset-provided LD_PRELOAD hooks.
+
+### Hooks Before Deployment
+
+The **Hooks** tab shows the user hooks supplied by the currently loaded preset. The form starts with the `default` preset's hook files, enabled state, and load order; loading another preset replaces that draft with the selected preset's hook configuration.
+
+- Toggle a hook to enable or disable it for the new instance.
+- Drag hooks to change their LD_PRELOAD order.
+- Upload, rename, and delete are unavailable until the instance exists. Use **Edit Config** on an existing instance to manage hook files.
+
+Hook enablement and ordering count as draft changes. Saving a preset from the deploy form preserves the hook configuration shown in the tab.
 
 ## Create Instance
 
@@ -52,7 +62,7 @@ The deploy form uses the same file manager as **Edit Config**. Before creating t
 
 ## What Happens To Config After Deploy
 
-QLSM deploys QLDS instance and pushes the full selected file snapshot to that instance: configs, checked plugins, plugin files, checked factories, and factory file contents.
+QLSM deploys the QLDS instance and pushes the full selected snapshot to it: configs, checked plugins, plugin files, checked factories, factory file contents, preset user-hook files, and the enabled hook order.
 
 - Later edits affect only that instance.
 - Other instances are unchanged.

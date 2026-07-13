@@ -23,10 +23,12 @@
 
 **Files:**
 - Modify: `docs/user/operations/chat-logs.md:22-35`
+- Modify: `docs/user/operations/server-logs.md:9-13`
 
 1. Replace the line-only description with all three filter modes.
 2. Explain that filter changes take effect when the operator selects **Apply**.
 3. Correct the Refresh/Apply behavior description so it refers to the selected filter rather than only a line count.
+4. Add the existing **All** mode to the Server Logs filter list.
 
 ### Task 3: Document pre-deployment hook selection
 
@@ -44,6 +46,7 @@
 **Files:**
 - Test: `README.md`
 - Test: `docs/user/operations/chat-logs.md`
+- Test: `docs/user/operations/server-logs.md`
 - Test: `docs/user/getting-started/deploy-new-instance.md`
 - Test: `docs/user/features/hooks.md`
 

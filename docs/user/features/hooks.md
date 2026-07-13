@@ -22,7 +22,20 @@ User hooks are `.so` files you upload yourself. They are fully under your contro
 
 QLSM validates that uploaded files are ELF binaries (checks the magic bytes). Non-ELF files are rejected at upload time.
 
-## Managing User Hooks
+## Choose Hooks Before Deployment
+
+The **Hooks** tab is also available when you deploy a new instance. Because the instance does not exist yet, this tab shows the user hooks from the currently loaded preset instead of files from a live instance.
+
+- Opening the form uses the `default` preset's hook files, enabled state, and load order.
+- Loading another preset refreshes the tab with that preset's hooks.
+- You can enable, disable, and drag hooks to set their LD_PRELOAD order before deployment.
+- You cannot upload, rename, or delete hook files until the instance exists.
+
+Creating the instance copies the preset's user-hook files and applies the enabled order shown in the tab. Saving a preset from the deploy form also preserves that draft hook order and enablement.
+
+See [Deploy A New Instance](../getting-started/deploy-new-instance.md) for the full deployment workflow.
+
+## Managing User Hooks On An Existing Instance
 
 ### Upload A Hook
 

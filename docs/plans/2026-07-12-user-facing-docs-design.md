@@ -7,7 +7,7 @@ Bring the README and its linked user guides in line with recently merged user-fa
 ## Audience and document types
 
 - The README remains a concise product overview for prospective users and operators.
-- The Chat Logs and Deploy New Instance pages remain task-oriented how-to guides for QLSM operators.
+- The log and Deploy New Instance pages remain task-oriented how-to guides for QLSM operators.
 - The Hooks page remains an explanation and operating guide for administrators using native hooks.
 
 ## Changes
@@ -15,6 +15,7 @@ Bring the README and its linked user guides in line with recently merged user-fa
 - Expand the README log feature text to name the available filters.
 - Add the MinQLX `damage` event to the README's plugin-management feature text.
 - Document Last N Lines, Time Range, and All filtering on the Chat Logs page.
+- Add the existing All mode to the Server Logs filter list.
 - Document the Hooks tab in the pre-deployment workflow, including its preset-derived limitations.
 - Explain on the Hooks page how hook selection and ordering work before an instance exists.
 
