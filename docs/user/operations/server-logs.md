@@ -10,6 +10,7 @@ Use **View Server Logs** from the instance action menu to fetch remote service l
 
 - **Last N Lines**
 - **Time Range**
+- **All**
 
 ### Line presets
 
@@ -30,4 +31,3 @@ Use **View Server Logs** from the instance action menu to fetch remote service l
 - After load, scroll auto-jumps to bottom.
 - Use `Ctrl+F` inside editor for search.
 - **`Refresh`** and **`Apply`** trigger a new fetch.
-

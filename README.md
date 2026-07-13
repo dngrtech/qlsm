@@ -14,12 +14,13 @@ Features:
 - Per-instance [RCON console](https://dngrtech.github.io/qlsm/operations/rcon-console/) with command line and live feed of all server events
 - [Live server status](https://dngrtech.github.io/qlsm/operations/live-status/) with current map, gametype, mode/factory, match timer, player list, and scores
 - [Syntax-aware editors](https://dngrtech.github.io/qlsm/operations/edit-configs/) (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, featuring a Python linter for minqlx plugin's code validation. The editor includes search and replace functionality for easy editing
-- Upload common config files, factories, and custom minqlx plugins
+- Upload common config files, factories, and custom minqlx plugins. 
+- QLSM's bundled minqlx build includes the `damage` event/dispatcher for custom plugins to hook.
 - [Preset manager](https://dngrtech.github.io/qlsm/presets/overview/) to load/save/update/delete QLDS presets, including export/import as ZIP archives to back up presets or move them between QLSM installs. Each preset includes custom `server.cfg`, `access.txt`, `mappool.txt`, `workshop.txt`, LD_PRELOAD user hooks, set of minqlx-plugins and `*.factories` files
   - Minqlx plugins can be enabled in the UI by selecting checkboxes. This eliminates the need to manually edit the `qlx_plugins` cvar, as QLSM handles it automatically.
   - Factories can be enabled in the UI by selecting checkboxes.
-- [Chat logs](https://dngrtech.github.io/qlsm/operations/chat-logs/) (including rotated archived chat log files) and [server logs](https://dngrtech.github.io/qlsm/operations/server-logs/) retrieval with convenient search capability.
-- [MinQLX logs](https://dngrtech.github.io/qlsm/operations/minqlx-logs/) (including rotated `minqlx.log.N` files) with syntax highlighting for events, SteamIDs, plugin tags, and authentic Quake `^N` color codes.
+- [Chat logs](https://dngrtech.github.io/qlsm/operations/chat-logs/) (including rotated archives) and [server logs](https://dngrtech.github.io/qlsm/operations/server-logs/) with Last N Lines, Time Range, and All filters, plus in-view search.
+- [MinQLX logs](https://dngrtech.github.io/qlsm/operations/minqlx-logs/) (including rotated `minqlx.log.N` files) with Last N Lines and All filters, plus syntax highlighting for events, SteamIDs, plugin tags, and authentic Quake `^N` color codes.
 - [Daily/weekly/monthly host auto-restart scheduling](https://dngrtech.github.io/qlsm/operations/auto-restart/); scheduled restarts trigger Steam workshop refresh across all deployed instances
 - [Manual workshop item update](https://dngrtech.github.io/qlsm/operations/update-workshop-item/) by Steam Workshop ID, with optional restart of selected instances
 - ZMQ RCON Port, ZMQ RCON Password, ZMQ Stats Port, ZMQ Stats Password - all these cvars are auto-generated and shown in the UI

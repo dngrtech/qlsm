@@ -19,9 +19,15 @@ Sorting behavior:
 
 The UI keeps at most 11 entries (current file + 10 archives).
 
-## Line Filtering
+## Filtering
 
-Line presets: `100`, `250`, `500`, `1000`, `2500`
+Choose a filter mode:
+
+- **Last N Lines** — presets `100`, `250`, `500`, `1000`, `2500`
+- **Time Range** — presets `15 min`, `30 min`, `1 hour`, `3 hours`, `12 hours`, `24 hours`
+- **All** — the entire selected file
+
+After changing the filter mode or its value, select **Apply** to fetch the selected file with that filter.
 
 
 ![](../images/chat-logs.png)
@@ -32,4 +38,6 @@ Line presets: `100`, `250`, `500`, `1000`, `2500`
 - Read-only CodeMirror display
 - Auto-scroll to bottom after load
 - `Ctrl+F` to search in-place
-- **`Refresh`** and **`Apply`** both re-fetch current file + line count
+- Selecting a different archive file reloads it immediately using the active filter
+- **Refresh** re-fetches the selected file without changing the active filter
+- **Apply** re-fetches the selected file using the currently selected filter controls
