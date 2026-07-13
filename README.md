@@ -14,7 +14,8 @@ Features:
 - Per-instance [RCON console](https://dngrtech.github.io/qlsm/operations/rcon-console/) with command line and live feed of all server events
 - [Live server status](https://dngrtech.github.io/qlsm/operations/live-status/) with current map, gametype, mode/factory, match timer, player list, and scores
 - [Syntax-aware editors](https://dngrtech.github.io/qlsm/operations/edit-configs/) (CodeMirror) for `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt`, featuring a Python linter for minqlx plugin's code validation. The editor includes search and replace functionality for easy editing
-- Upload common config files, factories, and custom minqlx plugins. QLSM's bundled minqlx build includes the `damage` event/dispatcher for custom plugins to hook.
+- Upload common config files, factories, and custom minqlx plugins. 
+- QLSM's bundled minqlx build includes the `damage` event/dispatcher for custom plugins to hook.
 - [Preset manager](https://dngrtech.github.io/qlsm/presets/overview/) to load/save/update/delete QLDS presets, including export/import as ZIP archives to back up presets or move them between QLSM installs. Each preset includes custom `server.cfg`, `access.txt`, `mappool.txt`, `workshop.txt`, LD_PRELOAD user hooks, set of minqlx-plugins and `*.factories` files
   - Minqlx plugins can be enabled in the UI by selecting checkboxes. This eliminates the need to manually edit the `qlx_plugins` cvar, as QLSM handles it automatically.
   - Factories can be enabled in the UI by selecting checkboxes.
