@@ -65,7 +65,11 @@ def _migrate_host_instances_to_hook(host):
 def _restart_running_instances(host):
     """Restart all RUNNING instances on a host.
 
-    Used after a minqlx rebuild so instances load the new binary.
+    Used after a minqlx rebuild so instances load the new build. The restart
+    runs sync_instance_configs_and_restart.yml, which mirrors the whole of
+    minqlx-shared/ into the instance first — both the binary and the minqlx/
+    Python package. Both halves must land together: a patched binary against a
+    stale Python package leaves patched event dispatchers unregistered.
     Stopped instances are left untouched.
     Returns (restarted_ok, restarted_failed) counts.
     """

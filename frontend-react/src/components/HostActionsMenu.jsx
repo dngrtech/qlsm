@@ -66,7 +66,7 @@ function HostActionsMenu({
         setIsRerunSetupModalOpen(false);
       }}
       title="Re-run Host Setup"
-      message="This will re-apply host configuration. Redis will briefly restart — running instances may lose their Redis connection momentarily but will reconnect automatically. Instances with pending platform upgrades may also briefly restart."
+      message="This will re-apply host configuration. Redis and running instances will restart."
       confirmButtonText="Re-run Setup"
       confirmButtonVariant="primary"
     />
