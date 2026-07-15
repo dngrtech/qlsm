@@ -4,6 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.14.8` | 2026-07-15 | [#149](https://github.com/dngrtech/qlsm/pull/149) | Fix a rebuilt MinQLX never reaching existing instances: instance restarts synced only the MinQLX binary and launcher, leaving the bundled Python package stale, so patched event dispatchers stayed unregistered. Restarts now mirror the whole shared MinQLX build, and standalone hosts restart their running instances on Re-run Host Setup like cloud hosts already did. |
 | `v1.14.7` | 2026-07-11 | [#147](https://github.com/dngrtech/qlsm/pull/147) | Skip the LD_PRELOAD hooks sync when the instance has no `user-hooks/` directory yet, instead of failing the whole config sync. |
 | `v1.14.6` | 2026-07-11 | — | Fix the auto-reset accuracy/stats timer getting stuck after repeated kills or deaths, and simplify `!autoresetacc`/`!autoresetstats` to a plain on/off toggle. |
 | `v1.14.5` | 2026-07-10 | [#146](https://github.com/dngrtech/qlsm/pull/146) | Ensure Ansible config and hook syncs use their inventory SSH key. |
