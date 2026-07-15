@@ -239,3 +239,65 @@ def test_standalone_rerun_migrates_lan_rate_enabled_instances(
         c.kwargs.get("restart_service") is True
         for c in apply_hooks.call_args_list
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 4 – standalone rerun restarts running instances after migration
+# ---------------------------------------------------------------------------
+
+@patch(f"{STANDALONE_MODULE}.os.path.exists", return_value=True)
+@patch(f"{STANDALONE_MODULE}.subprocess.run")
+@patch(f"{STANDALONE_MODULE}.subprocess.Popen")
+@patch("ui.task_logic.ansible_runner._stream_output", return_value=("stdout ok", ""))
+@patch(f"{STANDALONE_MODULE}.get_current_job")
+@patch("ui.task_logic.standalone_host_setup._generate_standalone_inventory")
+@patch("ui.task_logic.standalone_host_setup._wait_for_ssh", return_value=True)
+def test_standalone_rerun_restarts_running_instances(
+    mock_wait_ssh,
+    mock_gen_inventory,
+    mock_job,
+    mock_stream,
+    mock_popen,
+    mock_run,
+    mock_exists,
+):
+    app, host_id = _build_host_with_instances(
+        [("i-on", True), ("i-off", False)],
+        provider="standalone",
+    )
+
+    mock_job.return_value = MagicMock(id="job-standalone-restart-1")
+    proc = MagicMock()
+    proc.returncode = 0
+    mock_popen.return_value = proc
+    mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
+    mock_gen_inventory.return_value = ("/tmp/inv.yml", "1.2.3.4")
+
+    # Record the host id while the ORM object is still attached to a live
+    # session — reading it after the app context pops raises
+    # DetachedInstanceError. The existing tests get away with reading
+    # call_args because they capture plain ints, not ORM objects.
+    seen = {}
+
+    def _record_restart(host_arg):
+        seen["host_id"] = host_arg.id
+        return (2, 0)
+
+    with patch(
+        "ui.task_logic.common._restart_running_instances",
+        side_effect=_record_restart,
+    ) as restart_running:
+        with patch(
+            "ui.task_logic.ansible_instance_hooks.apply_instance_hooks_logic",
+            return_value=True,
+        ):
+            with app.app_context():
+                from ui.task_logic.standalone_host_setup import setup_standalone_host_logic
+                setup_standalone_host_logic(host_id, rerun=True)
+
+    assert restart_running.call_count == 1
+    assert seen["host_id"] == host_id
+
+    with app.app_context():
+        host = db.session.get(Host, host_id)
+        assert host.status == HostStatus.ACTIVE
