@@ -16,6 +16,9 @@
     # Instance directory on target host
     qlds_dir: "/home/ql/qlds-{{ game_port }}"
 
+    # Shared minqlx build on target host (source of truth for instance minqlx)
+    minqlx_shared_dir: "/home/ql/minqlx-shared"
+
   tasks:
     - name: Ensure correct ownership of minqlx-plugins directory
       ansible.builtin.file:
@@ -131,18 +134,18 @@
       changed_when: false
 
 
-    
+    # Mirror the whole shared build (binary, launcher, and the minqlx/ Python
+    # package) so instances converge on the same minqlx that add_qlds_instance.yml
+    # installs. Syncing only the .so leaves a stale Python package behind, which
+    # silently drops patched event dispatchers.
     - name: Sync minqlx binary and runtime from shared location
       ansible.builtin.copy:
-        src: "{{ item.src }}"
-        dest: "{{ qlds_dir }}/{{ item.dest }}"
-        remote_src: yes
+        src: "{{ minqlx_shared_dir }}/"
+        dest: "{{ qlds_dir }}/"
         owner: ql
         group: ql
-        mode: '0755'
-      loop:
-        - { src: "/home/ql/minqlx-shared/minqlx.x64.so", dest: "minqlx.x64.so" }
-        - { src: "/home/ql/minqlx-shared/run_server_x64_minqlx.sh", dest: "run_server_x64_minqlx.sh" }
+        mode: preserve
+        remote_src: yes
 
     - name: Render QLDS systemd service file (Update Hostname/Args)
       ansible.builtin.template:

@@ -2,12 +2,27 @@ import yaml
 
 PLAYBOOK = "ansible/playbooks/sync_instance_configs_and_restart.yml"
 SYNC_KEY = "ansible.builtin.synchronize"
+COPY_KEY = "ansible.builtin.copy"
 
 
 def _tasks():
     with open(PLAYBOOK) as f:
         doc = yaml.safe_load(f)
     return doc[0]["tasks"]
+
+
+def _vars():
+    with open(PLAYBOOK) as f:
+        doc = yaml.safe_load(f)
+    return doc[0]["vars"]
+
+
+def _minqlx_sync_task():
+    """The task that pulls minqlx from the shared build into the instance dir."""
+    return next(
+        t for t in _tasks()
+        if COPY_KEY in t and "minqlx_shared_dir" in str(t[COPY_KEY].get("src", ""))
+    )
 
 
 def test_playbook_ensures_user_hooks_dir():
@@ -41,3 +56,56 @@ def test_playbook_checks_user_hooks_source_before_sync():
     )
     assert source_check["delegate_to"] == "localhost"
     assert source_check["become"] is False
+
+
+def test_playbook_defines_minqlx_shared_dir_var():
+    assert _vars()["minqlx_shared_dir"] == "/home/ql/minqlx-shared"
+
+
+def test_playbook_mirrors_whole_minqlx_shared_dir():
+    task = _minqlx_sync_task()
+    c = task[COPY_KEY]
+    assert c["src"] == "{{ minqlx_shared_dir }}/"
+    assert c["dest"] == "{{ qlds_dir }}/"
+    assert c["remote_src"] is True
+    assert c["mode"] == "preserve"
+    assert c["owner"] == "ql"
+    assert c["group"] == "ql"
+    # A whole-directory mirror must not be a per-file loop.
+    assert "loop" not in task
+
+
+def test_minqlx_is_never_cherry_picked_by_file():
+    """Regression guard for the damage-event bug.
+
+    The old task looped over exactly minqlx.x64.so and run_server_x64_minqlx.sh,
+    never the minqlx/ Python package. That shipped a patched binary against a
+    stale Python package, so EVENT_DISPATCHERS["damage"] never registered on
+    existing instances. minqlx must be mirrored as a whole directory.
+    """
+    # Unconditional assertion first: the mirror task must exist and not be a
+    # loop. Without this the scan below passes vacuously once no loops remain.
+    assert "loop" not in _minqlx_sync_task()
+
+    # And no copy task anywhere may reintroduce per-file cherry-picking.
+    for task in _tasks():
+        if COPY_KEY not in task:
+            continue
+        for item in task.get("loop") or []:
+            assert "minqlx.x64.so" not in str(item), (
+                "minqlx must be mirrored as a whole directory, not cherry-picked per file"
+            )
+
+
+def test_minqlx_sync_precedes_service_restart():
+    """The synced files only take effect if the restart happens after the sync."""
+    tasks = _tasks()
+    sync_idx = next(
+        i for i, t in enumerate(tasks)
+        if COPY_KEY in t and "minqlx_shared_dir" in str(t[COPY_KEY].get("src", ""))
+    )
+    restart_idx = next(
+        i for i, t in enumerate(tasks)
+        if "Restart QLDS service" in t.get("name", "")
+    )
+    assert sync_idx < restart_idx
