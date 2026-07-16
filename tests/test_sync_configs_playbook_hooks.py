@@ -154,7 +154,7 @@ def test_minqlx_sync_precedes_service_restart():
     assert sync_idx < restart_idx
 
 
-def test_playbook_explicitly_keeps_non_restarted_service_stopped():
+def test_playbook_only_stops_non_restarted_service_when_explicitly_requested():
     task = next(
         task for task in _tasks()
         if "Keep stopped QLDS service stopped" in task.get("name", "")
@@ -163,4 +163,7 @@ def test_playbook_explicitly_keeps_non_restarted_service_stopped():
 
     assert systemd_args["name"] == "qlds@{{ game_port }}"
     assert systemd_args["state"] == "stopped"
-    assert task["when"] == "not (restart_service | bool)"
+    assert task["when"] == (
+        "not (restart_service | bool) and "
+        "(keep_service_stopped | default(false) | bool)"
+    )
