@@ -92,6 +92,26 @@
       become: false
       when: user_hooks_source.stat.exists
 
+    - name: Ensure system-hooks directory exists
+      ansible.builtin.file:
+        path: "{{ qlds_dir }}/system-hooks"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - name: Sync built-in system hooks from UI server
+      ansible.builtin.synchronize:
+        src: "../../ql-assets/data/system-hooks/"
+        dest: "{{ qlds_dir }}/system-hooks/"
+        private_key: "{{ ansible_ssh_private_key_file }}"
+        rsync_path: "sudo -u ql rsync"
+        rsync_opts:
+          - "--include=*.so"
+          - "--exclude=*"
+      delegate_to: localhost
+      become: false
+
     - name: Backfill common minqlx-plugins to instance directory
       ansible.builtin.command:
         argv:
@@ -186,6 +206,12 @@
         # survives the next reboot (covers restart and config-apply-with-restart).
         enabled: yes
       when: restart_service | bool
+
+    - name: Keep stopped QLDS service stopped
+      ansible.builtin.systemd:
+        name: "qlds@{{ game_port }}"
+        state: stopped
+      when: not (restart_service | bool)
 
   handlers:
     - name: reload systemd daemon

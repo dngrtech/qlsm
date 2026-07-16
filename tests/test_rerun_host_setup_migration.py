@@ -1,303 +1,178 @@
-"""Re-run Host Setup must, after a successful setup_host.yml run, flip the
-host's lan_rate_uses_hook flag to True and call apply_instance_hooks_logic
-for each instance with lan_rate_enabled=True — by ID, not by ORM iteration."""
+import inspect
 from unittest.mock import MagicMock, patch
-import os
-import tempfile
 
 import pytest
 
-from ui import create_app
-from ui.models import db, Host, HostStatus, QLInstance, InstanceStatus
+from ui import db
+from ui.models import Host, HostStatus, InstanceStatus, QLInstance
+
 
 CLOUD_MODULE = "ui.task_logic.ansible_host_setup"
 STANDALONE_MODULE = "ui.task_logic.standalone_host_setup"
-
-_created_apps = []
-
-
-def _make_app():
-    db_fd, db_path = tempfile.mkstemp()
-    os.close(db_fd)
-    app = create_app({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
-        "SQLALCHEMY_TRACK_MODIFICATIONS": False,
-        "RCON_ENABLED": False,
-    })
-    with app.app_context():
-        db.create_all()
-    _created_apps.append((app, db_path))
-    return app
+COMMON_HELPER = "ui.task_logic.common._reconcile_host_instances_after_setup"
 
 
-@pytest.fixture(autouse=True)
-def _cleanup_apps():
-    """Dispose engines and remove temp db + WAL/SHM files created via _make_app()."""
-    yield
-    while _created_apps:
-        app, db_path = _created_apps.pop()
-        with app.app_context():
-            db.session.remove()
-            db.engine.dispose()
-        for path in (db_path, f"{db_path}-wal", f"{db_path}-shm"):
-            if os.path.exists(path):
-                os.unlink(path)
-
-
-def _build_host_with_instances(instances_spec, provider="vultr"):
-    """Create a Host with QLInstances in the test DB.
-
-    instances_spec: list of (name, lan_rate_enabled) tuples.
-    Returns (app, host_id).
-    """
-    app = _make_app()
+def _build_host(app, *, provider, status):
     with app.app_context():
         host = Host(
-            name="legacy-host",
+            name=f"{provider}-recovery-host",
             provider=provider,
             os_type="debian",
             ip_address="1.2.3.4",
             ssh_key_path="/key",
             ssh_user="ansible",
-            status=HostStatus.CONFIGURING,
+            status=status,
+            is_standalone=provider == "standalone",
             lan_rate_uses_hook=False,
         )
         db.session.add(host)
-        db.session.commit()
-        host_id = host.id
-        for idx, (name, lan_rate_enabled) in enumerate(instances_spec):
-            db.session.add(QLInstance(
-                host_id=host_id,
-                name=name,
-                hostname=f"QL Server {name}",
-                port=27960 + idx,
-                lan_rate_enabled=lan_rate_enabled,
+        db.session.flush()
+        db.session.add_all([
+            QLInstance(
+                host_id=host.id,
+                name=f"{provider}-running",
+                hostname="Running server",
+                port=27960,
                 status=InstanceStatus.RUNNING,
-            ))
+            ),
+            QLInstance(
+                host_id=host.id,
+                name=f"{provider}-stopped",
+                hostname="Stopped server",
+                port=27961,
+                status=InstanceStatus.STOPPED,
+            ),
+        ])
         db.session.commit()
-        return app, host_id
+        return host.id
 
 
-# ---------------------------------------------------------------------------
-# Test 1 – cloud (ansible_host_setup) rerun migrates only lan_rate=on instances
-# ---------------------------------------------------------------------------
-
-@patch(f"{CLOUD_MODULE}.os.path.exists", return_value=True)
-@patch(f"{CLOUD_MODULE}.subprocess.run")
-@patch(f"{CLOUD_MODULE}.subprocess.Popen")
-@patch("ui.task_logic.ansible_runner._stream_output", return_value=("stdout ok", ""))
-@patch(f"{CLOUD_MODULE}.get_current_job")
-def test_cloud_rerun_migrates_only_lan_rate_enabled_instances(
-    mock_job, mock_stream, mock_popen, mock_run, mock_exists
-):
-    app, host_id = _build_host_with_instances([
-        ("i-on", True),
-        ("i-off", False),
-        ("i-on-2", True),
-    ])
-
-    mock_job.return_value = MagicMock(id="job-rerun-1")
-    proc = MagicMock()
-    proc.returncode = 0
-    mock_popen.return_value = proc
-    mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
-
-    with app.app_context():
-        enabled_ids = {
-            i.id for i in QLInstance.query.filter_by(
-                host_id=host_id, lan_rate_enabled=True
-            ).all()
-        }
-
-    with patch(
-        "ui.task_logic.ansible_instance_hooks.apply_instance_hooks_logic",
-        return_value=True,
-    ) as apply_hooks:
+def _run_cloud_setup(app, host_id, *, rerun):
+    process = MagicMock(returncode=0)
+    with patch(f"{CLOUD_MODULE}.get_current_job", return_value=MagicMock(id="job")), \
+         patch(f"{CLOUD_MODULE}.os.path.exists", return_value=True), \
+         patch(f"{CLOUD_MODULE}.subprocess.run"), \
+         patch(f"{CLOUD_MODULE}.subprocess.Popen", return_value=process), \
+         patch(
+             "ui.task_logic.ansible_runner._stream_output",
+             return_value=("stdout ok", ""),
+         ):
         with app.app_context():
             from ui.task_logic.ansible_host_setup import setup_host_ansible_logic
-            setup_host_ansible_logic(host_id, rerun=True)
-
-    with app.app_context():
-        host = db.session.get(Host, host_id)
-        assert host.lan_rate_uses_hook is True
-        assert host.status == HostStatus.ACTIVE
-
-    called_ids = {c.args[0] for c in apply_hooks.call_args_list}
-    assert called_ids == enabled_ids
-    assert all(
-        c.kwargs.get("restart_service") is True
-        for c in apply_hooks.call_args_list
-    )
+            return setup_host_ansible_logic(host_id, rerun=rerun)
 
 
-# ---------------------------------------------------------------------------
-# Test 2 – cloud rerun continues when one instance fails; host still goes ACTIVE
-# ---------------------------------------------------------------------------
-
-@patch(f"{CLOUD_MODULE}.os.path.exists", return_value=True)
-@patch(f"{CLOUD_MODULE}.subprocess.run")
-@patch(f"{CLOUD_MODULE}.subprocess.Popen")
-@patch("ui.task_logic.ansible_runner._stream_output", return_value=("stdout ok", ""))
-@patch(f"{CLOUD_MODULE}.get_current_job")
-def test_cloud_rerun_continues_on_instance_failure(
-    mock_job, mock_stream, mock_popen, mock_run, mock_exists
-):
-    app, host_id = _build_host_with_instances([
-        ("i-fail", True),
-        ("i-ok", True),
-    ])
-
-    mock_job.return_value = MagicMock(id="job-rerun-2")
-    proc = MagicMock()
-    proc.returncode = 0
-    mock_popen.return_value = proc
-    mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
-
-    call_count = [0]
-
-    def _side_effect(instance_id, restart_service=True):
-        call_count[0] += 1
-        # First call fails, second succeeds
-        return call_count[0] != 1
-
+def _run_standalone_setup(app, host_id, *, rerun):
     with patch(
-        "ui.task_logic.ansible_instance_hooks.apply_instance_hooks_logic",
-        side_effect=_side_effect,
-    ) as apply_hooks:
-        with app.app_context():
-            from ui.task_logic.ansible_host_setup import setup_host_ansible_logic
-            setup_host_ansible_logic(host_id, rerun=True)
-
-    with app.app_context():
-        host = db.session.get(Host, host_id)
-        # Host still becomes ACTIVE despite one instance failure
-        assert host.status == HostStatus.ACTIVE
-        assert host.lan_rate_uses_hook is True
-
-    assert apply_hooks.call_count == 2
-
-
-# ---------------------------------------------------------------------------
-# Test 3 – standalone rerun migrates lan_rate_enabled instances
-# ---------------------------------------------------------------------------
-
-@patch(f"{STANDALONE_MODULE}.os.path.exists", return_value=True)
-@patch(f"{STANDALONE_MODULE}.subprocess.run")
-@patch(f"{STANDALONE_MODULE}.subprocess.Popen")
-@patch("ui.task_logic.ansible_runner._stream_output", return_value=("stdout ok", ""))
-@patch(f"{STANDALONE_MODULE}.get_current_job")
-@patch("ui.task_logic.standalone_host_setup._generate_standalone_inventory")
-@patch("ui.task_logic.standalone_host_setup._wait_for_ssh", return_value=True)
-def test_standalone_rerun_migrates_lan_rate_enabled_instances(
-    mock_wait_ssh,
-    mock_gen_inventory,
-    mock_job,
-    mock_stream,
-    mock_popen,
-    mock_run,
-    mock_exists,
-):
-    app, host_id = _build_host_with_instances(
-        [
-            ("i-on", True),
-            ("i-off", False),
-        ],
-        provider="standalone",
-    )
-
-    mock_job.return_value = MagicMock(id="job-standalone-rerun-1")
-    proc = MagicMock()
-    proc.returncode = 0
-    mock_popen.return_value = proc
-    mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
-    mock_gen_inventory.return_value = ("/tmp/inv.yml", "1.2.3.4")
-
-    with app.app_context():
-        enabled_ids = {
-            i.id for i in QLInstance.query.filter_by(
-                host_id=host_id, lan_rate_enabled=True
-            ).all()
-        }
-
-    with patch(
-        "ui.task_logic.ansible_instance_hooks.apply_instance_hooks_logic",
+        f"{STANDALONE_MODULE}.get_current_job",
+        return_value=MagicMock(id="job"),
+    ), patch(
+        f"{STANDALONE_MODULE}._generate_standalone_inventory",
+        return_value=("/tmp/inventory.yml", "1.2.3.4"),
+    ), patch(
+        f"{STANDALONE_MODULE}._wait_for_ssh",
         return_value=True,
-    ) as apply_hooks:
+    ), patch(
+        f"{STANDALONE_MODULE}._run_setup_playbook",
+        return_value=True,
+    ):
         with app.app_context():
             from ui.task_logic.standalone_host_setup import setup_standalone_host_logic
-            setup_standalone_host_logic(host_id, rerun=True)
-
-    with app.app_context():
-        host = db.session.get(Host, host_id)
-        assert host.lan_rate_uses_hook is True
-        assert host.status == HostStatus.ACTIVE
-
-    called_ids = {c.args[0] for c in apply_hooks.call_args_list}
-    assert called_ids == enabled_ids
-    assert all(
-        c.kwargs.get("restart_service") is True
-        for c in apply_hooks.call_args_list
-    )
+            return setup_standalone_host_logic(host_id, rerun=rerun)
 
 
-# ---------------------------------------------------------------------------
-# Test 4 – standalone rerun restarts running instances after migration
-# ---------------------------------------------------------------------------
-
-@patch(f"{STANDALONE_MODULE}.os.path.exists", return_value=True)
-@patch(f"{STANDALONE_MODULE}.subprocess.run")
-@patch(f"{STANDALONE_MODULE}.subprocess.Popen")
-@patch("ui.task_logic.ansible_runner._stream_output", return_value=("stdout ok", ""))
-@patch(f"{STANDALONE_MODULE}.get_current_job")
-@patch("ui.task_logic.standalone_host_setup._generate_standalone_inventory")
-@patch("ui.task_logic.standalone_host_setup._wait_for_ssh", return_value=True)
-def test_standalone_rerun_restarts_running_instances(
-    mock_wait_ssh,
-    mock_gen_inventory,
-    mock_job,
-    mock_stream,
-    mock_popen,
-    mock_run,
-    mock_exists,
+@pytest.mark.parametrize(
+    ("module_name", "function_name"),
+    [
+        (CLOUD_MODULE, "setup_host_ansible_logic"),
+        (STANDALONE_MODULE, "setup_standalone_host_logic"),
+    ],
+)
+def test_rerun_callers_no_longer_reference_legacy_instance_paths(
+    module_name, function_name
 ):
-    app, host_id = _build_host_with_instances(
-        [("i-on", True), ("i-off", False)],
-        provider="standalone",
+    module = __import__(module_name, fromlist=[function_name])
+    source = inspect.getsource(getattr(module, function_name))
+
+    assert "_migrate_host_instances_to_hook" not in source
+    assert "_restart_running_instances" not in source
+    assert "update_instance_hooks.yml" not in source
+    assert "restart_instance_logic" not in source
+
+
+@pytest.mark.parametrize(
+    ("provider", "runner"),
+    [
+        ("vultr", _run_cloud_setup),
+        ("standalone", _run_standalone_setup),
+    ],
+)
+def test_rerun_uses_shared_reconciliation_once_and_stays_active(
+    app, provider, runner
+):
+    host_id = _build_host(
+        app,
+        provider=provider,
+        status=HostStatus.CONFIGURING,
     )
+    seen_host_ids = []
 
-    mock_job.return_value = MagicMock(id="job-standalone-restart-1")
-    proc = MagicMock()
-    proc.returncode = 0
-    mock_popen.return_value = proc
-    mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
-    mock_gen_inventory.return_value = ("/tmp/inv.yml", "1.2.3.4")
+    def fake_reconcile(host):
+        seen_host_ids.append(host.id)
+        host.lan_rate_uses_hook = True
+        return 1, 1
 
-    # Record the host id while the ORM object is still attached to a live
-    # session — reading it after the app context pops raises
-    # DetachedInstanceError. The existing tests get away with reading
-    # call_args because they capture plain ints, not ORM objects.
-    seen = {}
+    with patch(COMMON_HELPER, side_effect=fake_reconcile) as reconcile, \
+         patch(
+             "ui.task_logic.ansible_instance_hooks.apply_instance_hooks_logic"
+         ) as legacy_hooks, \
+         patch(
+             "ui.task_logic.ansible_instance_mgmt.restart_instance_logic"
+         ) as legacy_restart, \
+         patch(
+             "ui.task_logic.ansible_runner._run_ansible_playbook"
+         ) as legacy_playbook:
+        result = runner(app, host_id, rerun=True)
 
-    def _record_restart(host_arg):
-        seen["host_id"] = host_arg.id
-        return (2, 0)
-
-    with patch(
-        "ui.task_logic.common._restart_running_instances",
-        side_effect=_record_restart,
-    ) as restart_running:
-        with patch(
-            "ui.task_logic.ansible_instance_hooks.apply_instance_hooks_logic",
-            return_value=True,
-        ):
-            with app.app_context():
-                from ui.task_logic.standalone_host_setup import setup_standalone_host_logic
-                setup_standalone_host_logic(host_id, rerun=True)
-
-    assert restart_running.call_count == 1
-    assert seen["host_id"] == host_id
+    assert "Status: ACTIVE" in result
+    assert reconcile.call_count == 1
+    assert seen_host_ids == [host_id]
+    legacy_hooks.assert_not_called()
+    legacy_restart.assert_not_called()
+    legacy_playbook.assert_not_called()
 
     with app.app_context():
         host = db.session.get(Host, host_id)
         assert host.status == HostStatus.ACTIVE
+        assert host.lan_rate_uses_hook is True
+        assert (host.logs or "").count(
+            "Instance reconciliation after host setup: 1 ok, 1 failed"
+        ) == 1
+
+
+@pytest.mark.parametrize(
+    ("provider", "runner"),
+    [
+        ("vultr", _run_cloud_setup),
+        ("standalone", _run_standalone_setup),
+    ],
+)
+def test_initial_setup_skips_reconciliation_and_marks_hook_migration(
+    app, provider, runner
+):
+    host_id = _build_host(
+        app,
+        provider=provider,
+        status=HostStatus.PROVISIONED_PENDING_SETUP,
+    )
+
+    with patch(COMMON_HELPER) as reconcile:
+        result = runner(app, host_id, rerun=False)
+
+    assert "Status: ACTIVE" in result
+    reconcile.assert_not_called()
+    with app.app_context():
+        host = db.session.get(Host, host_id)
+        assert host.status == HostStatus.ACTIVE
+        assert host.lan_rate_uses_hook is True
+        assert "Instance reconciliation after host setup" not in (host.logs or "")

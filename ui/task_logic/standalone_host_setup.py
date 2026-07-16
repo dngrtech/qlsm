@@ -106,11 +106,12 @@ def setup_standalone_host_logic(host_id, rerun=False):
         if host.provider != 'self':
             host.redis_unix_socket = True
         if rerun:
-            from .common import _migrate_host_instances_to_hook, _restart_running_instances
-            ok, failed = _migrate_host_instances_to_hook(host)
-            append_log(host, f"LAN Rate migration: {ok} ok, {failed} failed")
-            ok, failed = _restart_running_instances(host)
-            append_log(host, f"Instance restart after minqlx rebuild: {ok} ok, {failed} failed")
+            from .common import _reconcile_host_instances_after_setup
+            ok, failed = _reconcile_host_instances_after_setup(host)
+            append_log(
+                host,
+                f"Instance reconciliation after host setup: {ok} ok, {failed} failed",
+            )
         else:
             from .ansible_host_setup import _mark_host_migrated_to_hook
             _mark_host_migrated_to_hook(host)

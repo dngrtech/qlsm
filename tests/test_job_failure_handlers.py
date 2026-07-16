@@ -137,3 +137,54 @@ def test_host_failure_handler_releases_lock(mock_release):
         host_job_failure_handler(mock_job, None, RuntimeError, RuntimeError("boom"), None)
 
     mock_release.assert_called_once_with('host', 1, 'tok-xyz')
+
+
+@patch('ui.task_lock.release_lock')
+@patch('ui.task_lock.release_locks')
+def test_host_failure_handler_releases_instance_locks_before_host_lock(
+    mock_release_locks, mock_release
+):
+    from ui.task_logic.job_failure_handlers import host_job_failure_handler
+
+    mock_job = MagicMock()
+    mock_job.id = 'test-job-rerun-abandoned'
+    mock_job.args = [1]
+    mock_job.meta = {
+        'lock_token': 'tok-rerun',
+        'locked_instance_ids': [3, 1],
+    }
+
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+    })
+    with app.app_context():
+        db.create_all()
+        host = Host(
+            id=1,
+            name='test',
+            provider='vultr',
+            status=HostStatus.CONFIGURING,
+        )
+        db.session.add(host)
+        db.session.commit()
+
+    events = []
+    mock_release_locks.side_effect = lambda *args: events.append(
+        ('instances', args)
+    )
+    mock_release.side_effect = lambda *args: events.append(('host', args))
+
+    with patch('ui.create_app', return_value=app):
+        host_job_failure_handler(
+            mock_job,
+            None,
+            RuntimeError,
+            RuntimeError('abandoned'),
+            None,
+        )
+
+    assert events == [
+        ('instances', ('instance', [3, 1], 'tok-rerun')),
+        ('host', ('host', 1, 'tok-rerun')),
+    ]

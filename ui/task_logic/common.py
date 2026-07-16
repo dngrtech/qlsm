@@ -26,69 +26,39 @@ def append_log(model_instance, message):
     # Note: Committing should happen in the main task function after calling this.
 
 
-def _migrate_host_instances_to_hook(host):
-    """Flip Host.lan_rate_uses_hook and reconcile per-instance hook state.
-
-    Captures instance IDs BEFORE the loop because apply_instance_hooks_logic
-    commits internally and would expire host.instances mid-loop.
-    Returns (migrated_ok, migrated_failed) counts.
-    """
-    # Lazy imports to avoid circular imports at module load time.
-    from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
+def _reconcile_host_instances_after_setup(host):
+    """Reconcile every host instance once from a pre-commit status snapshot."""
     from ui.models import db, InstanceStatus
+    from ui.task_logic.instance_reconciliation import (
+        reconcile_instance_after_host_setup,
+    )
+
+    instance_snapshots = [
+        (instance.id, instance.status)
+        for instance in host.instances
+    ]
 
     host.lan_rate_uses_hook = True
-    # Commit BEFORE the loop so inner commits see the updated flag.
     db.session.commit()
 
-    # Capture IDs and running state before the loop — inner commits may expire
-    # host.instances. Only restart instances that were already running; leave
-    # intentionally-stopped instances in the stopped state.
-    instances_to_migrate = [
-        (i.id, i.status == InstanceStatus.RUNNING)
-        for i in host.instances if i.lan_rate_enabled
-    ]
-
     ok = 0
     failed = 0
-    for instance_id, was_running in instances_to_migrate:
-        result = apply_instance_hooks_logic(instance_id, restart_service=was_running)
+    for instance_id, original_status in instance_snapshots:
+        restart_service = original_status is not InstanceStatus.STOPPED
+        target_status = (
+            InstanceStatus.RUNNING
+            if restart_service
+            else InstanceStatus.STOPPED
+        )
+        result = reconcile_instance_after_host_setup(
+            instance_id,
+            restart_service=restart_service,
+            target_status=target_status,
+        )
         if result is True:
             ok += 1
         else:
             failed += 1
-            append_log(host, f"instance id={instance_id} migration result: {result}")
-
-    return ok, failed
-
-
-def _restart_running_instances(host):
-    """Restart all RUNNING instances on a host.
-
-    Used after a minqlx rebuild so instances load the new build. The restart
-    runs sync_instance_configs_and_restart.yml, which mirrors the whole of
-    minqlx-shared/ into the instance first — both the binary and the minqlx/
-    Python package. Both halves must land together: a patched binary against a
-    stale Python package leaves patched event dispatchers unregistered.
-    Stopped instances are left untouched.
-    Returns (restarted_ok, restarted_failed) counts.
-    """
-    from ui.task_logic.ansible_instance_mgmt import restart_instance_logic
-    from ui.models import db, InstanceStatus
-
-    running_ids = [
-        i.id for i in host.instances if i.status == InstanceStatus.RUNNING
-    ]
-
-    ok = 0
-    failed = 0
-    for instance_id in running_ids:
-        result = restart_instance_logic(instance_id)
-        if result is True:
-            ok += 1
-        else:
-            failed += 1
-            append_log(host, f"instance id={instance_id} restart result: {result}")
-        db.session.commit()
+            append_log(host, f"instance id={instance_id} reconciliation failed")
 
     return ok, failed

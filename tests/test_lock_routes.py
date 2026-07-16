@@ -12,6 +12,7 @@ def app_with_instance():
         'JWT_COOKIE_CSRF_PROTECT': False,
         'JWT_TOKEN_LOCATION': ['headers'],
         'JWT_SECRET_KEY': 'test-secret',
+        'RCON_ENABLED': False,
     })
     with app.app_context():
         db.create_all()
@@ -41,6 +42,64 @@ def _full_configs(server_cfg='updated-config'):
         'access.txt': '',
         'workshop.txt': '',
     }
+
+
+@pytest.mark.parametrize(
+    ('method', 'path', 'payload'),
+    [
+        ('post', '/api/instances/', {
+            'name': 'blocked-add', 'host_id': 1, 'port': 27961,
+            'hostname': 'Blocked Add',
+        }),
+        ('put', '/api/instances/1', {'name': 'blocked-rename'}),
+        ('delete', '/api/instances/1', None),
+        ('post', '/api/instances/1/restart', None),
+        ('post', '/api/instances/1/stop', None),
+        ('post', '/api/instances/1/start', None),
+        ('put', '/api/instances/1/lan-rate', {'lan_rate_enabled': True}),
+        ('put', '/api/instances/1/config', {'configs': _full_configs()}),
+    ],
+)
+def test_instance_mutations_are_blocked_while_host_is_configuring(
+    method, path, payload, app_with_instance
+):
+    with app_with_instance.app_context():
+        db.session.get(Host, 1).status = HostStatus.CONFIGURING
+        db.session.commit()
+
+    client = app_with_instance.test_client()
+    headers = _get_auth_headers(app_with_instance)
+    request_kwargs = {'headers': headers}
+    if payload is not None:
+        request_kwargs['json'] = payload
+
+    with patch('ui.routes.instance_routes.acquire_lock') as mock_lock, \
+         patch('ui.routes.instance_routes.enqueue_task') as mock_enqueue, \
+         patch('ui.routes.instance_routes.create_instance') as mock_create, \
+         patch('ui.routes.instance_routes.update_instance') as mock_update, \
+         patch('ui.routes.instance_routes._sync_configs_to_disk') as mock_sync, \
+         patch('ui.routes.instance_routes.os.makedirs') as mock_makedirs:
+        response = getattr(client, method)(path, **request_kwargs)
+
+    assert response.status_code == 409
+    assert response.get_json() == {
+        'error': {
+            'message': (
+                'Host setup is currently running. Instance changes are '
+                'temporarily unavailable.'
+            ),
+        },
+    }
+    mock_lock.assert_not_called()
+    mock_enqueue.assert_not_called()
+    mock_create.assert_not_called()
+    mock_update.assert_not_called()
+    mock_sync.assert_not_called()
+    mock_makedirs.assert_not_called()
+
+    with app_with_instance.app_context():
+        assert QLInstance.query.count() == 1
+        assert db.session.get(QLInstance, 1).status == InstanceStatus.RUNNING
 
 
 @patch('ui.routes.instance_routes.enqueue_task')
