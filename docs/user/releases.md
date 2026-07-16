@@ -4,7 +4,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.14.10` | 2026-07-16 | [#151](https://github.com/dngrtech/qlsm/pull/151) | Prevent saving instance configuration with restart disabled from stopping a running QLDS service, while still preserving intentionally stopped instances during Re-run Host Setup. |
+| `v1.14.10` | 2026-07-16 | [#151](https://github.com/dngrtech/qlsm/pull/151) | Bug fixes and improvements. |
 | `v1.14.9` | 2026-07-15 | [#150](https://github.com/dngrtech/qlsm/pull/150) | Bug fixes and improvements. |
 | `v1.14.8` | 2026-07-15 | [#149](https://github.com/dngrtech/qlsm/pull/149) | Mirror the whole shared MinQLX build into instances on restart, and restart running instances on standalone Re-run Host Setup. |
 | `v1.14.7` | 2026-07-11 | [#147](https://github.com/dngrtech/qlsm/pull/147) | Skip the LD_PRELOAD hooks sync when the instance has no `user-hooks/` directory yet, instead of failing the whole config sync. |
