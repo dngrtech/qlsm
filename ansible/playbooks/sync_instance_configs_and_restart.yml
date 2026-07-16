@@ -211,7 +211,7 @@
       ansible.builtin.systemd:
         name: "qlds@{{ game_port }}"
         state: stopped
-      when: not (restart_service | bool)
+      when: not (restart_service | bool) and (keep_service_stopped | default(false) | bool)
 
   handlers:
     - name: reload systemd daemon

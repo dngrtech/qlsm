@@ -271,6 +271,9 @@ def test_apply_instance_config_pip_warning_no_restart(
     result = apply_instance_config(12, restart=False)
 
     assert mock_instance.status == InstanceStatus.UPDATED
+    extravars = mock_run_playbook.call_args.kwargs['extravars']
+    assert extravars['restart_service'] is False
+    assert 'keep_service_stopped' not in extravars
     logged_messages = [str(call) for call in mock_append_log.call_args_list]
     assert any('pip install failed' in msg for msg in logged_messages)
 

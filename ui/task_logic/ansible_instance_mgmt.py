@@ -622,7 +622,8 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
                 # If we didn't restart, it's still stopped? 
                 # Actually, sync_instance_configs_and_restart.yml handles the service state.
                 # If restart_service is True, it restarts (ensures started).
-                # If restart_service is False, it doesn't touch service state.
+                # This apply-config path does not request keep_service_stopped,
+                # so restart_service=False leaves the live service untouched.
                 # So if it was STOPPED and we didn't restart, it remains STOPPED.
                 if restart:
                      status_msg = "Instance started with new config."

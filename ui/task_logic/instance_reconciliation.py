@@ -62,6 +62,7 @@ def reconcile_instance_after_host_setup(
             "cpu_affinity": cpu_affinity,
             "lan_rate_enabled": instance.lan_rate_enabled,
             "restart_service": restart_service,
+            "keep_service_stopped": not restart_service,
         }
         extravars = with_self_host_network_extravars(instance, extravars)
         runner_result, error_msg = _run_ansible_playbook(

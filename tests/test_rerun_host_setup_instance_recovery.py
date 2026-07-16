@@ -85,6 +85,7 @@ def test_reconcile_instance_after_host_setup_commits_deterministic_target(
     assert len(calls) == 1
     assert calls[0][1] == "sync_instance_configs_and_restart.yml"
     assert calls[0][2]["restart_service"] is restart_service
+    assert calls[0][2]["keep_service_stopped"] is (not restart_service)
 
 
 @pytest.mark.parametrize(
