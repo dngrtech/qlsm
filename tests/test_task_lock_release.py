@@ -64,6 +64,36 @@ def test_rerun_task_timeout_constants_match_rq_job_timeouts():
     assert tasks.rerun_standalone_host_setup.helper.timeout == 1200
 
 
+def test_enqueue_task_copies_locked_instance_ids_into_job_meta():
+    from ui.tasks import enqueue_task
+
+    task_func = MagicMock()
+    helper = task_func.helper
+    helper.queue_name = 'default'
+    helper.timeout = 1200
+    helper.result_ttl = 500
+    helper.ttl = None
+    helper._depends_on = None
+    helper._at_front = False
+    helper._meta = {}
+    helper._description = None
+    queue = helper.rq.get_queue.return_value
+
+    enqueue_task(
+        task_func,
+        7,
+        lock_token='rerun-token',
+        locked_instance_ids=[3, 1],
+    )
+
+    call_kwargs = queue.enqueue_call.call_args.kwargs
+    assert call_kwargs['meta'] == {
+        'lock_token': 'rerun-token',
+        'locked_instance_ids': [3, 1],
+    }
+    assert call_kwargs['kwargs']['locked_instance_ids'] == [3, 1]
+
+
 @pytest.mark.parametrize(
     ("task_name", "logic_name"),
     [

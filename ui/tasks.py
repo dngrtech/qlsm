@@ -71,6 +71,10 @@ def enqueue_task(task_func, *args, on_failure=None, **kwargs):
     if lock_token:
         meta['lock_token'] = lock_token
 
+    locked_instance_ids = kwargs.get('locked_instance_ids')
+    if locked_instance_ids is not None:
+        meta['locked_instance_ids'] = list(locked_instance_ids)
+
     return helper.rq.get_queue(queue_name).enqueue_call(
         helper.wrapped,
         args=args,

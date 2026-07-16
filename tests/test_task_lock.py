@@ -78,6 +78,23 @@ class TestAcquireLocks:
             call('instance', 2, 'batch-token'),
         ]
 
+    @patch('ui.task_lock.release_lock', return_value=True)
+    @patch(
+        'ui.task_lock.acquire_lock',
+        side_effect=[True, RuntimeError('redis down')],
+    )
+    def test_acquisition_exception_releases_owned_locks_and_propagates(
+        self, mock_acquire, mock_release
+    ):
+        with pytest.raises(RuntimeError, match='redis down'):
+            acquire_locks('instance', [2, 1], 'batch-token', ttl=1260)
+
+        assert mock_acquire.call_args_list == [
+            call('instance', 1, 'batch-token', 1260),
+            call('instance', 2, 'batch-token', 1260),
+        ]
+        mock_release.assert_called_once_with('instance', 1, 'batch-token')
+
 
 class TestReleaseLocks:
     @patch('ui.task_lock.release_lock', side_effect=[RuntimeError('redis down'), True, True])

@@ -131,10 +131,19 @@ def host_job_failure_handler(job: Job, connection, type, value, traceback):
             else:
                 log.info(f"Host {host_id} already in terminal state {host.status.value}, skipping update")
 
-            # Release entity lock if token is available (safety net)
+            # Release rerun instance locks before the host lock so a crashed
+            # worker does not leave the next setup attempt blocked until TTL.
             lock_token = job.meta.get('lock_token') if job.meta else None
+            locked_instance_ids = (
+                job.meta.get('locked_instance_ids', []) if job.meta else []
+            )
             if lock_token:
-                from ui.task_lock import release_lock
+                from ui.task_lock import release_lock, release_locks
+                release_locks(
+                    'instance',
+                    locked_instance_ids,
+                    lock_token,
+                )
                 release_lock('host', host_id, lock_token)
 
     except Exception as e:

@@ -1139,7 +1139,13 @@ def rerun_setup_api(host_id):
         except Exception:
             current_app.logger.error(f"Failed to revert host {host.id} status after enqueue failure", exc_info=True)
         release_locks('instance', locked_instance_ids, lock_token)
-        release_lock('host', host.id, lock_token)
+        try:
+            release_lock('host', host.id, lock_token)
+        except Exception:
+            current_app.logger.error(
+                f"Failed to release host {host.id} lock after enqueue failure",
+                exc_info=True,
+            )
         current_app.logger.error(f"Error queuing rerun-setup for host {host.id}: {e}", exc_info=True)
         return jsonify({"error": {"message": f"Failed to queue re-run setup: {str(e)}"}}), 500
 

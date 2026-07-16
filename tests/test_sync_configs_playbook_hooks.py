@@ -152,3 +152,15 @@ def test_minqlx_sync_precedes_service_restart():
         if "Restart QLDS service" in t.get("name", "")
     )
     assert sync_idx < restart_idx
+
+
+def test_playbook_explicitly_keeps_non_restarted_service_stopped():
+    task = next(
+        task for task in _tasks()
+        if "Keep stopped QLDS service stopped" in task.get("name", "")
+    )
+    systemd_args = task["ansible.builtin.systemd"]
+
+    assert systemd_args["name"] == "qlds@{{ game_port }}"
+    assert systemd_args["state"] == "stopped"
+    assert task["when"] == "not (restart_service | bool)"
