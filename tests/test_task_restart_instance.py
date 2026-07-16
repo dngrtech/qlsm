@@ -57,7 +57,7 @@ def test_restart_instance_success(
     assert mock_instance.status == InstanceStatus.RUNNING
     assert mock_session.commit.call_count == 2
     assert mock_append_log.called, "append_log should be called during restart"
-    assert 'restart successful. Status: RUNNING' in result
+    assert result == 'Instance 11 restart successful. Status: RUNNING'
 
 
 @patch(f'{TASK_LOGIC_MODULE}.ensure_instance_cpu_affinity', return_value=1)
@@ -108,7 +108,7 @@ def test_restart_instance_ansible_failure(
 
     assert mock_instance.status == InstanceStatus.ERROR
     assert mock_session.commit.call_count == 2
-    assert 'restart failed. RC: 2' in result
+    assert result == 'Error: Instance 11 restart failed. RC: 2'
 
 
 @patch(f'{TASK_LOGIC_MODULE}.append_log')

@@ -25,6 +25,15 @@ def _minqlx_sync_task():
     )
 
 
+def _service_template_index(tasks):
+    return next(
+        i for i, task in enumerate(tasks)
+        if "qlds@{{ game_port }}.service" in str(
+            task.get("ansible.builtin.template", {}).get("dest", "")
+        )
+    )
+
+
 def test_playbook_ensures_user_hooks_dir():
     names = [t.get("name", "") for t in _tasks()]
     assert any("user-hooks directory exists" in n for n in names), names
@@ -56,6 +65,40 @@ def test_playbook_checks_user_hooks_source_before_sync():
     )
     assert source_check["delegate_to"] == "localhost"
     assert source_check["become"] is False
+
+
+def test_playbook_unconditionally_ensures_system_hooks_dir_before_service_template():
+    tasks = _tasks()
+    task_index, task = next(
+        (i, task) for i, task in enumerate(tasks)
+        if task.get("ansible.builtin.file", {}).get("path")
+        == "{{ qlds_dir }}/system-hooks"
+    )
+    file_args = task["ansible.builtin.file"]
+
+    assert file_args["state"] == "directory"
+    assert file_args["owner"] == "ql"
+    assert file_args["group"] == "ql"
+    assert "when" not in task
+    assert task_index < _service_template_index(tasks)
+
+
+def test_playbook_unconditionally_syncs_system_hooks_before_service_template():
+    tasks = _tasks()
+    task_index, task = next(
+        (i, task) for i, task in enumerate(tasks)
+        if task.get(SYNC_KEY, {}).get("src")
+        == "../../ql-assets/data/system-hooks/"
+    )
+    sync_args = task[SYNC_KEY]
+
+    assert sync_args["dest"] == "{{ qlds_dir }}/system-hooks/"
+    assert "--include=*.so" in sync_args["rsync_opts"]
+    assert "--exclude=*" in sync_args["rsync_opts"]
+    assert task["delegate_to"] == "localhost"
+    assert task["become"] is False
+    assert "when" not in task
+    assert task_index < _service_template_index(tasks)
 
 
 def test_playbook_defines_minqlx_shared_dir_var():

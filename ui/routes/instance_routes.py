@@ -32,6 +32,19 @@ _FOLDER_NAME_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 MAX_CONFIG_PATH_DEPTH = 2  # one folder + filename
 
 
+def _reject_mutation_while_host_configuring(host):
+    if host and host.status == HostStatus.CONFIGURING:
+        return jsonify({
+            "error": {
+                "message": (
+                    "Host setup is currently running. Instance changes are "
+                    "temporarily unavailable."
+                ),
+            },
+        }), 409
+    return None
+
+
 def _validate_path_segment(name, allowed_extensions=None):
     """Validate a single path segment (file or folder name).
 
@@ -341,7 +354,12 @@ def add_instance_api():
         host_id_int = int(host_id)
 
         selected_host = get_host(host_id_int)
-        if not selected_host or selected_host.status != HostStatus.ACTIVE:
+        if not selected_host:
+            return jsonify({"error": {"message": "Invalid or inactive host selected."}}), 400
+        mutation_rejection = _reject_mutation_while_host_configuring(selected_host)
+        if mutation_rejection:
+            return mutation_rejection
+        if selected_host.status != HostStatus.ACTIVE:
             return jsonify({"error": {"message": "Invalid or inactive host selected."}}), 400
 
         if would_enable_unsupported_lan_rate(
@@ -523,6 +541,9 @@ def view_instance_api(instance_id): # Renamed function
         return jsonify({"error": {"message": "Instance not found."}}), 404
 
     if request.method == 'PUT':
+        mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+        if mutation_rejection:
+            return mutation_rejection
         data = request.get_json()
         if not data:
              return jsonify({"error": {"message": "Request body must be JSON"}}), 400
@@ -577,6 +598,10 @@ def delete_instance_api(instance_id): # Renamed function
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
 
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    if mutation_rejection:
+        return mutation_rejection
+
     if instance.status in [InstanceStatus.DELETING, InstanceStatus.CONFIGURING]:
         return jsonify({"error": {"message": f'Instance "{instance.name}" is currently busy ({instance.status.value}). Cannot initiate deletion.'}}), 409
 
@@ -607,6 +632,10 @@ def restart_instance_api(instance_id): # Renamed function
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
 
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    if mutation_rejection:
+        return mutation_rejection
+
     if instance.status in [InstanceStatus.DEPLOYING, InstanceStatus.CONFIGURING, InstanceStatus.RESTARTING,
                            InstanceStatus.DELETING, InstanceStatus.STOPPING, InstanceStatus.STARTING]:
          return jsonify({"error": {"message": f'Instance "{instance.name}" is currently busy ({instance.status.value}). Cannot restart now.'}}), 409
@@ -632,6 +661,10 @@ def stop_instance_api(instance_id):
     instance = get_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
+
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    if mutation_rejection:
+        return mutation_rejection
 
     busy_statuses = [InstanceStatus.DEPLOYING, InstanceStatus.CONFIGURING, InstanceStatus.RESTARTING,
                      InstanceStatus.DELETING, InstanceStatus.STOPPING, InstanceStatus.STARTING]
@@ -663,6 +696,10 @@ def start_instance_api(instance_id):
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
 
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    if mutation_rejection:
+        return mutation_rejection
+
     busy_statuses = [InstanceStatus.DEPLOYING, InstanceStatus.CONFIGURING, InstanceStatus.RESTARTING,
                      InstanceStatus.DELETING, InstanceStatus.STOPPING, InstanceStatus.STARTING]
     if instance.status in busy_statuses:
@@ -692,6 +729,10 @@ def update_instance_lan_rate_api(instance_id):
     instance = get_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
+
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    if mutation_rejection:
+        return mutation_rejection
 
     # Check if instance is busy
     if instance.status in [InstanceStatus.DEPLOYING, InstanceStatus.CONFIGURING, InstanceStatus.RESTARTING,
@@ -1008,6 +1049,9 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
     instance_config_dir = os.path.join('configs', host_name, str(instance.id))
 
     if request.method == 'PUT':
+        mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+        if mutation_rejection:
+            return mutation_rejection
         data = request.get_json()
         if not data:
             return jsonify({"error": {"message": "Request body must be JSON"}}), 400

@@ -41,6 +41,11 @@ from ui.task_logic.ansible_workshop_update import force_update_workshop_logic
 from ui import rq
 
 
+RERUN_CLOUD_SETUP_TIMEOUT = 3600
+RERUN_STANDALONE_SETUP_TIMEOUT = 1200
+RERUN_SETUP_LOCK_RELEASE_BUFFER = 60
+
+
 def enqueue_task(task_func, *args, on_failure=None, **kwargs):
     """Enqueue a task, properly passing on_failure to RQ's enqueue_call.
 
@@ -344,27 +349,45 @@ def remove_standalone_host(host_id, lock_token=None):
             release_lock('host', host_id, lock_token)
 
 
-@rq.job(timeout=3600)
+@rq.job(timeout=RERUN_CLOUD_SETUP_TIMEOUT)
 @with_app_context
-def rerun_host_setup_ansible(host_id, lock_token=None):
+def rerun_host_setup_ansible(
+    host_id,
+    lock_token=None,
+    locked_instance_ids=None,
+):
     """RQ task entry point for re-running Ansible host setup on a cloud host."""
     try:
         return setup_host_ansible_logic(host_id, rerun=True)
     finally:
         if lock_token:
-            from ui.task_lock import release_lock
+            from ui.task_lock import release_lock, release_locks
+            release_locks(
+                'instance',
+                locked_instance_ids or [],
+                lock_token,
+            )
             release_lock('host', host_id, lock_token)
 
 
-@rq.job(timeout=1200)
+@rq.job(timeout=RERUN_STANDALONE_SETUP_TIMEOUT)
 @with_app_context
-def rerun_standalone_host_setup(host_id, lock_token=None):
+def rerun_standalone_host_setup(
+    host_id,
+    lock_token=None,
+    locked_instance_ids=None,
+):
     """RQ task entry point for re-running Ansible host setup on a standalone host."""
     try:
         return setup_standalone_host_logic(host_id, rerun=True)
     finally:
         if lock_token:
-            from ui.task_lock import release_lock
+            from ui.task_lock import release_lock, release_locks
+            release_locks(
+                'instance',
+                locked_instance_ids or [],
+                lock_token,
+            )
             release_lock('host', host_id, lock_token)
 
 

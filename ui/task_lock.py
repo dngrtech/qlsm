@@ -46,6 +46,21 @@ def acquire_lock(entity_type, entity_id, token, ttl):
     return bool(result)
 
 
+def acquire_locks(entity_type, entity_ids, token, ttl):
+    """Acquire a de-duplicated entity set in stable order or acquire none."""
+    acquired_ids = []
+    try:
+        for entity_id in sorted(set(entity_ids)):
+            if not acquire_lock(entity_type, entity_id, token, ttl):
+                release_locks(entity_type, acquired_ids, token)
+                return False
+            acquired_ids.append(entity_id)
+    except Exception:
+        release_locks(entity_type, acquired_ids, token)
+        raise
+    return True
+
+
 def release_lock(entity_type, entity_id, token):
     """Release a per-entity lock, only if we own it.
 
@@ -70,6 +85,19 @@ def release_lock(entity_type, entity_id, token):
     else:
         log.debug(f"Lock not released (not owner or expired): {key}")
     return bool(result)
+
+
+def release_locks(entity_type, entity_ids, token):
+    """Best-effort release for every unique entity ID."""
+    for entity_id in sorted(set(entity_ids)):
+        try:
+            release_lock(entity_type, entity_id, token)
+        except Exception:
+            log.exception(
+                "Failed to release lock: task_lock:%s:%s",
+                entity_type,
+                entity_id,
+            )
 
 
 def force_release_lock(entity_type, entity_id):

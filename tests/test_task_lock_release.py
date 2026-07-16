@@ -6,7 +6,11 @@ from ui import create_app, db
 
 @pytest.fixture(scope='module')
 def test_app():
-    app = create_app({'TESTING': True, 'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'})
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+        'RCON_ENABLED': False,
+    })
     with app.app_context():
         yield app
 
@@ -48,6 +52,71 @@ def test_no_release_when_no_lock_token(mock_logic, mock_release, test_app):
     with test_app.app_context():
         restart_instance(1)
     mock_release.assert_not_called()
+
+
+def test_rerun_task_timeout_constants_match_rq_job_timeouts():
+    from ui import tasks
+
+    assert tasks.RERUN_CLOUD_SETUP_TIMEOUT == 3600
+    assert tasks.RERUN_STANDALONE_SETUP_TIMEOUT == 1200
+    assert tasks.RERUN_SETUP_LOCK_RELEASE_BUFFER == 60
+    assert tasks.rerun_host_setup_ansible.helper.timeout == 3600
+    assert tasks.rerun_standalone_host_setup.helper.timeout == 1200
+
+
+@pytest.mark.parametrize(
+    ("task_name", "logic_name"),
+    [
+        ("rerun_host_setup_ansible", "setup_host_ansible_logic"),
+        ("rerun_standalone_host_setup", "setup_standalone_host_logic"),
+    ],
+)
+@pytest.mark.parametrize("raises", [False, True], ids=["success", "exception"])
+def test_rerun_tasks_release_instance_locks_before_host_lock(
+    task_name, logic_name, raises, test_app
+):
+    from ui import tasks
+
+    events = []
+
+    def run_logic(*args, **kwargs):
+        if raises:
+            raise RuntimeError("setup exploded")
+        return "ok"
+
+    with patch.object(tasks, logic_name, side_effect=run_logic), \
+         patch(
+             'ui.task_lock.release_locks',
+             side_effect=lambda entity_type, ids, token: events.append(
+                 ("instances", entity_type, ids, token)
+             ),
+         ), \
+         patch(
+             'ui.task_lock.release_lock',
+             side_effect=lambda entity_type, entity_id, token: events.append(
+                 ("host", entity_type, entity_id, token)
+             ),
+         ):
+        task = getattr(tasks, task_name)
+        with test_app.app_context():
+            if raises:
+                with pytest.raises(RuntimeError, match="setup exploded"):
+                    task(
+                        7,
+                        lock_token="rerun-token",
+                        locked_instance_ids=[3, 1],
+                    )
+            else:
+                assert task(
+                    7,
+                    lock_token="rerun-token",
+                    locked_instance_ids=[3, 1],
+                ) == "ok"
+
+    assert events == [
+        ("instances", "instance", [3, 1], "rerun-token"),
+        ("host", "host", 7, "rerun-token"),
+    ]
 
 
 @patch('ui.task_logic.terraform_provision.rq')

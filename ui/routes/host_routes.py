@@ -11,7 +11,13 @@ import ipaddress
 import subprocess
 import tempfile
 import uuid
-from ui.task_lock import acquire_lock, release_lock, force_release_lock
+from ui.task_lock import (
+    acquire_lock,
+    acquire_locks,
+    force_release_lock,
+    release_lock,
+    release_locks,
+)
 
 # Stale-lock detection constants for delete_host_api.
 # Threshold is intentionally below the minimum host lock TTL (1260s for standalone
@@ -97,6 +103,8 @@ from ui.tasks import provision_host, destroy_host, \
     force_update_workshop_task, configure_host_auto_restart_task, \
     resize_host_task, \
     rerun_host_setup_ansible, rerun_standalone_host_setup, \
+    RERUN_CLOUD_SETUP_TIMEOUT, RERUN_SETUP_LOCK_RELEASE_BUFFER, \
+    RERUN_STANDALONE_SETUP_TIMEOUT, \
     enqueue_task
 from ui.task_logic.job_failure_handlers import host_job_failure_handler
 from ui.routes.self_host_helpers import (
@@ -1085,26 +1093,52 @@ def rerun_setup_api(host_id):
     if host.status not in (HostStatus.ACTIVE, HostStatus.ERROR):
         return jsonify({"error": {"message": f"Host must be ACTIVE or ERROR to re-run setup. Current status: {host.status.value}"}}), 409
 
+    if host.is_standalone or host.provider == 'self':
+        task_fn = rerun_standalone_host_setup
+        task_timeout = RERUN_STANDALONE_SETUP_TIMEOUT
+    else:
+        task_fn = rerun_host_setup_ansible
+        task_timeout = RERUN_CLOUD_SETUP_TIMEOUT
+    lock_ttl = task_timeout + RERUN_SETUP_LOCK_RELEASE_BUFFER
+
     lock_token = str(uuid.uuid4())
-    if not acquire_lock('host', host.id, lock_token, ttl=1260):
+    if not acquire_lock('host', host.id, lock_token, ttl=lock_ttl):
         return jsonify({"error": {"message": "Host is currently locked by another operation."}}), 409
 
     original_status = host.status
+    locked_instance_ids = []
     try:
         update_host(host.id, status=HostStatus.CONFIGURING)
+        locked_instance_ids = sorted(instance.id for instance in host.instances)
 
-        if host.is_standalone or host.provider == 'self':
-            task_fn = rerun_standalone_host_setup
-        else:
-            task_fn = rerun_host_setup_ansible
+        if not acquire_locks(
+            'instance',
+            locked_instance_ids,
+            lock_token,
+            lock_ttl,
+        ):
+            update_host(host.id, status=original_status)
+            release_locks('instance', locked_instance_ids, lock_token)
+            release_lock('host', host.id, lock_token)
+            return jsonify({
+                "error": {
+                    "message": (
+                        "One or more instances are busy. Wait for active "
+                        "instance operations to finish before re-running host setup."
+                    ),
+                },
+            }), 409
 
-        enqueue_task(task_fn, host.id, lock_token=lock_token,
+        enqueue_task(task_fn, host.id,
+                     locked_instance_ids=locked_instance_ids,
+                     lock_token=lock_token,
                      on_failure=host_job_failure_handler)
     except Exception as e:
         try:
             update_host(host.id, status=original_status)
         except Exception:
             current_app.logger.error(f"Failed to revert host {host.id} status after enqueue failure", exc_info=True)
+        release_locks('instance', locked_instance_ids, lock_token)
         release_lock('host', host.id, lock_token)
         current_app.logger.error(f"Error queuing rerun-setup for host {host.id}: {e}", exc_info=True)
         return jsonify({"error": {"message": f"Failed to queue re-run setup: {str(e)}"}}), 500

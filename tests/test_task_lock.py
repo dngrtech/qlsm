@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import MagicMock, patch
-from ui.task_lock import acquire_lock, release_lock
+from unittest.mock import MagicMock, call, patch
+from ui.task_lock import acquire_lock, acquire_locks, release_lock, release_locks
 
 @pytest.fixture
 def mock_redis():
@@ -46,3 +46,46 @@ class TestReleaseLock:
         mock_redis.execute_command.return_value = 0
         result = release_lock('host', 999, 'any-token')
         assert result is False
+
+
+class TestAcquireLocks:
+    @patch('ui.task_lock.acquire_lock', return_value=True)
+    def test_deduplicates_and_acquires_ids_in_ascending_order(self, mock_acquire):
+        result = acquire_locks('instance', [9, 2, 9, 4], 'batch-token', ttl=3660)
+
+        assert result is True
+        assert mock_acquire.call_args_list == [
+            call('instance', 2, 'batch-token', 3660),
+            call('instance', 4, 'batch-token', 3660),
+            call('instance', 9, 'batch-token', 3660),
+        ]
+
+    @patch('ui.task_lock.release_lock', return_value=True)
+    @patch('ui.task_lock.acquire_lock', side_effect=[True, True, False])
+    def test_failed_acquisition_releases_every_owned_partial_lock(
+        self, mock_acquire, mock_release
+    ):
+        result = acquire_locks('instance', [3, 1, 2], 'batch-token', ttl=1260)
+
+        assert result is False
+        assert mock_acquire.call_args_list == [
+            call('instance', 1, 'batch-token', 1260),
+            call('instance', 2, 'batch-token', 1260),
+            call('instance', 3, 'batch-token', 1260),
+        ]
+        assert mock_release.call_args_list == [
+            call('instance', 1, 'batch-token'),
+            call('instance', 2, 'batch-token'),
+        ]
+
+
+class TestReleaseLocks:
+    @patch('ui.task_lock.release_lock', side_effect=[RuntimeError('redis down'), True, True])
+    def test_attempts_every_unique_id_when_one_release_raises(self, mock_release):
+        release_locks('instance', [4, 2, 4, 3], 'batch-token')
+
+        assert mock_release.call_args_list == [
+            call('instance', 2, 'batch-token'),
+            call('instance', 3, 'batch-token'),
+            call('instance', 4, 'batch-token'),
+        ]

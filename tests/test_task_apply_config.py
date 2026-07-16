@@ -59,7 +59,7 @@ def test_apply_instance_config_success(
     assert mock_instance.status == InstanceStatus.RUNNING
     assert mock_session.commit.call_count == 2
     assert mock_append_log.called, "append_log should be called during config apply"
-    assert 'config application successful' in result
+    assert result == 'Instance 12 config application successful. Status: running'
 
 
 @patch(f'{TASK_LOGIC_MODULE}.ensure_instance_cpu_affinity', return_value=1)
@@ -157,7 +157,7 @@ def test_apply_instance_config_ansible_failure(
 
     assert mock_instance.status == InstanceStatus.ERROR
     assert mock_session.commit.call_count == 2
-    assert 'config application failed' in result
+    assert result == 'Error: Instance 12 config application failed. RC: 1'
 
 
 @patch(f'{TASK_LOGIC_MODULE}.append_log')
