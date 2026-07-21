@@ -297,3 +297,9 @@ def _participant_sid(participant) -> str:
     if isinstance(participant, (tuple, list)) and participant:
         return participant[0]
     return participant
+
+
+# Register fleet handlers after the shared decorators and room helpers exist.
+# The import intentionally lives here because both modules use the same SocketIO
+# instance and default namespace.
+from ui import rcon_fleet_events as _rcon_fleet_events  # noqa: E402,F401

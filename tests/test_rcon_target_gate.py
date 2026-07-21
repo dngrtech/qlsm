@@ -55,6 +55,8 @@ def test_rcon_production_modules_stay_below_300_code_lines():
     root = Path(__file__).parents[1] / "ui"
     modules = [
         root / "rcon_ownership.py",
+        root / "rcon_fleet_events.py",
+        root / "rcon_fleet_gate.py",
         root / "rcon_target_gate.py",
         root / "rcon_sid_lifecycle.py",
         root / "rcon_transport.py",
