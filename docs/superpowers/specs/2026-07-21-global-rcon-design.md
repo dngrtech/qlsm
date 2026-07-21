@@ -229,7 +229,7 @@ Instance rows:
 
 Eligibility follows the existing individual RCON action contract:
 
-- Instance status is `running`, `active`, or `updated`.
+- Instance status is `running` or `updated`, matching the backend `InstanceStatus` enum. The frontend's legacy `active` label is not a persisted QL instance state and must not broaden backend eligibility.
 - `zmq_rcon_port` is configured in inventory.
 - Backend credential and target resolution succeeds.
 
