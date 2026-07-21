@@ -154,7 +154,11 @@ def test_failed_first_connect_rolls_back_and_leaves_room(app):
 
     leave.assert_called_once_with('rcon:1:2')
     assert not rcon_ownership.owns('sid-a', 1, 2, 'individual')
-    emit.assert_called_once_with('rcon:error', {'error': 'RCON service unavailable'})
+    emit.assert_called_once_with('rcon:error', {
+        'error': 'RCON service unavailable',
+        'host_id': 1,
+        'instance_id': 2,
+    })
 
 
 def test_individual_leave_preserves_fleet_owner_and_room(app):
@@ -194,7 +198,89 @@ def test_individual_command_requires_individual_owner_and_room(app):
         )
 
     publish.assert_not_called()
-    emit.assert_called_once_with('rcon:error', {'error': 'Not authorized for this instance'})
+    emit.assert_called_once_with('rcon:error', {
+        'error': 'Not authorized for this instance',
+        'host_id': 1,
+        'instance_id': 2,
+    })
+    rcon_ownership.cleanup_sid('sid-a')
+
+
+def test_individual_command_missing_fields_preserves_parsed_target_in_error(app):
+    from ui import socketio_events
+
+    with patch.object(socketio_events, 'emit') as emit:
+        _invoke(
+            app, socketio_events.handle_rcon_command,
+            {'host_id': 1, 'instance_id': 2},
+        )
+
+    emit.assert_called_once_with('rcon:error', {
+        'error': 'Missing required fields',
+        'host_id': 1,
+        'instance_id': 2,
+    })
+
+
+def test_individual_join_resolution_error_is_targeted(app):
+    from ui import socketio_events
+    from ui.rcon_transport import RconTargetError
+
+    with (
+        patch.object(
+            socketio_events, 'resolve_fleet_target',
+            side_effect=RconTargetError('Instance not found on host'),
+        ),
+        patch.object(socketio_events, 'emit') as emit,
+    ):
+        _invoke(
+            app, socketio_events.handle_rcon_join,
+            {'host_id': 1, 'instance_id': 2},
+        )
+
+    emit.assert_called_once_with('rcon:error', {
+        'error': 'Instance not found on host',
+        'host_id': 1,
+        'instance_id': 2,
+    })
+
+
+def test_individual_join_missing_target_uses_unroutable_none_ids(app):
+    from ui import socketio_events
+
+    with patch.object(socketio_events, 'emit') as emit:
+        _invoke(app, socketio_events.handle_rcon_join, {})
+
+    emit.assert_called_once_with('rcon:error', {
+        'error': 'Missing required fields (host_id, instance_id)',
+        'host_id': None,
+        'instance_id': None,
+    })
+
+
+def test_individual_join_not_established_error_is_targeted(app):
+    from ui import rcon_ownership, socketio_events
+
+    rcon_ownership.cleanup_sid('sid-a')
+    with (
+        patch.object(socketio_events, 'resolve_fleet_target', return_value=_target()),
+        patch.object(socketio_events, 'join_room'),
+        patch.object(
+            socketio_events, 'begin_connect',
+            return_value=SimpleNamespace(should_publish=False, established=False),
+        ),
+        patch.object(socketio_events, 'emit') as emit,
+    ):
+        _invoke(
+            app, socketio_events.handle_rcon_join,
+            {'host_id': 1, 'instance_id': 2},
+        )
+
+    emit.assert_called_once_with('rcon:error', {
+        'error': 'RCON connection was not established',
+        'host_id': 1,
+        'instance_id': 2,
+    })
     rcon_ownership.cleanup_sid('sid-a')
 
 

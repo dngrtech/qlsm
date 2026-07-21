@@ -4,6 +4,7 @@ import threading
 import time
 
 import pytest
+import redis
 from flask_jwt_extended import create_access_token
 
 from ui import db
@@ -49,6 +50,12 @@ class BlockingActionRedis(RecordingRedis):
             self.started.set()
             assert self.release.wait(timeout=2)
         return super().publish(channel, serialized_json)
+
+
+class FailingRedis(RecordingRedis):
+    def publish(self, channel, serialized_json):
+        self.publications.append((channel, serialized_json))
+        raise redis.RedisError("redis password=integration-secret")
 
 
 @pytest.fixture
@@ -201,6 +208,55 @@ def test_authenticated_individual_command_preserves_publication_contract(
     assert client.get_received() == []
 
 
+@pytest.mark.parametrize(
+    ("redis_client", "reason"),
+    [
+        (RecordingRedis(subscribers=0), "RCON service unavailable"),
+        (FailingRedis(), "Communication service temporarily unavailable"),
+    ],
+)
+def test_authenticated_individual_command_targets_redis_publication_errors(
+    app, rcon_target, authenticated_socket, recording_redis, redis_client, reason,
+):
+    from ui import rcon_transport
+
+    host_id, instance_id = rcon_target
+    client, _ = authenticated_socket
+    client.emit("rcon:join", {"host_id": host_id, "instance_id": instance_id})
+    client.get_received()
+    rcon_transport._client = redis_client
+
+    client.emit("rcon:command", {
+        "host_id": host_id, "instance_id": instance_id, "cmd": "status",
+    })
+
+    browser_events = client.get_received()
+    assert _event_payloads(browser_events, "rcon:error") == [{
+        "error": reason,
+        "host_id": host_id,
+        "instance_id": instance_id,
+    }]
+    assert "integration-secret" not in repr(browser_events)
+
+
+
+def test_authenticated_join_resolution_error_carries_exact_target(
+    app, rcon_target, authenticated_socket,
+):
+    host_id, instance_id = rcon_target
+    client, _ = authenticated_socket
+
+    client.emit("rcon:join", {
+        "host_id": host_id, "instance_id": instance_id + 999,
+    })
+
+    assert _event_payloads(client.get_received(), "rcon:error") == [{
+        "error": "Instance not found on host",
+        "host_id": host_id,
+        "instance_id": instance_id + 999,
+    }]
+
+
 
 def test_authentication_is_registered_before_disconnect_and_cancels_join(
     app, rcon_target, authenticated_socket, recording_redis, monkeypatch,
@@ -322,7 +378,11 @@ def test_leave_holding_target_gate_removes_authority_before_queued_command(
         "disconnect",
     ]
     assert _event_payloads(client.get_received(), "rcon:error") == [
-        {"error": "Not authorized for this instance"},
+        {
+            "error": "Not authorized for this instance",
+            "host_id": host_id,
+            "instance_id": instance_id,
+        },
     ]
 
 
@@ -520,6 +580,44 @@ def test_authenticated_stats_subscribe_and_unsubscribe_keep_existing_contract(
         {"action": "unsubscribe_stats"},
     )
     assert client.get_received() == []
+
+
+
+def test_authenticated_stats_errors_carry_exact_target(
+    app, rcon_target, authenticated_socket, recording_redis, caplog,
+):
+    host_id, instance_id = rcon_target
+    client, _ = authenticated_socket
+
+    with caplog.at_level(logging.DEBUG):
+        client.emit("rcon:subscribe_stats", {
+            "host_id": host_id, "instance_id": instance_id + 999,
+        })
+    assert _event_payloads(client.get_received(), "rcon:error") == [{
+        "error": f"Instance {instance_id + 999} not found on host {host_id}",
+        "host_id": host_id,
+        "instance_id": instance_id + 999,
+    }]
+
+    recording_redis.subscribers = 0
+    with caplog.at_level(logging.DEBUG):
+        client.emit("rcon:subscribe_stats", {
+            "host_id": host_id, "instance_id": instance_id,
+        })
+    assert _event_payloads(client.get_received(), "rcon:error") == [{
+        "error": "RCON service unavailable",
+        "host_id": host_id,
+        "instance_id": instance_id,
+    }]
+
+    client.emit("rcon:unsubscribe_stats", {
+        "host_id": host_id, "instance_id": instance_id,
+    })
+    assert _event_payloads(client.get_received(), "rcon:error") == [{
+        "error": "RCON service unavailable",
+        "host_id": host_id,
+        "instance_id": instance_id,
+    }]
 
 
 

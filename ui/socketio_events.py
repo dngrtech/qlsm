@@ -48,10 +48,20 @@ def _rcon_target_for_host(host) -> str | None:
     return rcon_target_for_host(host, resolve_self_host_management_target)
 
 
-def _publish_or_error(channel: str, payload: dict) -> bool:
+def _emit_rcon_error(error: str | None, host_id, instance_id) -> None:
+    emit("rcon:error", {
+        "error": error,
+        "host_id": host_id,
+        "instance_id": instance_id,
+    })
+
+
+def _publish_or_error(
+    channel: str, payload: dict, host_id, instance_id,
+) -> bool:
     result = publish_json(channel, payload)
     if not result.ok:
-        emit("rcon:error", {"error": result.reason})
+        _emit_rcon_error(result.reason, host_id, instance_id)
     return result.ok
 
 
@@ -130,13 +140,15 @@ def handle_rcon_join(data):
     host_id = data.get("host_id")
     instance_id = data.get("instance_id")
     if not all([host_id, instance_id]):
-        emit("rcon:error", {"error": "Missing required fields (host_id, instance_id)"})
+        _emit_rcon_error(
+            "Missing required fields (host_id, instance_id)", host_id, instance_id,
+        )
         return
 
     try:
         target = resolve_fleet_target(host_id, instance_id)
     except RconTargetError as exc:
-        emit("rcon:error", {"error": str(exc)})
+        _emit_rcon_error(str(exc), host_id, instance_id)
         return
 
     with target_operation(host_id, instance_id):
@@ -160,12 +172,14 @@ def handle_rcon_join(data):
                 rollback = completion.rollback
                 if rollback is not None and not rollback.owners:
                     leave_room(target.room)
-                emit("rcon:error", {"error": result.reason})
+                _emit_rcon_error(result.reason, host_id, instance_id)
                 return
             if not completion.claimant_active:
                 return
         elif not attempt.established:
-            emit("rcon:error", {"error": "RCON connection was not established"})
+            _emit_rcon_error(
+                "RCON connection was not established", host_id, instance_id,
+            )
             return
 
         emit("rcon:joined", {
@@ -199,6 +213,7 @@ def handle_rcon_leave(data):
             if _participant_count(room) == 0:
                 _publish_or_error(
                     command_channel(host_id, instance_id), disconnect_payload(),
+                    host_id, instance_id,
                 )
         emit("rcon:left", {"room": room})
 
@@ -211,7 +226,7 @@ def handle_rcon_command(data):
     instance_id = data.get("instance_id")
     cmd = data.get("cmd")
     if not all([host_id, instance_id, cmd]):
-        emit("rcon:error", {"error": "Missing required fields"})
+        _emit_rcon_error("Missing required fields", host_id, instance_id)
         return
 
     room = f"rcon:{host_id}:{instance_id}"
@@ -221,10 +236,13 @@ def handle_rcon_command(data):
             and room in rooms(sid=request.sid, namespace="/")
         )
         if not authorized:
-            emit("rcon:error", {"error": "Not authorized for this instance"})
+            _emit_rcon_error(
+                "Not authorized for this instance", host_id, instance_id,
+            )
             return
         _publish_or_error(
             command_channel(host_id, instance_id), command_payload(cmd),
+            host_id, instance_id,
         )
 
 
@@ -242,9 +260,11 @@ def handle_subscribe_stats(data):
     with target_operation(host_id, instance_id):
         instance = QLInstance.query.get(instance_id)
         if not instance or instance.host_id != host_id:
-            emit("rcon:error", {
-                "error": f"Instance {instance_id} not found on host {host_id}",
-            })
+            _emit_rcon_error(
+                f"Instance {instance_id} not found on host {host_id}",
+                host_id,
+                instance_id,
+            )
             return
 
         stats_port = instance.zmq_stats_port
@@ -256,7 +276,7 @@ def handle_subscribe_stats(data):
             "ip": _rcon_target_for_host(instance.host),
             "stats_port": stats_port,
             "stats_password": instance.zmq_stats_password,
-        })
+        }, host_id, instance_id)
 
 
 @socketio.on("rcon:unsubscribe_stats")
@@ -275,7 +295,7 @@ def handle_unsubscribe_stats(data):
         leave_room(room)
         _publish_or_error(command_channel(host_id, instance_id), {
             "action": "unsubscribe_stats",
-        })
+        }, host_id, instance_id)
 
 
 def _participant_count(room: str, excluding_sid: str | None = None) -> int:
