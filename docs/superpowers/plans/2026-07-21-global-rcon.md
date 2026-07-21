@@ -25,6 +25,10 @@
 - All view groups output by command and target; per-instance filters show raw streams.
 - Existing `rcon_service` and per-instance Redis channels remain authoritative; no global Redis command channel is added.
 - Output and command runs are browser-memory-only and clear on reload.
+- Every authenticated QLSM account is currently a fleet operator with fleet-wide management authority. Fleet events use the existing authentication boundary; this feature adds no RBAC or host-scoped ACLs.
+- The supported packaged Socket.IO topology is one Gunicorn worker with threads. Ownership is process-local with short per-SID locking; multi-worker ownership is out of scope.
+- Fleet payload limits are fixed at 100 targets, 128 characters for a non-empty `run_id`, and 4,096 UTF-8 bytes for a trimmed non-empty command.
+- Fleet command acknowledgement timeout is 10 seconds.
 
 ### Unresolved forks
 
@@ -34,11 +38,13 @@ None. All implementation tasks may proceed autonomously. Any newly discovered us
 
 ### Backend
 
-- Create `ui/rcon_transport.py` — shared target validation, credential resolution, room naming, Redis publication result, connect/command/disconnect payload builders.
-- Create `ui/rcon_fleet_events.py` — fleet SID registry and `rcon:fleet_*` SocketIO handlers.
-- Modify `ui/socketio_events.py` — consume shared transport helpers, preserve individual events, register fleet handlers, clean fleet state on disconnect.
-- Create `tests/test_rcon_transport.py` — pure/backend helper coverage.
-- Create `tests/test_rcon_fleet_events.py` — authenticated SocketIO fleet lifecycle and partial fan-out coverage.
+- Create `ui/rcon_transport.py` — shared target validation, credential resolution, strict payload limits, room naming, Redis publication result, connect/command/disconnect payload builders.
+- Create `ui/rcon_ownership.py` — authoritative per-SID/per-target idempotent `individual`/`fleet` owner sets, short per-SID locking, and 0→1/1→0 transition decisions shared by all handlers.
+- Create `ui/rcon_fleet_events.py` — fleet desired-target state and `rcon:fleet_*` SocketIO handlers.
+- Modify `ui/socketio_events.py` — consume shared transport/ownership helpers, preserve individual events, register fleet handlers, clean all SID ownership on disconnect.
+- Create `tests/test_rcon_transport.py` — pure/backend helper and payload-boundary coverage.
+- Create `tests/test_rcon_ownership.py` — owner transition, simultaneous individual/fleet, and threaded interleaving coverage.
+- Create `tests/test_rcon_fleet_events.py` — authenticated SocketIO fleet lifecycle, rollback, and partial fan-out coverage.
 
 ### Shared RCON frontend
 
@@ -83,12 +89,14 @@ None. All implementation tasks may proceed autonomously. Any newly discovered us
 
 ---
 
-### Task 1: Shared Backend RCON Transport Helpers
+### Task 1: Shared Backend RCON Transport and Ownership Helpers
 
 **Files:**
 - Create: `ui/rcon_transport.py`
+- Create: `ui/rcon_ownership.py`
 - Modify: `ui/socketio_events.py:21-80,117-240`
 - Create: `tests/test_rcon_transport.py`
+- Create: `tests/test_rcon_ownership.py`
 - Modify: `tests/test_socketio_events.py`
 
 - [ ] **Step 1: Write failing target-resolution and publication tests**
@@ -153,12 +161,16 @@ def test_publish_json_reports_zero_subscribers(monkeypatch):
     assert result.reason == 'RCON service unavailable'
 ```
 
+In the same RED step, add `tests/test_rcon_ownership.py` proving: acquiring `individual` is a 0→1 transition; reacquiring `individual` is idempotent; then acquiring `fleet` does not request another room join/connect; releasing either owner first preserves membership; releasing the final owner is the only 1→0 transition; disconnect cleanup clears all owners once; and another SID remains an independent participant. Add a same-process threaded barrier test that interleaves fleet reconciliation, command membership snapshot, leave, and cleanup without negative counts or publication after failed revalidation.
+
+Add pure schema tests for `validate_join_payload` and `validate_command_payload`: payload must be a dict; target arrays contain at most `MAX_FLEET_TARGETS = 100`; IDs are positive `int` values with `bool` explicitly rejected; `run_id` is a non-empty string up to `MAX_RUN_ID_CHARS = 128`; and trimmed commands are non-empty and at most `MAX_COMMAND_BYTES = 4096` UTF-8 bytes. Cover null/scalar payloads, a non-list target container, malformed elements, exact limits and limit+1, multibyte command boundaries, and deterministic safe errors.
+
 - [ ] **Step 2: Run the tests and verify RED**
 
 Run:
 
 ```bash
-pytest tests/test_rcon_transport.py tests/test_socketio_events.py -v
+pytest tests/test_rcon_transport.py tests/test_rcon_ownership.py tests/test_socketio_events.py -v
 ```
 
 Expected: collection or import failures because `ui.rcon_transport` does not exist.
@@ -258,7 +270,9 @@ def publish_json(channel: str, payload: dict) -> PublishResult:
         return PublishResult(False, 0, 'Communication service temporarily unavailable')
 ```
 
-Also expose `connect_payload(target)`, `command_payload(cmd)`, and `disconnect_payload()` small builders so individual and fleet handlers produce identical Redis contracts.
+Also expose `connect_payload(target)`, `command_payload(cmd)`, and `disconnect_payload()` small builders so individual and fleet handlers produce identical Redis contracts. Add the constants and plain-code schema validators tested above. Invalid payload object/target-container/run/command fields raise one bounded `RconPayloadError`; a valid target array returns ordered deduplicated entry records, each containing either a normalized `(host_id, instance_id)` key or a safe per-entry rejection, so one malformed element cannot abort valid siblings. Validators never log command contents.
+
+Implement `ui/rcon_ownership.py` as the single authority for both handlers. Key entries by `(sid, host_id, instance_id)` and store an idempotent owner set containing only `individual` and `fleet`; reacquiring an existing owner is a no-op, not a refcount increment. `acquire_owner(...)` and `release_owner(...)` run under a short lock scoped by SID and return transition records (`first_owner`, `final_owner`, current owners) without calling DB, Socket.IO, or Redis. `owns(...)`, `snapshot_owned(...)`, `rollback_acquire(...)`, and `cleanup_sid(...)` use the same lock. The packaged production contract is one Gunicorn worker with threads; document that this process-local registry does not support non-sticky multi-worker routing.
 
 - [ ] **Step 4: Refactor individual handlers without changing their event contract**
 
@@ -272,14 +286,14 @@ rcon:subscribe_stats
 rcon:unsubscribe_stats
 ```
 
-For individual errors, translate `PublishResult.reason` into the existing `rcon:error` event. Keep self-host target tests green.
+For individual errors, translate `PublishResult.reason` into the existing `rcon:error` event. Keep self-host target tests green. Individual `rcon:join` acquires owner `individual`; only `first_owner` joins the room and publishes connect. Individual `rcon:leave` releases that owner; only `final_owner` leaves the room and invokes the existing participant-safe disconnect. If first-owner connect publication fails, call `rollback_acquire` and leave only if no owner remains. Socket disconnect uses `cleanup_sid` once for all owners. Add tests where individual and fleet own the same target and each leaves first; the remaining owner continues receiving messages and no disconnect is published until the final owner/participant exits.
 
 - [ ] **Step 5: Run backend regression tests**
 
 Run:
 
 ```bash
-pytest tests/test_rcon_transport.py tests/test_socketio_events.py tests/test_rcon_self_host_path.py -v
+pytest tests/test_rcon_transport.py tests/test_rcon_ownership.py tests/test_socketio_events.py tests/test_rcon_self_host_path.py -v
 ```
 
 Expected: all pass.
@@ -287,7 +301,7 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add ui/rcon_transport.py ui/socketio_events.py tests/test_rcon_transport.py tests/test_socketio_events.py
+git add ui/rcon_transport.py ui/rcon_ownership.py ui/socketio_events.py tests/test_rcon_transport.py tests/test_rcon_ownership.py tests/test_socketio_events.py
 git commit -m "refactor: share RCON transport helpers"
 ```
 
@@ -358,7 +372,7 @@ def test_fleet_leave_clears_only_fleet_rooms(socket_client, running_target, mock
     assert ack == {'left': 1}
 ```
 
-Also test missing auth, malformed targets, empty/whitespace commands, host/instance mismatch, zero Redis subscribers, partial publication failure, and no credential values in acknowledgements.
+Also test the current authorization invariant explicitly: any valid authenticated QLSM account can operate every valid fleet target; unauthenticated clients are rejected, host/instance mismatches do not reveal credentials, and acknowledgements contain no credential values. Test null/scalar data, non-list and 101-entry targets, malformed elements, boolean/zero/negative IDs, empty and 4,097-byte commands, empty and 129-character run IDs, zero Redis subscribers, partial publication failure, and no command-content logging. Test both initial `fleet_join` and incremental `fleet_targets` connect failures for zero subscribers and Redis exceptions: only the just-acquired `fleet` owner is compensated, an existing `individual` owner remains joined, and explicit uncheck/recheck retries successfully.
 
 - [ ] **Step 2: Run the fleet tests and verify RED**
 
@@ -374,61 +388,49 @@ Expected: failures because fleet events are not registered.
 
 ```python
 # ui/rcon_fleet_events.py
-from collections import defaultdict
-from threading import RLock
-
 from flask import request
 from flask_socketio import join_room, leave_room, rooms
 
+from ui.rcon_ownership import (
+    acquire_owner, owns, release_owner, rollback_acquire, snapshot_owned,
+)
 from ui.rcon_transport import (
-    RconTargetError, command_payload, connect_payload,
+    RconPayloadError, RconTargetError, command_payload, connect_payload,
     disconnect_payload, publish_json, resolve_fleet_target,
+    validate_command_payload, validate_join_payload,
 )
 
-_fleet_targets = defaultdict(set)
-_fleet_lock = RLock()
-
-
-def target_key(raw):
-    if not isinstance(raw, dict):
-        raise RconTargetError('Invalid target')
-    host_id = raw.get('host_id')
-    instance_id = raw.get('instance_id')
-    if not isinstance(host_id, int) or not isinstance(instance_id, int):
-        raise RconTargetError('Invalid target')
-    return host_id, instance_id
-
-
-def unique_targets(raw_targets):
-    seen = set()
-    for raw in raw_targets if isinstance(raw_targets, list) else []:
-        key = target_key(raw)
-        if key not in seen:
-            seen.add(key)
-            yield key
+# No fleet-local room registry: ui.rcon_ownership is authoritative for both owners.
 
 
 def register_rcon_fleet_events(socketio, authenticated_only):
     @socketio.on('rcon:fleet_join')
     @authenticated_only
     def fleet_join(data):
-        return _set_targets(socketio, request.sid, data.get('targets', []))
+        try:
+            targets = validate_join_payload(data)
+        except RconPayloadError as exc:
+            return {'error': exc.safe_reason, 'targets': []}
+        return _set_targets(socketio, request.sid, targets)
 
     @socketio.on('rcon:fleet_targets')
     @authenticated_only
     def fleet_targets(data):
-        return _set_targets(socketio, request.sid, data.get('targets', []))
+        try:
+            targets = validate_join_payload(data)
+        except RconPayloadError as exc:
+            return {'error': exc.safe_reason, 'targets': []}
+        return _set_targets(socketio, request.sid, targets)
 
     @socketio.on('rcon:fleet_command')
     @authenticated_only
     def fleet_command(data):
-        cmd = data.get('cmd')
-        run_id = data.get('run_id')
-        if not isinstance(cmd, str) or not cmd.strip():
-            return {'run_id': run_id, 'error': 'Command is required', 'targets': []}
-        results = []
-        for host_id, instance_id in unique_targets(data.get('targets', [])):
-            results.append(_send_one(request.sid, host_id, instance_id, cmd.strip()))
+        try:
+            run_id, cmd, targets = validate_command_payload(data)
+        except RconPayloadError as exc:
+            return {'run_id': None, 'error': exc.safe_reason, 'targets': []}
+        results = [_send_one(request.sid, host_id, instance_id, cmd)
+                   for host_id, instance_id in targets]
         return {'run_id': run_id, 'targets': results}
 
     @socketio.on('rcon:fleet_leave')
@@ -437,7 +439,11 @@ def register_rcon_fleet_events(socketio, authenticated_only):
         return {'left': _leave_all(socketio, request.sid)}
 ```
 
-Implement `_set_targets`, `_send_one`, `_leave_one`, `_leave_all`, and `cleanup_fleet_sid`. Each result must contain `host_id`, `instance_id`, `state`, and an optional safe `reason`. `_send_one` must verify membership in both `_fleet_targets[request.sid]` and the actual SocketIO room before publishing.
+Implement `_set_targets`, `_send_one`, `_leave_one`, `_leave_all`, and `cleanup_fleet_sid` using `ui.rcon_ownership`; do not add a second fleet-local registry. Each target result contains `host_id`, `instance_id`, `state`, and an optional safe `reason`.
+
+For each newly desired target, use this exact sequence: resolve DB target outside the lock → `acquire_owner(..., 'fleet')` → if `first_owner`, join room and publish connect → if publication fails, `rollback_acquire` only for that acquisition and leave only if the rollback reports no owners → acknowledge `connecting`. Existing ownership returns `connecting` without a duplicate connect publication. For removal, release `fleet`; leave and participant-safe publish disconnect only on `final_owner`.
+
+For command dispatch, take a fleet-owned membership snapshot under the per-SID lock, resolve targets outside it, then immediately before each Redis publication re-check `owns(sid, target, 'fleet')` and actual Socket.IO room membership. Never hold an ownership lock during DB or Redis work. Cleanup applies the same final-owner rule and is idempotent.
 
 - [ ] **Step 4: Register fleet handlers and disconnect cleanup once**
 
@@ -449,14 +455,14 @@ from .rcon_fleet_events import cleanup_fleet_sid, register_rcon_fleet_events
 register_rcon_fleet_events(socketio, authenticated_only)
 ```
 
-Update `handle_disconnect()` to call `cleanup_fleet_sid(request.sid)`. Normal React unmount still emits `rcon:fleet_leave`; disconnect cleanup removes registry state and performs best-effort participant-safe disconnect publication without blocking disconnect.
+Update `handle_disconnect()` to invoke the shared ownership cleanup exactly once (if Task 1 has not already done so). Normal React unmount still emits `rcon:fleet_leave`; disconnect cleanup is idempotent, removes all owners, and performs best-effort participant-safe disconnect publication only for final-owner transitions without blocking disconnect.
 
 - [ ] **Step 5: Run backend RCON tests**
 
 Run:
 
 ```bash
-pytest tests/test_rcon_transport.py tests/test_rcon_fleet_events.py tests/test_socketio_events.py tests/test_rcon_self_host_path.py -v
+pytest tests/test_rcon_transport.py tests/test_rcon_ownership.py tests/test_rcon_fleet_events.py tests/test_socketio_events.py tests/test_rcon_self_host_path.py -v
 ```
 
 Expected: all pass, including partial fleet fan-out.
@@ -768,7 +774,9 @@ it('joins restored targets and tracks status by target key', () => {
 });
 ```
 
-Also test desired-target updates emit `rcon:fleet_targets`, messages preserve IDs, send emits exactly one `rcon:fleet_command`, acknowledgements are returned, disconnect marks targets failed, cleanup emits `rcon:fleet_leave`, and no stats event is emitted.
+Also test desired-target updates emit `rcon:fleet_targets`, messages preserve IDs, send emits exactly one `rcon:fleet_command`, acknowledgements are returned, cleanup emits `rcon:fleet_leave`, and no stats event is emitted. Add lifecycle-ordering cases: ready → deselect deletes status → reselect synchronously becomes `connecting`; a join acknowledgement never marks ready; socket disconnect synchronously marks all desired targets failed/non-ready; reconnect/new SID synchronously resets desired targets to `connecting` before rejoin; and handlers ignore events outside the current desired set/socket lifecycle. Because server status payloads have no generation, document that already-in-flight status cannot be perfectly correlated rather than inventing a generation protocol.
+
+Add acknowledgement tests using fake timers: callback at 9,999 ms succeeds; no callback at 10,000 ms normalizes every requested target to failed; disconnect and unmount settle pending sends immediately; malformed/null/top-level-error responses normalize safely; a callback after timeout/disconnect is ignored; and a later send still works. No case retries automatically.
 
 - [ ] **Step 2: Run the hook test and verify RED**
 
@@ -784,22 +792,30 @@ Expected: missing hook.
 - [ ] **Step 3: Implement the fleet session hook**
 
 ```javascript
-export function useFleetRconSession({ targets, enabled, onMessage }) {
+export const FLEET_ACK_TIMEOUT_MS = 10_000;
+
+export function useFleetRconSession({ targets, enabled, onMessage, onStatus }) {
   const [statuses, setStatuses] = useState(new Map());
   const socketRef = useRef(null);
   const targetsRef = useRef(targets);
+  const lifecycleRef = useRef(0);
+  const pendingRef = useRef(new Map());
 
   // acquire once while enabled; register filtered rcon:status/message/error listeners
-  // emit fleet_join on socket connect
-  // emit fleet_targets when the stable desired target signature changes
-  // map backend connected -> ready; preserve connecting/error/disconnected
-  // emit fleet_leave before releasing transport
+  // increment lifecycle and synchronously reset desired targets to connecting before join/rejoin
+  // delete status on removal; join acknowledgements establish connecting only
+  // map only a current desired target's connected event -> ready and call onStatus
+  // on disconnect mark desired targets failed and settle all pending sends
+  // emit fleet_leave and settle pending sends before releasing transport
 
   const sendCommand = useCallback((runId, cmd, readyTargets) => new Promise((resolve) => {
+    // Register one settlement record before emit. Normalize the callback shape.
+    // At 10 seconds, disconnect, or unmount, resolve once with per-target safe failures.
+    // Delete the record on settlement so late callbacks are ignored.
     socketRef.current.emit(
       'rcon:fleet_command',
       { run_id: runId, cmd, targets: readyTargets },
-      (ack) => resolve(ack),
+      (ack) => settleNormalized(runId, ack, resolve),
     );
   }), []);
 
@@ -865,7 +881,9 @@ act(() => vi.advanceTimersByTime(1500));
 expect(result.current.runs[0].results['1:11'].state).toBe('quiet');
 ```
 
-Cover five-second `no response yet`, late-line reopening, next-run attribution, unsolicited lines going only to raw stream, 50-run retention, 1,000 raw-line retention, rejection acknowledgements, and connection failures.
+Cover five-second `no response yet` starting only when a target is first acknowledged `queued`, late-line reopening, next-run attribution, unsolicited lines going only to raw stream, 50-run retention, 1,000 raw-line retention, and connection failures. Add response-before-ack, failure-before-ack, delayed and duplicate acknowledgement, and rejection-after-output cases: output/failure evidence is never downgraded to queued; duplicate/late acknowledgements are idempotent; rejection after output retains lines and sets an explicit `ack_anomaly` flag/state.
+
+Cover `applyTargetStatus`: queued/receiving/quiet → failed only for the current active result on `error`/`disconnected`; a reconnect does not revive or retry that run; status for a target with no active run changes no historical result. Cover raw streams: `startRun` appends one timestamped visibly attempted `command` event to each ready target before any response, none to skipped targets, and a later backend rejection retains the attempted marker.
 
 - [ ] **Step 2: Run the state test and verify RED**
 
@@ -887,7 +905,9 @@ export const MAX_RUNS = 50;
 export const MAX_RAW_LINES = 1000;
 ```
 
-Use refs for active run IDs and timer handles per target. Clear all timers on unmount. `startRun` must close prior attribution windows before assigning the new run to ready targets. `appendMessage` always appends to raw target output; it appends to a command result only if that target currently has an active run.
+Use refs for active run IDs and timer handles per target. Clear all timers on unmount. `startRun` must close prior attribution windows, append a timestamped `{ type: 'command', content: command, attempted: true }` raw event to each ready target (never skipped targets), then assign the new run before the caller emits. `appendMessage` always appends to raw target output; it appends to a command result only if that target currently has an active run.
+
+`applyDispatchAck` is a monotonic reducer: first `queued` starts `NO_RESPONSE_AFTER_MS`; it never replaces `receiving` or `failed`; duplicate acknowledgements do nothing; and `rejected` after lines preserves the lines and marks `ack_anomaly`. `applyTargetStatus(targetKey, status)` changes only the current active result to `failed` for `error`/`disconnected`, closes that attribution window, and never reopens it on reconnect.
 
 - [ ] **Step 4: Write failing rendering tests**
 
@@ -902,7 +922,7 @@ expect(screen.getByText('Server Initialization')).toBeVisible();
 
 Test one-line compact rows, output through five lines expanded inline, longer output collapsed, error blocks automatically expanded, Expand All/Collapse All, target-label click selecting its raw filter, and copy controls.
 
-`RconOutputFilters` must render `ALL`, a bounded direct target list, and a searchable `+ N more` overflow without modifying targets.
+`RconOutputFilters` must render `ALL`, a bounded direct list, and a searchable `+ N more` overflow without modifying recipients. Its population is the union of currently selected targets and targets referenced by retained raw streams/runs. Status affects dispatch only, not filter availability; failed, connecting, and deselected targets with history remain reachable, and deleted inventory objects use a safe `host_id:instance_id` label. Add tests for every union branch and history eviction removing an otherwise unselected filter.
 
 - [ ] **Step 5: Implement output components**
 
@@ -971,7 +991,7 @@ expect(sendCommand).toHaveBeenCalledWith(expect.any(String), 'qlx !setperm 76561
 ]);
 ```
 
-Also prove zero ready targets disables Send, the All/raw filter does not alter selection, inventory errors render safely, and no confirmation dialog or stats control exists.
+Also prove zero ready targets disables Send, the All/raw filter does not alter selection, inventory errors render safely, and no confirmation dialog or stats control exists. Wire a simulated session `error`/`disconnected` event through `onStatus` to `applyTargetStatus`, assert only the active result fails, and assert reconnect does not revive it. Verify failed/deselected retained-history filters remain available. Verify a normalized timeout/error acknowledgement settles the run and leaves the input usable.
 
 - [ ] **Step 2: Write failing navigation tests**
 
@@ -1018,7 +1038,7 @@ const handleSend = async (command) => {
 };
 ```
 
-The displayed recipient count and command payload both use the same `readyTargets` snapshot.
+The displayed recipient count and command payload both use the same `readyTargets` snapshot. Pass `appendMessage` and `applyTargetStatus` to `useFleetRconSession` as `onMessage`/`onStatus`; only the latter's current active target result is failed by `error`/`disconnected`. Pass filters the union of current selection and retained run/raw-history keys, with live names where available and ID fallback labels otherwise. `sendCommand` always settles with a normalized acknowledgement within 10 seconds or sooner on disconnect/unmount, so `applyDispatchAck` receives no unchecked/null shape and the input never remains pending indefinitely.
 
 - [ ] **Step 4: Add route and navigation links**
 
@@ -1092,11 +1112,13 @@ def test_global_rcon_docs_and_versions_stay_synchronized():
     mkdocs = (ROOT / 'mkdocs.yml').read_text()
     user_index = (ROOT / 'docs/user/index.md').read_text()
 
-    assert version_file == version_manifest['latest'] == '1.15.0'
+    assert version_file == version_manifest['latest']
+    assert 'rcon:fleet_join' in integration_doc
+    assert 'rcon:fleet_targets' in integration_doc
     assert 'rcon:fleet_command' in integration_doc
-    assert 'line-by-line' in integration_doc
+    assert 'rcon:fleet_leave' in integration_doc
+    assert 'rcon:cmd:global' not in integration_doc
     assert '/global-rcon' in user_doc
-    assert 'qlx !getperm' in user_doc
     assert 'Global RCON' in mkdocs
     assert 'Global RCON' in user_index
 ```
@@ -1109,7 +1131,7 @@ Run:
 pytest tests/test_global_rcon_docs.py -v
 ```
 
-Expected: version and Global RCON documentation assertions fail.
+Expected: Global RCON structural documentation assertions fail; version consistency may already pass until the synchronized release step.
 
 - [ ] **Step 3: Correct `docs/rcon_integration.md`**
 
@@ -1129,7 +1151,7 @@ Add:
 - Mutation/read-back example using `!setperm` then `!getperm`.
 - Explicit warning that queued/quiet is not semantic success.
 
-Add a **Global RCON** navigation entry in `mkdocs.yml` adjacent to the existing RCON Console operation, and add a Global RCON link beside RCON Console in `docs/user/index.md`.
+Add a **Global RCON** navigation entry in `mkdocs.yml` adjacent to the existing RCON Console operation, and add a Global RCON link beside RCON Console in `docs/user/index.md`. Keep automated assertions structural (canonical event names, nav/files, forbidden global channel, and cross-file version equality). During Task 9 final diff review, semantically confirm the prose explains non-atomic dispatch, no delayed retry, and mutation/read-back verification; do not freeze those warnings to incidental literal phrases.
 
 - [ ] **Step 5: Bump all version sources together**
 
@@ -1234,3 +1256,14 @@ Skip this commit if verification required no changes.
 - [ ] **Step 8: Stop before PR creation**
 
 Report branch, commits, exact test/build results, visual/live verification status, and any blocker. Do not push, open a PR, merge, or deploy without the user's explicit instruction.
+
+## Deferred follow-ups
+
+- Minor 2: optionally extract/reuse the guarded `crypto.randomUUID()` fallback already used by `NotificationProvider.jsx`. The current secure-context modern-browser baseline makes this non-blocking; do not add a compatibility subsystem.
+
+---
+**Review loop closed:** 2026-07-21
+- Findings: `docs/findings/2026-07-21-global-rcon-findings.md`
+- Assessment: `docs/assess-review-findings/2026-07-21-global-rcon-assessment.md`
+- Accepted findings folded in: Critical 1–3; Important 2–8; Minor 1 and 3.
+- Deferred: Minor 2 (`crypto.randomUUID()` guarded fallback), optional and non-blocking.

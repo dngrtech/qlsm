@@ -34,6 +34,8 @@ The feature extends the existing Flask-SocketIO → Redis Pub/Sub → `rcon_serv
 - Use grouped command runs in the All view and raw continuous output in per-instance views.
 - Keep command/output history in frontend memory only; reload clears it.
 - Reuse and update the existing RCON architecture and documentation.
+- Treat every authenticated QLSM account as a fleet operator with fleet-wide management authority, matching the current product-wide authorization model; Global RCON does not introduce RBAC or host-scoped ACLs.
+- Support the packaged single-worker, threaded Socket.IO topology. Multi-worker ownership coordination is not part of this feature.
 
 ## Scope
 
@@ -137,6 +139,8 @@ Changing selection:
 - `Select All` selects every eligible instance; `Select None` clears all selections.
 - Selection changes affect future commands only. Existing command runs retain their target snapshot and output.
 
+Readiness is scoped to the current desired-membership/SID lifecycle. Removing a target deletes its readiness immediately. Adding or re-adding a target, receiving a join acknowledgement, losing the transport, or reconnecting with a new SID synchronously sets the target to `connecting` before Send can observe it; only a subsequent `connected` status for a target still in the current desired set changes it to `ready`. Event handlers filter against the current desired set and current socket lifecycle. Existing status messages have no generation field, so the UI cannot prove that every already-in-flight status belongs to the newest membership generation; the required ordering prevents retained stale readiness but does not claim protocol-level generation correlation.
+
 Leaving the page emits fleet leave for joined targets and releases the browser session. Existing participant-count logic prevents a fleet page from disconnecting a socket still used by another browser client.
 
 ## Fleet command lifecycle
@@ -147,10 +151,10 @@ When the operator clicks `Send to N ready targets`:
 2. It generates a client-side `run_id` and snapshots all selected targets.
 3. Targets whose latest frontend status is not `ready` are added to the run as `skipped` and are not sent to the backend.
 4. The frontend emits one `rcon:fleet_command` event containing the command, run ID, and ready target IDs.
-5. The backend deduplicates targets, validates each host/instance relationship, confirms the sender joined each instance room, and checks current DB eligibility/configuration. Connection readiness is based on the frontend's latest `rcon:status` snapshot; a disconnect racing with dispatch remains possible and is reported through subsequent target status/output rather than hidden behind the acknowledgement.
+5. The backend deduplicates targets, validates each host/instance relationship, confirms the SID's fleet owner still owns each target and the SID remains in each instance room, and checks current DB eligibility/configuration. Connection readiness is based on the frontend's latest `rcon:status` snapshot; a disconnect racing with dispatch remains possible and is reported through subsequent target status/output rather than hidden behind the acknowledgement.
 6. For each accepted target, the backend publishes the existing `{action: "command", cmd: "..."}` payload on its per-instance Redis channel.
 7. The SocketIO acknowledgement returns a result for every requested target: `queued` or `rejected` with a safe reason.
-8. Incoming RCON lines are routed into that target's active command-run block and raw per-instance stream.
+8. Run creation appends one timestamped `command` event to every ready/dispatched target's raw stream before emission; skipped targets receive no command marker. A backend-rejected target retains the visibly attempted command marker while its run result shows rejection. Incoming RCON lines are then routed into that target's active command-run block and raw per-instance stream.
 
 Fan-out is not serialized across the fleet. The existing RCON service processes per-instance actions independently under per-instance locks, so one slow target does not block the other targets.
 
@@ -168,6 +172,10 @@ failed -> connection status changed to error/disconnected during the run
 ```
 
 `queued`, `receiving`, and `quiet` do not prove that a mutation was applied. After 1.5 seconds without a new line, a receiving block becomes `quiet`. A queued target with no line after 5 seconds displays `no response yet`. A late line in either state changes the block back to receiving. These timers are presentation hints, not protocol completion signals.
+
+Run state is monotonic with respect to evidence. Output or a connection failure received before an acknowledgement cannot be downgraded by a later `queued` acknowledgement. The five-second no-response timer starts only when `queued` is first established; duplicate and late acknowledgements are idempotent. A rejection received after output preserves the lines and displays an acknowledgement anomaly rather than erasing evidence. An `error` or `disconnected` status fails only that target's current active attribution window; a later reconnect can make the target ready for a future run but never revives or retries the failed run.
+
+Fleet command acknowledgements have a 10-second client timeout. Transport disconnect or hook unmount settles all pending sends immediately. Missing, malformed, or top-level-error acknowledgements become safe per-target failed/rejected results, late callbacks are ignored, no automatic retry occurs, and the command input remains usable.
 
 The newest command is the active attribution window for subsequent lines on an instance. Sending another command closes the prior run's attribution window. Because QLDS supplies no correlation ID, delayed output can be indistinguishable from output for the newer command; the raw instance stream remains the source for diagnosing such overlap.
 
@@ -305,13 +313,13 @@ Adaptive behavior:
 
 ### Per-instance view
 
-Selected ready targets appear as output filters:
+Output filters are populated from the union of currently selected targets and targets that still have retained raw-stream or command-run history:
 
 ```text
 [ALL] [PARIS-1] [PARIS-2] [NJ-1] [+ 12 more]
 ```
 
-Only a bounded number of filters render directly. Overflow targets use a searchable menu. Clicking a target label in the All view selects that instance filter.
+Only a bounded number of filters render directly. Overflow targets use a searchable menu. Readiness controls dispatch, not filter availability, so failed, connecting, or deselected targets remain inspectable while their page-lifetime history exists. Deleted inventory objects use a safe ID-based label. Clicking a target label in the All view selects that instance filter.
 
 A per-instance view shows the raw continuous stream using the existing console rendering model, including commands, timestamps, multiline output, Quake colors, search, and line numbers. It does not change recipients.
 
@@ -361,7 +369,9 @@ useGlobalRconPreferences per-user checked and expanded persistence/reconciliatio
 useRconCommandRuns       run snapshots, line routing, quiet/no-response display state
 ```
 
-The fleet backend keeps a lightweight per-SocketIO-SID set of targets joined through fleet events. It contains only `(host_id, instance_id)` pairs, never credentials. `rcon:fleet_targets`, `rcon:fleet_leave`, and SocketIO disconnect cleanup use this registry so fleet room cleanup cannot accidentally disturb unrelated room membership.
+The backend keeps one authoritative per-SocketIO-SID/per-target ownership registry shared by individual and fleet handlers. Each `(host_id, instance_id)` entry contains only the known owner names `individual` and `fleet` in an owner set, never credentials. Acquisition is idempotent for an owner. Acquiring the first owner performs the 0→1 room join and connect publication; releasing the final owner performs the 1→0 room leave and participant-safe disconnect publication. Releasing either owner while the other remains must not leave the room or disconnect the service.
+
+Registry transitions and command-membership snapshots use short per-SID critical sections under the supported single-worker, 12-thread deployment. Locks are never held during database resolution or Redis publication. Ownership is revalidated immediately before command publication. A process-local registry is not supported for a non-sticky multi-worker deployment; enabling such a topology requires a separate shared-ownership design.
 
 The existing individual console should consume extracted shared primitives where practical:
 
@@ -398,6 +408,8 @@ Behavior:
 - Join the existing `rcon:<host_id>:<instance_id>` room.
 - Publish the existing connect action per accepted target.
 
+Acquisition ordering is exact: validate payload and resolve the target without a registry lock; acquire the `fleet` owner in a short per-SID critical section; if this is the first owner, join the room and publish connect; then acknowledge `connecting`. If first-owner connect publication returns zero subscribers or raises, remove only the owner just acquired, leave the room only when no owner remains, and return a safe `rejected` result. Existing individual ownership is never rolled back. An explicit uncheck/recheck performs a fresh acquisition attempt.
+
 Acknowledgement:
 
 ```json
@@ -430,13 +442,14 @@ Request:
 
 Behavior:
 
-- Validate non-empty command and target shape.
+- Validate the strict fleet schema before target work: the event payload must be an object; `run_id` must be a non-empty opaque string of at most 128 characters; `cmd`, after trimming, must be non-empty and at most 4,096 UTF-8 bytes; `targets` must be an array of at most 100 entries; and each ID must be a positive integer but not a boolean. Invalid top-level payloads return one bounded safe error. In an otherwise valid list, an entry whose identity can be parsed may receive a per-target rejection; malformed entries never raise out of the handler.
 - Deduplicate targets.
 - Verify the sender is joined to each instance room.
 - Re-query instances and validate host relationship and current RCON eligibility.
 - Publish one existing command payload per accepted target. The shared Redis publish helper must return a success/failure result so the fleet acknowledgement can distinguish publication from failure; it must preserve the existing safe error emission behavior for the individual console.
 - Never queue a future retry for rejected, disconnected, or unavailable targets.
 - Do not send credentials or secret values in acknowledgements or logs.
+- Do not log command contents.
 
 Acknowledgement:
 
@@ -520,6 +533,11 @@ Add focused tests for:
 - No publication for skipped/rejected targets.
 - Redis failure isolation per target.
 - Existing individual RCON behavior remaining unchanged.
+- Same SID individual-plus-fleet ownership in every leave order, including another SID participant; only the final owner/participant leaves and publishes disconnect.
+- Initial and incremental connect-publication zero-subscriber/Redis-error compensation without removing another owner, followed by successful explicit recheck.
+- Null/scalar payloads, non-array/oversized target lists, malformed entries, boolean/zero/negative IDs, overlong UTF-8 commands, and overlong/empty run IDs.
+- Supported single-process threaded interleavings of reconcile, command, leave, and disconnect cleanup preserve ownership and revalidate before publication.
+- Current authorization invariant: every authenticated account may use fleet events; unauthenticated requests fail, mismatched IDs fail safely, and credentials are never disclosed.
 
 If `rcon_service` requires no semantic modification, preserve its tests and add only regression coverage proving concurrent per-instance command handling. Do not invent a global channel test because no global channel should exist.
 
@@ -549,6 +567,12 @@ Add tests for:
 - Output filtering never changing command recipients.
 - Command and line retention bounds.
 - Existing `RconConsoleModal` regression behavior after shared-component extraction.
+- Readiness ordering for ready → deselect → reselect, transport disconnect → reconnect/new SID, join acknowledgement, and filtered late events; Send remains disabled until a fresh connected status.
+- Response-before-ack, failure-before-ack, delayed/duplicate acknowledgements, rejection-after-output anomaly, and no-response timer starting only on first queued acknowledgement.
+- Queued/receiving/quiet → failed for the current run, reconnect not reviving it, and failures with no active run.
+- Raw command marker precedes output for ready targets, is absent for skipped targets, and remains visibly attempted when backend-rejected.
+- Ten-second acknowledgement timeout, disconnect/unmount settlement, malformed/top-level-error acknowledgement normalization, and ignored late callback.
+- Filters include current selection plus retained-history targets, including failed, deselected, and deleted-ID fallback cases.
 
 ## Documentation
 
@@ -576,3 +600,10 @@ The documentation must explicitly state that fleet dispatch is non-atomic and th
 - Existing individual RCON behavior remains functional.
 - UI states never overclaim command success beyond available transport evidence.
 - Tests and synchronized RCON/user documentation pass review.
+
+---
+**Review loop closed:** 2026-07-21
+- Findings: `docs/findings/2026-07-21-global-rcon-findings.md`
+- Assessment: `docs/assess-review-findings/2026-07-21-global-rcon-assessment.md`
+- Accepted findings folded in: Critical 1–3; Important 2–8; Minor 1 and 3.
+- Deferred: Minor 2 (`crypto.randomUUID()` guarded fallback), optional and non-blocking.
