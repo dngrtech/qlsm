@@ -17,15 +17,15 @@ import { rconTheme } from '../../utils/rconTheme';
 
 const MAX_LINES = 1000;
 
-function formatEvent({ type, content, timestamp }) {
-  const prefix = `[${timestamp}] `;
+function formatEvent({ type, content, timestamp }, showMetadata) {
+  const prefix = showMetadata ? `[${timestamp}] ` : '';
   if (type === 'command') return `${prefix}> ${content}`;
   if (type === 'error') return `${prefix}^1ERROR: ${content}`;
   if (type === 'stats') return `${prefix}^8${content}`;
   return `${prefix}${content}`;
 }
 
-const RconRawOutputViewer = forwardRef(function RconRawOutputViewer(_props, ref) {
+const RconRawOutputViewer = forwardRef(function RconRawOutputViewer({ showMetadata = true }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const extensions = useMemo(() => [
@@ -58,7 +58,7 @@ const RconRawOutputViewer = forwardRef(function RconRawOutputViewer(_props, ref)
     append(event) {
       const view = viewRef.current;
       if (!view) return;
-      const eventLines = formatEvent(event).split('\n').slice(-MAX_LINES);
+      const eventLines = formatEvent(event, showMetadata).split('\n').slice(-MAX_LINES);
       const formatted = eventLines.join('\n');
       const doc = view.state.doc;
       const currentLines = doc.length ? doc.lines : 0;
@@ -89,7 +89,7 @@ const RconRawOutputViewer = forwardRef(function RconRawOutputViewer(_props, ref)
     getText() {
       return viewRef.current?.state.doc.toString() || '';
     },
-  }), []);
+  }), [showMetadata]);
 
   return (
     <div

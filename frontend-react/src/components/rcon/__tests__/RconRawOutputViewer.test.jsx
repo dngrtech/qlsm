@@ -30,6 +30,17 @@ describe('RconRawOutputViewer', () => {
     );
   });
 
+  it('can omit event metadata while preserving command/error formatting and multiline content', () => {
+    const ref = createRef();
+    render(<RconRawOutputViewer ref={ref} showMetadata={false} />);
+    act(() => {
+      ref.current.append({ type: 'command', content: 'status', timestamp: 'ignored' });
+      ref.current.append({ type: 'response', content: '^2one\ntwo', timestamp: 'ignored' });
+      ref.current.append({ type: 'error', content: 'bad', timestamp: 'ignored' });
+    });
+    expect(ref.current.getText()).toBe('> status\n^2one\ntwo\n^1ERROR: bad');
+  });
+
   it('appends repeated events at the document end without replacing existing text', () => {
     const dispatch = vi.spyOn(EditorView.prototype, 'dispatch');
     const ref = createRef();

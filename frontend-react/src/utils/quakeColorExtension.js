@@ -9,19 +9,7 @@
 import { ViewPlugin, Decoration } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
 
-// Quake color code → CSS color (tuned for dark backgrounds)
-const QUAKE_COLORS = {
-    '0': '#abb2bf', // Default/reset (maps to base text color on dark bg, NOT black)
-    '1': '#ff4444', // Red
-    '2': '#44ff44', // Green
-    '3': '#ffff44', // Yellow
-    '4': '#6688ff', // Blue (brightened)
-    '5': '#44ffff', // Cyan
-    '6': '#ff44ff', // Magenta
-    '7': '#e0e0e0', // White
-    '8': '#ff9933', // Orange
-    '9': '#aaaaaa', // Gray
-};
+import { QUAKE_COLORS } from './quakeColors';
 
 // Semantic color palette
 const SEMANTIC_COLORS = {
