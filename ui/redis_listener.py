@@ -13,6 +13,8 @@ import os
 
 import redis
 
+from ui.rcon_transport import room_name
+
 REDIS_PREFIX = os.environ.get('REDIS_PREFIX', 'rcon')
 
 log = logging.getLogger(__name__)
@@ -131,7 +133,6 @@ class RedisListener:
         instance_id = parts[3]
         
         # Determine room and event
-        from ui.rcon_transport import room_name
         room = room_name(host_id, instance_id)
         
         
