@@ -22,18 +22,24 @@ function RuntimeIndicator({ value }) {
   const reason = typeof value === 'object' ? value.reason : null;
   const color = state === 'ready' ? 'text-emerald-600 dark:text-emerald-400'
     : state === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400';
-  return <span className={`text-xs ${color}`} role="status">{label}{reason ? `: ${reason}` : ''}</span>;
+  const text = `${label}${reason ? `: ${reason}` : ''}`;
+  return <span className={`block truncate text-xs ${color}`} role="status" title={text}>{text}</span>;
 }
 
 function InstanceRow({ hostLabel, instance, selectedKeys, setTargetChecked, runtimeStates }) {
+  const runtime = runtimeValue(runtimeStates, instance.key);
+  // Status sits under the name: in an 18rem pane a long reason would otherwise
+  // squeeze the name down to "Thund…", making targets indistinguishable.
   return (
-    <li className="flex min-w-0 items-center gap-2 border-t border-theme px-3 py-2 pl-10">
+    <li className="flex min-w-0 items-start gap-2 border-t border-theme px-3 py-2 pl-10">
       <input type="checkbox" aria-label={`Select ${instance.label} on ${hostLabel}`} checked={selectedKeys.has(instance.key)}
         disabled={!instance.eligible} onChange={(event) => setTargetChecked(instance.key, event.target.checked)}
-        className="h-4 w-4 flex-none rounded border-theme accent-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-50" />
-      <span className="min-w-0 flex-1 truncate text-sm text-theme-primary">{instance.label}</span>
-      {!instance.eligible && <span className="text-xs text-theme-muted">{instance.reason}</span>}
-      <RuntimeIndicator value={runtimeValue(runtimeStates, instance.key)} />
+        className="mt-0.5 h-4 w-4 flex-none rounded border-theme accent-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-50" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-theme-primary" title={instance.label}>{instance.label}</span>
+        {!instance.eligible && <span className="block truncate text-xs text-theme-muted">{instance.reason}</span>}
+        <RuntimeIndicator value={runtime} />
+      </span>
     </li>
   );
 }
@@ -51,8 +57,8 @@ function HostRow({ host, expanded, selectedKeys, runtimeStates, setHostChecked, 
         </button>
         <TriStateCheckbox label={`Select ${host.label}`} state={state} disabled={!eligibleKeys.size}
           onChange={(checked) => setHostChecked(eligibleKeys, checked)} />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-theme-primary">{host.label}</span>
-        <span className="text-xs text-theme-muted">{eligibleKeys.size} available</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-medium text-theme-primary">{host.label}</span>
+        <span className="flex-none text-xs text-theme-muted">{eligibleKeys.size} available</span>
       </div>
       {expanded && (host.instances.length ? (
         <ul>{host.instances.map((instance) => <InstanceRow key={instance.key} hostLabel={host.label} instance={instance}

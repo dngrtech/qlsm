@@ -45,7 +45,7 @@ function RconCommandInput({
   }, [history, historyIndex]);
 
   return (
-    <form onSubmit={submit} className="flex items-center gap-3 px-6 py-4 border-t border-theme bg-theme-elevated flex-shrink-0">
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 border-t border-theme bg-theme-elevated flex-shrink-0">
       <span className="font-mono text-sm font-semibold" style={{ color: 'var(--accent-primary)' }}>{prompt}</span>
       {recipientCount != null && <span className="text-xs text-theme-muted">{recipientCount} recipients</span>}
       <input
@@ -56,11 +56,11 @@ function RconCommandInput({
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={navigateHistory}
         placeholder={disabled ? 'Connecting...' : 'Enter command...'}
-        className="flex-1 bg-transparent border-none outline-none font-mono text-sm text-theme-primary placeholder-theme-muted"
+        className="min-w-0 flex-1 basis-40 bg-transparent border-none outline-none font-mono text-sm text-theme-primary placeholder-theme-muted"
         autoComplete="off"
         spellCheck="false"
       />
-      <button type="submit" disabled={disabled || !value.trim()} className="btn btn-primary gap-2">
+      <button type="submit" disabled={disabled || !value.trim()} className="btn btn-primary shrink-0 gap-2">
         <Send size={14} />
         {buttonLabel}
       </button>
