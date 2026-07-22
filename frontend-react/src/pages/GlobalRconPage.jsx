@@ -62,8 +62,9 @@ export default function GlobalRconPage() {
       .map((target) => ({ ...target, reason: statusReason(runtimeStates.get(target.key)) }));
     const id = runId();
     runs.startRun({ id, command, readyTargets: ready, skippedTargets: skipped });
-    const acknowledgement = await session.sendCommand(id, command, ready.map(({ host_id, instance_id, id: targetId }) => ({
-      host_id, instance_id: instance_id ?? targetId,
+    // Tree items carry the instance id as `id` (see buildRconHosts), not `instance_id`.
+    const acknowledgement = await session.sendCommand(id, command, ready.map(({ host_id, id: instanceId }) => ({
+      host_id, instance_id: instanceId,
     })));
     runs.applyDispatchAck(id, acknowledgement);
     return true;

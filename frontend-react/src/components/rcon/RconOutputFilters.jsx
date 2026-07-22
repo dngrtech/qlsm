@@ -60,7 +60,8 @@ export default function RconOutputFilters({
   runs = [],
   rawStreams = new Map(),
   directLimit = 8,
-  // Task 6 compatibility aliases.
+  // Alternate prop spellings accepted so this stays drop-in for callers that
+  // pass a precomputed target list or the shorter handler names.
   activeKey,
   onChange,
   targets,

@@ -15,7 +15,12 @@ function RconCommandInput({
 
   useEffect(() => {
     inputRef.current?.focus();
-    const timer = setTimeout(() => inputRef.current?.focus(), 350);
+    // The retry covers the modal's open animation. The fleet page mounts this
+    // permanently, so only re-focus when the user has not moved on themselves.
+    const timer = setTimeout(() => {
+      const active = document.activeElement;
+      if (!active || active === document.body) inputRef.current?.focus();
+    }, 350);
     return () => clearTimeout(timer);
   }, []);
 

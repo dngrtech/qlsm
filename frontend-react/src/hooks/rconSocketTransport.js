@@ -3,6 +3,10 @@ import { io } from 'socket.io-client';
 const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || '';
 const DISCONNECT_DELAY_MS = 1000;
 
+// NOTE: these are module-level on purpose — one shared socket per tab. They are
+// not HMR-safe: a hot reload re-executes this module and resets them while the
+// previous socket stays connected, so you can see two live connections after
+// saving a file in dev. Reload the page (or restart run-dev.sh) to clear it.
 let socket = null;
 let users = 0;
 let disconnectTimer = null;
