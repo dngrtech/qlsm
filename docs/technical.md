@@ -25,6 +25,7 @@ This document outlines the technical stack, development environment setup, key t
     *   Client-side table sorting.
     *   CodeMirror 6 integration for editing Quake Live configuration files (`server.cfg`, `mappool.txt`, `access.txt`, `workshop.txt`, custom `.cfg`/`.txt` files, and `.factories` files) with custom language modes and lint gutters where available.
     *   Unified config/plugin/factory file management. Configs and factories use an in-memory state adapter until the form is saved; plugins use server-side draft workspaces so `.py`, `.txt`, and `.so` files can be staged before committing to a preset or instance.
+    *   Global RCON (`/global-rcon`): one command dispatched to many instances over a shared Socket.IO fleet session, with per-user persisted target selection (`qlsm-global-rcon-targets-<user_id>`), per-target readiness, and grouped per-target output. Browser modules are `hooks/useFleetRconSession.js`, `hooks/useRconCommandRuns.js`, `hooks/useGlobalRconPreferences.js`, `utils/rconTargets.js`, and `components/rcon/`. Only `running` / `updated` instances with a configured `zmq_rcon_port` are eligible; dispatch is per target and skipped targets are never retried.
 * **Task Queue:** Flask-RQ2 + Redis
 * **Automation (Instance Mgmt):** Ansible (executed via direct `os.system` calls to `ansible-playbook` CLI within RQ tasks)
 * **Automation (Host Provisioning):** Terraform (executed via `subprocess` calls to `terraform` CLI within RQ tasks)

@@ -803,6 +803,75 @@ For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` m
 - Reserved names: `default`
 - Must be unique
 
+## Socket.IO RCON Events
+
+RCON runs over the **default Socket.IO namespace** (`/`), not a dedicated
+`/rcon` namespace, and there are no REST endpoints for sending RCON commands.
+Every handler requires an authenticated session.
+
+Each target is a `(host_id, instance_id)` pair. The server keeps one room per
+target, `rcon:<host_id>:<instance_id>`, and relays Redis traffic from that
+instance into it. Fan-out is **per instance** — commands are published to each
+instance's own Redis command channel. There is no global command channel.
+
+### Client to server
+
+| Event | Payload | Purpose |
+|-------|---------|---------|
+| `rcon:join` | `{host_id, instance_id}` | Open an individual console session for one target |
+| `rcon:leave` | `{host_id, instance_id}` | Close that individual session |
+| `rcon:command` | `{host_id, instance_id, cmd}` | Send one command to one joined target |
+| `rcon:subscribe_stats` | `{host_id, instance_id}` | Start the live game-event stream (individual console only) |
+| `rcon:unsubscribe_stats` | `{host_id, instance_id}` | Stop the live game-event stream |
+| `rcon:fleet_join` | `{targets: [{host_id, instance_id}]}` | Declare this connection's complete Global RCON selection |
+| `rcon:fleet_targets` | `{targets: [{host_id, instance_id}]}` | Reconcile to a new complete selection |
+| `rcon:fleet_command` | `{run_id, cmd, targets: [...]}` | Send one command to many joined targets |
+| `rcon:fleet_leave` | `{}` | Release every fleet target held by this connection |
+
+Fleet ownership is tracked per Socket.IO connection (SID). `rcon:fleet_join`
+and `rcon:fleet_targets` are both **full reconciliations**: targets missing
+from the payload are left, new ones are joined. Individual and fleet ownership
+are separate, so a Global RCON session never tears down an open per-instance
+console.
+
+### Server to client
+
+| Event | Payload | Notes |
+|-------|---------|-------|
+| `rcon:joined` | `{room, host_id, instance_id}` | Individual join acknowledged |
+| `rcon:left` | `{room}` | Individual leave acknowledged |
+| `rcon:status` | `{host_id, instance_id, status}` | `connected`, `disconnected`, or `error` |
+| `rcon:message` | `{host_id, instance_id, content}` | One line of output, delivered as it arrives |
+| `rcon:stats` | `{host_id, instance_id, event}` | Live game event (stats subscription only) |
+| `rcon:error` | `{error, host_id, instance_id}` | Target-tagged failure |
+
+Output is streamed **line by line** in `content`; there is no whole-response
+payload and no `text` field. Messages carry no command correlation ID, so
+clients attribute output by target and arrival order, not by run.
+
+### Acknowledgements
+
+`rcon:fleet_join`, `rcon:fleet_targets`, and `rcon:fleet_command` reply through
+the Socket.IO callback with a per-target result list. `rcon:fleet_command` also
+echoes the client-supplied `run_id`:
+
+```json
+{
+  "run_id": "0f2c…",
+  "targets": [
+    {"host_id": 1, "instance_id": 11, "state": "queued"},
+    {"host_id": 1, "instance_id": 12, "state": "rejected", "reason": "Fleet target is not joined"}
+  ]
+}
+```
+
+Dispatch is not atomic: each target is resolved and published independently,
+so a single run can mix `queued` and `rejected` results. `queued` means the
+command was published for delivery — it is not evidence that the command
+succeeded on the server. Rejected targets are not retried.
+
+Credentials are never included in any payload.
+
 ## External API
 
 Base URL: `/api/v1`
