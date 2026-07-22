@@ -20,6 +20,12 @@ function statusReason(status) {
   return status.reason || status.state || 'not ready';
 }
 
+// useServers surfaces inventory failures as plain strings; tolerate Error shapes too.
+function inventoryErrorText(error) {
+  if (typeof error === 'string') return error.trim() || 'unknown error';
+  return error?.message || 'unknown error';
+}
+
 export default function GlobalRconPage() {
   const { serversData = [], loading, error } = useServers();
   const { getOrderedHosts } = useHostOrder();
@@ -66,7 +72,7 @@ export default function GlobalRconPage() {
   if (loading) return <div className="global-rcon-page"><p className="global-rcon-state">Loading Global RCON inventory…</p></div>;
   if (error) return (
     <div className="global-rcon-page"><div className="global-rcon-state global-rcon-error">
-      <AlertTriangle size={20} /><span>Unable to load server inventory: {error.message || 'unknown error'}</span>
+      <AlertTriangle size={20} /><span>Unable to load server inventory: {inventoryErrorText(error)}</span>
     </div></div>
   );
 
@@ -91,7 +97,7 @@ export default function GlobalRconPage() {
         <section className="global-rcon-output"><GlobalRconOutput activeFilter={activeFilter} onFilterChange={setActiveFilter}
           selectedTargets={selectedTargets} runs={runs.runs} rawStreams={runs.rawStreams}
         />
-        <RconCommandInput disabled={!readyTargets.length} recipientCount={readyTargets.length}
+        <RconCommandInput disabled={!readyTargets.length}
           buttonLabel={`Send to ${readyTargets.length} ${readyTargets.length === 1 ? 'target' : 'targets'}`} onSend={send}
         /></section>
       </div>

@@ -50,10 +50,21 @@ describe('GlobalRconPage', () => {
     expect(screen.queryByText(/real-time game events/i)).not.toBeInTheDocument();
   });
 
+  it('routes fleet session events into the command run store', () => {
+    render(<GlobalRconPage />);
+    expect(state.fleetArgs.onMessage).toBe(state.appendMessage);
+    expect(state.fleetArgs.onStatus).toBe(state.applyTargetStatus);
+    expect(state.fleetArgs.enabled).toBe(true);
+  });
+
   it('disables send without ready targets and renders inventory errors safely', () => {
     state.statuses = new Map([['1:11', { state: 'connecting' }], ['1:12', { state: 'failed', reason: 'offline' }]]);
     const { rerender } = render(<GlobalRconPage />);
     expect(screen.getByRole('button', { name: 'Send to 0 targets' })).toBeDisabled();
+    // useServers reports failures as plain strings, not Error instances.
+    state.inventoryError = 'Failed to fetch hosts';
+    rerender(<GlobalRconPage />);
+    expect(screen.getByText(/unable to load server inventory: failed to fetch hosts/i)).toBeInTheDocument();
     state.inventoryError = new Error('offline');
     rerender(<GlobalRconPage />);
     expect(screen.getByText(/unable to load server inventory: offline/i)).toBeInTheDocument();
