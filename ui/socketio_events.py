@@ -31,6 +31,7 @@ from ui.rcon_transport import (
     publish_json,
     rcon_target_for_host,
     resolve_fleet_target,
+    room_name,
 )
 from ui.task_logic.self_host_network import resolve_self_host_management_target
 
@@ -123,7 +124,7 @@ def handle_disconnect():
                 transition = cleanup_target(sid, host_id, instance_id)
                 if not transition.changed:
                     continue
-                room = f"rcon:{host_id}:{instance_id}"
+                room = room_name(host_id, instance_id)
                 leave_room(room)
                 if _participant_count(room, excluding_sid=sid) == 0:
                     publish_json(
@@ -199,7 +200,7 @@ def handle_rcon_leave(data):
         return
 
     with target_operation(host_id, instance_id):
-        room = f"rcon:{host_id}:{instance_id}"
+        room = room_name(host_id, instance_id)
         if room not in rooms(sid=request.sid, namespace="/"):
             return
         if not owns(request.sid, host_id, instance_id, "individual"):
@@ -229,7 +230,7 @@ def handle_rcon_command(data):
         _emit_rcon_error("Missing required fields", host_id, instance_id)
         return
 
-    room = f"rcon:{host_id}:{instance_id}"
+    room = room_name(host_id, instance_id)
     with target_operation(host_id, instance_id):
         authorized = (
             owns(request.sid, host_id, instance_id, "individual")

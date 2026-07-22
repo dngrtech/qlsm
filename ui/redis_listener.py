@@ -131,7 +131,8 @@ class RedisListener:
         instance_id = parts[3]
         
         # Determine room and event
-        room = f"rcon:{host_id}:{instance_id}"
+        from ui.rcon_transport import room_name
+        room = room_name(host_id, instance_id)
         
         
         log.debug(f"Redis listener routing {msg_type} to room {room}")

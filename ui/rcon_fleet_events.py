@@ -31,6 +31,7 @@ from ui.rcon_transport import (
     disconnect_payload,
     publish_json,
     resolve_fleet_target,
+    room_name,
     validate_command_payload,
     validate_join_payload,
 )
@@ -136,7 +137,7 @@ def _remove_target(sid: str, host_id: int, instance_id: int):
         transition = release_owner(sid, host_id, instance_id, _OWNER)
         if not transition.changed:
             return None
-        room = f"rcon:{host_id}:{instance_id}"
+        room = room_name(host_id, instance_id)
         if transition.final_owner:
             try:
                 leave_room(room)
@@ -233,7 +234,7 @@ def handle_fleet_command(data):
             continue
         host_id, instance_id = entry.key
         with target_operation(host_id, instance_id):
-            room = f"rcon:{host_id}:{instance_id}"
+            room = room_name(host_id, instance_id)
             if (
                 not owns(sid, host_id, instance_id, _OWNER)
                 or room not in _room_membership(sid, host_id, instance_id, room)
