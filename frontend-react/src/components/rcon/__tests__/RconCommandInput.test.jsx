@@ -8,6 +8,23 @@ function input() {
 }
 
 describe('RconCommandInput', () => {
+  it('takes focus on mount but does not steal it back from the user', () => {
+    vi.useFakeTimers();
+    try {
+      render(<><button type="button">Elsewhere</button><RconCommandInput onSend={() => true} /></>);
+      expect(document.activeElement).toBe(input());
+
+      // The fleet page mounts this permanently, so a user who clicks away
+      // during the deferred re-focus window must keep their focus.
+      const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+      elsewhere.focus();
+      vi.advanceTimersByTime(400);
+      expect(document.activeElement).toBe(elsewhere);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not submit empty or disabled commands', () => {
     const onSend = vi.fn(() => true);
     const { rerender } = render(<RconCommandInput onSend={onSend} />);
