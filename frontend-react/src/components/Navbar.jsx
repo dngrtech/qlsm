@@ -62,6 +62,14 @@ function Navbar() {
             </Link>
 
             <Link
+              to="/global-rcon"
+              className={`navbar-nav-link ${isActive('global-rcon') ? 'navbar-nav-link-active' : ''}`}
+            >
+              <Terminal size={16} strokeWidth={2} />
+              <span>GLOBAL RCON</span>
+            </Link>
+
+            <Link
               to="/docs"
               className={`navbar-nav-link ${isActive('docs') ? 'navbar-nav-link-active' : ''}`}
             >
@@ -146,6 +154,17 @@ function Navbar() {
                         >
                           <Server size={16} strokeWidth={2} />
                           <span>Servers</span>
+                        </Link>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <Link
+                          to="/global-rcon"
+                          className={`navbar-dropdown-item ${active || isActive('global-rcon') ? 'navbar-dropdown-item-active' : ''}`}
+                        >
+                          <Terminal size={16} strokeWidth={2} />
+                          <span>Global RCON</span>
                         </Link>
                       )}
                     </Menu.Item>
