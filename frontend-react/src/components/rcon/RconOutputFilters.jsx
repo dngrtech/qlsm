@@ -32,9 +32,9 @@ export function deriveRconOutputTargets({ selectedTargets = [] } = {}) {
 }
 
 // Same tab treatment as the Configuration Files / Plugins / Factories / Hooks
-// strip in EditInstanceConfigModal: bottom-border underline + tint when active.
-// Every tab keeps that border even when inactive, so once targets overflow
-// one line it doubles as the divider between wrapped rows.
+// strip in EditInstanceConfigModal: bottom-border underline + tint on the
+// active tab only; inactive tabs stay transparent so just the selected one
+// shows the accent line.
 const TAB_CLASSES = 'border-b-2 border-r border-r-[var(--surface-border)] px-4 py-2.5 text-[12px] font-display font-semibold uppercase tracking-wide transition-all duration-200';
 
 function Tab({ tabKey, label, activeFilter, onFilterChange }) {
@@ -47,7 +47,7 @@ function Tab({ tabKey, label, activeFilter, onFilterChange }) {
       onClick={() => onFilterChange(tabKey)}
       className={`${TAB_CLASSES} ${active
         ? 'border-b-[var(--accent-primary)] bg-[var(--accent-primary)]/5 text-[var(--accent-primary)]'
-        : 'border-b-[var(--surface-border)] text-[var(--text-secondary)] hover:bg-[var(--surface-base)]/50 hover:text-[var(--text-primary)]'}`}
+        : 'border-b-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-base)]/50 hover:text-[var(--text-primary)]'}`}
     >
       {label}
     </button>
@@ -70,12 +70,9 @@ export default function RconOutputFilters({
     [selectedTargets, targets]);
 
   return (
-    // overflow-hidden clips two things: each tab's square corners against the
-    // rounded frame, and (via the -mb-0.5 below, matching border-b-2's 2px)
-    // the bottom row's own divider — that row's edge is the frame's own
-    // border already, so it doesn't need a second line stacked on top of it.
+    // overflow-hidden clips each tab's square corners against the rounded frame.
     <div className="overflow-hidden rounded-t-xl border border-[var(--surface-border)] bg-[var(--surface-elevated)]">
-      <div role="tablist" aria-label="RCON output filters" className="-mb-0.5 flex flex-wrap">
+      <div role="tablist" aria-label="RCON output filters" className="flex flex-wrap">
         <Tab tabKey="all" label="ALL" activeFilter={active} onFilterChange={change} />
         {union.map((target) => (
           <Tab key={target.key} tabKey={target.key} label={target.name}
