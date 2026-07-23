@@ -11,11 +11,15 @@ Open it from **GLOBAL RCON** in the top navigation, or go to `/global-rcon`.
 |---|---|---|
 | Scope | One instance | Every instance you select |
 | Opened from | Instance **Actions** menu | Top navigation |
-| Live game events | Yes, optional stats stream | No — command output only |
+| Live game events | Yes, optional structured stats overlay | Raw console output only (no structured overlay) |
 | Output | Single stream | Grouped per target, per command |
 
-Global RCON deliberately has no live stats stream. Use the per-instance
-console when you want to watch a single server's events.
+Every ready target keeps an open RCON connection, so console output the
+server prints on its own — chat, connects, admin messages — arrives live in
+Global RCON too, not just the reply to a command you sent. What Global RCON
+doesn't have is the per-instance console's optional **structured stats
+overlay** (a separate parsed kill-feed/event view). Use the per-instance
+console when you want that overlay for a single server.
 
 ## Selecting targets
 
@@ -105,6 +109,12 @@ Per-target status labels:
     minqlx commands print nothing on success — and a command that fails
     server-side can also print nothing. Always verify anything that changes
     state by reading it back.
+
+A target's block can keep showing **Receiving** and growing well past your
+command's actual reply — the connection stays open, so any chat, connect, or
+admin-plugin lines the server prints in the meantime land in the same block.
+It settles once the target has been quiet for about 1.5 seconds, and starts
+fresh the next time you send that target a command.
 
 ### Verify changes by reading them back
 
