@@ -14,7 +14,7 @@ def generate_zmq_rcon_password(length=14):
     """
     # Avoid: # (comment), ! (shell history), * (glob), % (format), & (background)
     # These get mangled by shell, Ansible, or Quake arg parsing even when quoted
-    safe_punctuation = '-_=+'
+    safe_punctuation = '-_='
     alphabet = string.ascii_letters + string.digits + safe_punctuation
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
