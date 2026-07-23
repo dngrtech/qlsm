@@ -110,6 +110,15 @@ class ConnectionManager:
             if existing:
                 if existing.connected:
                     log.debug(f"Already connected to {host_id}:{instance_id}")
+                    # A fresh connect() call means a client just joined and is
+                    # waiting for a status event to leave "connecting". The
+                    # reused connection won't emit one on its own, so re-emit
+                    # its current state here.
+                    if self._on_status_change:
+                        try:
+                            self._on_status_change(host_id, instance_id, "connected")
+                        except Exception as e:
+                            log.error(f"Error in status callback: {e}")
                     return True
                 else:
                     log.info(f"[{host_id}:{instance_id}] Found stale connection object. Disconnecting before replacing.")

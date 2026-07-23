@@ -137,6 +137,15 @@ export function useGlobalRconPreferences({
     });
   }, [hostIds, inventoryReady, loaded, storageKeys?.expanded, userId]);
 
+  const setAllHostsExpanded = useCallback((expanded) => {
+    setStored((previous) => {
+      const base = previous.userId === userId ? previous : loaded;
+      const next = expanded ? new Set(hostIds) : new Set();
+      writeSet(storageKeys?.expanded, next);
+      return { ...base, userId, expandedHostIds: next };
+    });
+  }, [hostIds, loaded, storageKeys?.expanded, userId]);
+
   return {
     selectedKeys,
     expandedHostIds,
@@ -147,6 +156,7 @@ export function useGlobalRconPreferences({
     selectAllEligible,
     selectNone,
     toggleHostExpanded,
+    setAllHostsExpanded,
   };
 }
 

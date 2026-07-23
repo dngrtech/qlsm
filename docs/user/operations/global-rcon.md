@@ -38,22 +38,32 @@ On narrow screens the pane collapses behind a **Hide targets** /
 ### Readiness
 
 Selection is not the same as readiness. Each selected instance moves through
-its own connection state, shown beside its name:
+its own connection state, shown as a colored dot beside its name — hover it
+for the exact state and, if failed, the reason:
 
-| State | Meaning |
-|---|---|
-| Connecting | The RCON session for this instance is being established |
-| Ready | The instance can receive commands right now |
-| Failed | The session dropped or was refused, with the reason shown |
+| Dot | State | Meaning |
+|---|---|---|
+| 🟢 Green | Ready | The instance can receive commands right now |
+| 🟡 Amber | Connecting | The RCON session for this instance is being established |
+| 🔴 Red | Failed | The session dropped or was refused, with the reason shown |
 
 The header shows `N ready / M eligible selected` so you can see at a glance
 how much of your selection can actually be reached.
 
 ## Sending a command
 
-Type the command and press **Send to N targets**. `N` is the number of
-targets that are ready at the moment you press it, and the button is
-disabled when that number is zero.
+**The active output tab controls where the command goes:**
+
+- **ALL** selected — the button reads **Send to N targets** and dispatches
+  to every ready instance in your current selection.
+- **A specific instance's tab** selected — the button reads **Send to
+  \<instance name\>** and dispatches to **that instance only**, even if
+  other instances are also ticked in the Targets pane. This lets you send a
+  one-off command to a single server without changing your selection.
+
+The button is disabled whenever the instance(s) it would send to are not
+ready — for a single-instance tab, that means that one instance specifically,
+regardless of whether other selected instances are ready.
 
 Dispatch is **not atomic**. The command is delivered to each ready instance
 individually, so some can succeed while others fail. The recipient list is a
@@ -73,7 +83,8 @@ one block per target.
 
 - Short replies are shown in full.
 - Replies longer than five lines collapse to their first line; click the line
-  count to expand, or use **Expand all** / **Collapse all** on the run.
+  count to expand, or use the **Expand All** / **Collapse All** toggle on the
+  run to do it for every target at once.
 - **Copy** puts a target's output on the clipboard.
 - Click a target's name to switch the view to that instance's raw stream.
 
@@ -84,17 +95,16 @@ Per-target status labels:
 | Dispatching | The command is being sent |
 | Queued | The server accepted the command for delivery |
 | Receiving | Output is arriving |
-| Quiet | Output arrived and then stopped (after ~1.5s) |
 | No response yet | Nothing arrived within ~5 seconds |
 | Skipped | Not ready when you pressed Send |
 | Rejected / Failed | The instance refused the command or the session dropped |
 
 !!! warning "Queued is delivery, not success"
-    **Queued**, **Quiet**, and **No response yet** only describe message
-    delivery and silence. They do not mean the command did what you wanted.
-    Many QLDS and minqlx commands print nothing on success — and a command
-    that fails server-side can also print nothing. Always verify anything
-    that changes state by reading it back.
+    **Queued** and **No response yet** only describe message delivery and
+    silence. They do not mean the command did what you wanted. Many QLDS and
+    minqlx commands print nothing on success — and a command that fails
+    server-side can also print nothing. Always verify anything that changes
+    state by reading it back.
 
 ### Verify changes by reading them back
 
@@ -110,13 +120,16 @@ badge is not.
 
 ## Filtering output
 
-Above the output, **All** shows every run grouped by target. Selecting a
-single instance switches to that instance's raw line-by-line stream, which is
-useful when one server behaves differently from the rest.
+Above the output, **ALL** shows every run grouped by target. Selecting a
+single instance's tab switches to that instance's raw line-by-line stream,
+which is useful when one server behaves differently from the rest — **and
+also scopes Send to that one instance**, see [Sending a command](#sending-a-command)
+above.
 
-The filter list covers your current selection plus any target that appears in
-retained history, so output from an instance you have since deselected stays
-reachable. Longer lists move into a searchable overflow menu.
+The tab list always mirrors your current tree selection: tick or untick an
+instance in the Targets pane and its tab appears or disappears immediately.
+Unticking an instance you were viewing drops its tab, but its output already
+shown under **ALL** is unaffected.
 
 History is bounded: the newest 50 runs and the newest 1,000 raw lines per
 target are kept.
@@ -126,7 +139,7 @@ target are kept.
 | Symptom | Likely cause |
 |---|---|
 | Instance greyed out in Targets | Not `running` / `updated`, or no RCON port configured |
-| Send button disabled | No selected target is currently ready |
+| Send button disabled | Nothing the active tab would send to is ready — on **ALL** that means no selected target is ready; on a single instance's tab, that instance specifically isn't ready |
 | Target stuck on Connecting | Host unreachable, or the RCON service is not running |
 | Everything shows Failed after a while | Browser lost its connection to QLSM; it reconnects and rejoins automatically |
 | Target shows Skipped every time | It is never ready at send time — check the instance status |

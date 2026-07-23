@@ -43,7 +43,7 @@ const streams = new Map([
 ]);
 
 describe('GlobalRconOutput exact public interface', () => {
-  it('renders union filters and all retained runs in supplied newest-first order', () => {
+  it('renders a tab only for the current selection while still showing all retained runs newest-first', () => {
     const onFilterChange = vi.fn();
     render(<GlobalRconOutput
       activeFilter="all" onFilterChange={onFilterChange} selectedTargets={selected}
@@ -51,8 +51,10 @@ describe('GlobalRconOutput exact public interface', () => {
     />);
     expect(screen.getByRole('tab', { name: 'ALL' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Live Alpha' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Historical Bravo' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '3:33' })).toBeInTheDocument();
+    // Neither ever appeared in selectedTargets, so they stay out of the tab
+    // strip even though their output is still visible under "ALL".
+    expect(screen.queryByRole('tab', { name: 'Historical Bravo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '3:33' })).not.toBeInTheDocument();
     const commands = screen.getAllByRole('heading', { level: 3 });
     expect(commands.map((node) => node.textContent)).toEqual(['> newer', '> older']);
   });

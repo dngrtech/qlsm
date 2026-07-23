@@ -4327,15 +4327,14 @@ body {
 .global-rcon-header h1 { display: flex; align-items: center; gap: .6rem; font-size: 1.35rem; font-weight: 700; }
 .global-rcon-header p, .global-rcon-summary, .global-rcon-state { color: var(--text-secondary); font-size: .875rem; }
 .global-rcon-summary { display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
-.global-rcon-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 18rem minmax(0, 1fr); gap: 1rem; }
-.global-rcon-targets, .global-rcon-output { min-width: 0; border: 1px solid var(--surface-border); border-radius: .75rem; background: var(--surface-raised); padding: 1rem; }
-.global-rcon-targets { overflow: auto; }
-.global-rcon-targets h2 { margin: 0; font-size: .9rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-.global-rcon-targets-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
-.global-rcon-target-toggle { display: none; color: var(--text-secondary); font-size: .75rem; text-decoration: underline; }
-.global-rcon-output { display: flex; min-height: 0; flex-direction: column; overflow: hidden; }
+.global-rcon-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: 26.4rem minmax(0, 1fr); gap: 1rem; }
+.global-rcon-targets { min-width: 0; border: 1px solid var(--surface-border); border-radius: .75rem; background: var(--surface-raised); padding: 1rem; overflow: auto; }
+.global-rcon-targets-title { display: flex; align-items: center; justify-content: space-between; margin: -1rem -1rem .75rem; }
+.global-rcon-target-toggle { display: none; flex: none; margin-right: 1rem; color: var(--text-secondary); font-size: .75rem; text-decoration: underline; }
+/* Output's frame lives on the tab strip + content pane inside GlobalRconOutput
+   itself (matching EditInstanceConfigModal's tab-then-panel look), not here. */
+.global-rcon-output { min-width: 0; display: flex; min-height: 0; flex-direction: column; overflow: hidden; }
 .global-rcon-output > div { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.global-rcon-output > div > [role="tabpanel"] { min-height: 0; flex: 1; overflow: auto; }
 .global-rcon-state { display: flex; align-items: center; gap: .5rem; padding: 2rem; }
 .global-rcon-error { color: var(--accent-danger); }
 @media (max-width: 850px) {

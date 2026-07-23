@@ -21,34 +21,40 @@ export default function GlobalRconOutput({
   runs = [],
   rawStreams = new Map(),
   activeKey,
+  commandInput,
 }) {
   const active = activeFilter ?? activeKey ?? 'all';
   const events = active === 'all' ? EMPTY_EVENTS : rawStreams.get(active) ?? EMPTY_EVENTS;
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="flex h-full flex-col">
       <RconOutputFilters
         activeFilter={active}
         onFilterChange={onFilterChange}
         selectedTargets={selectedTargets}
-        runs={runs}
-        rawStreams={rawStreams}
       />
-      {active === 'all' ? (runs.length ? (
-        <div className="space-y-3" role="tabpanel" aria-label="All command runs">
-          {runs.map((run) => (
-            <RconCommandRun key={run.id} run={run} onFilterChange={onFilterChange} />
+      {/* Content pane continues the tab strip's border, flush underneath it —
+          same tab-then-panel frame as EditInstanceConfigModal. */}
+      <div className="flex min-h-0 flex-1 flex-col rounded-b-xl border-x border-b border-[var(--surface-border)] bg-[var(--surface-base)]">
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-auto p-3">
+          {active === 'all' ? (runs.length ? (
+            <div className="space-y-3" role="tabpanel" aria-label="All command runs">
+              {runs.map((run) => (
+                <RconCommandRun key={run.id} run={run} onFilterChange={onFilterChange} />
+              ))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-theme-muted">No commands have been sent.</p>
+          )) : (events.length ? (
+            <div role="tabpanel" aria-label="Target raw output" className="h-full">
+              <TargetOutput events={events} targetKey={active} />
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-theme-muted">No output for this target.</p>
           ))}
         </div>
-      ) : (
-        <p className="py-8 text-center text-sm text-theme-muted">No commands have been sent.</p>
-      )) : (events.length ? (
-        <div role="tabpanel" aria-label="Target raw output" className="min-h-0 flex-1">
-          <TargetOutput events={events} targetKey={active} />
-        </div>
-      ) : (
-        <p className="py-8 text-center text-sm text-theme-muted">No output for this target.</p>
-      ))}
+        {commandInput}
+      </div>
     </div>
   );
 }

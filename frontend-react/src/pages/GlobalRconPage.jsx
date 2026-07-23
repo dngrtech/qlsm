@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { AlertTriangle, Radio, Terminal } from 'lucide-react';
+import { AlertTriangle, Radio, Target, Terminal } from 'lucide-react';
 
 import RconCommandInput from '../components/rcon/RconCommandInput';
 import GlobalRconOutput from '../components/rcon/GlobalRconOutput';
@@ -9,6 +9,7 @@ import useGlobalRconPreferences from '../hooks/useGlobalRconPreferences';
 import { useHostOrder } from '../hooks/useHostOrder';
 import useRconCommandRuns from '../hooks/useRconCommandRuns';
 import { useServers } from '../hooks/useServers';
+import { useServerStatus } from '../hooks/useServerStatus';
 import { buildRconHosts, selectedEligibleTargetRefs } from '../utils/rconTargets';
 
 function runId() {
@@ -28,6 +29,7 @@ function inventoryErrorText(error) {
 
 export default function GlobalRconPage() {
   const { serversData = [], loading, error } = useServers();
+  const serverStatuses = useServerStatus();
   const { getOrderedHosts } = useHostOrder();
   const hosts = useMemo(() => getOrderedHosts(serversData), [getOrderedHosts, serversData]);
   const instances = useMemo(() => hosts.flatMap((host) => host.instances ?? []), [hosts]);
@@ -54,9 +56,22 @@ export default function GlobalRconPage() {
   const readyTargets = useMemo(() => selectedTargets.filter((target) => target.eligible
     && runtimeStates.get(target.key)?.state === 'ready'), [runtimeStates, selectedTargets]);
   const selectedEligible = selectedTargets.filter((target) => target.eligible);
+  // Viewing the ALL tab sends to the whole selection; viewing one instance's
+  // tab scopes Send to just that instance, even if others are also selected.
+  const activeTarget = activeFilter !== 'all'
+    ? selectedTargets.find((target) => target.key === activeFilter) : null;
+  const dispatchTargets = useMemo(
+    () => (activeFilter === 'all' ? selectedTargets : (activeTarget ? [activeTarget] : [])),
+    [activeFilter, activeTarget, selectedTargets],
+  );
+  const dispatchReady = useMemo(() => dispatchTargets.filter((target) => target.eligible
+    && runtimeStates.get(target.key)?.state === 'ready'), [dispatchTargets, runtimeStates]);
+  const sendButtonLabel = activeTarget
+    ? `Send to ${activeTarget.label}`
+    : `Send to ${dispatchReady.length} ${dispatchReady.length === 1 ? 'target' : 'targets'}`;
 
   const send = useCallback(async (command) => {
-    const snapshot = selectedTargets.filter((target) => target.eligible);
+    const snapshot = dispatchTargets.filter((target) => target.eligible);
     const ready = snapshot.filter((target) => runtimeStates.get(target.key)?.state === 'ready');
     const skipped = snapshot.filter((target) => !ready.some((item) => item.key === target.key))
       .map((target) => ({ ...target, reason: statusReason(runtimeStates.get(target.key)) }));
@@ -68,7 +83,7 @@ export default function GlobalRconPage() {
     })));
     runs.applyDispatchAck(id, acknowledgement);
     return true;
-  }, [runs, runtimeStates, selectedTargets, session]);
+  }, [dispatchTargets, runs, runtimeStates, session]);
 
   if (loading) return <div className="global-rcon-page"><p className="global-rcon-state">Loading Global RCON inventory…</p></div>;
   if (error) return (
@@ -80,26 +95,35 @@ export default function GlobalRconPage() {
   return (
     <div className="global-rcon-page">
       <header className="global-rcon-header">
-        <div><h1><Terminal size={24} /> Global RCON</h1><p>Dispatch commands to selected Quake Live instances. Queued is delivery, not semantic success.</p></div>
+        <div><h1><Terminal size={24} /> Global RCON</h1></div>
         <div className="global-rcon-summary"><Radio size={15} className={session.connected ? 'text-emerald-500' : 'text-theme-muted'} />
           {readyTargets.length} ready / {selectedEligible.length} eligible selected</div>
       </header>
       <div className="global-rcon-layout">
-        <aside className={`global-rcon-targets ${targetsOpen ? '' : 'global-rcon-targets-collapsed'}`}>
-          <div className="global-rcon-targets-title"><h2>Targets</h2><button type="button" className="global-rcon-target-toggle"
-            aria-expanded={targetsOpen} onClick={() => setTargetsOpen((open) => !open)}>{targetsOpen ? 'Hide targets' : 'Show targets'}</button></div>
+        <aside className={`global-rcon-targets scrollbar-thin ${targetsOpen ? '' : 'global-rcon-targets-collapsed'}`}>
+          <div className="global-rcon-targets-title">
+            <div className="flex flex-1 overflow-hidden rounded-t-xl border border-[var(--surface-border)] bg-[var(--surface-elevated)]">
+              <span className="flex flex-1 items-center gap-2 border-b-2 border-b-[var(--accent-primary)] bg-[var(--accent-primary)]/5 px-4 py-2.5 text-[13px] font-display font-semibold uppercase tracking-wide text-[var(--accent-primary)]">
+                <Target size={16} />
+                Targets
+              </span>
+            </div>
+            <button type="button" className="global-rcon-target-toggle"
+              aria-expanded={targetsOpen} onClick={() => setTargetsOpen((open) => !open)}>{targetsOpen ? 'Hide targets' : 'Show targets'}</button>
+          </div>
           {targetsOpen && <RconTargetTree
             hosts={rconHosts} selectedKeys={preferences.selectedKeys} expandedHostIds={preferences.expandedHostIds}
-            runtimeStates={runtimeStates} setTargetChecked={preferences.setTargetChecked}
+            runtimeStates={runtimeStates} serverStatuses={serverStatuses} setTargetChecked={preferences.setTargetChecked}
             setHostChecked={preferences.setHostChecked} selectAllEligible={preferences.selectAllEligible}
             selectNone={preferences.selectNone} toggleHostExpanded={preferences.toggleHostExpanded}
+            setAllHostsExpanded={preferences.setAllHostsExpanded}
           />}
         </aside>
         <section className="global-rcon-output"><GlobalRconOutput activeFilter={activeFilter} onFilterChange={setActiveFilter}
           selectedTargets={selectedTargets} runs={runs.runs} rawStreams={runs.rawStreams}
-        />
-        <RconCommandInput disabled={!readyTargets.length}
-          buttonLabel={`Send to ${readyTargets.length} ${readyTargets.length === 1 ? 'target' : 'targets'}`} onSend={send}
+          commandInput={<RconCommandInput disabled={!dispatchReady.length} className="border-t border-theme"
+            buttonLabel={sendButtonLabel} onSend={send}
+          />}
         /></section>
       </div>
     </div>

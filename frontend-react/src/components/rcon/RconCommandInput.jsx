@@ -7,6 +7,7 @@ function RconCommandInput({
   prompt = 'RCON>',
   onSend,
   buttonLabel = 'Send',
+  className = 'border-t border-theme bg-theme-elevated',
 }) {
   const [value, setValue] = useState('');
   const [history, setHistory] = useState([]);
@@ -50,7 +51,7 @@ function RconCommandInput({
   }, [history, historyIndex]);
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 border-t border-theme bg-theme-elevated flex-shrink-0">
+    <form onSubmit={submit} className={`flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 flex-shrink-0 ${className}`}>
       <span className="font-mono text-sm font-semibold" style={{ color: 'var(--accent-primary)' }}>{prompt}</span>
       {recipientCount != null && <span className="text-xs text-theme-muted">{recipientCount} recipients</span>}
       <input

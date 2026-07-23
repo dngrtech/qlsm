@@ -3,6 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mocks = vi.hoisted(() => ({ addNotification: vi.fn() }));
+vi.mock('../../NotificationProvider', () => ({
+  useNotification: () => ({ addNotification: mocks.addNotification }),
+}));
+
 const viewer = vi.hoisted(() => ({ mounts: 0, appendCalls: 0, clearCalls: 0 }));
 vi.mock('../RconRawOutputViewer', async () => {
   const React = await import('react');
@@ -45,10 +50,8 @@ beforeEach(() => {
   viewer.mounts = 0;
   viewer.appendCalls = 0;
   viewer.clearCalls = 0;
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    value: { writeText: vi.fn().mockResolvedValue(undefined) },
-  });
+  mocks.addNotification.mockClear();
+  Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
 });
 
 describe('RconCommandRun', () => {
@@ -83,6 +86,26 @@ describe('RconCommandRun', () => {
     await waitFor(() => expect(screen.getByTestId('run-viewer')).toHaveTextContent('six'));
     fireEvent.click(header);
     expect(header).toHaveAttribute('aria-expanded', 'false');
+    // The viewer stays mounted through the collapse transition so max-height
+    // has real content to clip (otherwise the collapse animation looked
+    // instant), then unmounts once the transition finishes.
+    const viewerNode = screen.getByTestId('run-viewer');
+    expect(viewerNode).toBeInTheDocument();
+    fireEvent.transitionEnd(viewerNode.parentElement.parentElement, { propertyName: 'max-height' });
+    expect(screen.queryByTestId('run-viewer')).not.toBeInTheDocument();
+  });
+
+  it('lands on the light preview when streaming crosses the five-line threshold without a user override', async () => {
+    const events = Array.from({ length: 8 }, (_, index) => ({
+      type: 'response', content: `line-${index}`, timestamp: `${index}`,
+    }));
+    const runWith = (lines) => makeRun([result('1:11', 'Alpha', { lines })]);
+    const { rerender } = render(<RconCommandRun run={runWith(events.slice(0, 3))} />);
+    for (let count = 4; count <= 8; count += 1) {
+      rerender(<RconCommandRun run={runWith(events.slice(0, count))} />);
+    }
+    expect(screen.getByRole('button', { name: 'Alpha, 8 lines' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('line-0')).toBeInTheDocument();
     expect(screen.queryByTestId('run-viewer')).not.toBeInTheDocument();
   });
 
@@ -197,8 +220,10 @@ describe('RconCommandRun', () => {
     expect(screen.getByRole('button', { name: 'Bravo, 6 lines' })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('copies exact multiline target content and safely absorbs clipboard rejection', async () => {
+  it('copies exact multiline target content, confirms via toast, and safely absorbs clipboard rejection', async () => {
     const user = userEvent.setup();
+    // Defined after userEvent.setup(), which installs its own clipboard stub
+    // on setup and would otherwise clobber this mock.
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -208,10 +233,16 @@ describe('RconCommandRun', () => {
       { type: 'error', content: 'three', timestamp: 'b' },
     ];
     render(<RconCommandRun run={makeRun([result('1:11', 'Alpha', { lines })])} />);
-    await user.click(screen.getByRole('button', { name: 'Copy output for Alpha' }));
+    const copyButton = screen.getByRole('button', { name: 'Copy output for Alpha' });
+    await user.click(copyButton);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('one\ntwo\nthree');
+    expect(mocks.addNotification).toHaveBeenCalledWith('Output copied to clipboard', 'success');
+    await waitFor(() => expect(copyButton.querySelector('svg')).toHaveClass('text-emerald-400'));
+
+    mocks.addNotification.mockClear();
     navigator.clipboard.writeText.mockRejectedValueOnce(new Error('denied'));
-    await expect(user.click(screen.getByRole('button', { name: 'Copy output for Alpha' }))).resolves.toBeUndefined();
+    await expect(user.click(copyButton)).resolves.toBeUndefined();
+    expect(mocks.addNotification).not.toHaveBeenCalled();
   });
 
   it('activates the target raw filter by clicking the visible target label', () => {

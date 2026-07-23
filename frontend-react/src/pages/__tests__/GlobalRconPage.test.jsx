@@ -26,7 +26,13 @@ vi.mock('../../hooks/useRconCommandRuns', () => ({ default: () => ({
   appendMessage: state.appendMessage, applyTargetStatus: state.applyTargetStatus,
 }) }));
 vi.mock('../../components/rcon/RconTargetTree', () => ({ default: () => <div data-testid="target-tree" /> }));
-vi.mock('../../components/rcon/GlobalRconOutput', () => ({ default: () => <div data-testid="output" /> }));
+vi.mock('../../components/rcon/GlobalRconOutput', () => ({ default: ({ commandInput, onFilterChange }) => (
+  <div data-testid="output">
+    <button onClick={() => onFilterChange('1:11')}>activate-1:11</button>
+    <button onClick={() => onFilterChange('1:12')}>activate-1:12</button>
+    {commandInput}
+  </div>
+) }));
 vi.mock('../../components/rcon/RconCommandInput', () => ({ default: ({ disabled, buttonLabel, onSend }) => <button disabled={disabled} onClick={() => onSend('status')}>{buttonLabel}</button> }));
 
 import GlobalRconPage from '../GlobalRconPage';
@@ -48,6 +54,24 @@ describe('GlobalRconPage', () => {
     expect(state.sendCommand.mock.calls[0].slice(1)).toEqual(['status', [{ host_id: 1, instance_id: 11 }]]);
     expect(state.applyDispatchAck).toHaveBeenCalled();
     expect(screen.queryByText(/real-time game events/i)).not.toBeInTheDocument();
+  });
+
+  it('scopes Send to only the active target tab, ignoring the rest of the selection', async () => {
+    render(<GlobalRconPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'activate-1:11' }));
+    const send = screen.getByRole('button', { name: 'Send to Ready' });
+    fireEvent.click(send);
+    await vi.waitFor(() => expect(state.sendCommand).toHaveBeenCalled());
+    expect(state.startRun).toHaveBeenCalledWith(expect.objectContaining({
+      readyTargets: [expect.objectContaining({ key: '1:11' })], skippedTargets: [],
+    }));
+    expect(state.sendCommand.mock.calls[0].slice(1)).toEqual(['status', [{ host_id: 1, instance_id: 11 }]]);
+  });
+
+  it('disables Send when the active tab targets a selected instance that is not ready, even though another is', () => {
+    render(<GlobalRconPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'activate-1:12' }));
+    expect(screen.getByRole('button', { name: 'Send to Waiting' })).toBeDisabled();
   });
 
   it('routes fleet session events into the command run store', () => {

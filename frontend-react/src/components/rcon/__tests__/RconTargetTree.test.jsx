@@ -73,7 +73,11 @@ describe('RconTargetTree', () => {
     expect(props.toggleHostExpanded).toHaveBeenCalledWith(1);
     rerender(<RconTargetTree {...props} expandedHostIds={new Set()} />);
     expect(screen.getByRole('button', { name: 'Expand Alpha host' })).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Select Ready server on Alpha host' })).not.toBeInTheDocument();
+    // Instances stay mounted (revealed via an animated max-height, not
+    // conditional rendering) so collapse can transition instead of snapping.
+    const checkbox = screen.getByRole('checkbox', { name: 'Select Ready server on Alpha host' });
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox.closest('div').className).toMatch(/max-h-0/);
   });
 
   it('renders connecting, ready, and failed runtime indicators without disabling eligible failures', () => {
@@ -83,10 +87,17 @@ describe('RconTargetTree', () => {
       ['1:13', { status: 'ready' }],
     ]);
     renderTree({ runtimeStates });
-    expect(screen.getByText('Failed: Timed out')).toBeInTheDocument();
-    expect(screen.getByText('Connecting')).toBeInTheDocument();
-    expect(screen.getByText('Ready')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Failed: Timed out' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Connecting' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Ready' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Select Ready server on Alpha host' })).toBeEnabled();
+  });
+
+  it('shows a current/max player count from server status, and a dash when none is available yet', () => {
+    renderTree({ serverStatuses: { 11: { players: [{}, {}, {}, {}], maxplayers: 16 } } });
+    expect(screen.getByText('4/16')).toBeInTheDocument();
+    // Stopped server (12) and No RCON server (13) have no status entry.
+    expect(screen.getAllByText('—')).toHaveLength(2);
   });
 
   it('uses host context to distinguish identical instance checkbox labels', () => {
