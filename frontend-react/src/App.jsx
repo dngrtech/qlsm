@@ -11,6 +11,7 @@ import EditPresetPage from './pages/EditPresetPage';
 import UserManagementPage from './pages/UserManagementPage';
 import SettingsPage from './pages/SettingsPage';
 import ServersPage from './pages/ServersPage';
+import GlobalRconPage from './pages/GlobalRconPage';
 import DocsPage from './pages/DocsPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -30,6 +31,7 @@ function App() {
                   <Route path="/" element={<Navigate to="/servers" replace />} />
                   <Route path="/change-password" element={<ChangePasswordPage />} />
                   <Route path="/servers" element={<ServersPage />} />
+                  <Route path="/global-rcon" element={<GlobalRconPage />} />
                   <Route path="/presets" element={<PresetsPage />} />
                   <Route path="/presets/add" element={<AddPresetPage />} />
                   <Route path="/presets/edit/:presetId" element={<EditPresetPage />} />

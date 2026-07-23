@@ -1,0 +1,77 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Send } from 'lucide-react';
+
+function RconCommandInput({
+  disabled = false,
+  recipientCount,
+  prompt = 'RCON>',
+  onSend,
+  buttonLabel = 'Send',
+  className = 'border-t border-theme bg-theme-elevated',
+}) {
+  const [value, setValue] = useState('');
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    // The retry covers the modal's open animation. The fleet page mounts this
+    // permanently, so only re-focus when the user has not moved on themselves.
+    const timer = setTimeout(() => {
+      const active = document.activeElement;
+      if (!active || active === document.body) inputRef.current?.focus();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const submit = useCallback((event) => {
+    event.preventDefault();
+    const command = value.trim();
+    if (disabled || !command) return;
+    if (onSend(command) === false) return;
+    setHistory((previous) => [command, ...previous].slice(0, 50));
+    setHistoryIndex(-1);
+    setValue('');
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [disabled, onSend, value]);
+
+  const navigateHistory = useCallback((event) => {
+    if (event.key === 'ArrowUp' && historyIndex < history.length - 1) {
+      event.preventDefault();
+      const next = historyIndex + 1;
+      setHistoryIndex(next);
+      setValue(history[next]);
+    } else if (event.key === 'ArrowDown' && historyIndex >= 0) {
+      event.preventDefault();
+      const next = historyIndex - 1;
+      setHistoryIndex(next);
+      setValue(next < 0 ? '' : history[next]);
+    }
+  }, [history, historyIndex]);
+
+  return (
+    <form onSubmit={submit} className={`flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 flex-shrink-0 ${className}`}>
+      <span className="font-mono text-sm font-semibold" style={{ color: 'var(--accent-primary)' }}>{prompt}</span>
+      {recipientCount != null && <span className="text-xs text-theme-muted">{recipientCount} recipients</span>}
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={navigateHistory}
+        placeholder={disabled ? 'Connecting...' : 'Enter command...'}
+        className="min-w-0 flex-1 basis-40 bg-transparent border-none outline-none font-mono text-sm text-theme-primary placeholder-theme-muted"
+        autoComplete="off"
+        spellCheck="false"
+      />
+      <button type="submit" disabled={disabled || !value.trim()} className="btn btn-primary shrink-0 gap-2">
+        <Send size={14} />
+        {buttonLabel}
+      </button>
+    </form>
+  );
+}
+
+export default RconCommandInput;

@@ -65,6 +65,7 @@ nav:
     - Live Status: operations/live-status.md
     - Edit Configs, Plugins, And Factories: operations/edit-configs.md
     - RCON Console: operations/rcon-console.md
+    - Global RCON: operations/global-rcon.md
     - Server Logs: operations/server-logs.md
     - Chat Logs: operations/chat-logs.md
     - MinQLX Logs: operations/minqlx-logs.md

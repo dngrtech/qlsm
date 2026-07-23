@@ -2,6 +2,9 @@
 
 RCON lets you send live commands to a running server.
 
+To send one command to several instances at once, use
+[Global RCON](global-rcon.md) instead.
+
 ## Open RCON
 
 - Go to instance **Actions**.
@@ -42,5 +45,6 @@ The console has a **Show real-time game events** checkbox enabled by default. Wh
 
 ## Related Pages
 
+- [Global RCON](global-rcon.md) — send one command to many instances.
 - [Use Logs And Chat Logs](logs-and-chat.md)
 - [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

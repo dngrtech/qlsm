@@ -63,6 +63,11 @@
         "path": "/docs/operations/rcon-console.md"
       },
       {
+        "id": "global-rcon",
+        "title": "Global RCON",
+        "path": "/docs/operations/global-rcon.md"
+      },
+      {
         "id": "server-logs",
         "title": "Server Logs",
         "path": "/docs/operations/server-logs.md"
