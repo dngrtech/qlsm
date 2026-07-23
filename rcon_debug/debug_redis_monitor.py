@@ -11,8 +11,11 @@ def monitor():
     r = redis.from_url(redis_url, decode_responses=True, password=redis_password)
     pubsub = r.pubsub()
     
-    # Subscribe to all RCON related channels
-    patterns = ['rcon:cmd:*', 'rcon:response:*', 'rcon:status:*', 'rcon:stats:*']
+    # Subscribe to all RCON related channels. Channels are prefixed by
+    # REDIS_PREFIX (default 'rcon'), matching ui/rcon_transport.py — dev
+    # environments use e.g. 'rcon-dev-1', so a hardcoded 'rcon:' misses them.
+    prefix = os.environ.get('REDIS_PREFIX', 'rcon')
+    patterns = [f'{prefix}:cmd:*', f'{prefix}:response:*', f'{prefix}:status:*', f'{prefix}:stats:*']
     pubsub.psubscribe(*patterns)
     
     print(f"Subscribed to patterns: {', '.join(patterns)}")
