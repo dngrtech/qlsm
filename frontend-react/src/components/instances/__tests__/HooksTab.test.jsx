@@ -132,6 +132,37 @@ describe('HooksTab', () => {
     expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: false });
   });
 
+  it('replacing via the "⋮" actions menu also forces a restart for an ENABLED hook', async () => {
+    // Each row renders two file inputs: the inline replace icon's own input,
+    // and a second one owned by HookActionsMenu. Target the second explicitly
+    // so this test can't accidentally pass by hitting the inline one instead.
+    const { props } = renderTab();
+
+    const row = screen.getByTestId('hook-row-a.so');
+    const inputs = row.querySelectorAll('input[type="file"]');
+    expect(inputs).toHaveLength(2);
+    const menuInput = inputs[1];
+    const file = new File(['ELF content'], 'a.so', { type: 'application/octet-stream' });
+    fireEvent.change(menuInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(api.replaceInstanceHook).toHaveBeenCalledWith(1, 'a.so', file));
+    expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: true });
+  });
+
+  it('replacing via the "⋮" actions menu does not force a restart for a DISABLED hook', async () => {
+    const { props } = renderTab();
+
+    const row = screen.getByTestId('hook-row-c.so');
+    const inputs = row.querySelectorAll('input[type="file"]');
+    expect(inputs).toHaveLength(2);
+    const menuInput = inputs[1];
+    const file = new File(['ELF content'], 'c.so', { type: 'application/octet-stream' });
+    fireEvent.change(menuInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(api.replaceInstanceHook).toHaveBeenCalledWith(1, 'c.so', file));
+    expect(props.onRefresh).toHaveBeenCalledWith({ hooksChanged: false });
+  });
+
   it('shows error banner when upload fails', async () => {
     api.uploadInstanceHook.mockRejectedValueOnce({ error: { message: 'Not an ELF file' } });
     renderTab();
