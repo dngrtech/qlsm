@@ -5,6 +5,7 @@ import {
   dirname,
   flattenFiles,
   getErrorMessage,
+  getExtension,
   getFileType,
   getInitialSelectableFile,
   isCheckablePath,
@@ -265,22 +266,55 @@ export function useFileManagerController({
     }
   }, [adapter, capabilities, checkable, expandFolder, newModalMode, newModalTargetDir, onCheck, selectPath, selectedFile]);
 
-  const handleUpload = useCallback(async (file, targetDir = null) => {
-    try {
-      const dir = targetDir ?? dirname(selectedFile?.path || '');
-      const result = await adapter.upload(file, dir);
-      const path = result?.path || joinPath(dir, file.name);
-      if (checkable && isCheckablePath(path) && onCheck && onCheck !== adapter.setChecked) {
-        await onCheck(path, true);
+  const handleUpload = useCallback(async (input, targetDir = null) => {
+    const files = input == null
+      ? []
+      : (input instanceof File ? [input] : Array.from(input));
+    if (files.length === 0) return;
+
+    const dir = targetDir ?? dirname(selectedFile?.path || '');
+    const allowed = capabilities.allowedExtensions || [];
+    const rejected = [];
+    const valid = [];
+    for (const file of files) {
+      if (allowed.includes(getExtension(file.name))) {
+        valid.push(file);
+      } else {
+        rejected.push(`${file.name} (invalid type)`);
       }
-      if (dir) expandFolder(dir);
-      setActionError(null);
-      pendingLocalPathsRef.current.add(path);
-      await selectPath(path, { path, name: basename(path), type: 'file' }, result?.content);
-    } catch (err) {
-      setActionError(getErrorMessage(err, 'Upload failed'));
     }
-  }, [adapter, checkable, expandFolder, onCheck, selectPath, selectedFile]);
+
+    let lastUploaded = null;
+    for (const file of valid) {
+      try {
+        const result = await adapter.upload(file, dir);
+        const path = result?.path || joinPath(dir, file.name);
+        if (checkable && isCheckablePath(path) && onCheck && onCheck !== adapter.setChecked) {
+          await onCheck(path, true);
+        }
+        pendingLocalPathsRef.current.add(path);
+        lastUploaded = { path, content: result?.content };
+      } catch (err) {
+        rejected.push(`${file.name} (${getErrorMessage(err, 'upload failed')})`);
+      }
+    }
+
+    if (lastUploaded) {
+      if (dir) expandFolder(dir);
+      await selectPath(
+        lastUploaded.path,
+        { path: lastUploaded.path, name: basename(lastUploaded.path), type: 'file' },
+        lastUploaded.content,
+      );
+    }
+
+    if (rejected.length > 0) {
+      const noun = rejected.length === 1 ? 'file' : 'files';
+      setActionError(`${rejected.length} ${noun} skipped: ${rejected.join(', ')}`);
+    } else {
+      setActionError(null);
+    }
+  }, [adapter, capabilities, checkable, expandFolder, onCheck, selectPath, selectedFile]);
 
   const openRenameModal = useCallback((item) => {
     setRenameTarget({ kind: item.type, path: item.path });
@@ -437,8 +471,8 @@ export function useFileManagerController({
     openNewFileModal(folderItem.path);
   }, [openNewFileModal]);
 
-  const handleUploadToFolder = useCallback((folderItem, file) => {
-    handleUpload(file, folderItem.path);
+  const handleUploadToFolder = useCallback((folderItem, files) => {
+    handleUpload(files, folderItem.path);
   }, [handleUpload]);
 
   const language = selectedFile && getLanguageForFile ? getLanguageForFile(selectedFile.path) : null;

@@ -322,3 +322,99 @@ describe('useFileManagerController initial selection', () => {
     expect(result.current.currentContent).toBe('uploaded content');
   });
 });
+
+describe('useFileManagerController multi-file upload', () => {
+  it('uploads a batch of valid files and selects the last one', async () => {
+    const adapter = createAdapter([]);
+    adapter.upload.mockImplementation((file) =>
+      Promise.resolve({ path: file.name, content: `body:${file.name}` }));
+
+    const { result } = renderHook(() => useFileManagerController({
+      adapter,
+      capabilities: { allowedExtensions: ['.cfg'] },
+    }));
+
+    await act(async () => {
+      await result.current.handleUpload([
+        new File(['a'], 'one.cfg'),
+        new File(['b'], 'two.cfg'),
+      ]);
+    });
+
+    expect(adapter.upload).toHaveBeenCalledTimes(2);
+    expect(result.current.selectedFile?.path).toBe('two.cfg');
+    expect(result.current.currentContent).toBe('body:two.cfg');
+    expect(result.current.actionError).toBeNull();
+  });
+
+  it('filters out disallowed extensions and reports them without uploading', async () => {
+    const adapter = createAdapter([]);
+    adapter.upload.mockImplementation((file) =>
+      Promise.resolve({ path: file.name, content: `body:${file.name}` }));
+
+    const { result } = renderHook(() => useFileManagerController({
+      adapter,
+      capabilities: { allowedExtensions: ['.cfg'] },
+    }));
+
+    await act(async () => {
+      await result.current.handleUpload([
+        new File(['a'], 'good.cfg'),
+        new File(['x'], 'bad.exe'),
+      ]);
+    });
+
+    expect(adapter.upload).toHaveBeenCalledTimes(1);
+    expect(adapter.upload).toHaveBeenCalledWith(expect.objectContaining({ name: 'good.cfg' }), '');
+    expect(result.current.selectedFile?.path).toBe('good.cfg');
+    expect(result.current.actionError).toMatch(/bad\.exe/);
+    expect(result.current.actionError).toMatch(/invalid type/);
+  });
+
+  it('uploads the good files and reports per-file failures', async () => {
+    const adapter = createAdapter([]);
+    adapter.upload.mockImplementation((file) =>
+      file.name === 'boom.cfg'
+        ? Promise.reject(new Error('server said no'))
+        : Promise.resolve({ path: file.name, content: `body:${file.name}` }));
+
+    const { result } = renderHook(() => useFileManagerController({
+      adapter,
+      capabilities: { allowedExtensions: ['.cfg'] },
+    }));
+
+    await act(async () => {
+      await result.current.handleUpload([
+        new File(['a'], 'ok.cfg'),
+        new File(['b'], 'boom.cfg'),
+      ]);
+    });
+
+    expect(adapter.upload).toHaveBeenCalledTimes(2);
+    expect(result.current.selectedFile?.path).toBe('ok.cfg');
+    expect(result.current.actionError).toMatch(/boom\.cfg/);
+    expect(result.current.actionError).toMatch(/server said no/);
+  });
+
+  it('routes folder multi-upload through the folder path', async () => {
+    const adapter = createAdapter([]);
+    adapter.upload.mockImplementation((file, dir) =>
+      Promise.resolve({ path: `${dir}/${file.name}`, content: 'x' }));
+
+    const { result } = renderHook(() => useFileManagerController({
+      adapter,
+      capabilities: { allowedExtensions: ['.cfg'], canFolders: true },
+    }));
+
+    await act(async () => {
+      await result.current.handleUploadToFolder(
+        { path: 'scripts', name: 'scripts', type: 'folder' },
+        [new File(['a'], 'a.cfg'), new File(['b'], 'b.cfg')],
+      );
+    });
+
+    expect(adapter.upload).toHaveBeenCalledWith(expect.objectContaining({ name: 'a.cfg' }), 'scripts');
+    expect(adapter.upload).toHaveBeenCalledWith(expect.objectContaining({ name: 'b.cfg' }), 'scripts');
+    expect(result.current.selectedFile?.path).toBe('scripts/b.cfg');
+  });
+});
