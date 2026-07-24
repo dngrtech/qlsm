@@ -70,10 +70,11 @@ export default function FileSidebarActions({
             <Upload className="w-3.5 h-3.5" /> Upload
             <input
               type="file"
+              multiple
               accept={allowedExtensions.join(',')}
               className="hidden"
               onChange={(e) => {
-                if (e.target.files[0]) onUpload(e.target.files[0]);
+                if (e.target.files.length) onUpload(Array.from(e.target.files));
                 e.target.value = '';
               }}
             />
