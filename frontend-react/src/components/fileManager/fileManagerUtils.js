@@ -82,3 +82,8 @@ export function rewritePathPrefix(path, oldPrefix, newPrefix) {
   }
   return null;
 }
+
+export function getExtension(name = '') {
+  const dotIndex = name.lastIndexOf('.');
+  return dotIndex === -1 ? '' : name.slice(dotIndex).toLowerCase();
+}
