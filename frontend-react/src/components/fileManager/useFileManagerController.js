@@ -472,7 +472,7 @@ export function useFileManagerController({
   }, [openNewFileModal]);
 
   const handleUploadToFolder = useCallback((folderItem, files) => {
-    handleUpload(files, folderItem.path);
+    return handleUpload(files, folderItem.path);
   }, [handleUpload]);
 
   const language = selectedFile && getLanguageForFile ? getLanguageForFile(selectedFile.path) : null;
