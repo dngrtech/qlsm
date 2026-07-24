@@ -136,7 +136,7 @@ function TreeItem({
           onRename={() => rowMenuHandlers.onRename(item)}
           onDelete={() => rowMenuHandlers.onDelete(item)}
           onNewFileInFolder={() => rowMenuHandlers.onNewFileInFolder(item)}
-          onUploadToFolder={(file) => rowMenuHandlers.onUploadToFolder(item, file)}
+          onUploadToFolder={(files) => rowMenuHandlers.onUploadToFolder(item, files)}
         />
       </div>
       {isFolder && foldersEnabled && expanded && item.children?.map(child => (

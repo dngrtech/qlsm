@@ -77,11 +77,12 @@ export default function FileTreeRowMenu({
       {isFolder && (
         <input
           type="file"
+          multiple
           ref={fileInputRef}
           className="hidden"
           accept={(capabilities.allowedExtensions || []).join(',')}
           onChange={(e) => {
-            if (e.target.files[0] && onUploadToFolder) onUploadToFolder(e.target.files[0]);
+            if (e.target.files.length && onUploadToFolder) onUploadToFolder(Array.from(e.target.files));
             e.target.value = '';
           }}
         />
