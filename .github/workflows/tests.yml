@@ -9,6 +9,13 @@ jobs:
     name: pytest
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
+    env:
+      # Dummy, non-production value: with_app_context() calls create_app()
+      # with no test_config override, which imports ui.config for real.
+      # ProductionConfig's class body raises unconditionally (regardless of
+      # FLASK_ENV) if SECRET_KEY is unset in the environment. Locally this is
+      # masked by a real .env file; CI has none, so it's needed here.
+      SECRET_KEY: ci-test-secret-key-not-for-production
 
     services:
       redis:
