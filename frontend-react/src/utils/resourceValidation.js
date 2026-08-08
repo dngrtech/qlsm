@@ -4,6 +4,7 @@ export const INSTANCE_NAME_MAX_LENGTH = 40;
 // Hyphens are escaped (\-) so the source stays valid when used as an HTML
 // `pattern` attribute, which browsers now compile with the `v` (unicodeSets)
 // flag — an unescaped trailing hyphen throws "Invalid character class".
+// eslint-disable-next-line no-useless-escape -- see comment above: the escape is required for the HTML pattern attribute
 export const HOST_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$/;
 // Instance names also allow spaces (unlike host names)
 export const INSTANCE_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9\- ]*[a-zA-Z0-9])?$/;

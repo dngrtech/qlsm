@@ -17,16 +17,6 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function timeAgo(ts) {
-  if (!ts) return null;
-  const secs = Math.floor(Date.now() / 1000) - ts;
-  if (secs < 60) return 'just now';
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
-  if (secs < 86400 * 30) return `${Math.floor(secs / 86400)}d ago`;
-  return `${Math.floor(secs / (86400 * 30))}mo ago`;
-}
-
 function FilenameCell({ filename }) {
   const dot = filename.lastIndexOf('.');
   const base = dot > 0 ? filename.slice(0, dot) : filename;
