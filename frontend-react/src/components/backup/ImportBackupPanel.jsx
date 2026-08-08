@@ -31,6 +31,7 @@ function ImportBackupPanel() {
       setFile(null);
       setPassword('');
       setConfirmText('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
       showError(err.error?.message || 'Failed to import backup.');
     } finally {
@@ -66,7 +67,7 @@ function ImportBackupPanel() {
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-secondary"
           >
-            <FolderOpen size={16} strokeWidth={2} className="mr-1" />
+            <FolderOpen size={16} strokeWidth={2} className="mr-1" aria-hidden="true" />
             <span>{file ? file.name : 'Choose backup file'}</span>
           </button>
         </div>
