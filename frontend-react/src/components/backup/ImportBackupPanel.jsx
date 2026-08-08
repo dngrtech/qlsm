@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AlertTriangle, Loader2, Upload } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { AlertTriangle, FolderOpen, Loader2, Upload } from 'lucide-react';
 import { importBackup } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import { CURRENT_VERSION } from '../../utils/versioning';
@@ -8,6 +8,7 @@ const CONFIRM_PHRASE = 'RESTORE';
 const labelClass = 'block text-sm font-medium text-theme-secondary mb-1.5';
 
 function ImportBackupPanel() {
+  const fileInputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState('');
   const [confirmText, setConfirmText] = useState('');
@@ -53,12 +54,21 @@ function ImportBackupPanel() {
         <div>
           <label htmlFor="backup-file" className={labelClass}>Backup file</label>
           <input
+            ref={fileInputRef}
             id="backup-file"
             type="file"
             accept=".qlsmbak"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="text-sm text-theme-secondary"
+            className="hidden"
           />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="btn btn-secondary"
+          >
+            <FolderOpen size={16} strokeWidth={2} className="mr-1" />
+            <span>{file ? file.name : 'Choose backup file'}</span>
+          </button>
         </div>
 
         <div>
