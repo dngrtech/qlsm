@@ -2,7 +2,21 @@
 
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
-<video src="docs/user/videos/edit-instance-config-demo.mp4" controls width="1280"></video>
+## TEST — pick a GIF option below (this section only exists on the test branch)
+
+**900px wide, 12fps — 9.4MB**
+![900w](docs/user/videos/gif-options/option-900w.gif)
+
+**700px wide, 12fps — 6.1MB**
+![700w](docs/user/videos/gif-options/option-700w.gif)
+
+**550px wide, 10fps — 3.9MB**
+![550w](docs/user/videos/gif-options/option-550w.gif)
+
+**420px wide, 8fps — 2.3MB**
+![420w](docs/user/videos/gif-options/option-420w.gif)
+
+---
 
 Features:
 - Three deployment modes (Debian 12 and Ubuntu 22 are tested, Debian 12 is recommended):
