@@ -7,14 +7,7 @@
 **900px wide, 12fps — 9.4MB**
 ![900w](docs/user/videos/gif-options/option-900w.gif)
 
-**700px wide, 12fps — 6.1MB**
-![700w](docs/user/videos/gif-options/option-700w.gif)
 
-**550px wide, 10fps — 3.9MB**
-![550w](docs/user/videos/gif-options/option-550w.gif)
-
-**420px wide, 8fps — 2.3MB**
-![420w](docs/user/videos/gif-options/option-420w.gif)
 
 ---
 
