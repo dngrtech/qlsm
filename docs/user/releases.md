@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.26.3` | 2026-08-14 | [#176](https://github.com/dngrtech/qlsm/pull/176) | Bug fixes and improvements. |
 | `v1.26.2` | 2026-08-12 | [#175](https://github.com/dngrtech/qlsm/pull/175) | Fixed a stale LAN-rate NAT rule that could black-hole all inbound game traffic on standalone/self-hosted servers using the hook-based rate method; legacy-rule cleanup now runs regardless of firewall mode, and the NAT helper script enables `route_localnet` on the real network interface, not just `all`/`default`/`lo`. |
 | `v1.26.1` | 2026-08-11 | [#174](https://github.com/dngrtech/qlsm/pull/174) | Clear an instance's `UPDATED` status after QLSM confirms that its service restarted and resumed live status, including scheduled host auto-restarts. |
 | `v1.26.0` | 2026-08-09 | [#173](https://github.com/dngrtech/qlsm/pull/173) | Add a "Live events" checkbox to Global RCON to suppress unsolicited console output. |
