@@ -20,10 +20,20 @@ import minqlx
 import datetime
 import time
 import re
+from redis.exceptions import RedisError as _RedisError
 
 LENGTH_REGEX = re.compile(r"(?P<number>[0-9]+) (?P<scale>seconds?|minutes?|hours?|days?|weeks?|months?|years?)")
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 PLAYER_KEY = "minqlx:players:{}"
+
+
+def zadd_compat(db, key, member, score):
+    """Support both redis-py 2.x (raises RedisError) and 3.x+ (dict mapping) zadd signatures."""
+    try:
+        return db.zadd(key, {member: score})
+    except (TypeError, _RedisError):
+        return db.zadd(key, score, member)
+
 
 class silence(minqlx.Plugin):
     def __init__(self):
@@ -149,7 +159,7 @@ class silence(minqlx.Plugin):
             silence_id = self.db.zcard(base_key)
             score = time.time() + td.total_seconds()
             db = self.db.pipeline()
-            db.zadd(base_key, score, silence_id)
+            zadd_compat(db, base_key, silence_id, score)
             silence = {"expires": expires, "reason": reason, "issued": now, "issued_by": player.steam_id}
             db.hmset(base_key + ":{}".format(silence_id), silence)
             db.execute()
@@ -194,7 +204,7 @@ class silence(minqlx.Plugin):
         else:
             db = self.db.pipeline()
             for silence_id, score in silences:
-                db.zincrby(base_key, silence_id, -score)
+                db.zincrby(base_key, amount=-score, value=silence_id)
             db.execute()
             if ident in self.silenced:
                 del self.silenced[ident]

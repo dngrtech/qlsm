@@ -32,6 +32,7 @@ import random
 import time
 import os
 import re
+from redis.exceptions import RedisError as _RedisError
 
 # This code makes sure the required superclass is loaded automatically
 try:
@@ -62,6 +63,14 @@ MAX_ATTEMPTS = 3
 CACHE_EXPIRE = 60*30 # 30 minutes TTL.
 DEFAULT_RATING = 1500
 SUPPORTED_GAMETYPES = ("ca", "ctf", "dom", "ft", "tdm")
+
+
+def zadd_compat(db, key, member, score):
+    """Support both redis-py 2.x (raises RedisError) and 3.x+ (dict mapping) zadd signatures."""
+    try:
+        return db.zadd(key, {member: score})
+    except (TypeError, _RedisError):
+        return db.zadd(key, score, member)
 
 
 class player_info(iouonegirlPlugin):
@@ -318,7 +327,7 @@ class player_info(iouonegirlPlugin):
             base_key = PLAYER_KEY.format(player.steam_id) + ":bans"
             ban_id = self.db.zcard(base_key)
             db = self.db.pipeline()
-            db.zadd(base_key, time.time() + td.total_seconds(), ban_id)
+            zadd_compat(db, base_key, ban_id, time.time() + td.total_seconds())
             ban = {"expires": expires, "reason": "deactivated account", "issued": now, "issued_by": "player_info"}
             db.hmset(base_key + ":{}".format(ban_id), ban)
             db.execute()

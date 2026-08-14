@@ -20,6 +20,7 @@ import requests
 import datetime
 import time
 import os
+from redis.exceptions import RedisError as _RedisError
 
 LENGTH_REGEX = re.compile(r"(?P<number>[0-9]+) (?P<scale>seconds?|minutes?|hours?|days?|weeks?|months?|years?)")
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -28,6 +29,15 @@ PLAYER_KEY = "minqlx:players:{}"
 VERSION = "v1.11"
 
 VOTEBAN_FILE = "voteban.txt"
+
+
+def zadd_compat(db, key, member, score):
+    """Support both redis-py 2.x (raises RedisError) and 3.x+ (dict mapping) zadd signatures."""
+    try:
+        return db.zadd(key, {member: score})
+    except (TypeError, _RedisError):
+        return db.zadd(key, score, member)
+
 
 class voteban(minqlx.Plugin):
     def __init__(self):
@@ -212,7 +222,7 @@ class voteban(minqlx.Plugin):
             base_key = PLAYER_KEY.format(id) + ":votebans"
             ban_id = self.db.zcard(base_key)
             db = self.db.pipeline()
-            db.zadd(base_key, time.time() + td.total_seconds(), ban_id)
+            zadd_compat(db, base_key, ban_id, time.time() + td.total_seconds())
             ban = {"expires": expires, "reason": reason, "issued": now, "issued_by": player.steam_id}
             db.hmset(base_key + ":{}".format(ban_id), ban)
             db.execute()
@@ -323,7 +333,7 @@ class voteban(minqlx.Plugin):
             else:
                 db = self.db.pipeline()
                 for p, score in votebans:
-                    db.zincrby(base_key, p, -score)
+                    db.zincrby(base_key, amount=-score, value=p)
                 db.execute()
                 player.tell("^2{}^3 has been deleted from the Vote Ban list.".format(messageName))
             

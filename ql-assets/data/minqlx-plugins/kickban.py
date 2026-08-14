@@ -31,6 +31,14 @@ def zadd_compat(db, key, member, score):
         return db.zadd(key, score, member)
 
 
+def hset_compat(db, key, mapping):
+    """Support both redis-py < 3.5.0 (no mapping= kwarg on hset) and >= 3.5.0 hset signatures."""
+    try:
+        return db.hset(key, mapping=mapping)
+    except TypeError:
+        return db.hmset(key, mapping)
+
+
 class kickban(minqlx.Plugin):
     def __init__(self):
         super().__init__()
@@ -173,9 +181,10 @@ class kickban(minqlx.Plugin):
 
         pipe = self.db.pipeline()
         zadd_compat(pipe, base_key, ban_id, time.time() + duration * 60)
-        pipe.hset(
+        hset_compat(
+            pipe,
             base_key + ":{}".format(ban_id),
-            mapping={
+            {
                 "expires": expires_str,
                 "reason": "Auto-banned: kicked {} times within {} minutes".format(count, window),
                 "issued": now_str,
