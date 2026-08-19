@@ -6,6 +6,7 @@ from ui.database import (
     get_hosts, get_host, get_host_by_name, create_host, update_host, delete_host # delete_host might be used by delete_host_route
 )
 from ui.vultr_settings import is_vultr_configured
+from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, runtime_paths
 import re
 import os
 import datetime
@@ -65,6 +66,24 @@ def validate_host_name(name, exclude_host_id=None):
     if existing_host and (exclude_host_id is None or existing_host.id != exclude_host_id):
         return None, {"message": f"A host with the name '{name}' already exists", "status_code": 409}
     return name, None
+
+def _validate_runtime(value):
+    """Validate the optional 'runtime' field of a host-creation payload.
+
+    Returns (runtime, None) on success or (None, message) on failure. An absent
+    value means the default. An unknown value is an error rather than a silent
+    default: the runtime is immutable once set, so guessing is not acceptable.
+    """
+    if value is None:
+        return DEFAULT_RUNTIME, None
+    if not isinstance(value, str):
+        return None, "Runtime must be a string."
+    normalized = value.strip().lower()
+    if not normalized:
+        return None, "Runtime must be a non-empty string."
+    if not is_valid_runtime(normalized):
+        return None, f"Invalid runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
+    return normalized, None
 
 def validate_ip_address(ip_str):
     """Validates IP address format. Returns (validated_ip, error_dict)."""
@@ -150,14 +169,18 @@ def add_host_api():
         return jsonify({"error": {"message": error["message"]}}), error["status_code"]
     name = validated_name
 
+    runtime, runtime_error = _validate_runtime(data.get('runtime'))
+    if runtime_error:
+        return jsonify({"error": {"message": runtime_error}}), 400
+
     if provider == 'self':
-        return _handle_self_host_creation(name, data)
+        return _handle_self_host_creation(name, data, runtime)
     if provider == 'standalone':
-        return _handle_standalone_host_creation(name, data)
-    return _handle_cloud_host_creation(name, provider, data)
+        return _handle_standalone_host_creation(name, data, runtime)
+    return _handle_cloud_host_creation(name, provider, data, runtime)
 
 
-def _handle_cloud_host_creation(name, provider, data):
+def _handle_cloud_host_creation(name, provider, data, runtime=DEFAULT_RUNTIME):
     """Handle creation of cloud-provisioned hosts (Vultr, etc.)."""
     region = data.get('region')
     machine_size = data.get('machine_size')
@@ -188,8 +211,12 @@ def _handle_cloud_host_creation(name, provider, data):
             region=region,
             machine_size=machine_size,
             timezone=timezone,
-            os_type='debian',
+            # The OS follows the runtime: minqlxtended is built and tested on
+            # Ubuntu 24.04, which is also the only Terraform image that ships
+            # the Python 3.12 it links against.
+            os_type=runtime_paths(runtime)['os_type'],
             is_standalone=False,
+            runtime=runtime,
             status=HostStatus.PENDING
         )
         if host:
@@ -401,7 +428,7 @@ def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_k
                 pass
 
 
-def _handle_standalone_host_creation(name, data):
+def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
     """Handle creation of standalone (user-provided) hosts."""
     ip_address = data.get('ip_address')
     ssh_key = data.get('ssh_key')
@@ -505,6 +532,7 @@ def _handle_standalone_host_creation(name, data):
             os_type=detected_os['os_type'],
             timezone=timezone,
             is_standalone=True,
+            runtime=runtime,
             status=HostStatus.PENDING
         )
 
@@ -642,7 +670,7 @@ def _validate_required_timezone(timezone):
     return timezone, None
 
 
-def _handle_self_host_creation(name, data):
+def _handle_self_host_creation(name, data, runtime=DEFAULT_RUNTIME):
     existing_self = Host.query.filter_by(provider='self').first()
     if existing_self:
         return jsonify({"error": {"message": "A self host already exists. Only one QLSM Host (self) is allowed."}}), 409
@@ -677,6 +705,7 @@ def _handle_self_host_creation(name, data):
             os_type=local_os_type,
             is_standalone=True,
             timezone=timezone,
+            runtime=runtime,
             status=HostStatus.PENDING,
         )
 
