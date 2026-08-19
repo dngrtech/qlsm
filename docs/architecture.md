@@ -221,6 +221,15 @@ qlsm/
 4. Ansible `add_qlds_instance.yml` → Deploys to host
 5. Instance status → RUNNING
 
+Before step 1, opening the Add Instance form (or changing the selected host) seeds
+the draft from a runtime-matched builtin preset: the chosen host's `runtime` resolves
+to a preset name — `default` for minqlx, `default-minqlxtended` for minqlxtended —
+via `defaultPresetNameForRuntime()` in the frontend (`frontend-react/src/constants/runtimes.js`)
+and `_default_preset_for()` in the backend (`ui/routes/draft_routes.py`, used when the
+plugin draft workspace is created). The two are deliberate mirrors of the same
+runtime → preset mapping and must not drift, since seeding from the wrong runtime's
+preset would ship plugins that cannot load.
+
 ### Instance Config Update
 1. User edits config, plugins, or factories → `PUT /api/instances/<id>/config`
 2. Managed config and factory maps are synced in `configs/<host>/<id>/`; plugin changes are committed from a draft workspace when `draft_id` is provided
