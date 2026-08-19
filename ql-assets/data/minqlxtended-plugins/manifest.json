@@ -1,0 +1,141 @@
+{
+  "files": {
+    "aliases.py": {
+      "origin": "upstream",
+      "sha256": "c8d768912411e881830368aa1730cc8be1775a4b59eba63bb7a89cae82c5cb3c"
+    },
+    "balance.py": {
+      "origin": "upstream",
+      "sha256": "38e2e0f0bd0dafd6b305da6ff6d3e6b7f092c93e26a36a15f00d0d68efef1258"
+    },
+    "ban.py": {
+      "origin": "upstream",
+      "sha256": "60f9cd7467a9476c2761bac69ce4054dbb837725db48763ce57ba2fadb6db6aa"
+    },
+    "branding.py": {
+      "origin": "upstream",
+      "sha256": "6f73a1b3842d284e64bf1aa6e54a77c29b064a2f09658b0c946820d5caa1c871"
+    },
+    "clan.py": {
+      "origin": "upstream",
+      "sha256": "63d4b858b4c38b19b3fcc7e9094ce4a5dcdbb6745ec3b990b5ba37ec837b9b9c"
+    },
+    "custom_votes.py": {
+      "origin": "upstream",
+      "sha256": "399ae4dab636b007defc4012f282574ff125fabda2e9af00bdfb85872347062c"
+    },
+    "dictionary.py": {
+      "origin": "upstream",
+      "sha256": "dca18b04e54de22b2a422814c0aad02d2ae5749bbdf05cf1f9342f0f434b650e"
+    },
+    "docs.py": {
+      "origin": "upstream",
+      "sha256": "ac8bcdb006dabfe70c81581e6023b7c4713e8decbce2baebd08bbb05701719a0"
+    },
+    "essentials.py": {
+      "origin": "upstream",
+      "sha256": "c3f009141b60340f9f0ff41207a6aa27ffb1aae3e852e70ea680ab7bcb57f02f"
+    },
+    "fun.py": {
+      "origin": "upstream",
+      "sha256": "a5d3e379cfff0afc66a4c471e82f66f121c4f07ba029536f449a6ba3374c9660"
+    },
+    "infectedmm.py": {
+      "origin": "upstream",
+      "sha256": "844812c4df4ced37fc743af23646bf6018acdb9cba08542b7a39a615a4c59d8d"
+    },
+    "lan.py": {
+      "origin": "upstream",
+      "sha256": "64121f7cd1fd8a557ab04c513e4f6dd29d1b1f18c04132b248bf968c52e78848"
+    },
+    "last_in.py": {
+      "origin": "upstream",
+      "sha256": "e9a3f5c1dcf1ee00d126452f5a437e4a1e6187cee03d42b97ade09dc52518645"
+    },
+    "leaverban.py": {
+      "origin": "upstream",
+      "sha256": "8e7f0fb4c2dd9972faa4d8b2aba4bcfdd543f02e3a3072afeece2f73dd7dbed9"
+    },
+    "log.py": {
+      "origin": "upstream",
+      "sha256": "49dfc7e4498c46d5dce9e12af6fce4de76911836ac7b870e429111a4cfb0700a"
+    },
+    "maptools.py": {
+      "origin": "upstream",
+      "sha256": "460797e9bad66a5e014c27c00f9f422847e5fbf6903552ff9ee48b61dfdc9a33"
+    },
+    "motd.py": {
+      "origin": "upstream",
+      "sha256": "7c1741718eab59fcea47d0d6798f35c6b0bcb24e102d9edf7df53bd524e1d8b3"
+    },
+    "names.py": {
+      "origin": "upstream",
+      "sha256": "ed7713340354e6886872baa27419c7ae333d1e0749f8ad4904db90d6520a10ad"
+    },
+    "permission.py": {
+      "origin": "upstream",
+      "sha256": "102a3ba975a3f18f05cab68bade5c744a8ff95d3259b4d7a6904ba6bf71b16c6"
+    },
+    "plugin_manager.py": {
+      "origin": "upstream",
+      "sha256": "66e64be70a62beeb1525f225e3f0f13f4b510d343ef920a6222a8ab2caccd4ea"
+    },
+    "pummel.py": {
+      "origin": "upstream",
+      "sha256": "f9dee74a2fb69072ad7204e02221ec0829868ba74cfdaf746ce49c477307e594"
+    },
+    "queue.py": {
+      "origin": "upstream",
+      "sha256": "c7e92ff3c5d39bfcfb8492a96727d7e7433c30ee5f1fca6c0042085c941587a2"
+    },
+    "raw.py": {
+      "origin": "upstream",
+      "sha256": "177e2c1649d392fcd645ac949a409614e78412a26549a09891e21e991e029eaa"
+    },
+    "scores.py": {
+      "origin": "upstream",
+      "sha256": "f8835916d5d1fbc8abd058198a286a374afee6fb395ec55583e819b885f45c0d"
+    },
+    "silence.py": {
+      "origin": "upstream",
+      "sha256": "ea01905af72f302507386bb7a70e605ddbbb0d62380a889191b0af014980813b"
+    },
+    "solorace.py": {
+      "origin": "upstream",
+      "sha256": "96dad15fe70d367dcf7ffa9fe91920ba6731aa5b197455a62c2bb1a9ebf55abb"
+    },
+    "stats.py": {
+      "origin": "upstream",
+      "sha256": "7ee7f44ca30749a9598fc6a38e1af47512b1336d127e5cf89822d3be857010a1"
+    },
+    "sv_fps.py": {
+      "origin": "upstream",
+      "sha256": "44870e1dd67b22b50755e935b5646a3c2593f6640b2f8e3fef50fa4e7e742e79"
+    },
+    "untracked.py": {
+      "origin": "upstream",
+      "sha256": "9c91af2e4a006f34f23586acc69083eb1bcf2a1050bace9f2be1a2338d7941e7"
+    },
+    "votecommands.py": {
+      "origin": "upstream",
+      "sha256": "6b8419d60b71ed32a84c453047a1948f409ca7075b68b913250245faca114370"
+    },
+    "votestats.py": {
+      "origin": "upstream",
+      "sha256": "31339d1244ac158af0d877488f5aa57cc16671fc8d6cb405f2e25c8d943f263f"
+    },
+    "vpnblock.py": {
+      "origin": "upstream",
+      "sha256": "710f20893b115fdd274fa56314201a5c3398bab1f6ffad47276cc57616862a9a"
+    },
+    "workshop.py": {
+      "origin": "upstream",
+      "sha256": "deb4ce7384f4808c0911729ed68602ae55be1216db59a4287f8444bd6241d09c"
+    }
+  },
+  "upstream": {
+    "commit": "d93a3ce758bac650ad1b00ff4850f06873c914a9",
+    "repo": "https://github.com/tjone270/minqlxtended-plugins",
+    "version": "plugins v1.0.0"
+  }
+}
