@@ -14,6 +14,7 @@ import { copyToClipboard } from '../../utils/clipboard';
 import {
   canEnableLanRate,
   getLanRateUnsupportedMessage,
+  isLanRateAlwaysOn,
 } from '../../utils/lanRateCompatibility';
 import { effectiveRedisDb } from '../addInstance/redisDbOptions';
 
@@ -171,7 +172,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
   };
 
   const handleToggleLanRate = async () => {
-    if (!instanceId || !instance || !canToggleLanRate) return;
+    if (!instanceId || !instance || !canToggleLanRate || lanRateAlwaysOn) return;
     setLanRateUpdating(true); setActionError(null);
     try {
       const newEnabled = !instance.lan_rate_enabled;
@@ -230,12 +231,16 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
   const hostShape = {
     os_type: hostOsType,
     lan_rate_uses_hook: instance?.host_lan_rate_uses_hook ?? instance?.host?.lan_rate_uses_hook ?? false,
+    runtime: instance?.host_runtime ?? instance?.host?.runtime ?? null,
   };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,
     currentEnabled: instance?.lan_rate_enabled,
   });
-  const lanRateUnsupportedReason = !canToggleLanRate && !instance?.lan_rate_enabled
+  // The runtime provides 99k itself on minqlxtended: show it on and locked.
+  const lanRateAlwaysOn = isLanRateAlwaysOn(hostShape);
+  const lanRateDisplayEnabled = Boolean(instance?.lan_rate_enabled) || lanRateAlwaysOn;
+  const lanRateUnsupportedReason = lanRateAlwaysOn || (!canToggleLanRate && !instance?.lan_rate_enabled)
     ? getLanRateUnsupportedMessage(hostShape)
     : null;
   const cpuAffinityLabel = Number.isInteger(instance?.cpu_affinity)
@@ -336,7 +341,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                             <span className="inline-flex items-center gap-1.5">
                               <span>99k LAN Rate</span>
                               {lanRateUnsupportedReason && (
-                                <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={13} />
+                                <InfoTooltip text={lanRateUnsupportedReason} variant={lanRateAlwaysOn ? 'info' : 'danger'} size={13} />
                               )}
                             </span>
                           )}
@@ -344,16 +349,16 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
                           <div className="flex flex-col items-start gap-2">
                             <div className="flex items-center gap-2">
                               <button type="button" onClick={handleToggleLanRate}
-                                disabled={lanRateUpdating || actionLoading || isBusyStatus || !canToggleLanRate}
+                                disabled={lanRateUpdating || actionLoading || isBusyStatus || !canToggleLanRate || lanRateAlwaysOn}
                                 className="neu-toggle neu-toggle--sm"
                                 aria-label="Toggle 99k LAN Rate"
-                                aria-pressed={instance.lan_rate_enabled}>
-                                <span className={`neu-toggle__track ${instance.lan_rate_enabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-                                  <span className={`neu-toggle__knob ${instance.lan_rate_enabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                                aria-pressed={lanRateDisplayEnabled}>
+                                <span className={`neu-toggle__track ${lanRateDisplayEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+                                  <span className={`neu-toggle__knob ${lanRateDisplayEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
                                 </span>
                               </button>
                               <span className="text-xs text-theme-secondary">
-                                {lanRateUpdating ? 'Updating...' : (instance.lan_rate_enabled ? 'Enabled' : 'Disabled')}
+                                {lanRateUpdating ? 'Updating...' : (lanRateDisplayEnabled ? 'Enabled' : 'Disabled')}
                               </span>
                             </div>
                           </div>

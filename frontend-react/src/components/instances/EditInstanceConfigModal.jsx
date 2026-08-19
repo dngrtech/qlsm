@@ -22,6 +22,7 @@ import HooksTab from './HooksTab';
 import {
   canEnableLanRate,
   getLanRateUnsupportedMessage,
+  isLanRateAlwaysOn,
 } from '../../utils/lanRateCompatibility';
 
 const CONFIG_FILES_ORDER = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
@@ -435,12 +436,17 @@ function EditInstanceConfigModal({
     host: hostShape,
     currentEnabled: originalLanRateEnabled && lanRateEnabled,
   });
-  const lanRateUnsupportedReason = !canToggleLanRate && !lanRateEnabled
+  // The runtime provides 99k itself on minqlxtended: show it on and locked,
+  // but leave the saved value alone so a preset taken from this instance does
+  // not silently switch 99k on for a minqlx host.
+  const lanRateAlwaysOn = isLanRateAlwaysOn(hostShape);
+  const lanRateDisplayEnabled = lanRateEnabled || lanRateAlwaysOn;
+  const lanRateUnsupportedReason = lanRateAlwaysOn || (!canToggleLanRate && !lanRateEnabled)
     ? getLanRateUnsupportedMessage(hostShape)
     : null;
 
   const handleLanRateToggle = () => {
-    if (!canToggleLanRate) return;
+    if (!canToggleLanRate || lanRateAlwaysOn) return;
     setLanRateEnabled(prev => {
       const next = !prev;
       if (next !== originalLanRateEnabled) setRestartAfterSave(true);
@@ -538,7 +544,7 @@ function EditInstanceConfigModal({
       // the same leniency the manual-toggle gate (canToggleLanRate) applies.
       if (presetData.lan_rate_enabled != null) {
         const canEnable = canEnableLanRate({
-          host: { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook },
+          host: { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime },
           currentEnabled: originalLanRateEnabled,
         });
         const nextLanRate = presetData.lan_rate_enabled && !canEnable ? false : presetData.lan_rate_enabled;
@@ -563,7 +569,7 @@ function EditInstanceConfigModal({
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
-  }, [hostLanRateUsesHook, hostOsType, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
+  }, [hostLanRateUsesHook, hostOsType, hostRuntime, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
 
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
@@ -956,20 +962,20 @@ function EditInstanceConfigModal({
                                 <button
                                   type="button"
                                   onClick={handleLanRateToggle}
-                                  disabled={saving || loading || !canToggleLanRate}
+                                  disabled={saving || loading || !canToggleLanRate || lanRateAlwaysOn}
                                   className="neu-toggle"
-                                  aria-pressed={lanRateEnabled}
+                                  aria-pressed={lanRateDisplayEnabled}
                                 >
                                   <span className="sr-only">Toggle 99k LAN Rate</span>
-                                  <span className={`neu-toggle__track ${lanRateEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-                                    <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                                  <span className={`neu-toggle__track ${lanRateDisplayEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+                                    <span className={`neu-toggle__knob ${lanRateDisplayEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
                                   </span>
                                 </button>
                                 <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
-                                  <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
+                                  <Zap size={16} className={`mr-1 ${lanRateDisplayEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
                                   <span>99k LAN Rate</span>
                                   {lanRateUnsupportedReason && (
-                                    <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={14} />
+                                    <InfoTooltip text={lanRateUnsupportedReason} variant={lanRateAlwaysOn ? 'info' : 'danger'} size={14} />
                                   )}
                                 </span>
                               </div>

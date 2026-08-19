@@ -6,12 +6,18 @@ const PASSWORD_INPUT_BASE = 'w-44 rounded py-1.5 px-2 text-sm font-mono border b
 function InstanceOptionsRow({
   lanRateEnabled, onLanRateChange,
   lanRateDisabled = false,
+  lanRateAlwaysOn = false,
   lanRateUnavailableReason = null,
   autoGeneratePasswords = true, onAutoGeneratePasswordsChange,
   zmqStatsPassword = '', onZmqStatsPasswordChange,
   zmqRconPassword = '', onZmqRconPasswordChange,
   passwordErrors = {},
 }) {
+  // The runtime provides 99k itself on minqlxtended, so the control shows the
+  // real state (on) and refuses edits rather than pretending it is settable.
+  const lanRateOn = lanRateEnabled || lanRateAlwaysOn;
+  const lanRateLocked = lanRateDisabled || lanRateAlwaysOn;
+
   const inputClass = (hasError) => (
     `${PASSWORD_INPUT_BASE} ${hasError
       ? 'border-[var(--accent-danger)]'
@@ -25,19 +31,19 @@ function InstanceOptionsRow({
           type="button"
           onClick={() => onLanRateChange(!lanRateEnabled)}
           className="neu-toggle"
-          aria-pressed={lanRateEnabled}
-          disabled={lanRateDisabled}
+          aria-pressed={lanRateOn}
+          disabled={lanRateLocked}
         >
           <span className="sr-only">Toggle 99k LAN Rate</span>
-          <span className={`neu-toggle__track ${lanRateEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-            <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+          <span className={`neu-toggle__track ${lanRateOn ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+            <span className={`neu-toggle__knob ${lanRateOn ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
           </span>
         </button>
         <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
-          <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
+          <Zap size={16} className={`mr-1 ${lanRateOn ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
           <span>99k LAN Rate</span>
           {lanRateUnavailableReason && (
-            <InfoTooltip text={lanRateUnavailableReason} variant="danger" size={14} />
+            <InfoTooltip text={lanRateUnavailableReason} variant={lanRateAlwaysOn ? 'info' : 'danger'} size={14} />
           )}
         </span>
       </div>

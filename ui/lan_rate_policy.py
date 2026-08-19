@@ -1,10 +1,15 @@
 """Shared rules for 99k LAN rate compatibility."""
+from ui.runtime import MINQLXTENDED, host_runtime
 
 SUPPORTED_LAN_RATE_OS_TYPES = frozenset({"debian"})
 OS_TYPE_ALIASES = {
     "debian12": "debian",
 }
 UNKNOWN_99K_LAN_RATE_MESSAGE = "99k LAN rate is only supported on Debian hosts."
+ALWAYS_ON_LAN_RATE_MESSAGE = (
+    "99k LAN rate is always on for minqlxtended hosts — the runtime treats "
+    "every client as a LAN address itself, so this setting cannot be changed."
+)
 
 
 def _normalized_os_type(host):
@@ -17,6 +22,17 @@ def _normalized_os_type(host):
     return OS_TYPE_ALIASES.get(normalized, normalized)
 
 
+def lan_rate_always_on(host):
+    """Whether the runtime provides 99k LAN rate unconditionally.
+
+    minqlxtended hooks Sys_IsLANAddress with no cvar gate, and QLSM excludes
+    force_rate.so on it (ui/runtime.py) because a second patch of the same
+    prologue can exit the server. Neither the hook path nor the legacy iptables
+    path is reachable, so the toggle is inert in both directions.
+    """
+    return host_runtime(host) == MINQLXTENDED
+
+
 def host_requires_os_check(host):
     """Returns True if the legacy iptables-based 99k LAN Rate path is in use
     on this host, meaning the Debian-only OS restriction must be enforced.
@@ -26,6 +42,10 @@ def host_requires_os_check(host):
 
 def host_supports_lan_rate(host):
     """Return whether the host supports enabling 99k LAN rate."""
+    if lan_rate_always_on(host):
+        # Fixed on, not unsupported: reporting False here would make the UI
+        # offer to "fix" a host that already has it.
+        return True
     if not host_requires_os_check(host):
         return True
     # Legacy path: keep existing Debian-only check.
@@ -34,6 +54,8 @@ def host_supports_lan_rate(host):
 
 def lan_rate_unsupported_message(host):
     """Return the user-facing incompatibility message for the host, or None."""
+    if lan_rate_always_on(host):
+        return ALWAYS_ON_LAN_RATE_MESSAGE
     if not host_requires_os_check(host):
         return None
     # Legacy hosts: Debian-only restriction with migration hint for Ubuntu.

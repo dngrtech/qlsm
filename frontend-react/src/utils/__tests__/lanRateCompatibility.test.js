@@ -1,5 +1,6 @@
 import {
   canEnableLanRate,
+  isLanRateAlwaysOn,
   isLanRateSupported,
   getLanRateUnsupportedMessage,
 } from '../lanRateCompatibility';
@@ -65,5 +66,26 @@ describe('getLanRateUnsupportedMessage', () => {
     const msg = getLanRateUnsupportedMessage({ os_type: 'ubuntu', lan_rate_uses_hook: false });
     expect(msg).toMatch(/Re-run Host Setup/);
     expect(msg).toMatch(/host actions menu/);
+  });
+});
+
+describe('minqlxtended hosts', () => {
+  const host = { os_type: 'ubuntu', lan_rate_uses_hook: true, runtime: 'minqlxtended' };
+
+  it('reports 99k LAN rate as always on', () => {
+    expect(isLanRateAlwaysOn(host)).toBe(true);
+  });
+
+  it('still counts as supported so nothing offers to fix it', () => {
+    expect(isLanRateSupported(host)).toBe(true);
+  });
+
+  it('explains that the runtime provides it', () => {
+    expect(getLanRateUnsupportedMessage(host)).toContain('minqlxtended');
+  });
+
+  it('leaves minqlx hosts alone', () => {
+    expect(isLanRateAlwaysOn({ ...host, runtime: 'minqlx' })).toBe(false);
+    expect(isLanRateAlwaysOn({ ...host, runtime: undefined })).toBe(false);
   });
 });
