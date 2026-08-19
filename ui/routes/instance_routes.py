@@ -11,7 +11,11 @@ from ui.lan_rate_policy import (
     lan_rate_unsupported_message,
     would_enable_unsupported_lan_rate,
 )
-from ui.preset_support import resolve_preset_path, resolve_preset_subdir
+from ui.preset_support import (
+    default_preset_name_for_runtime,
+    resolve_preset_path,
+    resolve_preset_subdir,
+)
 from ui.runtime import host_runtime, log_filename_pattern, runtime_paths
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
@@ -432,8 +436,16 @@ def add_instance_api():
 
             shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
         else:
-            # No draft — copy defaults
-            default_scripts_dir = resolve_preset_subdir('default', 'scripts')
+            # No draft — copy the builtin defaults for the host's runtime.
+            # draft_id is optional on this endpoint, so this is a live path for
+            # API clients and for the UI after a draft-creation failure.
+            # Hardcoding 'default' here would seed a minqlxtended host with
+            # minqlx plugins, and the playbook's baseline backfill
+            # (--ignore-existing) cannot correct a same-named wrong-runtime
+            # file — every plugin would then die on import.
+            default_scripts_dir = resolve_preset_subdir(
+                default_preset_name_for_runtime(host_runtime(selected_host)), 'scripts'
+            )
             if os.path.exists(default_scripts_dir):
                 shutil.copytree(default_scripts_dir, instance_scripts_dir, dirs_exist_ok=True)
             else:

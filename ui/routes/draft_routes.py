@@ -15,9 +15,11 @@ from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 from ui import db
 from ui.models import BinaryMetadata
-from ui.database import get_preset_by_name
-from ui.preset_support import resolve_preset_subdir
-from ui.runtime import MINQLXTENDED, normalize_runtime
+from ui.preset_support import (
+    DEFAULT_PRESET_NAME,
+    default_preset_name_for_preset,
+    resolve_preset_subdir,
+)
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
@@ -28,14 +30,6 @@ CONFIGS_BASE = 'configs'
 PRESETS_DIR = 'presets'
 SCRIPTS_DIR = 'scripts'
 USER_HOOKS_DIR = 'user-hooks'
-DEFAULT_PRESET_NAME = 'default'
-
-# The builtin preset whose scripts/ is overlaid beneath a non-default preset,
-# per runtime. Mirrors defaultPresetNameForRuntime() in the frontend's
-# constants/runtimes.js -- the two must not drift.
-_DEFAULT_PRESET_BY_RUNTIME = {
-    MINQLXTENDED: 'default-minqlxtended',
-}
 
 
 def _get_drafts_base():
@@ -92,18 +86,6 @@ def _cleanup_stale_drafts():
                 continue
     except OSError:
         pass
-
-
-def _default_preset_for(preset_name):
-    """The builtin preset to overlay beneath `preset_name`.
-
-    Falls back to the minqlx default for an unknown preset: a NULL runtime
-    column means the row predates the feature, and nothing but minqlx has ever
-    existed.
-    """
-    preset = get_preset_by_name(preset_name) if preset_name else None
-    runtime = normalize_runtime(getattr(preset, 'runtime', None))
-    return _DEFAULT_PRESET_BY_RUNTIME.get(runtime, DEFAULT_PRESET_NAME)
 
 
 def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRESET_NAME):
@@ -314,7 +296,7 @@ def create_draft():
         # runtime-aware needs the instance's host and belongs with the
         # compatibility gate.
         default_preset_name = (
-            _default_preset_for(data.get('preset'))
+            default_preset_name_for_preset(data.get('preset'))
             if data.get('source') == 'preset'
             else DEFAULT_PRESET_NAME
         )

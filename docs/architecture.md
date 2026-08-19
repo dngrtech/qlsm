@@ -225,10 +225,17 @@ Before step 1, opening the Add Instance form (or changing the selected host) see
 the draft from a runtime-matched builtin preset: the chosen host's `runtime` resolves
 to a preset name — `default` for minqlx, `default-minqlxtended` for minqlxtended —
 via `defaultPresetNameForRuntime()` in the frontend (`frontend-react/src/constants/runtimes.js`)
-and `_default_preset_for()` in the backend (`ui/routes/draft_routes.py`, used when the
-plugin draft workspace is created). The two are deliberate mirrors of the same
-runtime → preset mapping and must not drift, since seeding from the wrong runtime's
-preset would ship plugins that cannot load.
+and `default_preset_name_for_runtime()` in the backend (`ui/preset_support.py`). The two
+are deliberate mirrors of the same runtime → preset mapping and must not drift, since
+seeding from the wrong runtime's preset would ship plugins that cannot load.
+
+Every backend path that falls back to "the default preset" resolves the name through
+`ui/preset_support.py` rather than hardcoding `default`: the draft workspace overlay
+(`ui/routes/draft_routes.py`), the no-draft instance-create fallback — `draft_id` is
+optional on `POST /api/instances`, so this runs for API clients and for the UI after a
+draft-creation failure (`ui/routes/instance_routes.py`) — and the preset-read overlay
+that backs the preset GET/create/update/import responses (`_read_preset_scripts()` in
+`ui/routes/preset_api_routes.py`, which takes the preset's own `runtime`).
 
 ### Instance Config Update
 1. User edits config, plugins, or factories → `PUT /api/instances/<id>/config`
