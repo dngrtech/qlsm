@@ -37,21 +37,16 @@ def test_preset_stores_and_serialises_minqlxtended(app):
 
 
 def test_null_preset_runtime_reads_as_minqlx(app):
-    """An old export has no runtime recorded, and nothing but minqlx existed.
-
-    Note: no flush() here. The column is NOT NULL, so flushing a None raises
-    IntegrityError. ConfigPreset.to_dict() does not call db.session.refresh(),
-    unlike Host.to_dict(), so the in-memory None is read directly -- which is
-    exactly the normalisation path under test.
+    """Defensive normalisation: a runtime that never got the column default
+    still serialises as minqlx. Transient (never added to the session), so
+    there is no expiry and no autoflush -- the in-memory None is read
+    directly. SQLAlchemy applies column defaults at flush time, not at
+    construction, so a transient preset's runtime is naturally None here.
     """
     with app.app_context():
         preset = ConfigPreset(name="old", path="configs/presets/old")
-        db.session.add(preset)
-        db.session.commit()
-
-        preset.runtime = None
+        assert preset.runtime is None
         assert preset.to_dict()["runtime"] == MINQLX
-        db.session.rollback()  # discard the dirty in-memory None
 
 
 def test_create_preset_records_the_runtime(app, client, auth_headers, tmp_path, monkeypatch):
@@ -94,16 +89,13 @@ def test_export_manifest_of_a_legacy_preset_says_minqlx(app):
     from ui.routes.preset_api_routes import _preset_export_manifest
 
     with app.app_context():
+        # Transient (never added to the session): the column default applies
+        # at flush time, not construction, so runtime is naturally None here
+        # -- exercising the normalisation honestly, with no expiry/autoflush
+        # involved.
         preset = ConfigPreset(name="legacy-export", path="configs/presets/legacy-export")
-        db.session.add(preset)
-        db.session.commit()
-
-        # No flush() -- the column is NOT NULL. _preset_export_manifest reads
-        # preset.runtime directly, so the in-memory None exercises the
-        # normalisation honestly.
-        preset.runtime = None
+        assert preset.runtime is None
         manifest = _preset_export_manifest(preset, 0)
-        db.session.rollback()
 
     assert manifest["preset"]["runtime"] == MINQLX
 

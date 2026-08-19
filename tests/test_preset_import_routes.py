@@ -9,6 +9,7 @@ from flask_jwt_extended import create_access_token
 
 from ui import db
 from ui.models import BinaryMetadata, ConfigPreset
+from ui.runtime import MINQLX, MINQLXTENDED
 
 BASE_CONFIGS = {
     'server.cfg': 'set sv_hostname "Imported"\n',
@@ -155,6 +156,21 @@ def test_import_creates_new_preset(client, app, presets_base):
         assert [(r.file_path, r.description) for r in rows] == [('custom_hook.so', '99k hook')]
 
 
+def test_import_of_a_manifest_without_a_runtime_key_lands_on_minqlx(client, app, presets_base):
+    """The real-world 'no runtime recorded' case: an export made before this
+    column existed has no 'runtime' key in its manifest at all (make_manifest
+    doesn't set one). Nothing but minqlx existed at that point, so the
+    imported preset must land on minqlx."""
+    response = post_import(client, app, build_zip())
+
+    assert response.status_code == 201
+    assert response.get_json()['data']['runtime'] == MINQLX
+
+    with app.app_context():
+        preset = ConfigPreset.query.filter_by(name='imported').one()
+        assert preset.runtime == MINQLX
+
+
 def test_import_creates_preset_with_enabled_hooks(client, app, presets_base):
     zip_buffer = build_zip(extra={
         'user-hooks/custom_hook.so': b'\x7fELFfake',
@@ -278,6 +294,37 @@ def test_import_overwrite_replaces_existing(client, app, presets_base):
     assert not (preset_dir / 'old-only.cfg').exists()
     assert (preset_dir / 'server.cfg').read_text() == BASE_CONFIGS['server.cfg']
     assert not (presets_base / 'taken.import-old').exists()
+
+
+def test_import_overwrite_replaces_the_old_runtime_stamp(client, app, presets_base):
+    """Re-importing over an existing preset replaces its content -- the
+    runtime stamp must move with it, not stay pinned to whatever the
+    preset claimed before. Otherwise a minqlxtended preset overwritten by a
+    legacy (no-runtime-key) export would keep claiming minqlxtended for
+    minqlx content."""
+    preset_dir = presets_base / 'taken'
+    preset_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in BASE_CONFIGS.items():
+        (preset_dir / filename).write_text(content)
+    with app.app_context():
+        preset = ConfigPreset(
+            name='taken', description='Old description',
+            path=str(preset_dir), runtime=MINQLXTENDED,
+        )
+        db.session.add(preset)
+        db.session.commit()
+        preset_id = preset.id
+
+    response = post_import(
+        client, app, build_zip(name='taken'),
+        form={'overwrite_preset_id': str(preset_id)},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()['data']['runtime'] == MINQLX
+
+    with app.app_context():
+        assert db.session.get(ConfigPreset, preset_id).runtime == MINQLX
 
 
 def test_import_overwrite_ignores_stale_backup_directory(client, app, presets_base):

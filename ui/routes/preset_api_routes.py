@@ -96,39 +96,34 @@ def _resolve_export_root(preset_path):
 
 
 def _preset_export_manifest(preset, binary_metadata_count):
-    # no_autoflush: reading an expired attribute (e.g. right after a commit)
-    # would otherwise trigger an implicit flush of any other pending change
-    # on this instance first -- a problem for callers that mutate an
-    # in-memory field (like runtime) without an intervening flush.
-    with db.session.no_autoflush:
-        return {
-            'type': 'qlsm-preset-export',
-            'format_version': EXPORT_FORMAT_VERSION,
-            'preset': {
-                'id': preset.id,
-                'name': preset.name,
-                'description': preset.description,
-                'is_builtin': bool(preset.is_builtin),
-                'runtime': normalize_runtime(preset.runtime),
-                'created_at': preset.created_at.isoformat() if preset.created_at else None,
-                'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
-            },
-            'includes': {
-                'preset_directory': True,
-                'configs': True,
-                'factories': True,
-                'scripts': True,
-                'user_hooks': True,
-                'checked_plugins': True,
-                'checked_factories': True,
-                'enabled_hooks': True,
-                'lan_rate_enabled': True,
-                'binary_metadata': True,
-            },
-            'counts': {
-                'binary_metadata': binary_metadata_count,
-            },
-        }
+    return {
+        'type': 'qlsm-preset-export',
+        'format_version': EXPORT_FORMAT_VERSION,
+        'preset': {
+            'id': preset.id,
+            'name': preset.name,
+            'description': preset.description,
+            'is_builtin': bool(preset.is_builtin),
+            'runtime': normalize_runtime(preset.runtime),
+            'created_at': preset.created_at.isoformat() if preset.created_at else None,
+            'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
+        },
+        'includes': {
+            'preset_directory': True,
+            'configs': True,
+            'factories': True,
+            'scripts': True,
+            'user_hooks': True,
+            'checked_plugins': True,
+            'checked_factories': True,
+            'enabled_hooks': True,
+            'lan_rate_enabled': True,
+            'binary_metadata': True,
+        },
+        'counts': {
+            'binary_metadata': binary_metadata_count,
+        },
+    }
 
 
 def _preset_binary_metadata_export(preset_name):

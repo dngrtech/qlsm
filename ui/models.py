@@ -248,26 +248,17 @@ class ConfigPreset(db.Model):
         return f'<ConfigPreset {self.name}>'
 
     def to_dict(self):
-        """Convert preset to dictionary (metadata only, no config content).
-
-        Wrapped in no_autoflush: reading an expired attribute (e.g. right
-        after a commit) would otherwise trigger an implicit flush of any
-        other pending change on this instance first. That's a problem for
-        callers that mutate an in-memory field (like runtime) without an
-        intervening flush -- a read method should never have the side
-        effect of writing unrelated dirty state to the database.
-        """
-        with db.session.no_autoflush:
-            return {
-                'id': self.id,
-                'name': self.name,
-                'description': self.description,
-                'path': self.path,
-                'is_builtin': self.is_builtin,
-                'runtime': normalize_runtime(self.runtime),
-                'last_updated': self.last_updated.isoformat() if self.last_updated else None,
-                'created_at': self.created_at.isoformat() if self.created_at else None
-            }
+        """Convert preset to dictionary (metadata only, no config content)."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'path': self.path,
+            'is_builtin': self.is_builtin,
+            'runtime': normalize_runtime(self.runtime),
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 
 class ApiKey(db.Model):
