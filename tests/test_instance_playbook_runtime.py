@@ -88,6 +88,48 @@ def test_hook_update_logic_passes_runtime_extravars(app, tended_instance, monkey
     assert captured["extravars"]["launch_script"] == "run_server_x64_minqlxtended.sh"
 
 
+def test_reconcile_instance_after_host_setup_passes_runtime_extravars(
+    app, tended_instance, monkeypatch
+):
+    """Regression: reconcile_instance_after_host_setup is a sixth production
+    call site of sync_instance_configs_and_restart.yml, reached from every
+    Host Setup rerun (ansible_host_setup.py, standalone_host_setup.py) for
+    every instance on the host. It builds its own extravars dict and was
+    missed in the original pass over this playbook's call sites.
+    """
+    from ui.task_logic import instance_reconciliation as reconciliation_mod
+
+    captured = {}
+
+    def fake_run(instance, playbook, extravars=None):
+        captured["extravars"] = extravars
+        return SimpleNamespace(rc=0, stdout=lambda: ""), None
+
+    monkeypatch.setattr(reconciliation_mod, "_run_ansible_playbook", fake_run)
+    monkeypatch.setattr(reconciliation_mod, "_prepare_instance_zmq", lambda inst: None)
+    monkeypatch.setattr(reconciliation_mod, "ensure_instance_cpu_affinity", lambda inst: None)
+    monkeypatch.setattr(
+        reconciliation_mod, "with_self_host_network_extravars", lambda inst, e: e
+    )
+
+    with app.app_context():
+        reconciliation_mod.reconcile_instance_after_host_setup(
+            tended_instance.id,
+            restart_service=True,
+            target_status=InstanceStatus.RUNNING,
+        )
+
+    # Unconditional guard first: without this, a call site that silently never
+    # reaches _run_ansible_playbook would pass vacuously below.
+    assert captured.get("extravars"), "never reached the playbook call"
+
+    extravars = captured["extravars"]
+    assert extravars["runtime"] == "minqlxtended"
+    assert extravars["runtime_plugins_dirname"] == "minqlxtended-plugins"
+    assert extravars["runtime_shared_dir"] == "/home/ql/minqlxtended-shared"
+    assert extravars["launch_script"] == "run_server_x64_minqlxtended.sh"
+
+
 def test_service_template_no_longer_hardcodes_the_minqlx_launcher():
     text = Path(SERVICE_TEMPLATE).read_text()
     assert "run_server_x64_minqlx.sh " not in text
