@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { FolderOpen, LayoutGrid, LoaderCircle, Save } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
+import { isPresetRuntimeCompatible } from '../../utils/presetRuntimeCompat';
 import { deletePreset, importPreset, updatePreset } from '../../services/api';
 import { triggerPresetDownload } from '../../utils/presetDownload';
 import ConfirmationModal from '../ConfirmationModal';
@@ -216,6 +217,7 @@ function PresetManagerModal({
                       />
                       <PresetLoadTab
                         presets={presets}
+                        host={host}
                         isLoading={isLoading}
                         selectedId={selectedId}
                         onSelect={setSelectedId}
@@ -240,7 +242,11 @@ function PresetManagerModal({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        disabled={selectedId == null || isLoadingPreset}
+                        disabled={
+                          selectedId == null
+                          || isLoadingPreset
+                          || !isPresetRuntimeCompatible(selectedPreset, host)
+                        }
                         onClick={() => setShowLoadConfirm(true)}
                       >
                         {isLoadingPreset
