@@ -74,3 +74,34 @@ describe('AddHostFormFields', () => {
     expect(screen.getByTestId('listbox-machine-size-plan')).toHaveAttribute('data-disabled', 'true');
   });
 });
+
+const baseProps = {
+  name: 'h', onNameChange: vi.fn(), nameError: null, onNameBlur: vi.fn(),
+  provider: 'vultr', providerListOptions: [{ id: 'vultr', name: 'Vultr' }],
+  onProviderChange: vi.fn(), vultrConfigured: true, vultrUnavailableMessage: '',
+  selectedContinent: '', onContinentChange: vi.fn(), vultrContinentOptions: [],
+  region: '', onRegionChange: vi.fn(), vultrFilteredRegions: [],
+  machineSize: '', onMachineSizeChange: vi.fn(), currentSizes: [],
+  ipAddress: '', onIpAddressChange: vi.fn(), sshPort: 22, onSshPortChange: vi.fn(),
+  sshUser: '', onSshUserChange: vi.fn(),
+  standaloneAuthMethod: 'key', onStandaloneAuthMethodChange: vi.fn(),
+  sshKey: '', onSshKeyChange: vi.fn(), sshPassword: '', onSshPasswordChange: vi.fn(),
+  timezone: '', onTimezoneChange: vi.fn(), connectionTestStatus: 'idle',
+  connectionTestMessage: '', onTestConnection: vi.fn(), onSwitchToSelfHost: vi.fn(),
+  osInfo: null, runtime: 'minqlx', onRuntimeChange: vi.fn(),
+};
+
+describe('AddHostFormFields runtime picker', () => {
+  it('renders the runtime picker for every provider', () => {
+    ['vultr', 'standalone', 'self'].forEach(provider => {
+      const { unmount } = render(<AddHostFormFields {...baseProps} provider={provider} />);
+      expect(screen.getByTestId('runtime-picker')).toBeInTheDocument();
+      unmount();
+    });
+  });
+
+  it('tells the operator the choice cannot be changed later', () => {
+    render(<AddHostFormFields {...baseProps} />);
+    expect(screen.getByTestId('runtime-immutable-warning')).toHaveTextContent(/cannot be changed/i);
+  });
+});

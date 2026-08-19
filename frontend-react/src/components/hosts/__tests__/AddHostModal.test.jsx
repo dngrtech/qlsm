@@ -96,6 +96,7 @@ describe('AddHostModal self provider', () => {
       ip_address: '203.0.113.10',
       timezone: 'UTC',
       ssh_user: 'rage',
+      runtime: 'minqlx',
     }));
     expect(mocks.testHostConnection).not.toHaveBeenCalled();
   });
@@ -166,6 +167,7 @@ describe('AddHostModal self provider', () => {
       ssh_auth_method: 'password',
       ssh_password: 'bootstrap-secret',
       timezone: 'UTC',
+      runtime: 'minqlx',
     }));
   });
 
