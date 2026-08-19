@@ -35,7 +35,22 @@
     use_host_redis: true
     static_network_hardening: true
 
+    # Runtime split (minqlx vs minqlxtended). QLSM overrides this via
+    # --extra-vars; Task 7 adds the rest of the runtime-derived vars here.
+    runtime: "minqlx"
+
   tasks:
+    - name: Fail early if the host cannot run the selected runtime
+      assert:
+        that:
+          - ansible_python_version is version('3.12', '>=')
+        fail_msg: >-
+          This host runs Python {{ ansible_python_version }}, but minqlxtended
+          requires Python 3.12 or newer. Use Ubuntu 24.04 or newer, or deploy
+          this host with the minqlx runtime.
+        success_msg: "Python {{ ansible_python_version }} satisfies the minqlxtended floor."
+      when: runtime == 'minqlxtended'
+
   #######################################################################
   # 0. Network Configuration for Debian (Disable cloud-init & set static IP)
   #######################################################################

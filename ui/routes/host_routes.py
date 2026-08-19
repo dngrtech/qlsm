@@ -354,7 +354,45 @@ def _validate_detected_remote_os(detected_os):
     return True, _build_detected_os_success_message(detected_os)
 
 
-def _detect_and_validate_remote_os(*, host, port, username, timeout=15, password=None, key_filename=None):
+def _validate_runtime_python(detected_os, runtime):
+    """Whether a detected host meets the runtime's Python floor.
+
+    Only minqlxtended has one (it links -lpython3.12). Returns (ok, message).
+    An undetectable version fails closed: the runtime choice is irreversible,
+    so shipping a host we cannot verify is worse than refusing.
+    """
+    minimum = runtime_paths(runtime)['min_python']
+    if minimum is None:
+        return True, ""
+
+    raw = (detected_os or {}).get('python_version')
+    minimum_text = '.'.join(str(part) for part in minimum)
+    if not raw:
+        return False, (
+            f"Could not determine the host's Python version, and {runtime} "
+            f"requires Python {minimum_text} or newer. Install python3 on the "
+            "host, or create this host with the minqlx runtime."
+        )
+
+    try:
+        parts = tuple(int(part) for part in str(raw).split('.')[:len(minimum)])
+    except ValueError:
+        return False, (
+            f"Could not parse the host's Python version ({raw}), and {runtime} "
+            f"requires Python {minimum_text} or newer."
+        )
+
+    if parts < minimum:
+        return False, (
+            f"This host runs Python {raw}, but {runtime} requires Python "
+            f"{minimum_text} or newer. Use Ubuntu 24.04 or newer, or create "
+            "this host with the minqlx runtime."
+        )
+    return True, ""
+
+
+def _detect_and_validate_remote_os(*, host, port, username, timeout=15, password=None,
+                                   key_filename=None, runtime=DEFAULT_RUNTIME):
     try:
         detected_os = detect_remote_os(
             host=host,
@@ -368,7 +406,14 @@ def _detect_and_validate_remote_os(*, host, port, username, timeout=15, password
         return False, f"Connection failed: {exc}", None
 
     success, message = _validate_detected_remote_os(detected_os)
-    return success, message, detected_os
+    if not success:
+        return success, message, detected_os
+
+    python_ok, python_message = _validate_runtime_python(detected_os, runtime)
+    if not python_ok:
+        return False, python_message, detected_os
+
+    return True, message, detected_os
 
 
 def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_key):
@@ -506,6 +551,7 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
             username=ssh_user,
             timeout=30,
             key_filename=ssh_key_path,
+            runtime=runtime,
         )
         if not remote_os_ok:
             if ssh_auth_method == 'password':
