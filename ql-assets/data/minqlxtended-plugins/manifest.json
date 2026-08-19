@@ -96,6 +96,10 @@
       "origin": "upstream",
       "sha256": "f8835916d5d1fbc8abd058198a286a374afee6fb395ec55583e819b885f45c0d"
     },
+    "serverchecker.py": {
+      "origin": "qlsm",
+      "sha256": "480fa42dcd8063dcb24415ecc0fd0da33b76a2e99e7b717e76547c9d25a9a156"
+    },
     "silence.py": {
       "origin": "upstream",
       "sha256": "ea01905af72f302507386bb7a70e605ddbbb0d62380a889191b0af014980813b"
