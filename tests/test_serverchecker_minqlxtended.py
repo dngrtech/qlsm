@@ -13,7 +13,9 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from stubs.minqlxtended_stub import GameState, Gametype, Team, install_stub  # noqa: E402
+from stubs.minqlxtended_stub import (  # noqa: E402
+    GameState, Gametype, NonexistentGameError, Team, install_stub,
+)
 
 PLUGIN_PATH = os.path.join(
     'ql-assets', 'data', 'minqlxtended-plugins', 'serverchecker.py'
@@ -67,6 +69,19 @@ class FakePlayer:
 
     def __getitem__(self, key):
         return self._userinfo[key]
+
+
+class DeadGame:
+    """A game that disappeared mid-cycle.
+
+    Game holds no per-instance state and re-reads the engine on every access
+    (_game.py:72-73), so once the game is gone every property raises, not just
+    the ones touched before it went. `self.game` having handed back an object a
+    moment earlier is no protection.
+    """
+
+    def __getattr__(self, name):
+        raise NonexistentGameError("Tried to read the level when no game is active.")
 
 
 def _build(module, game=None, players=()):
@@ -157,6 +172,37 @@ def test_no_game_still_writes_a_usable_payload(module):
     status = json.loads(plugin.db.values['minqlx:server_status:27960'])
     assert status['map'] == '?'
     assert status['state'] == 'warmup'
+
+
+def test_a_game_that_vanishes_mid_cycle_still_writes_a_payload(module):
+    """A map change between `self.game` and the reads must not cost the write.
+
+    NonexistentGameError is a bare Exception subclass (_game.py:55), so guards
+    for ValueError/TypeError/IndexError/AttributeError do not stop it. Unguarded
+    it reaches update_status's own `except Exception`, which logs and returns
+    without writing — the key then expires and every instance on the host shows
+    as dead in the UI, which is the exact failure this plugin exists to prevent.
+    Degrade to the same payload as no game at all instead.
+    """
+    plugin = _build(module, game=DeadGame(), players=[FakePlayer()])
+    plugin.update_status()
+    status = json.loads(plugin.db.values['minqlx:server_status:27960'])
+    assert status['map'] == '?'
+    assert status['state'] == 'warmup'
+    assert status['gametype'] == '?'
+    assert status['factory'] == '?'
+    assert status['red_score'] == 0
+    assert status['blue_score'] == 0
+    assert status['match_start_time'] is None
+    # The players are read before the game is touched, so they must survive.
+    assert status['players'][0]['name'] == 'sarge'
+
+
+def test_a_vanished_game_still_expires_the_key(module):
+    """The write must be a complete cycle, not just a set with no expiry."""
+    plugin = _build(module, game=DeadGame(), players=[])
+    plugin.update_status()
+    assert plugin.db.expiries['minqlx:server_status:27960'] == module.EXPIRE_INTERVAL
 
 
 def test_workshop_id_normalisation_accepts_ints_and_trailing_text(module):

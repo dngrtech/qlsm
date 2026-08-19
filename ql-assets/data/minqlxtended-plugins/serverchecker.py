@@ -209,7 +209,10 @@ class serverchecker(minqlxtended.Plugin):
 
     def _refresh_workshop_item_for_map(self, map_name=None):
         """Resolve current map to workshop item once per map and cache result."""
-        current_map = (map_name or (self.game.map if self.game else "") or "").strip().lower()
+        try:
+            current_map = (map_name or (self.game.map if self.game else "") or "").strip().lower()
+        except minqlxtended.NonexistentGameError:
+            current_map = ""
         if not current_map:
             self._resolved_map = None
             self._current_workshop_item = None
@@ -262,27 +265,47 @@ class serverchecker(minqlxtended.Plugin):
                 minqlxtended dropped Game.red_score / Game.blue_score. Scores
                 come off the team_scores tuple, indexed by Team.index
                 (_game.py:190). Guarded because team_scores reads the live
-                level and raises once the game is gone.
+                level and raises NonexistentGameError once the game is gone.
                 """
                 try:
                     return game.team_scores[team.index] if game else 0
-                except (ValueError, TypeError, IndexError, AttributeError):
+                except (ValueError, TypeError, IndexError, AttributeError,
+                        minqlxtended.NonexistentGameError):
                     return 0
 
             game = self.game
-            self._refresh_workshop_item_for_map(game.map if game else None)
+
+            def _game_field(name, default):
+                """Read one Game attribute, treating a vanished game as absent.
+
+                Game re-reads live engine state on every access and raises
+                NonexistentGameError (_game.py:99 and :174) the moment the game
+                is gone — during a map change, most often. That is a bare
+                Exception subclass (_game.py:55), so it escapes the guards above
+                and would be caught only by update_status's own handler, costing
+                the whole cycle: no Redis write, and the UI shows the instance
+                dead. Falling back to the no-game default keeps the write.
+                """
+                try:
+                    return getattr(game, name) if game else default
+                except minqlxtended.NonexistentGameError:
+                    return default
+
+            map_name = _game_field("map", None)
+            state = _game_field("state", "warmup")
+            self._refresh_workshop_item_for_map(map_name)
             status = {
                 "port":       port,
                 "hostname":   self.get_cvar("sv_hostname") or "",
-                "map":        game.map        if game else "?",
-                "gametype":   str(game.type_short) if game else "?",
-                "factory":    game.factory    if game else "?",
-                "state":      game.state      if game else "warmup",
+                "map":        map_name if map_name is not None else "?",
+                "gametype":   str(_game_field("type_short", "?")),
+                "factory":    _game_field("factory", "?"),
+                "state":      state,
                 "players":    players,
                 "maxplayers": int(self.get_cvar("sv_maxclients") or 16),
                 "red_score":  _team_score(minqlxtended.Team.RED),
                 "blue_score": _team_score(minqlxtended.Team.BLUE),
-                "match_start_time": int(self._match_start_time) if self._match_start_time and (game and game.state == "in_progress") else None,
+                "match_start_time": int(self._match_start_time) if self._match_start_time and state == "in_progress" else None,
                 "workshop_item_id": self._current_workshop_item,
                 "updated":    int(time.time()),
             }

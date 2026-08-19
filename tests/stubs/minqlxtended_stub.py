@@ -59,6 +59,15 @@ EVENT_ARITIES = {
 }
 
 
+class NonexistentGameError(Exception):
+    """What Game raises once the game is gone (_game.py:55).
+
+    A bare Exception subclass on the engine too, which is the whole point: it is
+    not a ValueError or an AttributeError, so a plugin that guards only those
+    lets it through.
+    """
+
+
 class SignatureMismatch(Exception):
     """What the engine raises at registration for a bad handler signature."""
 
@@ -128,7 +137,8 @@ def install_stub():
     # These classes are defined in this file, so their __module__ names this
     # stub. On the engine they belong to `minqlxtended`, and a ported plugin is
     # checked against that, so hand them the identity they are impersonating.
-    for impersonator in (Plugin, Team, GameState, Gametype, SignatureMismatch):
+    for impersonator in (Plugin, Team, GameState, Gametype, SignatureMismatch,
+                         NonexistentGameError):
         impersonator.__module__ = "minqlxtended"
     module.Plugin = Plugin
     module.Team = Team
@@ -136,5 +146,6 @@ def install_stub():
     module.Gametype = Gametype
     module.thread = thread
     module.SignatureMismatch = SignatureMismatch
+    module.NonexistentGameError = NonexistentGameError
     sys.modules["minqlxtended"] = module
     return module
