@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, Webhook, CheckCircle } from 'lucide-react';
+import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, Webhook, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, getPresets, savePreset, updatePreset } from '../../services/api';
@@ -9,6 +9,7 @@ import InstanceOptionsRow from './InstanceOptionsRow';
 import { buildRedisDbOptions, nextFreeRedisDb } from './redisDbOptions';
 import HooksTab from '../instances/HooksTab';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
+import InfoTooltip from '../common/InfoTooltip';
 import FullScreenConfigEditorModal from '../config/FullScreenConfigEditorModal';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
 import {
@@ -34,6 +35,8 @@ import {
   isLanRateSupported,
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
+import { runtimeLabel } from '../../constants/runtimes';
+import { presetRuntimeMismatchMessage } from '../../utils/presetRuntimeCompat';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
@@ -158,9 +161,13 @@ function AddInstanceForm({
   const [presets, setPresets] = useState(initialData.presets || []);
 
   // Loaded preset tracking
-  const [loadedPreset, setLoadedPreset] = useState(null); // { id, name, description } or null
+  const [loadedPreset, setLoadedPreset] = useState(null); // { id, name, description, runtime } or null
   const [isPresetModified, setIsPresetModified] = useState(false);
   const [isUpdatingPreset, setIsUpdatingPreset] = useState(false);
+  // Set when a host switch invalidates the loaded preset (runtime mismatch);
+  // explains the auto-clear so it isn't silent. Cleared on dismiss or on the
+  // next successful preset load.
+  const [presetClearedNotice, setPresetClearedNotice] = useState(null);
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
@@ -208,6 +215,13 @@ function AddInstanceForm({
   const initialConfigContentsRef = useRef(normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap()));
   const initialCheckedPluginsRef = useRef(initialPluginSeed.selectable);
   const loadedPresetConfigRef = useRef(null); // Stores config contents when preset is loaded, for modification detection
+  // Mirrors loadedPreset so handleHostChange can read it without taking it as a
+  // useCallback dependency. It must not: the mount/reset effect below depends on
+  // handleHostChange's identity and calls setLoadedPreset(null), so a new
+  // identity on every preset load would re-run that reset and wipe the preset
+  // the operator just loaded.
+  const loadedPresetRef = useRef(null);
+  useEffect(() => { loadedPresetRef.current = loadedPreset; }, [loadedPreset]);
   const loadedPresetCheckedPluginsRef = useRef(initialPluginSeed.selectable);
   const loadedPresetLanRateRef = useRef(false);
 
@@ -311,6 +325,30 @@ function AddInstanceForm({
 
   const handleHostChange = useCallback(async (hostId, isInitialLoad = false) => {
     setSelectedHostId(hostId);
+
+    // A preset loaded against one host's runtime is not safe to carry over to
+    // a host on the other runtime -- its plugin selection came from the old
+    // runtime and would silently be submitted against the new one. Clear it
+    // (and say so) rather than leaving it in place unvalidated.
+    const carriedPreset = loadedPresetRef.current;
+    if (carriedPreset && hostId && !isInitialLoad) {
+      const newHostRecord = (initialData.hosts || []).find((host) => String(host.id) === String(hostId));
+      if (runtimeLabel(carriedPreset.runtime) !== runtimeLabel(newHostRecord?.runtime)) {
+        setPresetClearedNotice(
+          `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared. `
+          + presetRuntimeMismatchMessage(carriedPreset, newHostRecord)
+        );
+        setLoadedPreset(null);
+        loadedPresetConfigRef.current = null;
+        const { selectable, dropped } = seedCheckedPlugins(initialData.defaultCheckedPlugins);
+        setCheckedPlugins(selectable);
+        setDroppedPluginCount(dropped.length);
+        setPluginNoticeDismissed(false);
+        loadedPresetCheckedPluginsRef.current = selectable;
+        initialCheckedPluginsRef.current = selectable;
+      }
+    }
+
     let newAvailablePorts = [];
     if (hostId) {
       try {
@@ -367,7 +405,7 @@ function AddInstanceForm({
         syncConfigFile('server.cfg', currentServerCfg.replace(NET_PORT_REGEX, `// $1${currentPortVal}$2 (Port removed)`));
       }
     }
-  }, [initialData.hosts, syncConfigFile, syncConfigState]);
+  }, [initialData.defaultCheckedPlugins, initialData.hosts, syncConfigFile, syncConfigState]);
 
   useEffect(() => {
     const currentDefaultConfigs = normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap());
@@ -616,7 +654,14 @@ function AddInstanceForm({
       initialConfigContentsRef.current = newConfigs;
 
       // Track which preset was loaded (for update feature)
-      setLoadedPreset({ id: presetId, name: presetData.name, description: presetData.description || '', is_builtin: !!presetData.is_builtin });
+      setLoadedPreset({
+        id: presetId,
+        name: presetData.name,
+        description: presetData.description || '',
+        is_builtin: !!presetData.is_builtin,
+        runtime: presetData.runtime,
+      });
+      setPresetClearedNotice(null);
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
@@ -1021,6 +1066,21 @@ function AddInstanceForm({
         />
       </div>
       <div className="flex flex-col flex-grow min-h-0 mb-2">
+        {/* Shown when a host switch invalidated the loaded preset */}
+        {presetClearedNotice && (
+          <div role="status" className="alert-warning mb-3 flex items-start gap-2 text-sm flex-shrink-0">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--accent-warning)' }} />
+            <span className="flex-1 min-w-0 text-[var(--text-secondary)]">{presetClearedNotice}</span>
+            <button
+              type="button"
+              onClick={() => setPresetClearedNotice(null)}
+              aria-label="Dismiss"
+              className="flex-shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {/* Show loaded preset indicator */}
         {loadedPreset && (
           <div className="flex items-center text-sm text-[var(--text-secondary)] mb-2 flex-shrink-0">
@@ -1145,14 +1205,24 @@ function AddInstanceForm({
               <Save className="w-4 h-4 mr-2" />
               Save Preset
             </button>
-            <button
-              type="button"
-              onClick={() => { setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
-              className="btn btn-secondary"
-            >
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Load Preset
-            </button>
+            <span className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => { setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
+                className="btn btn-secondary"
+                disabled={!hasSelectedHost}
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Load Preset
+              </button>
+              {!hasSelectedHost && (
+                <InfoTooltip
+                  text="Select a host first. Presets are runtime-specific, and QLSM needs to know which runtime to check compatibility against before showing you any."
+                  variant="info"
+                  size={14}
+                />
+              )}
+            </span>
           </div>
         </div>
 

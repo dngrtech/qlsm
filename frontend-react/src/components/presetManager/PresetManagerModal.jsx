@@ -70,6 +70,9 @@ function PresetManagerModal({
   }, [isOpen, initialTab]);
 
   const selectedPreset = presets.find((p) => p.id === selectedId) || (importedPresetPreview?.id === selectedId ? importedPresetPreview : null);
+  // PresetLoadTab already dims a preset from the other runtime, but a selection
+  // can outlive a host change, so gate the action itself as well.
+  const canLoadSelected = selectedId != null && !isLoadingPreset && isPresetRuntimeCompatible(selectedPreset, host);
 
   const handleDownload = async (preset) => {
     setDownloadingId(preset.id);
@@ -242,11 +245,7 @@ function PresetManagerModal({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        disabled={
-                          selectedId == null
-                          || isLoadingPreset
-                          || !isPresetRuntimeCompatible(selectedPreset, host)
-                        }
+                        disabled={!canLoadSelected}
                         onClick={() => setShowLoadConfirm(true)}
                       >
                         {isLoadingPreset
