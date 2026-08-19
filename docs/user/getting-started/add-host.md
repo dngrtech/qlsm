@@ -9,7 +9,11 @@ Every host runs one of two Quake Live server runtimes, chosen from the **Server 
 - **minqlx** — the original runtime, and every plugin QLSM ships today. Provisions/expects **Debian 12**.
 - **minqlxtended** — a hard fork with no plugin compatibility with minqlx. Provisions/expects **Ubuntu 24.04**, and requires **Python 3.12 or newer** on the target machine.
 
-For Vultr cloud hosts, QLSM provisions the matching OS image automatically — there's no separate OS choice. For standalone and self hosts, the target machine's OS is still auto-detected during connection testing, but creating a minqlxtended host additionally requires the detected Python to already be 3.12 or newer; host creation is rejected with an explanation if it isn't.
+For Vultr cloud hosts, QLSM provisions the matching OS image automatically — there's no separate OS choice.
+
+For **standalone** hosts, the target machine's OS is auto-detected during connection testing, and creating a minqlxtended host additionally requires the detected Python to already be 3.12 or newer — the Add Host form rejects the submission with an explanation if it isn't.
+
+For a **self** host, there's no equivalent inline check: QLSM has no way to detect the local machine's Python version before creating the host record. The form accepts the submission, the host is created, and setup runs in the background — if the machine's Python turns out to be older than 3.12, setup fails and the host lands in **Error** status instead of **Active**. If you're creating a minqlxtended self host, confirm `python3 --version` is 3.12 or newer on that machine yourself before you submit the form.
 
 **This choice is permanent.** There is no setting to change it later. Moving a host to the other runtime means saving a preset from the existing host and deploying a brand-new host with the other runtime selected.
 

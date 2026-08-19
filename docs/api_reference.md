@@ -142,7 +142,12 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
-All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is **immutable** — there is no field or endpoint to change it after the host is created. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against). For standalone and self hosts, `runtime: "minqlxtended"` additionally requires the target machine's detected Python to be 3.12 or newer; host creation fails with `400` otherwise.
+All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is **immutable** — there is no field or endpoint to change it after the host is created. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against).
+
+The Python 3.12 floor for `runtime: "minqlxtended"` is enforced differently per provider, because QLSM doesn't have the same evidence available at creation time for each:
+
+- **Standalone:** enforced synchronously. `POST /api/hosts` runs an SSH-based OS/Python detection before creating the row, and returns `400` immediately if the detected Python is older than 3.12 (or undetectable).
+- **Self:** *not* enforced at creation. Self-host creation only reads local `/etc/os-release`-style detection, which carries no Python version — there is no SSH session to probe, since the host *is* the QLSM server's own reachable target. `POST /api/hosts` returns `201` regardless of the host's actual Python version, the record is created, and asynchronous setup is queued. `ansible/playbooks/setup_host.yml` is the actual gate: it asserts the Python floor before building, and a self host whose Python is too old reaches `ERROR` status once that setup task runs and fails — after creation returned successfully, not instead of it.
 
 ### Self-Host Defaults
 
