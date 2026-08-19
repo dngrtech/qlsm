@@ -106,6 +106,8 @@ ql-assets/*
 ql-assets/data/*
 !ql-assets/data/minqlx-plugins/
 !ql-assets/data/minqlx-plugins/**
+!ql-assets/data/minqlxtended-plugins/
+!ql-assets/data/minqlxtended-plugins/**
 !ql-assets/data/system-hooks/
 !ql-assets/data/system-hooks/**
 !ql-assets/qlfilter/

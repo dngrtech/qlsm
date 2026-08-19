@@ -1,0 +1,5 @@
+# minqlxtended requires a modern redis-py under RESP3 -- the floors below are
+# upstream's, and are incompatible with the redis<3.0 range the minqlx
+# baseline pins. P2 extends this file with the vendored plugins' own deps.
+redis>=5.1.0
+hiredis>=3.0.0
