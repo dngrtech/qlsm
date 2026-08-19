@@ -16,6 +16,10 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 - A set of selected factory files
 - The [99k LAN Rate](../features/99k-lan-rate.md) toggle state
 
+## Server Runtime Compatibility
+
+A preset remembers which [Server Runtime](../getting-started/add-host.md#server-runtime) — minqlx or minqlxtended — it was saved from, because the two runtimes don't share plugins. On the **Load Preset** tab, a preset saved from the other runtime than your current host appears greyed out with a small label naming its runtime, and clicking it does nothing. Save a fresh preset from an instance on the runtime you want to reuse it on instead.
+
 ## Built-in Presets
 
 QLSM ships a set of **built-in presets** that provide ready-to-use baselines. Built-in presets **cannot be modified, renamed, or deleted** — they are read-only. The Preset Manager's Save tab treats a built-in name as a new-name validation conflict instead of overwrite mode, and the Load tab disables delete for built-ins.

@@ -142,6 +142,8 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
+All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is **immutable** — there is no field or endpoint to change it after the host is created. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against). For standalone and self hosts, `runtime: "minqlxtended"` additionally requires the target machine's detected Python to be 3.12 or newer; host creation fails with `400` otherwise.
+
 ### Self-Host Defaults
 
 ```
@@ -238,6 +240,7 @@ Example success response:
     "ssh_user": "ansible",
     "ssh_port": 22,
     "os_type": "debian",
+    "runtime": "minqlx",
     "is_standalone": false,
     "timezone": "America/New_York",
     "cpu_count": 1,
@@ -264,6 +267,8 @@ Example success response:
 `lan_rate_uses_hook: false` means the host uses the legacy iptables/sysctl mechanism for 99k LAN Rate. After running "Re-run Host Setup", `lan_rate_uses_hook` becomes `true` and instances can use the new hook-based mechanism on any OS.
 
 `firewall_pool_v2: false` means the host's firewall allow-list was rendered before the game/RCON port pool was widened, so the higher instance slots may not be reachable. A successful host setup run — initial or "Re-run Host Setup" — sets it to `true`.
+
+`runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and never changed afterward. `NULL`/legacy rows normalize to `"minqlx"`.
 
 ## Instances
 
@@ -367,6 +372,7 @@ Example success response:
     "host_name": "my-host-1",
     "host_ip_address": "144.202.73.249",
     "host_os_type": "debian",
+    "host_runtime": "minqlx",
     "port": 27960,
     "hostname": "My Duel Server",
     "lan_rate_enabled": false,
@@ -385,6 +391,8 @@ Example success response:
   }
 }
 ```
+
+`host_runtime` is read-only, mirrors the parent host's `runtime`, and is not a column on the instance itself — it exists so the frontend can show which minqlx fork the instance runs without a second lookup.
 
 ### Config Files Response (GET /instances/<id>/config)
 ```json
@@ -786,6 +794,7 @@ GET /presets/validate-name?name=my-preset
   "checked_factories": ["duel.factories"],
   "enabled_hooks": ["ql_netfix.so"],
   "lan_rate_enabled": true,
+  "runtime": "minqlx",
   "binary_meta_source": {
     "context_type": "preset",
     "context_key": "default"
@@ -803,11 +812,13 @@ GET /presets/validate-name?name=my-preset
 
 `binary_meta_source` is optional on `POST /presets` and `PUT /presets/<id>`. When provided, matching `.so` file descriptions are copied from the source context into the target preset context. Use this when saving an instance or another preset as a new preset.
 
+`runtime` is optional and records which minqlx fork (`"minqlx"` or `"minqlxtended"`) the preset was saved from — the frontend sends the host or instance's current runtime here. `400` if present and not one of the two valid values. On `POST /presets` (create), an absent value defaults to `"minqlx"`. On `PUT /presets/<id>` (update), the semantics are different and deliberately so: an absent `runtime` key means **leave unchanged**, not "reset to minqlx" — `update_preset_api` also serves plain rename/description edits that carry no originating host and no `runtime` key at all, and defaulting an absent value there would silently downgrade an existing minqlxtended preset back to minqlx on an unrelated save. Send the key only when you intend to set it.
+
 ### Download Preset Export
 
 `GET /api/presets/{preset_id}/download`
 
-Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, selection JSON files (`checked_plugins.json`, `checked_factories.json`, `enabled_hooks.json`, `lan_rate_enabled.json`), and generated export metadata.
+Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, selection JSON files (`checked_plugins.json`, `checked_factories.json`, `enabled_hooks.json`, `lan_rate_enabled.json`), and generated export metadata — the `manifest.json`'s `preset` object includes `runtime`, so an imported archive round-trips which fork the preset was saved from.
 
 Responses:
 
@@ -845,6 +856,7 @@ Responses:
     "name": "duel-config",
     "description": "Standard duel settings",
     "path": "configs/presets/duel-config",
+    "runtime": "minqlx",
     "server_cfg": "...",
     "mappool_txt": "...",
     "access_txt": "...",

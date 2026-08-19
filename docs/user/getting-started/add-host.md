@@ -2,9 +2,18 @@
 
 Hosts are added from **Servers** -> **Add New Host**. <img src="../../images/add-new-host-button.png" width="120" style="display:inline; vertical-align:middle; margin:0 4px" />
 
-## Supported OS
+## Server Runtime
 
-Use **Debian 12**. Ubuntu is also supported.
+Every host runs one of two Quake Live server runtimes, chosen from the **Server Runtime** picker on the Add Host form, right below **Provider**:
+
+- **minqlx** — the original runtime, and every plugin QLSM ships today. Provisions/expects **Debian 12**.
+- **minqlxtended** — a hard fork with no plugin compatibility with minqlx. Provisions/expects **Ubuntu 24.04**, and requires **Python 3.12 or newer** on the target machine.
+
+For Vultr cloud hosts, QLSM provisions the matching OS image automatically — there's no separate OS choice. For standalone and self hosts, the target machine's OS is still auto-detected during connection testing, but creating a minqlxtended host additionally requires the detected Python to already be 3.12 or newer; host creation is rejected with an explanation if it isn't.
+
+**This choice is permanent.** There is no setting to change it later. Moving a host to the other runtime means saving a preset from the existing host and deploying a brand-new host with the other runtime selected.
+
+**Presets do not carry across runtimes.** A preset saved from a minqlx instance cannot be loaded onto a minqlxtended host, and vice versa, because the plugins in one do not run on the other. The Preset Manager's Load tab shows an incompatible preset greyed out, labeled with the runtime it was saved from, and does nothing if you click it. See [Presets And Default Config](../presets/overview.md).
 
 ## Self-Host Deployment
 
@@ -99,5 +108,6 @@ Continue with: [Configure Auto-Restart](../operations/auto-restart.md)
 ## Related Pages
 
 - [Deploy A New Instance](deploy-new-instance.md)
+- [Presets And Default Config](../presets/overview.md)
 - [Host Actions Menu](../operations/host-actions-menu.md)
 - [Deployment Troubleshooting](../help/deployment-troubleshooting.md)

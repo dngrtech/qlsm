@@ -122,6 +122,11 @@ Tasks are enqueued with `on_failure` callbacks to handle unexpected RQ failures 
 ### ZMQ / RCON
 Instance ZMQ connections (RCON + stats) are managed via `_prepare_instance_zmq()` from `ui/task_logic/zmq_utils.py`. Fields `zmq_rcon_port`, `zmq_rcon_password`, `zmq_stats_port`, `zmq_stats_password` on `QLInstance` drive connection setup.
 
+### Server Runtime (minqlx / minqlxtended)
+`ui/runtime.py` is the single source of truth for every value that differs between the two minqlx forks — plugin directory names, shared build directory, engine `.so`, launch script, log filename, git pin, Terraform OS image, Python floor, and excluded system hooks. Never hardcode a runtime-specific literal (`'minqlx-plugins'`, `'minqlx.log'`, `/home/ql/minqlx-shared`, etc.) anywhere in the backend, playbooks, or Terraform — resolve it through `ui.runtime.runtime_paths(runtime)` instead, so a new call site can't silently drift from what `ui/runtime.py` says minqlxtended looks like.
+
+Any new instance-level playbook (one that acts on an already-deployed `QLInstance`, the way `add_qlds_instance.yml` and `sync_instance_configs_and_restart.yml` do) must merge `ui.runtime.runtime_extravars(host)` into its own extra-vars dict at the call site, and accept `runtime_plugins_dirname` / `runtime_shared_dir` / `launch_script` as playbook vars with minqlx-shaped defaults (so a manual, no-extravars run still targets minqlx). A playbook that skips this will work for every host today and silently target the wrong runtime's paths the moment a minqlxtended host exists.
+
 ## Instance Config Folders
 
 Instance config directories (`configs/<host_name>/<instance_id>/`) support user-managed subfolders, nested up to 3 levels deep, for `.ent` files (entity overrides). This is in addition to the always-present `scripts/` and `factories/` reserved folders.

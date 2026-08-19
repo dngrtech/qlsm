@@ -153,6 +153,7 @@ class Host(db.Model):
     ssh_key_path = db.Column(db.String(255), nullable=True)
     ssh_port = db.Column(db.Integer, default=22)
     os_type = db.Column(db.String(50), nullable=True)  # normalized detected host OS family, e.g. 'debian', 'ubuntu'
+    runtime = db.Column(db.String(20), nullable=False, default='minqlx')  # 'minqlx' or 'minqlxtended'; set at creation, immutable
     is_standalone = db.Column(db.Boolean, default=False)  # user-provided host (not Terraform)
     timezone = db.Column(db.String(100), nullable=True)  # IANA timezone name
     cpu_count = db.Column(db.Integer, nullable=True)
@@ -189,7 +190,7 @@ QLSM reserves Redis `DB 0`; minqlx instances use `DB 1..8` (Redis ships 16 datab
 `DB 1..8` is selectable at instance creation via the optional `redis_db` field; it defaults to the port-derived value (`port - REDIS_DB_PORT_OFFSET`) and there is no edit path afterward. `QLInstance.redis_db` is nullable — `NULL` means "derive from the port," which is how every pre-existing instance behaves. `ui.constants.resolve_redis_db(instance)` is the single function that resolves either case; both `ui/task_logic/ansible_instance_mgmt.py` and `ui/task_logic/server_status_poll.py` call it rather than re-deriving the formula.
 Self-host minqlx services receive `qlx_redisAddress`, `qlx_redisPassword`, and `qlx_redisDatabase` explicitly at deploy time.
 
-**QLInstance Model:** Represents a Quake Live server instance running on a specific `Host`. A private service-runtime baseline is persisted for safe `UPDATED` reconciliation; it is excluded from the API and backups and is not user-configurable.
+**QLInstance Model:** Represents a Quake Live server instance running on a specific `Host`. A private service-runtime baseline is persisted for safe `UPDATED` reconciliation; it is excluded from the API and backups and is not user-configurable. `to_dict()` also includes a read-only `host_runtime` field (the parent `Host.runtime`, normalized) for frontend display — it is not a column on `QLInstance` itself.
 
 ```python
 class QLInstance(db.Model):
@@ -225,6 +226,7 @@ class ConfigPreset(db.Model):
     description = db.Column(db.Text, nullable=True)
     path = db.Column(db.String(500), nullable=True)  # filesystem path to preset config folder
     is_builtin = db.Column(db.Boolean, nullable=False, default=False)  # True for QLSM-shipped presets
+    runtime = db.Column(db.String(20), nullable=False, default='minqlx')  # runtime the preset was saved from
     last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 ```
@@ -232,6 +234,41 @@ class ConfigPreset(db.Model):
 **ApiKey Model:** Stores API keys for external service authentication. Used by `external_api_routes.py` to validate `Authorization: Bearer <key>` headers.
 
 **AppSetting Model:** Generic key-value store for application settings (e.g., rate limit values). Accessed via `settings_routes.py`.
+
+## Server Runtimes
+
+QLSM builds and runs one of two minqlx forks per host: **minqlx** (`MinoMino/minqlx`, the original) and **minqlxtended** (`tjone270/minqlxtended`, a hard fork with no plugin compatibility in either direction). `ui/runtime.py` is the single source of truth for every value that differs between them — nothing else in the backend, the Ansible playbooks, or the Terraform roots hardcodes a runtime-specific path or pin. Its API:
+
+-   `MINQLX`, `MINQLXTENDED`, `VALID_RUNTIMES`, `DEFAULT_RUNTIME` (`'minqlx'`) — the constants.
+-   `normalize_runtime(value)` — coerces any stored value to a valid runtime; `None`, an unrecognized string, or a non-string all resolve to `minqlx`, since a `NULL` column means the row predates this feature and nothing else has ever existed.
+-   `is_valid_runtime(value)` — strict check used by API validation, where an unknown caller-supplied value must be rejected with `400` rather than silently defaulted.
+-   `runtime_paths(runtime)` — returns a copy of that runtime's path/pin table (see below).
+-   `host_runtime(host)` — `normalize_runtime(host.runtime)`, tolerant of `None` and detached ORM objects.
+-   `log_filename_pattern(runtime)` — a regex matching the runtime's live log file and its rotated siblings (e.g. `minqlx\.log(\.\d+)?`).
+-   `runtime_extravars(host)` — the `runtime`, `runtime_plugins_dirname`, `runtime_shared_dir`, and `launch_script` extra-vars every instance-level playbook needs; callers merge this into their own extravars dict rather than deriving it themselves.
+
+| | minqlx | minqlxtended |
+|---|---|---|
+| Plugins dir (instance and `ql-assets/data/`) | `minqlx-plugins` | `minqlxtended-plugins` |
+| Shared build dir | `/home/ql/minqlx-shared` | `/home/ql/minqlxtended-shared` |
+| Engine `.so` | `minqlx.x64.so` | `minqlxtended.x64.so` |
+| Launch script | `run_server_x64_minqlx.sh` | `run_server_x64_minqlxtended.sh` |
+| Log filename | `minqlx.log` | `minqlxtended.log` |
+| Git repo / pinned commit | `MinoMino/minqlx` @ `fbdd915185337791d8e209dc4b686a1ee60d3721` | `tjone270/minqlxtended` @ `1e2f307bb695f955d9ff819fac562af0ac79f559` |
+| Terraform OS image | Debian 12 x64 (bookworm) | Ubuntu 24.04 LTS x64 |
+| Python floor | none (existing hosts run whatever they already run) | 3.12 (the build links `-lpython3.12`) |
+
+**Host creation:** `POST /api/hosts` accepts an optional `runtime` field (default `minqlx`, `400` if unrecognized) and stores it on `Host.runtime`, which is never writable again after creation — moving a host to the other runtime means saving a preset and deploying a new host. The Terraform OS variables (`os_name`, `os_family`) and the standalone/self-host remote-OS-detection Python-version check are both derived from the chosen runtime, so a minqlxtended host is provisioned on Ubuntu 24.04 or refused if the target machine can't meet the Python 3.12 floor. `setup_host.yml` re-asserts the same Python floor server-side (`ansible_python_version is version('3.12', '>=')`) before building, so a manual playbook run against an unsuitable host fails fast rather than compiling against the wrong interpreter.
+
+**Terraform:** `terraform/vultr-root/main.tf` looks up the Vultr OS image through `data "vultr_os" "selected"`, filtered by the `os_name`/`os_family` variables QLSM passes from `Host.runtime` (via `ui/task_logic/terraform_runner.py:_os_vars()`). Every Terraform entry point — provision, resize, and destroy — passes these; omitting them on resize would re-resolve `os_id` to the variable default and Vultr would reinstall the operating system on a live server.
+
+**Host setup (`setup_host.yml`):** builds the selected runtime's shared install from its pinned commit into its own shared directory. minqlx compiles with the local patches under `ql-assets/patches/` applied first (see the Ansible section below); minqlxtended does not need them — the `damage` event is native and `reset_player_stats` is pure Python there — and links `minqlxtended.zip` (the Python package, zipped) beside the compiled `.so` instead of an unpacked package directory. Both builds run under the `ql` system user and sync a runtime-appropriate `requirements.txt` from `ql-assets/data/<runtime>-plugins/`.
+
+**System hooks:** minqlxtended hooks `Sys_IsLANAddress` itself, unconditionally, in its own source (`src/server/hooks.c`). The built-in `force_rate.so` LD_PRELOAD hook overwrites the same function prologue and can crash the server if its `STATIC_SEARCH` fails, so `runtime_paths()['excluded_system_hooks']` excludes it on minqlxtended — `_build_ld_preload_paths()` in `ui/task_logic/ansible_instance_mgmt.py` skips any system hook named in that set before it ever reaches LD_PRELOAD.
+
+**Presets:** `ConfigPreset.runtime` records which runtime a preset was saved from. Plugins are not portable between runtimes, so the frontend blocks loading a preset onto a host of the other runtime (`frontend-react/src/utils/presetRuntimeCompat.js`, consumed by the Preset Manager's Load tab). This gate is temporary: it refuses the load outright rather than offering to strip incompatible content and continue.
+
+**Backups:** `ui/task_logic/backup_files.py` registers both runtimes' `ql-assets/data/` plugin baselines as separate archive trees (`plugins/minqlx-plugins`, `plugins/minqlxtended-plugins`), so a restore onto a fresh machine carries whichever baselines exist regardless of which runtimes are actually in use.
 
 ## Testing Framework
 
@@ -253,10 +290,10 @@ The project uses pytest for testing, with fixtures defined in `tests/conftest.py
     -   **Dynamic (Terraform Generated):** Terraform generates a unique inventory snippet file per provisioned host (e.g., `ansible/inventory/my-host-name_vultr_host.yml`) using the `templates/vultr_hosts.yml.tftpl` template. This file contains the host's IP, the specific SSH user (`ansible`), and the absolute path to the generated private key.
     -   **Combined Inventory:** Ansible automatically reads all `.yml` files within the specified inventory directory.
 -   **Playbook Structure:**
-    -   **`ansible/playbooks/setup_host.yml`:** Performs the initial one-time setup on a newly provisioned host. Installs prerequisites (including `iptables-persistent`, and `redis-server` only when the host runtime needs its own Redis), configures the firewall using a template (`ansible/templates/iptables.rules.j2`) that defines both filter and NAT rules which are applied atomically via `iptables-restore` and persisted, creates the `ql` user, installs base SteamCMD/QLDS/minqlx to shared locations (`/home/ql/qlds-base`, `/home/ql/minqlx-shared`), and syncs common assets (`/home/ql/assets/common`). minqlx is built from a pinned upstream commit (`minqlx_git_version`, currently `fbdd915185337791d8e209dc4b686a1ee60d3721` on `MinoMino/minqlx`) rather than a floating `master`, with local patches from `ql-assets/patches/*.patch` applied on top before compiling (see `rebuild_minqlx.yml` below for the shared patch-apply mechanism).
+    -   **`ansible/playbooks/setup_host.yml`:** Performs the initial one-time setup on a newly provisioned host. Installs prerequisites (including `iptables-persistent`, and `redis-server` only when the host runtime needs its own Redis), configures the firewall using a template (`ansible/templates/iptables.rules.j2`) that defines both filter and NAT rules which are applied atomically via `iptables-restore` and persisted, creates the `ql` user, installs base SteamCMD/QLDS and the host's selected minqlx **runtime** to its shared location (`/home/ql/qlds-base`, plus `/home/ql/minqlx-shared` or `/home/ql/minqlxtended-shared`), and syncs common assets (`/home/ql/assets/common`). minqlx is built from a pinned upstream commit with local patches from `ql-assets/patches/*.patch` applied on top before compiling (see `rebuild_minqlx.yml` below for the shared patch-apply mechanism); minqlxtended is built unpatched from its own pin. Both pins and every other per-runtime path live in `ui/runtime.py` — see **Server Runtimes** above. Building minqlxtended asserts the host's Python is 3.12+ before compiling.
     -   **`ansible/playbooks/rebuild_minqlx.yml`:** Rebuilds minqlx from source and redeploys it to the shared location (`/home/ql/minqlx-shared`) without a full host setup. Clones `MinoMino/minqlx` at the pinned `minqlx_git_version` SHA, applies every `*.patch` file in `ql-assets/patches/` via `patch -p1 --forward`, compiles with `make`, and copies the resulting `minqlx.x64.so` and Python package to the shared location. Patches currently applied: `minqlx-reset-accuracy.patch` (adds `reset_player_stats`) and `minqlx-damage-event.patch` (backports the `damage` event/dispatcher and `DAMAGE_*` flag constants from the `mgaertne/minqlx` fork).
-    -   **`ansible/playbooks/add_qlds_instance.yml`:** Adds a new QLDS instance to a pre-configured host. Creates the instance directory (`/home/ql/qlds-{id}`), copies shared resources (QLDS base, minqlx, common assets) into the instance directory, syncs instance-specific configuration files from the UI server (`configs/<host>/<id>/`), installs instance-specific Python dependencies, and manages the systemd service.
-    -   **`ansible/playbooks/sync_instance_configs_and_restart.yml`:** Applies saved configuration changes to an existing instance. It syncs configs, factories, plugin drafts, and `user-hooks/` to the host, mirrors the whole shared minqlx build (`/home/ql/minqlx-shared/` — the `minqlx.x64.so` binary, the `run_server_x64_minqlx.sh` launcher, and the `minqlx/` Python package) into the instance directory, re-renders the service unit with the current `LD_PRELOAD`, and restarts only when requested/required. Mirroring the whole directory rather than individual files is what lets a rebuilt minqlx (see `setup_host.yml` and `rebuild_minqlx.yml` above) reach already-existing instances: the binary and the Python package are two halves of the same build, and syncing only one half leaves patched event dispatchers unregistered at runtime.
+    -   **`ansible/playbooks/add_qlds_instance.yml`:** Adds a new QLDS instance to a pre-configured host. Creates the instance directory (`/home/ql/qlds-{id}`), copies shared resources (QLDS base, the host's runtime build, common assets) into the instance directory, syncs instance-specific configuration files from the UI server (`configs/<host>/<id>/`), installs instance-specific Python dependencies, and manages the systemd service. Every runtime-specific path (`runtime_shared_dir`, `runtime_plugins_dirname`, `launch_script`) is passed in from `ui.runtime.runtime_extravars()` rather than hardcoded in the playbook.
+    -   **`ansible/playbooks/sync_instance_configs_and_restart.yml`:** Applies saved configuration changes to an existing instance. It syncs configs, factories, plugin drafts, and `user-hooks/` to the host, mirrors the whole shared runtime build (the engine `.so`, its launch script, and — for minqlx — the `minqlx/` Python package; minqlxtended ships `minqlxtended.zip` instead of an unpacked package) into the instance directory, re-renders the service unit with the current `LD_PRELOAD`, and restarts only when requested/required. Mirroring the whole directory rather than individual files is what lets a rebuilt runtime (see `setup_host.yml` and `rebuild_minqlx.yml` above) reach already-existing instances: the binary and the Python package/zip are two halves of the same build, and syncing only one half leaves patched event dispatchers unregistered at runtime.
     -   **`ansible/playbooks/update_instance_hooks.yml`:** System-hook maintenance path used by backend tasks to re-render a QLDS instance systemd unit with the current LD_PRELOAD value and daemon-reload systemd when a system hook changes outside the user Save Configuration flow.
     -   **`ansible/playbooks/manage_qlds_service.yml`:** Manages the `qlds@<id>.service` systemd service (start, stop, restart, delete service file).
     -   **`ansible/playbooks/get_qlds_logs.yml`:** Retrieves logs for a specific instance service.
@@ -307,7 +344,9 @@ edit flow.
 
 `_build_ld_preload_paths()` in `ui/task_logic/ansible_instance_mgmt.py` converts
 the stored user hook list into a colon-joined path string, prepending any active
-system hooks. The system-hook task path remains available for backend-managed
+system hooks whose filename is not in the host runtime's `excluded_system_hooks`
+set (see **Server Runtimes** above — `force_rate.so` is always excluded on
+minqlxtended). The system-hook task path remains available for backend-managed
 system hooks such as `force_rate.so` when their predicates change outside the
 user Save Configuration flow.
 
