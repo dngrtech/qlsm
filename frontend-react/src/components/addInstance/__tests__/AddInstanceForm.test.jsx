@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -1685,6 +1685,59 @@ describe('AddInstanceForm draft lifecycle', () => {
       fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
       await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
       expect(onSubmit.mock.calls[0][0].checked_plugins).toEqual(['essentials']);
+    });
+
+    it('keeps a manual plugin selection when switching between same-runtime hosts', async () => {
+      // The no-wipe half of the re-seed guard, and the dominant path: every
+      // existing user moves between minqlx hosts. Re-seeding there would
+      // silently discard the operator's manual selection, which is exactly
+      // what the original plan got wrong -- so pin it against the submitted
+      // payload, not against a rendered label.
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <AddInstanceForm
+          initialData={{
+            hosts: [
+              { id: 1, name: 'deb-host-a', runtime: 'minqlx' },
+              { id: 2, name: 'deb-host-b', runtime: 'minqlx' },
+            ],
+            presets: [],
+            defaultConfigContents: {
+              'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+            },
+            defaultSeedsByRuntime: {
+              minqlx: { checkedPlugins: ['balance.py'], availableHooks: [], enabledHooks: [] },
+              minqlxtended: { checkedPlugins: ['essentials.py'], availableHooks: [], enabledHooks: [] },
+            },
+          }}
+          initialHostId={1}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={vi.fn()}
+        />
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      // The operator edits the seeded selection by hand: drop balance, add irc.
+      const pluginManagerProps = () => mocks.fileManagerProps
+        .filter(props => props.checkable && props.capabilities.allowedExtensions.includes('.py'))
+        .at(-1);
+      act(() => {
+        pluginManagerProps().onCheck('balance.py', false);
+        pluginManagerProps().onCheck('irc.py', true);
+      });
+      await waitFor(() => expect(pluginManagerProps().checkedFiles).toEqual(new Set(['irc.py'])));
+
+      fireEvent.click(screen.getByRole('button', { name: /select host 2/i }));
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].checked_plugins).toEqual(['irc']);
     });
 
     it('treats a runtime-less preset and a runtime-less host as compatible', async () => {

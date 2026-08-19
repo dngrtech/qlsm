@@ -237,7 +237,12 @@ function AddInstanceForm({
   const loadedPresetCheckedPluginsRef = useRef(initialPluginSeed.selectable);
   // The runtime the plugin/hook seed currently reflects. handleHostChange
   // compares against it so a same-runtime host switch leaves the operator's
-  // selection alone, while a cross-runtime switch re-seeds.
+  // selection alone, while a cross-runtime switch re-seeds. Invariant: every
+  // place that replaces the plugin/hook seed must point this at the runtime
+  // the new seed came from -- the mount/reset effect, handleHostChange, and
+  // handleLoadPreset. Leave it stale in any one of them and the next host
+  // change compares against the wrong runtime and silently re-seeds over what
+  // the operator has.
   const seededRuntimeRef = useRef(runtimeLabel(initialHostRuntime));
   const loadedPresetLanRateRef = useRef(false);
 
@@ -701,6 +706,9 @@ function AddInstanceForm({
         runtime: presetData.runtime,
       });
       setPresetClearedNotice(null);
+      // The preset's plugin/hook selection is now the seed, so the seeded
+      // runtime is the preset's (see seededRuntimeRef above).
+      seededRuntimeRef.current = runtimeLabel(presetData.runtime);
       // Reseed draft workspace with the loaded preset's scripts
       setDraftPreset(presetData.name);
       loadedPresetConfigRef.current = newConfigs;
