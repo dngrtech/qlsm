@@ -3,6 +3,7 @@ import enum
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
+from ui.runtime import DEFAULT_RUNTIME, normalize_runtime
 
 class HostStatus(enum.Enum):
     """Enum for Host status."""
@@ -60,6 +61,11 @@ class Host(db.Model):
     redis_unix_socket = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     lan_rate_uses_hook = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = LD_PRELOAD hook mechanism; False = legacy iptables/sysctl path
     firewall_pool_v2 = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = firewall rendered with the current game/RCON port pool; False = narrower legacy allow-list
+    # Which minqlx runtime this host builds and runs. Chosen at creation and
+    # immutable thereafter -- migrating a live host is destructive, and a locked
+    # column can never drift from what is actually installed on the box.
+    runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
+                        server_default=DEFAULT_RUNTIME)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True) # New field for QLFilter
     auto_restart_schedule = db.Column(db.String(100), nullable=True) # Cron expression for auto-restart
@@ -97,6 +103,7 @@ class Host(db.Model):
             'redis_unix_socket': bool(self.redis_unix_socket),
             'lan_rate_uses_hook': bool(self.lan_rate_uses_hook),
             'firewall_pool_v2': bool(self.firewall_pool_v2),
+            'runtime': normalize_runtime(self.runtime),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,
