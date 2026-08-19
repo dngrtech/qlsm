@@ -35,7 +35,7 @@ import {
   isLanRateSupported,
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
-import { runtimeLabel } from '../../constants/runtimes';
+import { defaultPresetNameForRuntime, runtimeLabel } from '../../constants/runtimes';
 import { presetRuntimeMismatchMessage } from '../../utils/presetRuntimeCompat';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
@@ -133,6 +133,17 @@ function AddInstanceForm({
   onServerCfgLintStatusChange,
   onDirtyStateChange,
 }) {
+  // Plugin/hook seeds are per-runtime: minqlx plugins do not load on
+  // minqlxtended, so every seed site resolves through the selected host rather
+  // than a single flat default.
+  const initialHostRuntime = (initialData.hosts || [])
+    .find((host) => String(host.id) === String(initialHostId))?.runtime;
+  const seedForRuntime = useCallback((runtime) => (
+    (initialData.defaultSeedsByRuntime || {})[runtimeLabel(runtime)]
+      || { checkedPlugins: [], availableHooks: [], enabledHooks: [] }
+  ), [initialData.defaultSeedsByRuntime]);
+  const initialSeed = seedForRuntime(initialHostRuntime);
+
   const [name, setName] = useState('');
   const [selectedHostId, setSelectedHostId] = useState('');
   const [port, setPort] = useState('');
@@ -171,21 +182,21 @@ function AddInstanceForm({
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
-  const initialPluginSeed = seedCheckedPlugins(initialData.defaultCheckedPlugins);
+  const initialPluginSeed = seedCheckedPlugins(initialSeed.checkedPlugins);
   const [checkedPlugins, setCheckedPlugins] = useState(initialPluginSeed.selectable);
   const [droppedPluginCount, setDroppedPluginCount] = useState(initialPluginSeed.dropped.length);
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
   const pluginsManagerRef = useRef(null);
-  const [draftPreset, setDraftPreset] = useState('default');
+  const [draftPreset, setDraftPreset] = useState(defaultPresetNameForRuntime(initialHostRuntime));
   const [factoryServerTree, setFactoryServerTree] = useState(initialData.defaultFactoryTree || []);
 
   // Hooks tab state. There is no instance yet, so hook files come from the
   // preset (default preset on first open); HooksTab renders in its instance-less
   // mode (view + toggle + reorder). enabledHookOrder is the LD_PRELOAD order sent
   // on create as enabled_hooks.
-  const [availableHooks, setAvailableHooks] = useState(initialData.defaultAvailableHooks || []);
-  const [enabledHookOrder, setEnabledHookOrder] = useState(initialData.defaultEnabledHooks || []);
-  const initialEnabledHookOrderRef = useRef(initialData.defaultEnabledHooks || []);
+  const [availableHooks, setAvailableHooks] = useState(initialSeed.availableHooks);
+  const [enabledHookOrder, setEnabledHookOrder] = useState(initialSeed.enabledHooks);
+  const initialEnabledHookOrderRef = useRef(initialSeed.enabledHooks);
   // True when the hook enablement/order differs from the loaded (or default)
   // preset baseline. Feeds both the unsaved-changes guard and the "(modified)"
   // preset indicator.
@@ -223,6 +234,10 @@ function AddInstanceForm({
   const loadedPresetRef = useRef(null);
   useEffect(() => { loadedPresetRef.current = loadedPreset; }, [loadedPreset]);
   const loadedPresetCheckedPluginsRef = useRef(initialPluginSeed.selectable);
+  // The runtime the plugin/hook seed currently reflects. handleHostChange
+  // compares against it so a same-runtime host switch leaves the operator's
+  // selection alone, while a cross-runtime switch re-seeds.
+  const seededRuntimeRef = useRef(runtimeLabel(initialHostRuntime));
   const loadedPresetLanRateRef = useRef(false);
 
   const readFactoryServerContent = useCallback(async (path) => {
@@ -326,27 +341,47 @@ function AddInstanceForm({
   const handleHostChange = useCallback(async (hostId, isInitialLoad = false) => {
     setSelectedHostId(hostId);
 
+    const newHostRecord = (initialData.hosts || []).find((host) => String(host.id) === String(hostId));
+    const newRuntime = runtimeLabel(newHostRecord?.runtime);
+    const previousRuntime = seededRuntimeRef.current;
+
     // A preset loaded against one host's runtime is not safe to carry over to
     // a host on the other runtime -- its plugin selection came from the old
     // runtime and would silently be submitted against the new one. Clear it
     // (and say so) rather than leaving it in place unvalidated.
     const carriedPreset = loadedPresetRef.current;
+    let presetCleared = false;
     if (carriedPreset && hostId && !isInitialLoad) {
-      const newHostRecord = (initialData.hosts || []).find((host) => String(host.id) === String(hostId));
-      if (runtimeLabel(carriedPreset.runtime) !== runtimeLabel(newHostRecord?.runtime)) {
+      if (runtimeLabel(carriedPreset.runtime) !== newRuntime) {
         setPresetClearedNotice(
           `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared. `
           + presetRuntimeMismatchMessage(carriedPreset, newHostRecord)
         );
         setLoadedPreset(null);
         loadedPresetConfigRef.current = null;
-        const { selectable, dropped } = seedCheckedPlugins(initialData.defaultCheckedPlugins);
-        setCheckedPlugins(selectable);
-        setDroppedPluginCount(dropped.length);
-        setPluginNoticeDismissed(false);
-        loadedPresetCheckedPluginsRef.current = selectable;
-        initialCheckedPluginsRef.current = selectable;
+        presetCleared = true;
       }
+    }
+
+    // Re-seed from the new host's runtime. Plugins are not interchangeable
+    // between runtimes, so a cross-runtime switch has to move the seed with it
+    // -- otherwise the form ships minqlx files to a minqlxtended host. A
+    // same-runtime switch leaves whatever the operator selected in place.
+    if (hostId && !isInitialLoad && (newRuntime !== previousRuntime || presetCleared)) {
+      const seed = seedForRuntime(newRuntime);
+      const { selectable, dropped } = seedCheckedPlugins(seed.checkedPlugins);
+      setCheckedPlugins(selectable);
+      setDroppedPluginCount(dropped.length);
+      setPluginNoticeDismissed(false);
+      loadedPresetCheckedPluginsRef.current = selectable;
+      initialCheckedPluginsRef.current = selectable;
+      setAvailableHooks(seed.availableHooks);
+      setEnabledHookOrder(seed.enabledHooks);
+      initialEnabledHookOrderRef.current = seed.enabledHooks;
+      setDraftPreset(defaultPresetNameForRuntime(newRuntime));
+    }
+    if (hostId) {
+      seededRuntimeRef.current = newRuntime;
     }
 
     let newAvailablePorts = [];
@@ -405,7 +440,7 @@ function AddInstanceForm({
         syncConfigFile('server.cfg', currentServerCfg.replace(NET_PORT_REGEX, `// $1${currentPortVal}$2 (Port removed)`));
       }
     }
-  }, [initialData.defaultCheckedPlugins, initialData.hosts, syncConfigFile, syncConfigState]);
+  }, [initialData.hosts, seedForRuntime, syncConfigFile, syncConfigState]);
 
   useEffect(() => {
     const currentDefaultConfigs = normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap());
@@ -438,19 +473,21 @@ function AddInstanceForm({
     loadedPresetConfigRef.current = null;
     setIsPresetModified(false);
 
-    const defaultAvailableHooks = initialData.defaultAvailableHooks || [];
-    const defaultEnabledHooks = initialData.defaultEnabledHooks || [];
-    setAvailableHooks(defaultAvailableHooks);
-    setEnabledHookOrder(defaultEnabledHooks);
-    initialEnabledHookOrderRef.current = defaultEnabledHooks;
+    // Seeded from the host the modal opened on, not a flat default: the two
+    // runtimes ship different plugins.
+    const seed = seedForRuntime(initialHostRuntime);
+    setAvailableHooks(seed.availableHooks);
+    setEnabledHookOrder(seed.enabledHooks);
+    initialEnabledHookOrderRef.current = seed.enabledHooks;
 
-    const { selectable, dropped } = seedCheckedPlugins(initialData.defaultCheckedPlugins);
+    const { selectable, dropped } = seedCheckedPlugins(seed.checkedPlugins);
     setCheckedPlugins(selectable);
     setDroppedPluginCount(dropped.length);
     setPluginNoticeDismissed(false);
     initialCheckedPluginsRef.current = selectable;
     loadedPresetCheckedPluginsRef.current = selectable;
-    setDraftPreset('default');
+    setDraftPreset(defaultPresetNameForRuntime(initialHostRuntime));
+    seededRuntimeRef.current = runtimeLabel(initialHostRuntime);
     resetFactories(initialData.defaultFactories || {});
     setFactoryServerTree(initialData.defaultFactoryTree || []);
 
@@ -463,14 +500,13 @@ function AddInstanceForm({
     return () => { portFetchAbortRef.current?.abort(); };
   }, [
     handleHostChange,
-    initialData.defaultAvailableHooks,
-    initialData.defaultCheckedPlugins,
     initialData.defaultConfigContents,
-    initialData.defaultEnabledHooks,
     initialData.defaultFactories,
     initialData.defaultFactoryTree,
     initialHostId,
+    initialHostRuntime,
     resetFactories,
+    seedForRuntime,
     syncConfigState,
   ]);
 

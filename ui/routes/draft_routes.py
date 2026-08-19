@@ -15,7 +15,9 @@ from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 from ui import db
 from ui.models import BinaryMetadata
+from ui.database import get_preset_by_name
 from ui.preset_support import resolve_preset_subdir
+from ui.runtime import MINQLXTENDED, normalize_runtime
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
@@ -26,6 +28,14 @@ CONFIGS_BASE = 'configs'
 PRESETS_DIR = 'presets'
 SCRIPTS_DIR = 'scripts'
 USER_HOOKS_DIR = 'user-hooks'
+DEFAULT_PRESET_NAME = 'default'
+
+# The builtin preset whose scripts/ is overlaid beneath a non-default preset,
+# per runtime. Mirrors defaultPresetNameForRuntime() in the frontend's
+# constants/runtimes.js -- the two must not drift.
+_DEFAULT_PRESET_BY_RUNTIME = {
+    MINQLXTENDED: 'default-minqlxtended',
+}
 
 
 def _get_drafts_base():
@@ -84,15 +94,28 @@ def _cleanup_stale_drafts():
         pass
 
 
-def _seed_draft(draft_scripts_path, source_path):
+def _default_preset_for(preset_name):
+    """The builtin preset to overlay beneath `preset_name`.
+
+    Falls back to the minqlx default for an unknown preset: a NULL runtime
+    column means the row predates the feature, and nothing but minqlx has ever
+    existed.
+    """
+    preset = get_preset_by_name(preset_name) if preset_name else None
+    runtime = normalize_runtime(getattr(preset, 'runtime', None))
+    return _DEFAULT_PRESET_BY_RUNTIME.get(runtime, DEFAULT_PRESET_NAME)
+
+
+def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRESET_NAME):
     """Copy source plugin files into a draft directory.
 
-    For non-default presets, default scripts are copied first so the full
-    plugin list is always visible.  Preset-specific files overlay on top.
-    This mirrors _read_preset_scripts() in preset_api_routes.py.
+    For non-default presets, the runtime-matched default preset's scripts are
+    copied first so the full plugin list is always visible.  Preset-specific
+    files overlay on top.  This mirrors _read_preset_scripts() in
+    preset_api_routes.py.
     """
     default_scripts = os.path.abspath(
-        resolve_preset_subdir('default', SCRIPTS_DIR, CONFIGS_BASE)
+        resolve_preset_subdir(default_preset_name, SCRIPTS_DIR, CONFIGS_BASE)
     )
     presets_root = os.path.join(os.path.abspath(CONFIGS_BASE), PRESETS_DIR)
     is_non_default_preset = (
@@ -287,7 +310,15 @@ def create_draft():
 
     try:
         os.makedirs(os.path.dirname(draft_scripts_path), exist_ok=True)
-        _seed_draft(draft_scripts_path, source_path)
+        # An instance-sourced draft keeps the minqlx default; making that
+        # runtime-aware needs the instance's host and belongs with the
+        # compatibility gate.
+        default_preset_name = (
+            _default_preset_for(data.get('preset'))
+            if data.get('source') == 'preset'
+            else DEFAULT_PRESET_NAME
+        )
+        _seed_draft(draft_scripts_path, source_path, default_preset_name)
     except OSError as e:
         current_app.logger.error(f"Failed to create draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to create draft workspace"}}), 500

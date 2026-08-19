@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   getPresetById: vi.fn(),
   getPresets: vi.fn(),
   fileManagerProps: [],
+  // Preset names the plugin draft adapter was opened against, newest last.
+  draftAdapterPresets: [],
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
   savePreset: vi.fn(),
@@ -110,7 +112,11 @@ vi.mock('../../fileManager', () => ({
       </div>
     );
   }),
-  useDraftAdapter: () => ({
+  useDraftAdapter: ({ preset } = {}) => {
+    if (mocks.draftAdapterPresets[mocks.draftAdapterPresets.length - 1] !== preset) {
+      mocks.draftAdapterPresets.push(preset);
+    }
+    return {
     draftId: 'draft-123',
     tree: [],
     loading: false,
@@ -125,7 +131,8 @@ vi.mock('../../fileManager', () => ({
     discard: mocks.discardDraft,
     consume: mocks.consumeDraft,
     hasChanges: false,
-  }),
+    };
+  },
   useStateAdapter: ({ initialFiles = {}, initialFolders = [], serverTree = [] } = {}) => {
     const [files, setFiles] = React.useState(initialFiles);
     const [folders, setFolders] = React.useState(initialFolders);
@@ -267,6 +274,7 @@ describe('AddInstanceForm draft lifecycle', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mocks.fileManagerProps = [];
+    mocks.draftAdapterPresets = [];
     if (!AddInstanceForm) {
       ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
     }
@@ -858,11 +866,16 @@ describe('AddInstanceForm draft lifecycle', () => {
             'access.txt': '',
             'workshop.txt': '',
           },
-          defaultAvailableHooks: [
-            { filename: 'a.so', size: 1024, modified: 1, enabled: false, order: null, description: '' },
-            { filename: 'b.so', size: 2048, modified: 1, enabled: false, order: null, description: '' },
-          ],
-          defaultEnabledHooks: ['a.so'],
+          defaultSeedsByRuntime: {
+            minqlx: {
+              checkedPlugins: [],
+              availableHooks: [
+                { filename: 'a.so', size: 1024, modified: 1, enabled: false, order: null, description: '' },
+                { filename: 'b.so', size: 2048, modified: 1, enabled: false, order: null, description: '' },
+              ],
+              enabledHooks: ['a.so'],
+            },
+          },
         }}
         initialHostId={null}
         onSubmit={onSubmit}
@@ -977,7 +990,7 @@ describe('AddInstanceForm draft lifecycle', () => {
   });
 
   describe('non-enableable plugins', () => {
-    it('drops non-enableable entries from defaultCheckedPlugins', async () => {
+    it('drops non-enableable entries from the runtime seed', async () => {
       render(
         <AddInstanceForm
           initialData={{
@@ -989,7 +1002,13 @@ describe('AddInstanceForm draft lifecycle', () => {
               'access.txt': '',
               'workshop.txt': '',
             },
-            defaultCheckedPlugins: ['balance.py', 'extras/textart.py'],
+            defaultSeedsByRuntime: {
+              minqlx: {
+                checkedPlugins: ['balance.py', 'extras/textart.py'],
+                availableHooks: [],
+                enabledHooks: [],
+              },
+            },
           }}
           initialHostId={null}
           onSubmit={vi.fn()}
@@ -1057,7 +1076,13 @@ describe('AddInstanceForm draft lifecycle', () => {
               'access.txt': '',
               'workshop.txt': '',
             },
-            defaultCheckedPlugins: ['balance.py', 'discord_extensions/admin.py'],
+            defaultSeedsByRuntime: {
+              minqlx: {
+                checkedPlugins: ['balance.py', 'discord_extensions/admin.py'],
+                availableHooks: [],
+                enabledHooks: [],
+              },
+            },
           }}
           initialHostId={null}
           onSubmit={onSubmit}
@@ -1585,6 +1610,81 @@ describe('AddInstanceForm draft lifecycle', () => {
       await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
       expect(screen.getByText('Editing preset:')).toBeInTheDocument();
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('seeds the minqlxtended default when the form opens on a minqlxtended host', async () => {
+      // The defect this guards: seeding every host from the minqlx builtin
+      // ships plugins that cannot load on a minqlxtended server.
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <AddInstanceForm
+          initialData={{
+            hosts: [{ id: 2, name: 'ubu-host', runtime: 'minqlxtended' }],
+            presets: [],
+            defaultConfigContents: {
+              'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+            },
+            defaultSeedsByRuntime: {
+              minqlx: { checkedPlugins: ['balance.py'], availableHooks: [], enabledHooks: [] },
+              minqlxtended: { checkedPlugins: ['essentials.py'], availableHooks: [], enabledHooks: [] },
+            },
+          }}
+          initialHostId={2}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={vi.fn()}
+        />
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+      expect(mocks.draftAdapterPresets).toContain('default-minqlxtended');
+      expect(mocks.draftAdapterPresets).not.toContain('default');
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].checked_plugins).toEqual(['essentials']);
+    });
+
+    it('re-seeds from the new runtime when the host switches across runtimes', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <AddInstanceForm
+          initialData={{
+            hosts: [
+              { id: 1, name: 'deb-host', runtime: 'minqlx' },
+              { id: 2, name: 'ubu-host', runtime: 'minqlxtended' },
+            ],
+            presets: [],
+            defaultConfigContents: {
+              'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+            },
+            defaultSeedsByRuntime: {
+              minqlx: { checkedPlugins: ['balance.py'], availableHooks: [], enabledHooks: [] },
+              minqlxtended: { checkedPlugins: ['essentials.py'], availableHooks: [], enabledHooks: [] },
+            },
+          }}
+          initialHostId={1}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={vi.fn()}
+        />
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /select host 2/i }));
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+
+      await waitFor(() => expect(mocks.draftAdapterPresets).toContain('default-minqlxtended'));
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].checked_plugins).toEqual(['essentials']);
     });
 
     it('treats a runtime-less preset and a runtime-less host as compatible', async () => {

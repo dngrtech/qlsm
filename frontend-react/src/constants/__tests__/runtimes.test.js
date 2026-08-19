@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RUNTIME_OPTIONS, DEFAULT_RUNTIME, runtimeLabel, runtimeLogFilename } from '../runtimes';
+import { RUNTIME_OPTIONS, DEFAULT_RUNTIME, defaultPresetNameForRuntime, runtimeLabel, runtimeLogFilename } from '../runtimes';
 
 describe('runtime constants', () => {
   it('defaults to minqlx', () => {
@@ -31,5 +31,23 @@ describe('runtime constants', () => {
   it('falls back to the minqlx log filename for unknown or missing runtimes', () => {
     expect(runtimeLogFilename(null)).toBe('minqlx.log');
     expect(runtimeLogFilename('garbage')).toBe('minqlx.log');
+  });
+});
+
+describe('defaultPresetNameForRuntime', () => {
+  it('returns the minqlx builtin preset for minqlx', () => {
+    expect(defaultPresetNameForRuntime('minqlx')).toBe('default');
+  });
+
+  it('returns the minqlxtended builtin preset for minqlxtended', () => {
+    expect(defaultPresetNameForRuntime('minqlxtended')).toBe('default-minqlxtended');
+  });
+
+  it('falls back to the minqlx preset for null, unknown or missing values', () => {
+    // A host row that predates the runtime column reads null, and nothing but
+    // minqlx has ever existed. Mirrors normalize_runtime() in ui/runtime.py.
+    expect(defaultPresetNameForRuntime(null)).toBe('default');
+    expect(defaultPresetNameForRuntime(undefined)).toBe('default');
+    expect(defaultPresetNameForRuntime('nonsense')).toBe('default');
   });
 });

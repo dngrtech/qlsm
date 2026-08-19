@@ -37,6 +37,51 @@ def preset_with_scripts(tmp_path):
     return tmp_path
 
 
+
+def _make_runtime_preset_tree(app, tmp_path, preset_name, runtime):
+    """Build a configs/ tree with both builtin defaults and one user preset.
+
+    Returns the configs base. The two builtin defaults hold disjoint plugin
+    files so a test can tell which one got overlaid.
+    """
+    configs_base = tmp_path / 'configs'
+    presets_root = configs_base / 'presets'
+
+    builtins = {
+        'default': 'suppress_join_msg.py',
+        'default-minqlxtended': 'essentials.py',
+    }
+    rows = []
+    for name, filename in builtins.items():
+        path = presets_root / '_builtin' / name
+        (path / 'scripts').mkdir(parents=True)
+        (path / 'scripts' / filename).write_text(f'# {filename}\n')
+        rows.append(ConfigPreset(
+            name=name,
+            description=name,
+            path=str(path),
+            is_builtin=True,
+            runtime='minqlxtended' if name.endswith('-minqlxtended') else 'minqlx',
+        ))
+
+    user_path = presets_root / preset_name
+    (user_path / 'scripts').mkdir(parents=True)
+    (user_path / 'scripts' / 'my_plugin.py').write_text('# my_plugin\n')
+    rows.append(ConfigPreset(
+        name=preset_name,
+        description=preset_name,
+        path=str(user_path),
+        is_builtin=False,
+        runtime=runtime,
+    ))
+
+    with app.app_context():
+        for row in rows:
+            db.session.add(row)
+        db.session.commit()
+    return configs_base
+
+
 class TestCreateDraft:
     """Tests for POST /api/drafts/ endpoint."""
 
@@ -80,6 +125,68 @@ class TestCreateDraft:
         assert response.status_code == 201
         draft_dir = os.path.join(drafts_base, response.get_json()['data']['draft_id'], 'scripts')
         assert os.path.exists(os.path.join(draft_dir, 'balance.py'))
+
+    def test_draft_from_a_minqlxtended_preset_overlays_the_minqlxtended_default(
+        self, client, app, auth_headers, tmp_path, monkeypatch, drafts_base
+    ):
+        """_seed_draft overlays the default preset's scripts under any non-default
+        preset so the picker shows the full plugin list. That overlay must match
+        the preset's runtime -- pouring minqlx plugins under a minqlxtended preset
+        ships files that cannot load, through a path the Load-tab gate never sees.
+        """
+        configs_base = _make_runtime_preset_tree(app, tmp_path, 'my-mxt-preset', 'minqlxtended')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(configs_base))
+
+        response = client.post('/api/drafts/', json={
+            'source': 'preset',
+            'preset': 'my-mxt-preset',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        scripts = set(os.listdir(os.path.join(drafts_base, draft_id, 'scripts')))
+        assert 'essentials.py' in scripts        # from the minqlxtended default
+        assert 'my_plugin.py' in scripts         # the preset's own file
+        assert 'suppress_join_msg.py' not in scripts  # minqlx-only; must not leak
+
+    def test_draft_from_a_minqlx_preset_overlays_the_minqlx_default(
+        self, client, app, auth_headers, tmp_path, monkeypatch, drafts_base
+    ):
+        """The minqlx side of the same rule -- the runtime split must not have
+        moved minqlx presets onto the minqlxtended baseline."""
+        configs_base = _make_runtime_preset_tree(app, tmp_path, 'my-mx-preset', 'minqlx')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(configs_base))
+
+        response = client.post('/api/drafts/', json={
+            'source': 'preset',
+            'preset': 'my-mx-preset',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        scripts = set(os.listdir(os.path.join(drafts_base, draft_id, 'scripts')))
+        assert 'suppress_join_msg.py' in scripts
+        assert 'my_plugin.py' in scripts
+        assert 'essentials.py' not in scripts
+
+    def test_draft_from_a_runtime_less_preset_overlays_the_minqlx_default(
+        self, client, app, auth_headers, tmp_path, monkeypatch, drafts_base
+    ):
+        """A preset row that predates the runtime column reads NULL, and nothing
+        but minqlx has ever existed -- it must keep the minqlx baseline."""
+        configs_base = _make_runtime_preset_tree(app, tmp_path, 'legacy-preset', None)
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(configs_base))
+
+        response = client.post('/api/drafts/', json={
+            'source': 'preset',
+            'preset': 'legacy-preset',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        scripts = set(os.listdir(os.path.join(drafts_base, draft_id, 'scripts')))
+        assert 'suppress_join_msg.py' in scripts
+        assert 'essentials.py' not in scripts
 
     def test_create_draft_returns_uuid(self, client, auth_headers, preset_with_scripts, monkeypatch):
         monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))
