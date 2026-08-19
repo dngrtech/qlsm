@@ -77,7 +77,7 @@ function PresetSaveTab({
     const trimmed = name.trim();
     const desc = description.trim() || null;
     if (isOverwrite) {
-      onOverwritePreset(matchedPreset.id, { description: desc });
+      onOverwritePreset(matchedPreset.id, { description: desc, runtime: host?.runtime || 'minqlx' });
       return;
     }
     const localError = validateNameLocally(trimmed);

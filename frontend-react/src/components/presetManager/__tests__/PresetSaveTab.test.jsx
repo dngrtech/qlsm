@@ -86,7 +86,15 @@ describe('PresetSaveTab', () => {
     setup({ onOverwritePreset });
     fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'duel-cfg' } });
     fireEvent.click(screen.getByRole('button', { name: /overwrite preset/i }));
-    await waitFor(() => expect(onOverwritePreset).toHaveBeenCalledWith(1, { description: 'Comp duel' }));
+    await waitFor(() => expect(onOverwritePreset).toHaveBeenCalledWith(1, { description: 'Comp duel', runtime: 'minqlx' }));
+  });
+
+  it('stamps the host runtime when overwriting too', async () => {
+    const onOverwritePreset = vi.fn();
+    setup({ onOverwritePreset, host: { runtime: 'minqlxtended' } });
+    fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'duel-cfg' } });
+    fireEvent.click(screen.getByRole('button', { name: /overwrite preset/i }));
+    await waitFor(() => expect(onOverwritePreset).toHaveBeenCalledWith(1, { description: 'Comp duel', runtime: 'minqlxtended' }));
   });
 
   it('clears name and description via Save as new instead', () => {

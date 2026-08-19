@@ -625,7 +625,7 @@ function EditInstanceConfigModal({
     }
   }, [checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
-  const handleOverwritePreset = useCallback(async (presetId, { description }) => {
+  const handleOverwritePreset = useCallback(async (presetId, { description, runtime }) => {
     setIsSavingPreset(true);
     setPresetError(null);
     try {
@@ -636,6 +636,7 @@ function EditInstanceConfigModal({
       }
       const presetData = {
         description: description || null,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactories,

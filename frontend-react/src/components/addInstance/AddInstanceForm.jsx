@@ -727,13 +727,14 @@ function AddInstanceForm({
     }
   }, [checkedPlugins, draftPreset, enabledHookOrder, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories]);
 
-  const handleOverwritePreset = useCallback(async (presetId, { description }) => {
+  const handleOverwritePreset = useCallback(async (presetId, { description, runtime }) => {
     setIsUpdatingPreset(true);
     try {
       const { files: serializedFactoriesUpdate } = serializeFactories();
       const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
         description,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactoriesUpdate,
