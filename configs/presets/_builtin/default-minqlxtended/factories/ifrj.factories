@@ -1,0 +1,23 @@
+{
+    "cvars": {
+        "g_startingWeapons": "65",
+        "capturelimit": "5",
+        "g_suddenDeathRespawn": "0",
+        "g_instagib": "1",
+        "g_dropCmds": "1",
+		"g_railjump": "700",
+		"weapon_reload_rg": "1000",
+        "timelimit": "15",
+		"g_freezeProtectedSpawnTime":"1500",
+		"g_freezeAutoThawTime":"60000",
+		"g_freezeRoundDelay": "0",
+        "dmflags": "28",
+        "g_allowKill": "1",
+        "g_overtime": "0"
+    },
+    "author": "Doomsday",
+    "description": "InstaFreeze Rail Jump",
+    "basegt": "ft",
+    "id": "ifrj",
+    "title": "InstaFreeze RJ"
+}

@@ -1,0 +1,27 @@
+{
+        "cvars": {
+                "dmflags": "28",
+                "teamsize": "4",
+                "roundtimelimit": "65",
+                "roundlimit": "10",
+                "g_startingHealth": "200",
+                "g_startingArmor": "100",
+                "g_startingHealthBonus": "0",
+                "g_startingWeapons": "255",
+                "g_startingAmmo_rl": "50",
+                "g_startingAmmo_pg": "100",
+		"g_startingAmmo_sg": "50",
+                "g_startingAmmo_mg": "150",
+                "g_startingAmmo_lg": "170",
+                "g_startingAmmo_rg": "13",
+                "g_startingAmmo_gl": "5",
+                "g_allowKill": "0",
+                "g_overtime": "0",
+                "g_loadout": "0"
+        },
+        "author": "author",
+        "description": "Thunderdome Blue CA",
+        "basegt": "ca",
+        "id": "blueca",
+        "title": "blueca"
+}

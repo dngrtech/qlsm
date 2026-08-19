@@ -1,0 +1,5 @@
+{
+  "description": "Default QLSM preset for minqlxtended hosts",
+  "builtin": true,
+  "runtime": "minqlxtended"
+}
