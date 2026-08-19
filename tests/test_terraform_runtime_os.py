@@ -3,6 +3,7 @@
 If resize omitted it, Terraform would re-resolve os_id to the default and
 Vultr would reinstall the operating system on a running game server.
 """
+import shutil
 import pytest
 
 from ui import db
@@ -86,18 +87,29 @@ def test_every_terraform_entry_point_passes_the_hosts_os(app, monkeypatch, entry
     monkeypatch.setattr(mod, "_run_terraform_command", fake_run, raising=False)
     monkeypatch.setattr(mod, "run_terraform_with_retry", fake_run, raising=False)
     monkeypatch.setattr(mod, "get_current_job", lambda: _FakeJob(), raising=False)
+    # Every entry point bails out early when `terraform` is absent from PATH,
+    # returning before it ever builds an argument list. CI has no terraform
+    # binary, so without this stub the test would assert against an empty
+    # capture list and blame the runtime plumbing for a missing dependency.
+    monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
 
+    raised = None
     with app.app_context():
         try:
             fn()
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - surfaced in the assertion below
             # We only care about the arguments handed to Terraform, not about
-            # completing the whole task against stubbed output.
-            pass
+            # completing the whole task against stubbed output -- but keep the
+            # exception so a failure explains itself instead of just reporting
+            # an empty list.
+            raised = exc
 
     apply_calls = [a for a in captured
                    if any(x in ("apply", "destroy") for x in a)]
-    assert apply_calls, f"{entry_point} never invoked apply/destroy"
+    assert apply_calls, (
+        f"{entry_point} never invoked apply/destroy; "
+        f"raised={raised!r}; captured={captured!r}"
+    )
     for args in apply_calls:
         assert "-var=os_name=Ubuntu 24.04 LTS x64" in args, args
         assert "-var=os_family=ubuntu" in args, args
