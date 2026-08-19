@@ -25,6 +25,7 @@ vi.mock('axios', () => ({
 
 import {
   fetchInstanceHooks,
+  fetchInstanceMinqlxLogs,
   getSelfHostDefaults,
   importPreset,
   resizeHost,
@@ -153,6 +154,30 @@ describe('instance hook API helpers', () => {
       system_hooks_active: [],
     });
     expect(mocks.get).toHaveBeenCalledWith('/instances/12/hooks');
+  });
+});
+
+describe('fetchInstanceMinqlxLogs', () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+  });
+
+  it('includes filename in the query string when one is given', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { logs: 'x' } } });
+
+    await fetchInstanceMinqlxLogs(3, { filename: 'minqlxtended.log.1' });
+
+    const url = mocks.get.mock.calls[0][0];
+    expect(url).toContain('filename=minqlxtended.log.1');
+  });
+
+  it('omits filename from the query string when none is given, letting the backend apply its own per-runtime default', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { logs: 'x' } } });
+
+    await fetchInstanceMinqlxLogs(3, {});
+
+    const url = mocks.get.mock.calls[0][0];
+    expect(url).not.toContain('filename');
   });
 });
 

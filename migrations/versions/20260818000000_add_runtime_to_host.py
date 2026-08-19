@@ -30,5 +30,19 @@ def upgrade():
 
 
 def downgrade():
+    # Dropping the column re-upgrades every row to 'minqlx' via the
+    # server_default on the next upgrade. A host actually running a
+    # non-minqlx runtime would then read back as minqlx, and the next
+    # terraform apply -- including a routine resize -- would reinstall its
+    # OS to match. Refuse instead of silently corrupting that host.
+    count = op.get_bind().execute(
+        sa.text("SELECT COUNT(*) FROM host WHERE runtime != 'minqlx'")
+    ).scalar()
+    if count:
+        raise RuntimeError(
+            f"{count} host(s) run a non-minqlx runtime. Dropping Host.runtime would "
+            "silently reset them to minqlx, and the next terraform apply would "
+            "reinstall their OS. Delete or recreate those hosts before downgrading."
+        )
     with op.batch_alter_table("host", schema=None) as batch_op:
         batch_op.drop_column("runtime")

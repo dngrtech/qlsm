@@ -21,3 +21,15 @@ const KNOWN = new Set(RUNTIME_OPTIONS.map(option => option.id));
 // A host with no recorded runtime predates the column, and nothing but minqlx
 // has ever existed.
 export const runtimeLabel = (value) => (KNOWN.has(value) ? value : DEFAULT_RUNTIME);
+
+// The live (unrotated) log filename each runtime writes. Mirrors
+// runtime_paths()['log_filename'] in ui/runtime.py. Used only to seed a log
+// viewer's initial file selection before the backend's own file listing
+// arrives -- that listing is always the source of truth once it does, and
+// nothing here filters or rejects entries it returns.
+const RUNTIME_LOG_FILENAMES = {
+  minqlx: 'minqlx.log',
+  minqlxtended: 'minqlxtended.log',
+};
+
+export const runtimeLogFilename = (value) => RUNTIME_LOG_FILENAMES[runtimeLabel(value)];
