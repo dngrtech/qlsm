@@ -28,7 +28,9 @@ def lan_rate_always_on(host):
     minqlxtended hooks Sys_IsLANAddress with no cvar gate, and QLSM excludes
     force_rate.so on it (ui/runtime.py) because a second patch of the same
     prologue can exit the server. Neither the hook path nor the legacy iptables
-    path is reachable, so the toggle is inert in both directions.
+    path can change the behaviour there, so the toggle is inert in both
+    directions -- note the reconfigure task still runs (and still restarts the
+    server) if something writes the field anyway; see docs/technical.md.
     """
     return host_runtime(host) == MINQLXTENDED
 
