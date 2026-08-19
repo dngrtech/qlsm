@@ -59,6 +59,7 @@ def _preset_row(preset):
     return {
         'id': preset.id, 'name': preset.name, 'description': preset.description,
         'path': preset.path, 'is_builtin': bool(preset.is_builtin),
+        'runtime': normalize_runtime(preset.runtime),
         'last_updated': _iso(preset.last_updated), 'created_at': _iso(preset.created_at),
     }
 

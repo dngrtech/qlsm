@@ -20,6 +20,7 @@ function PresetManagerModal({
   onClose,
   initialTab = 'load',
   zIndexClass = 'z-[60]',
+  host = null,
   presets = [],
   isLoading = false,
   onLoadPreset,
@@ -252,6 +253,7 @@ function PresetManagerModal({
                   <>
                     <PresetSaveTab
                       key={`${isOpen ? 'open' : 'closed'}-${initialOverwriteName || 'new'}`}
+                      host={host}
                       presets={presets}
                       initialOverwriteName={initialOverwriteName}
                       onSavePreset={onSavePreset}

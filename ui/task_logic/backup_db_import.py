@@ -98,6 +98,7 @@ def replace_database(data):
         db.session.add(ConfigPreset(
             id=row['id'], name=row['name'], description=row.get('description'),
             path=row['path'], is_builtin=row.get('is_builtin', False),
+            runtime=normalize_runtime(row.get('runtime')),
             last_updated=_parse_dt(row.get('last_updated')), created_at=_parse_dt(row.get('created_at')),
         ))
 

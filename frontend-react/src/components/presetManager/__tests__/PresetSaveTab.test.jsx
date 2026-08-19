@@ -48,7 +48,15 @@ describe('PresetSaveTab', () => {
     expect(screen.getByText('New preset')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: /save preset/i });
     fireEvent.click(btn);
-    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlx' }));
+  });
+
+  it('stamps the runtime of the host the preset is saved from', async () => {
+    const onSavePreset = vi.fn();
+    setup({ onSavePreset, host: { runtime: 'minqlxtended' } });
+    fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'fresh-name' } });
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlxtended' }));
   });
 
   it('enters overwrite mode and auto-fills description when name matches a non-builtin preset', () => {
@@ -119,7 +127,7 @@ describe('PresetSaveTab', () => {
 
     resolveValidation({ is_valid: true });
 
-    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlx' }));
     expect(onSavePreset).not.toHaveBeenCalledWith(expect.objectContaining({ name: '' }));
   });
 });

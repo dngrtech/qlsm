@@ -94,6 +94,7 @@ function EditInstanceConfigModal({
   const [originalLanRateEnabled, setOriginalLanRateEnabled] = useState(false);
   const [hostOsType, setHostOsType] = useState(null);
   const [hostLanRateUsesHook, setHostLanRateUsesHook] = useState(false);
+  const [hostRuntime, setHostRuntime] = useState('minqlx');
 
   // Restart on Save state
   const [restartAfterSave, setRestartAfterSave] = useState(true);
@@ -341,6 +342,7 @@ function EditInstanceConfigModal({
           setScriptHostName(fetchedHostName);
           setHostOsType(instanceDetails.host_os_type || null);
           setHostLanRateUsesHook(instanceDetails.host_lan_rate_uses_hook === true);
+          setHostRuntime(instanceDetails.host_runtime || 'minqlx');
           setInstanceStatus(instanceDetails.status || null);
           const incomingFolders = Array.isArray(configData?.config_folders)
             ? configData.config_folders
@@ -428,7 +430,7 @@ function EditInstanceConfigModal({
   };
 
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
-  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook };
+  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,
     currentEnabled: originalLanRateEnabled && lanRateEnabled,
@@ -563,7 +565,7 @@ function EditInstanceConfigModal({
     }
   }, [hostLanRateUsesHook, hostOsType, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
 
-  const handleSavePreset = useCallback(async ({ name, description }) => {
+  const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
     setPresetError(null);
     try {
@@ -572,6 +574,7 @@ function EditInstanceConfigModal({
       const presetData = {
         name: name.trim(),
         description: description?.trim() || null,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactories,
@@ -1189,6 +1192,7 @@ function EditInstanceConfigModal({
         onClose={() => { setIsPresetManagerOpen(false); setSavedPresetForDownload(null); setPresetError(null); }}
         initialTab={presetManagerTab}
         zIndexClass="z-[60]"
+        host={hostShape}
         presets={presets}
         isLoading={loadingPresets}
         onLoadPreset={handleLoadPreset}

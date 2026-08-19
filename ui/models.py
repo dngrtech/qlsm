@@ -167,6 +167,7 @@ class QLInstance(db.Model):
             'host_ip_address': self.host.ip_address if self.host else None, # Include host IP address
             'host_os_type': self.host.os_type if self.host else None,
             'host_lan_rate_uses_hook': bool(self.host.lan_rate_uses_hook) if self.host else False,
+            'host_runtime': normalize_runtime(self.host.runtime) if self.host else DEFAULT_RUNTIME,
             'port': self.port,
             'hostname': self.hostname, # Added hostname
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode
@@ -235,6 +236,11 @@ class ConfigPreset(db.Model):
     description = db.Column(db.Text, nullable=True)
     path = db.Column(db.String(255), nullable=False)  # Filesystem path to preset folder
     is_builtin = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    # The runtime of the instance this preset was saved from. Presets are not
+    # portable across runtimes -- plugins written for one do not run on the
+    # other -- so this is provenance the load path checks before applying.
+    runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
+                        server_default=DEFAULT_RUNTIME)
     last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -242,16 +248,26 @@ class ConfigPreset(db.Model):
         return f'<ConfigPreset {self.name}>'
 
     def to_dict(self):
-        """Convert preset to dictionary (metadata only, no config content)."""
-        return {
-            'id': self.id,
-            'name': self.name,
-            'description': self.description,
-            'path': self.path,
-            'is_builtin': self.is_builtin,
-            'last_updated': self.last_updated.isoformat() if self.last_updated else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }
+        """Convert preset to dictionary (metadata only, no config content).
+
+        Wrapped in no_autoflush: reading an expired attribute (e.g. right
+        after a commit) would otherwise trigger an implicit flush of any
+        other pending change on this instance first. That's a problem for
+        callers that mutate an in-memory field (like runtime) without an
+        intervening flush -- a read method should never have the side
+        effect of writing unrelated dirty state to the database.
+        """
+        with db.session.no_autoflush:
+            return {
+                'id': self.id,
+                'name': self.name,
+                'description': self.description,
+                'path': self.path,
+                'is_builtin': self.is_builtin,
+                'runtime': normalize_runtime(self.runtime),
+                'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+                'created_at': self.created_at.isoformat() if self.created_at else None
+            }
 
 
 class ApiKey(db.Model):

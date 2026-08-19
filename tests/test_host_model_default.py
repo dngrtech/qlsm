@@ -79,3 +79,80 @@ def test_qlinstance_to_dict_exposes_host_lan_rate_uses_hook():
         for path in (db_path, f'{db_path}-wal', f'{db_path}-shm'):
             if os.path.exists(path):
                 os.unlink(path)
+
+
+def test_qlinstance_to_dict_exposes_host_runtime():
+    """Required so EditInstanceConfigModal can stamp a saved preset with the
+    runtime of the host it was saved from."""
+    from ui.models import QLInstance, InstanceStatus
+    from ui.runtime import MINQLXTENDED
+    app, db_fd, db_path = _make_app()
+    try:
+        with app.app_context():
+            host = Host(
+                name="runtime-serializer-test",
+                provider="vultr",
+                os_type="debian",
+                ip_address="1.2.3.4",
+                runtime=MINQLXTENDED,
+            )
+            db.session.add(host)
+            db.session.commit()
+            instance = QLInstance(
+                host_id=host.id,
+                name="i",
+                port=27960,
+                hostname="test-server",
+                lan_rate_enabled=False,
+                status=InstanceStatus.RUNNING,
+            )
+            db.session.add(instance)
+            db.session.commit()
+            d = instance.to_dict()
+            assert d['host_runtime'] == MINQLXTENDED
+    finally:
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
+        os.close(db_fd)
+        for path in (db_path, f'{db_path}-wal', f'{db_path}-shm'):
+            if os.path.exists(path):
+                os.unlink(path)
+
+
+def test_qlinstance_to_dict_host_runtime_defaults_to_minqlx():
+    """A host created before the runtime column existed must still report
+    minqlx through the instance serializer."""
+    from ui.models import QLInstance, InstanceStatus
+    from ui.runtime import MINQLX
+    app, db_fd, db_path = _make_app()
+    try:
+        with app.app_context():
+            host = Host(
+                name="legacy-runtime-serializer-test",
+                provider="vultr",
+                os_type="debian",
+                ip_address="1.2.3.4",
+            )
+            db.session.add(host)
+            db.session.commit()
+            instance = QLInstance(
+                host_id=host.id,
+                name="i",
+                port=27960,
+                hostname="test-server",
+                lan_rate_enabled=False,
+                status=InstanceStatus.RUNNING,
+            )
+            db.session.add(instance)
+            db.session.commit()
+            d = instance.to_dict()
+            assert d['host_runtime'] == MINQLX
+    finally:
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
+        os.close(db_fd)
+        for path in (db_path, f'{db_path}-wal', f'{db_path}-shm'):
+            if os.path.exists(path):
+                os.unlink(path)

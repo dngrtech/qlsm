@@ -677,7 +677,7 @@ function AddInstanceForm({
 
 
   // Handle saving current config as a preset
-  const handleSavePreset = useCallback(async ({ name, description }) => {
+  const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
     try {
       // Map internal config keys to API keys
@@ -686,6 +686,7 @@ function AddInstanceForm({
       const presetData = {
         name,
         description: description || null,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactories,
@@ -1191,6 +1192,7 @@ function AddInstanceForm({
         onClose={() => setIsPresetManagerOpen(false)}
         initialTab={presetManagerTab}
         zIndexClass="z-[60]"
+        host={selectedHost}
         presets={presets}
         isLoading={false}
         isLoadingPreset={isLoadingPreset}

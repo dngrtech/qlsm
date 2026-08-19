@@ -8,6 +8,7 @@ import PresetNameCombobox from './PresetNameCombobox';
 const PRESET_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 function PresetSaveTab({
+  host = null,
   presets = [],
   initialOverwriteName = null,
   onSavePreset,
@@ -91,7 +92,7 @@ function PresetSaveTab({
     } finally {
       setIsValidating(false);
     }
-    onSavePreset({ name: trimmed, description: desc });
+    onSavePreset({ name: trimmed, description: desc, runtime: host?.runtime || 'minqlx' });
   };
 
   const submitDisabled = Boolean(savedPreset) || isSaving || isValidating

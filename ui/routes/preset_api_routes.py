@@ -19,6 +19,7 @@ from ui.preset_support import (
 )
 from ui.routes.draft_routes import ELF_MAGIC, MAX_BINARY_FILE_SIZE
 from ui.font_files import FONT_EXTENSIONS, validate_font_content
+from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, normalize_runtime
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
     MAX_CONFIG_FOLDER_DEPTH,
@@ -95,33 +96,39 @@ def _resolve_export_root(preset_path):
 
 
 def _preset_export_manifest(preset, binary_metadata_count):
-    return {
-        'type': 'qlsm-preset-export',
-        'format_version': EXPORT_FORMAT_VERSION,
-        'preset': {
-            'id': preset.id,
-            'name': preset.name,
-            'description': preset.description,
-            'is_builtin': bool(preset.is_builtin),
-            'created_at': preset.created_at.isoformat() if preset.created_at else None,
-            'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
-        },
-        'includes': {
-            'preset_directory': True,
-            'configs': True,
-            'factories': True,
-            'scripts': True,
-            'user_hooks': True,
-            'checked_plugins': True,
-            'checked_factories': True,
-            'enabled_hooks': True,
-            'lan_rate_enabled': True,
-            'binary_metadata': True,
-        },
-        'counts': {
-            'binary_metadata': binary_metadata_count,
-        },
-    }
+    # no_autoflush: reading an expired attribute (e.g. right after a commit)
+    # would otherwise trigger an implicit flush of any other pending change
+    # on this instance first -- a problem for callers that mutate an
+    # in-memory field (like runtime) without an intervening flush.
+    with db.session.no_autoflush:
+        return {
+            'type': 'qlsm-preset-export',
+            'format_version': EXPORT_FORMAT_VERSION,
+            'preset': {
+                'id': preset.id,
+                'name': preset.name,
+                'description': preset.description,
+                'is_builtin': bool(preset.is_builtin),
+                'runtime': normalize_runtime(preset.runtime),
+                'created_at': preset.created_at.isoformat() if preset.created_at else None,
+                'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
+            },
+            'includes': {
+                'preset_directory': True,
+                'configs': True,
+                'factories': True,
+                'scripts': True,
+                'user_hooks': True,
+                'checked_plugins': True,
+                'checked_factories': True,
+                'enabled_hooks': True,
+                'lan_rate_enabled': True,
+                'binary_metadata': True,
+            },
+            'counts': {
+                'binary_metadata': binary_metadata_count,
+            },
+        }
 
 
 def _preset_binary_metadata_export(preset_name):
@@ -478,6 +485,22 @@ def _validate_lan_rate_enabled_payload(data):
     if not isinstance(data['lan_rate_enabled'], bool):
         return "lan_rate_enabled must be a boolean"
     return None
+
+
+def _validate_preset_runtime(data):
+    """Validate the optional 'runtime' field of a preset payload.
+
+    Returns (runtime, None) or (None, message). The frontend sends the runtime
+    of the host the preset was saved from; an absent value means minqlx.
+    """
+    value = data.get('runtime')
+    if value is None:
+        return DEFAULT_RUNTIME, None
+    if not isinstance(value, str) or not value.strip():
+        return None, "Preset runtime must be a non-empty string."
+    if not is_valid_runtime(value):
+        return None, f"Invalid preset runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
+    return value.strip().lower(), None
 
 
 def _validation_error_response(error):
@@ -1027,6 +1050,10 @@ def create_preset_api():
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
 
+    runtime, runtime_error = _validate_preset_runtime(data)
+    if runtime_error:
+        return jsonify({"error": {"message": runtime_error}}), 400
+
     description = data.get('description', '')
     preset_path = os.path.join(PRESETS_DIR, name)
 
@@ -1098,7 +1125,8 @@ def create_preset_api():
         preset_data = {
             'name': name,
             'description': description,
-            'path': preset_path
+            'path': preset_path,
+            'runtime': runtime,
         }
         new_preset = create_preset(**preset_data)
         current_app.logger.info(f"ConfigPreset '{new_preset.name}' created with ID {new_preset.id} at {preset_path}")

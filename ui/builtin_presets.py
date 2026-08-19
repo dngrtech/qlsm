@@ -13,6 +13,7 @@ from ui.preset_support import (
     is_internal_preset_name,
     validate_preset_name_format,
 )
+from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, normalize_runtime
 
 
 _DESCRIPTION_MAX_LEN = 1000
@@ -72,7 +73,17 @@ def _load_manifest(preset_dir):
     binary_descriptions = manifest.get('binary_descriptions', {})
     validated = _validate_binary_descriptions(binary_descriptions, preset_dir, manifest_path)
 
-    return {'description': description.strip(), 'binary_descriptions': validated}
+    runtime = manifest.get('runtime', DEFAULT_RUNTIME)
+    if not is_valid_runtime(runtime):
+        raise BuiltinPresetError(
+            f"{manifest_path}: runtime must be one of {', '.join(VALID_RUNTIMES)}."
+        )
+
+    return {
+        'description': description.strip(),
+        'binary_descriptions': validated,
+        'runtime': normalize_runtime(runtime),
+    }
 
 
 def _iter_builtin_dirs():
@@ -137,10 +148,12 @@ def sync_builtin_presets(remove_orphaned=False):
                 description=manifest['description'],
                 path=expected_path,
                 is_builtin=True,
+                runtime=manifest['runtime'],
             ))
         elif row.is_builtin:
             row.description = manifest['description']
             row.path = expected_path
+            row.runtime = manifest['runtime']
         else:
             db.session.rollback()
             raise BuiltinPresetError(
