@@ -7,6 +7,13 @@
   vars:
     game_port: "{{ port }}"
 
+    # Supplied by ui.runtime.runtime_extravars(). Defaults keep manual runs on
+    # minqlx, matching every host that exists today.
+    runtime: "minqlx"
+    runtime_plugins_dirname: "minqlx-plugins"
+    runtime_shared_dir: "/home/ql/minqlx-shared"
+    launch_script: "run_server_x64_minqlx.sh"
+
   tasks:
     - name: Ensure system-hooks directory exists
       ansible.builtin.file:
@@ -31,7 +38,7 @@
     - name: Sync .so hooks from UI server to instance minqlx-plugins
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ instance_id }}/scripts/"
-        dest: "/home/ql/qlds-{{ game_port }}/minqlx-plugins/"
+        dest: "/home/ql/qlds-{{ game_port }}/{{ runtime_plugins_dirname }}/"
         private_key: "{{ ansible_ssh_private_key_file }}"
         rsync_path: "sudo -u ql rsync"
         rsync_opts:

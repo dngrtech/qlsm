@@ -16,8 +16,14 @@
 
     # Shared locations (should match setup_host.yml)
     qlds_base_dir: "/home/ql/qlds-base"
-    minqlx_shared_dir: "/home/ql/minqlx-shared"
     common_assets_dir: "/home/ql/assets/common"
+
+    # Supplied by ui.runtime.runtime_extravars(). Defaults keep manual runs on
+    # minqlx, matching every host that exists today.
+    runtime: "minqlx"
+    runtime_plugins_dirname: "minqlx-plugins"
+    runtime_shared_dir: "/home/ql/minqlx-shared"
+    launch_script: "run_server_x64_minqlx.sh"
 
   pre_tasks:
     - name: Abort if instance directory already exists
@@ -134,7 +140,7 @@
 
     - name: Copy contents of shared minqlx directory into instance directory
       ansible.builtin.copy:
-        src: "{{ minqlx_shared_dir }}/" # Trailing slash copies contents
+        src: "{{ runtime_shared_dir }}/" # Trailing slash copies contents
         dest: "{{ qlds_dir }}/"          # Destination is instance root
         owner: ql
         group: ql
@@ -146,7 +152,7 @@
 
     - name: Create minqlx-plugins directory
       ansible.builtin.file:
-        path: "{{ qlds_dir }}/minqlx-plugins"
+        path: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}"
         state: directory
         owner: ql
         group: ql
@@ -196,7 +202,7 @@
     - name: Sync instance-specific scripts (minqlx plugins) from UI server
       ansible.builtin.synchronize:
         src: "../../configs/{{ host_name }}/{{ qlds_id }}/scripts/"
-        dest: "{{ qlds_dir }}/minqlx-plugins/"
+        dest: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/"
         private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes
@@ -212,8 +218,8 @@
           - -a
           - --ignore-existing
           - --itemize-changes
-          - "{{ common_assets_dir }}/minqlx-plugins/"
-          - "{{ qlds_dir }}/minqlx-plugins/"
+          - "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}/"
+          - "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/"
       register: common_minqlx_backfill
       changed_when: common_minqlx_backfill.stdout != ""
 

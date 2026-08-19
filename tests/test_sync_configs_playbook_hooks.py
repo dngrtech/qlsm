@@ -21,7 +21,7 @@ def _minqlx_sync_task():
     """The task that pulls minqlx from the shared build into the instance dir."""
     return next(
         t for t in _tasks()
-        if COPY_KEY in t and "minqlx_shared_dir" in str(t[COPY_KEY].get("src", ""))
+        if COPY_KEY in t and "runtime_shared_dir" in str(t[COPY_KEY].get("src", ""))
     )
 
 
@@ -101,14 +101,16 @@ def test_playbook_unconditionally_syncs_system_hooks_before_service_template():
     assert task_index < _service_template_index(tasks)
 
 
-def test_playbook_defines_minqlx_shared_dir_var():
-    assert _vars()["minqlx_shared_dir"] == "/home/ql/minqlx-shared"
+def test_playbook_defines_runtime_shared_dir_var():
+    # Supplied by ui.runtime.runtime_extravars(); this is the minqlx default,
+    # matching every host that exists today.
+    assert _vars()["runtime_shared_dir"] == "/home/ql/minqlx-shared"
 
 
 def test_playbook_mirrors_whole_minqlx_shared_dir():
     task = _minqlx_sync_task()
     c = task[COPY_KEY]
-    assert c["src"] == "{{ minqlx_shared_dir }}/"
+    assert c["src"] == "{{ runtime_shared_dir }}/"
     assert c["dest"] == "{{ qlds_dir }}/"
     assert c["remote_src"] is True
     assert c["mode"] == "preserve"
@@ -145,7 +147,7 @@ def test_minqlx_sync_precedes_service_restart():
     tasks = _tasks()
     sync_idx = next(
         i for i, t in enumerate(tasks)
-        if COPY_KEY in t and "minqlx_shared_dir" in str(t[COPY_KEY].get("src", ""))
+        if COPY_KEY in t and "runtime_shared_dir" in str(t[COPY_KEY].get("src", ""))
     )
     restart_idx = next(
         i for i, t in enumerate(tasks)
