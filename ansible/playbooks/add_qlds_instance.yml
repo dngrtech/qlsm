@@ -150,7 +150,7 @@
       # It will copy minqlx.x64.so, run_server_x64_minqlx.sh, the minqlx/ dir,
       # and optional scripts if they exist in the source, directly into the instance dir.
 
-    - name: Create minqlx-plugins directory
+    - name: Create the runtime plugins directory
       ansible.builtin.file:
         path: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}"
         state: directory

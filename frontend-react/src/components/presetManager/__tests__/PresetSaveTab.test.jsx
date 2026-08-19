@@ -81,6 +81,17 @@ describe('PresetSaveTab', () => {
     expect(desc.value).toBe('my own text');
   });
 
+  it('normalises an unrecognised host runtime rather than passing it through', async () => {
+    // A host row carrying a value the frontend does not know about must still
+    // stamp a runtime the backend will accept. runtimeLabel() collapses it to
+    // minqlx; a bare `host?.runtime || DEFAULT` would have forwarded it.
+    const onSavePreset = vi.fn();
+    setup({ onSavePreset, host: { runtime: 'minqlx-from-the-future' } });
+    fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'fresh-name' } });
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlx' }));
+  });
+
   it('calls onOverwritePreset with the matched id when overwriting', async () => {
     const onOverwritePreset = vi.fn();
     setup({ onOverwritePreset });
