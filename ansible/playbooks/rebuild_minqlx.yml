@@ -8,12 +8,16 @@
     minqlx_build_dir: "/tmp/minqlx-build"
     minqlx_shared_dir: "/home/ql/minqlx-shared"
     minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
+    runtime: "minqlx"
+    minqlxtended_git_version: "1e2f307bb695f955d9ff819fac562af0ac79f559"
+    minqlxtended_shared_dir: "/home/ql/minqlxtended-shared"
 
   tasks:
     - name: Clean up old minqlx build directory
       file:
         path: "{{ minqlx_build_dir }}"
         state: absent
+      when: runtime == 'minqlx'
 
     - name: Create fresh minqlx build directory
       file:
@@ -22,6 +26,7 @@
         owner: ql
         group: ql
         mode: '0755'
+      when: runtime == 'minqlx'
 
     - name: Clone minqlx repo as ql user
       become: yes
@@ -31,12 +36,14 @@
         dest: "{{ minqlx_build_dir }}"
         version: "{{ minqlx_git_version }}"
         depth: 1
+      when: runtime == 'minqlx'
 
     - name: Copy local minqlx patches to build host
       copy:
         src: "{{ playbook_dir }}/../../ql-assets/patches/"
         dest: "/tmp/minqlx-patches/"
         mode: '0644'
+      when: runtime == 'minqlx'
 
     - name: Apply local minqlx patches
       become: yes
@@ -50,12 +57,14 @@
       args:
         chdir: "{{ minqlx_build_dir }}"
         executable: /bin/bash
+      when: runtime == 'minqlx'
 
     - name: Compile minqlx (make) as ql user
       become: yes
       become_user: ql
       make:
         chdir: "{{ minqlx_build_dir }}"
+      when: runtime == 'minqlx'
 
     - name: Copy minqlx compiled files to shared location
       copy:
@@ -69,6 +78,7 @@
         - { src: "bin/minqlx.x64.so", dest: "minqlx.x64.so" }
         - { src: "bin/run_server_x64_minqlx.sh", dest: "run_server_x64_minqlx.sh" }
         - { src: "python/minqlx/", dest: "minqlx/" }
+      when: runtime == 'minqlx'
 
     - name: Copy optional helper scripts if present
       become: yes
@@ -82,13 +92,77 @@
         done
       args:
         executable: /bin/bash
+      when: runtime == 'minqlx'
 
     - name: Clean up minqlx build directory
       file:
         path: "{{ minqlx_build_dir }}"
         state: absent
+      when: runtime == 'minqlx'
 
     - name: Clean up patch staging directory
       file:
         path: "/tmp/minqlx-patches"
         state: absent
+      when: runtime == 'minqlx'
+
+    - name: Clean up old minqlxtended build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+      when: runtime == 'minqlxtended'
+
+    - name: Create fresh minqlxtended build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+      when: runtime == 'minqlxtended'
+
+    - name: Ensure minqlxtended shared directory exists
+      file:
+        path: "{{ minqlxtended_shared_dir }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+      when: runtime == 'minqlxtended'
+
+    - name: Clone minqlxtended repo as ql user
+      become: yes
+      become_user: ql
+      git:
+        repo: https://github.com/tjone270/minqlxtended.git
+        dest: "{{ minqlx_build_dir }}"
+        version: "{{ minqlxtended_git_version }}"
+        depth: 1
+      when: runtime == 'minqlxtended'
+
+    - name: Compile minqlxtended (make) as ql user
+      become: yes
+      become_user: ql
+      make:
+        chdir: "{{ minqlx_build_dir }}"
+      when: runtime == 'minqlxtended'
+
+    - name: Copy minqlxtended compiled files to shared location
+      copy:
+        src: "{{ minqlx_build_dir }}/{{ item.src }}"
+        dest: "{{ minqlxtended_shared_dir }}/{{ item.dest }}"
+        remote_src: yes
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - { src: "bin/minqlxtended.x64.so", dest: "minqlxtended.x64.so" }
+        - { src: "bin/minqlxtended.zip", dest: "minqlxtended.zip" }
+        - { src: "bin/run_server_x64_minqlxtended.sh", dest: "run_server_x64_minqlxtended.sh" }
+      when: runtime == 'minqlxtended'
+
+    - name: Clean up minqlxtended build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+      when: runtime == 'minqlxtended'

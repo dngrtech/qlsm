@@ -19,6 +19,7 @@ from ui.preset_support import (
 )
 from ui.routes.draft_routes import ELF_MAGIC, MAX_BINARY_FILE_SIZE
 from ui.font_files import FONT_EXTENSIONS, validate_font_content
+from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, normalize_runtime
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
     MAX_CONFIG_FOLDER_DEPTH,
@@ -103,6 +104,7 @@ def _preset_export_manifest(preset, binary_metadata_count):
             'name': preset.name,
             'description': preset.description,
             'is_builtin': bool(preset.is_builtin),
+            'runtime': normalize_runtime(preset.runtime),
             'created_at': preset.created_at.isoformat() if preset.created_at else None,
             'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
         },
@@ -478,6 +480,45 @@ def _validate_lan_rate_enabled_payload(data):
     if not isinstance(data['lan_rate_enabled'], bool):
         return "lan_rate_enabled must be a boolean"
     return None
+
+
+def _validate_preset_runtime(data):
+    """Validate the optional 'runtime' field of a preset creation payload.
+
+    Returns (runtime, None) or (None, message). The frontend sends the runtime
+    of the host the preset was saved from; an absent value means minqlx.
+    """
+    value = data.get('runtime')
+    if value is None:
+        return DEFAULT_RUNTIME, None
+    if not isinstance(value, str) or not value.strip():
+        return None, "Preset runtime must be a non-empty string."
+    if not is_valid_runtime(value):
+        return None, f"Invalid preset runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
+    return value.strip().lower(), None
+
+
+def _validate_preset_runtime_update(data):
+    """Validate the optional 'runtime' field of a preset update payload.
+
+    Unlike _validate_preset_runtime (create), an absent value must NOT default
+    to DEFAULT_RUNTIME here: update_preset_api also serves plain rename/
+    description edits from the preset manager, which carry no originating
+    host and no 'runtime' key at all. Defaulting an absent value would
+    silently re-stamp an existing minqlxtended preset back to minqlx on a
+    same-name save or description tweak. Returns (runtime, None) when
+    'runtime' is present and valid, (None, None) when it's absent (caller
+    must check 'runtime' in data before applying), or (None, message) on an
+    invalid value.
+    """
+    if 'runtime' not in data:
+        return None, None
+    value = data['runtime']
+    if not isinstance(value, str) or not value.strip():
+        return None, "Preset runtime must be a non-empty string."
+    if not is_valid_runtime(value):
+        return None, f"Invalid preset runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
+    return value.strip().lower(), None
 
 
 def _validation_error_response(error):
@@ -1027,6 +1068,10 @@ def create_preset_api():
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
 
+    runtime, runtime_error = _validate_preset_runtime(data)
+    if runtime_error:
+        return jsonify({"error": {"message": runtime_error}}), 400
+
     description = data.get('description', '')
     preset_path = os.path.join(PRESETS_DIR, name)
 
@@ -1098,7 +1143,8 @@ def create_preset_api():
         preset_data = {
             'name': name,
             'description': description,
-            'path': preset_path
+            'path': preset_path,
+            'runtime': runtime,
         }
         new_preset = create_preset(**preset_data)
         current_app.logger.info(f"ConfigPreset '{new_preset.name}' created with ID {new_preset.id} at {preset_path}")
@@ -1254,6 +1300,11 @@ def update_preset_api(preset_id):
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
 
+    runtime_provided = 'runtime' in data
+    runtime, runtime_error = _validate_preset_runtime_update(data)
+    if runtime_error:
+        return jsonify({"error": {"message": runtime_error}}), 400
+
     # Check for name change
     if name_provided and new_name != original_preset_name:
         is_valid, error, reason = validate_user_preset_name(
@@ -1347,6 +1398,8 @@ def update_preset_api(preset_id):
             update_data['description'] = data['description']
         if 'path' in data:
             update_data['path'] = data['path']
+        if runtime_provided:
+            update_data['runtime'] = runtime
 
         if update_data:
             updated_preset = update_preset(preset_id, **update_data)

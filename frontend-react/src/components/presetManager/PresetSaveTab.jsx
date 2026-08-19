@@ -4,10 +4,12 @@ import { validatePresetName } from '../../services/api';
 import { classNames } from '../../utils/uiUtils';
 import InfoTooltip from '../common/InfoTooltip';
 import PresetNameCombobox from './PresetNameCombobox';
+import { runtimeLabel } from '../../constants/runtimes';
 
 const PRESET_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 function PresetSaveTab({
+  host = null,
   presets = [],
   initialOverwriteName = null,
   onSavePreset,
@@ -76,7 +78,7 @@ function PresetSaveTab({
     const trimmed = name.trim();
     const desc = description.trim() || null;
     if (isOverwrite) {
-      onOverwritePreset(matchedPreset.id, { description: desc });
+      onOverwritePreset(matchedPreset.id, { description: desc, runtime: runtimeLabel(host?.runtime) });
       return;
     }
     const localError = validateNameLocally(trimmed);
@@ -91,7 +93,7 @@ function PresetSaveTab({
     } finally {
       setIsValidating(false);
     }
-    onSavePreset({ name: trimmed, description: desc });
+    onSavePreset({ name: trimmed, description: desc, runtime: runtimeLabel(host?.runtime) });
   };
 
   const submitDisabled = Boolean(savedPreset) || isSaving || isValidating

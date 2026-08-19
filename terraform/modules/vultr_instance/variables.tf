@@ -19,7 +19,8 @@ variable "ssh_key_ids" {
 variable "os_id" {
   description = "The Vultr OS ID to install on the instance."
   type        = number
-  default     = 2139 # Default to Debian 12 Bookworm x64
+  default     = 2136 # Debian 12 Bookworm x64, per the Vultr API. Overridden by
+                     # the root module's data "vultr_os" lookup in practice.
 }
 
 variable "hostname" {

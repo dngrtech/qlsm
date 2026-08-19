@@ -9,8 +9,6 @@
     steam_dir: "/home/ql/Steam"
     qlds_base_dir: "/home/ql/qlds-base"
     minqlx_build_dir: "/tmp/minqlx-build" # Temporary build location
-    minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
-    minqlx_shared_dir: "/home/ql/minqlx-shared"
     common_assets_dir: "/home/ql/assets/common"
 
     # Firewall vars -- fallback defaults for manual playbook runs. QLSM overrides
@@ -35,7 +33,31 @@
     use_host_redis: true
     static_network_hardening: true
 
+    # Which minqlx runtime this host builds. QLSM always passes this from
+    # Host.runtime, so re-running setup rebuilds the same runtime every time.
+    # The default keeps manual playbook runs on minqlx.
+    runtime: "minqlx"
+
+    minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
+    minqlx_shared_dir: "/home/ql/minqlx-shared"
+    minqlxtended_git_version: "1e2f307bb695f955d9ff819fac562af0ac79f559"
+    minqlxtended_shared_dir: "/home/ql/minqlxtended-shared"
+
+    runtime_shared_dir: "{{ minqlxtended_shared_dir if runtime == 'minqlxtended' else minqlx_shared_dir }}"
+    runtime_plugins_dirname: "{{ 'minqlxtended-plugins' if runtime == 'minqlxtended' else 'minqlx-plugins' }}"
+
   tasks:
+    - name: Fail early if the host cannot run the selected runtime
+      assert:
+        that:
+          - ansible_python_version is version('3.12', '>=')
+        fail_msg: >-
+          This host runs Python {{ ansible_python_version }}, but minqlxtended
+          requires Python 3.12 or newer. Use Ubuntu 24.04 or newer, or deploy
+          this host with the minqlx runtime.
+        success_msg: "Python {{ ansible_python_version }} satisfies the minqlxtended floor."
+      when: runtime == 'minqlxtended'
+
   #######################################################################
   # 0. Network Configuration for Debian (Disable cloud-init & set static IP)
   #######################################################################
@@ -513,6 +535,7 @@
       file:
         path: "{{ minqlx_build_dir }}"
         state: absent
+      when: runtime == 'minqlx'
 
     - name: Create fresh minqlx build directory
       file:
@@ -521,6 +544,7 @@
         owner: ql
         group: ql
         mode: '0755'
+      when: runtime == 'minqlx'
 
     - name: Clone minqlx repo as ql user
       become: yes
@@ -530,12 +554,14 @@
         dest: "{{ minqlx_build_dir }}"
         version: "{{ minqlx_git_version }}"
         depth: 1
+      when: runtime == 'minqlx'
 
     - name: Copy local minqlx patches to build host
       copy:
         src: "{{ playbook_dir }}/../../ql-assets/patches/"
         dest: "/tmp/minqlx-patches/"
         mode: '0644'
+      when: runtime == 'minqlx'
 
     - name: Apply local minqlx patches
       become: yes
@@ -549,6 +575,7 @@
       args:
         chdir: "{{ minqlx_build_dir }}"
         executable: /bin/bash
+      when: runtime == 'minqlx'
 
     - name: Compile minqlx (make) as ql user
       become: yes
@@ -558,6 +585,7 @@
       # Add check for existing shared files?
       # args:
       #   creates: "{{ minqlx_shared_dir }}/minqlx.x64.so"
+      when: runtime == 'minqlx'
 
     - name: Copy minqlx compiled files to shared location
       copy:
@@ -571,6 +599,7 @@
         - { src: "bin/minqlx.x64.so", dest: "minqlx.x64.so" }
         - { src: "bin/run_server_x64_minqlx.sh", dest: "run_server_x64_minqlx.sh" }
         - { src: "python/minqlx/", dest: "minqlx/" } # Copy package CONTENTS
+      when: runtime == 'minqlx'
 
     - name: Copy optional helper scripts to shared location if present
       become: yes
@@ -584,11 +613,81 @@
         done
       args:
         executable: /bin/bash
+      when: runtime == 'minqlx'
 
     - name: Clean up minqlx build directory
       file:
         path: "{{ minqlx_build_dir }}"
         state: absent
+      when: runtime == 'minqlx'
+
+  #######################################################################
+  # 5b. Shared minqlxtended build
+  #
+  # No patches: `damage` is a native event and reset_acc is pure Python here,
+  # so both local C patches are obsolete. No PYTHONPATH either -- the .so
+  # locates minqlxtended.zip beside itself.
+  #######################################################################
+    - name: Clean up old minqlxtended build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+      when: runtime == 'minqlxtended'
+
+    - name: Create fresh minqlxtended build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+      when: runtime == 'minqlxtended'
+
+    - name: Ensure minqlxtended shared directory exists
+      file:
+        path: "{{ minqlxtended_shared_dir }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+      when: runtime == 'minqlxtended'
+
+    - name: Clone minqlxtended repo as ql user
+      become: yes
+      become_user: ql
+      git:
+        repo: https://github.com/tjone270/minqlxtended.git
+        dest: "{{ minqlx_build_dir }}"
+        version: "{{ minqlxtended_git_version }}"
+        depth: 1
+      when: runtime == 'minqlxtended'
+
+    - name: Compile minqlxtended (make) as ql user
+      become: yes
+      become_user: ql
+      make:
+        chdir: "{{ minqlx_build_dir }}"
+      when: runtime == 'minqlxtended'
+
+    - name: Copy minqlxtended compiled files to shared location
+      copy:
+        src: "{{ minqlx_build_dir }}/{{ item.src }}"
+        dest: "{{ minqlxtended_shared_dir }}/{{ item.dest }}"
+        remote_src: yes
+        owner: ql
+        group: ql
+        mode: '0755'
+      loop:
+        - { src: "bin/minqlxtended.x64.so", dest: "minqlxtended.x64.so" }
+        - { src: "bin/minqlxtended.zip", dest: "minqlxtended.zip" }
+        - { src: "bin/run_server_x64_minqlxtended.sh", dest: "run_server_x64_minqlxtended.sh" }
+      when: runtime == 'minqlxtended'
+
+    - name: Clean up minqlxtended build directory
+      file:
+        path: "{{ minqlx_build_dir }}"
+        state: absent
+      when: runtime == 'minqlxtended'
 
   #######################################################################
   # 6. Sync Common Assets & Install Core Dependencies
@@ -598,16 +697,16 @@
       register: pip3_version_output
       changed_when: false
 
-    - name: Check if minqlx-plugins requirements.txt is available on controller
+    - name: Check if the runtime's plugin requirements.txt is available on controller
       stat:
-        path: "{{ playbook_dir }}/../../ql-assets/data/minqlx-plugins/requirements.txt"
+        path: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
       delegate_to: localhost
       become: no
       register: minqlx_reqs_stat
 
-    - name: Stage minqlx requirements file on host
+    - name: Stage runtime requirements file on host
       copy:
-        src: "{{ playbook_dir }}/../../ql-assets/data/minqlx-plugins/requirements.txt"
+        src: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
         dest: "/root/minqlx-requirements.txt"
         owner: root
         group: root
@@ -671,9 +770,9 @@
       register: local_steamapps_stat
       become: no
 
-    - name: Check if local minqlx-plugins directory exists
+    - name: Check if the runtime's local plugins directory exists
       stat:
-        path: "../../ql-assets/data/minqlx-plugins"
+        path: "../../ql-assets/data/{{ runtime_plugins_dirname }}"
       delegate_to: localhost
       register: local_minqlx_plugins_stat
       become: no
@@ -685,10 +784,10 @@
       register: local_scripts_stat
       become: no
 
-    - name: Sync common minqlx plugins
+    - name: Sync common plugins for the host runtime
       synchronize:
-        src: "../../ql-assets/data/minqlx-plugins/"
-        dest: "{{ common_assets_dir }}/minqlx-plugins/"
+        src: "../../ql-assets/data/{{ runtime_plugins_dirname }}/"
+        dest: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}/"
         private_key: "{{ ansible_ssh_private_key_file }}"
         archive: yes
         recursive: yes

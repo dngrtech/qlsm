@@ -14,6 +14,7 @@ from rq import get_current_job
 from ui import db
 from ui.constants import resolve_redis_db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
+from ui.runtime import host_runtime, log_filename_pattern, runtime_extravars, runtime_paths
 from .common import append_log # Import from the common module
 from . import service_runtime
 from .ansible_runner import _run_ansible_playbook
@@ -131,7 +132,7 @@ def _build_qlds_args_string(instance):
     parts += [
         f'+set qlx_redisDatabase {redis_db_index}',
         f'+set fs_homepath {homepath}',
-        f'+set qlx_pluginsPath {homepath}/minqlx-plugins',
+        f'+set qlx_pluginsPath {homepath}/{runtime_paths(host_runtime(instance.host))["plugins_dirname"]}',
         # ZMQ RCON
         '+set zmq_rcon_enable 1',
         f'+set zmq_rcon_port {instance.zmq_rcon_port}',
@@ -152,17 +153,27 @@ def _build_ld_preload_paths(instance):
     """Return a colon-joined LD_PRELOAD value, or an empty string.
 
     User hooks resolve per-filename: files in user-hooks/ map to the
-    /user-hooks/ runtime dir; legacy files in scripts/ map to /minqlx-plugins/.
+    /user-hooks/ runtime dir; legacy files in scripts/ map to the host
+    runtime's plugins dir.
+
+    System hooks the runtime provides natively are skipped entirely -- see
+    runtime_paths()['excluded_system_hooks'].
     """
     from ui.task_logic.hook_paths import resolve_user_hook
 
+    runtime = host_runtime(getattr(instance, 'host', None))
+    excluded = runtime_paths(runtime)['excluded_system_hooks']
+
     paths = []
     for filename, predicate, subdir in _SYSTEM_HOOKS:
+        if filename in excluded:
+            continue
         if predicate(instance):
             paths.append(f"/home/ql/qlds-{instance.port}/{subdir}/{filename}")
     if instance.ld_preload_hooks and instance.host:
         for fn in (h.strip() for h in instance.ld_preload_hooks.split(',') if h.strip()):
-            res = resolve_user_hook(CONFIGS_BASE, instance.host.name, instance.id, fn)
+            res = resolve_user_hook(CONFIGS_BASE, instance.host.name, instance.id, fn,
+                                    runtime=runtime)
             if res is None:
                 log.warning(
                     "Hook %s not found for instance %s; skipping from LD_PRELOAD",
@@ -242,6 +253,7 @@ def deploy_instance_logic(instance_id):
             'lan_rate_enabled': instance.lan_rate_enabled # Pass for conditional iptables/sysctl
         }
         deploy_extravars = with_self_host_network_extravars(instance, deploy_extravars)
+        deploy_extravars.update(runtime_extravars(instance.host))
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -360,6 +372,7 @@ def restart_instance_logic(instance_id):
             'cpu_affinity': cpu_affinity
         }
         restart_extravars = with_self_host_network_extravars(instance, restart_extravars)
+        restart_extravars.update(runtime_extravars(instance.host))
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -591,6 +604,7 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
             'restart_service': restart     # Pass restart flag
         }
         apply_config_extravars = with_self_host_network_extravars(instance, apply_config_extravars)
+        apply_config_extravars.update(runtime_extravars(instance.host))
 
         # Run the new playbook: sync_instance_configs_and_restart.yml
         runner_result, error_msg = _run_ansible_playbook(
@@ -856,6 +870,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             'lan_rate_enabled': instance.lan_rate_enabled
         }
         reconfigure_extravars = with_self_host_network_extravars(instance, reconfigure_extravars)
+        reconfigure_extravars.update(runtime_extravars(instance.host))
 
         # Run the LAN rate update playbook
         runner_result, error_msg = _run_ansible_playbook(
@@ -1261,11 +1276,11 @@ def list_instance_chat_logs(instance_id):
         return False, [], str(e)
 
 
-def _validate_minqlx_log_request(filter_mode, lines, filename):
+def _validate_minqlx_log_request(filter_mode, lines, filename, instance):
     if filter_mode not in ('lines', 'all'):
         return "filter_mode must be 'lines' or 'all'"
 
-    if not re.fullmatch(r'minqlx\.log(\.\d+)?', filename or ''):
+    if not re.fullmatch(log_filename_pattern(host_runtime(instance.host)), filename or ''):
         return "Invalid MinQLX log filename."
 
     if filter_mode == 'lines':
@@ -1324,16 +1339,15 @@ def _extract_ansible_debug_msg(stdout):
     return '\n'.join(msg_lines).replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"')
 
 
-def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, filename='minqlx.log'):
+def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, filename=None):
     """
     Fetch MinQLX logs from a remote QLDS instance via Ansible.
 
+    `filename` defaults to the host runtime's own log file. Validation happens
+    after the instance is resolved, because the valid filenames depend on it.
+
     Returns a tuple: (success: bool, logs: str, error_msg: str or None)
     """
-    validation_error = _validate_minqlx_log_request(filter_mode, lines, filename)
-    if validation_error:
-        return False, "", validation_error
-
     process = None
 
     try:
@@ -1341,6 +1355,13 @@ def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, file
         if instance_error:
             log.error(f"Cannot fetch MinQLX logs for instance {instance_id}: {instance_error}")
             return False, "", instance_error
+
+        if filename is None:
+            filename = runtime_paths(host_runtime(host))['log_filename']
+
+        validation_error = _validate_minqlx_log_request(filter_mode, lines, filename, instance)
+        if validation_error:
+            return False, "", validation_error
 
         playbook_path = os.path.abspath('ansible/playbooks/fetch_minqlx_logs.yml')
         inventory_path = os.path.abspath('ansible/inventory/')
@@ -1410,6 +1431,7 @@ def list_instance_minqlx_logs(instance_id):
 
         extravars = {
             'port': instance.port,
+            'filename': runtime_paths(host_runtime(host))['log_filename'],
             'ansible_ssh_user': host.ssh_user,
             'ansible_ssh_private_key_file': os.path.abspath(host.ssh_key_path),
         }
@@ -1448,8 +1470,10 @@ def list_instance_minqlx_logs(instance_id):
             log.warning(f"Parsed MinQLX msg is not a list: {type(files)}")
             return True, [], None
 
-        valid_files = [f for f in files if isinstance(f, str) and re.fullmatch(r'minqlx\.log(\.\d+)?', f)]
-        valid_files.sort(key=lambda f: 0 if f == 'minqlx.log' else int(f.rsplit('.', 1)[1]))
+        pattern = log_filename_pattern(host_runtime(host))
+        live_name = runtime_paths(host_runtime(host))['log_filename']
+        valid_files = [f for f in files if isinstance(f, str) and re.fullmatch(pattern, f)]
+        valid_files.sort(key=lambda f: 0 if f == live_name else int(f.rsplit('.', 1)[1]))
         return True, valid_files, None
 
     except subprocess.TimeoutExpired:

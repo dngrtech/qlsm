@@ -513,12 +513,16 @@ export const listInstanceChatLogs = async (instanceId) => {
 
 export const fetchInstanceMinqlxLogs = async (instanceId, options = {}) => {
   try {
-    const { filterMode = 'lines', lines = 500, filename = 'minqlx.log' } = options;
+    const { filterMode = 'lines', lines = 500, filename } = options;
     const params = new URLSearchParams({
       filter_mode: filterMode,
       lines: lines.toString(),
-      filename: filename
     });
+    // Omitting filename lets the backend apply its own per-runtime default
+    // (see fetch_remote_minqlx_logs_api) instead of the frontend guessing.
+    if (filename) {
+      params.set('filename', filename);
+    }
     const response = await apiClient.get(`/instances/${instanceId}/minqlx-logs?${params.toString()}`);
     return response.data.data; // { logs, instance_name, port, filter_mode, lines, filename }
   } catch (error) {

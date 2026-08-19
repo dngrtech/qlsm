@@ -11,7 +11,7 @@ from rq import get_current_job
 from ui import db
 from ui.models import Host, HostStatus
 from .common import append_log # Import from the common module
-from .terraform_runner import _run_terraform_command # Import the runner helper
+from .terraform_runner import _run_terraform_command, _os_vars # Import the runner helper
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ def destroy_host_logic(host_id):
                     f"-var=vultr_region={host.region}",
                     f"-var=vultr_plan={host.machine_size}" # Assuming machine_size maps directly to plan ID
                     # Add other vars if needed by the destroy process
-                ]
+                ] + _os_vars(host)
                 _, error = _run_terraform_command(host, ['destroy', '-auto-approve', '-input=false', '-no-color'] + destroy_vars, terraform_root_dir)
                 if error:
                     # Check if the error is because the instance is already gone (404)

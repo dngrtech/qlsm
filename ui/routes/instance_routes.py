@@ -12,6 +12,7 @@ from ui.lan_rate_policy import (
     would_enable_unsupported_lan_rate,
 )
 from ui.preset_support import resolve_preset_path, resolve_preset_subdir
+from ui.runtime import host_runtime, log_filename_pattern, runtime_paths
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
     get_host,
@@ -995,14 +996,15 @@ def fetch_remote_minqlx_logs_api(instance_id):
     if not instance.host:
         return jsonify({"error": {"message": "Instance has no associated host."}}), 400
 
+    runtime = host_runtime(instance.host)
     filter_mode = request.args.get('filter_mode', 'lines')
     lines_raw = request.args.get('lines', '500')
-    filename = request.args.get('filename', 'minqlx.log')
+    filename = request.args.get('filename') or runtime_paths(runtime)['log_filename']
 
     if filter_mode not in ('lines', 'all'):
         return jsonify({"error": {"message": "filter_mode must be 'lines' or 'all'"}}), 400
 
-    if not re.fullmatch(r'minqlx\.log(\.\d+)?', filename):
+    if not re.fullmatch(log_filename_pattern(runtime), filename):
         return jsonify({"error": {"message": "Invalid MinQLX log filename."}}), 400
 
     try:

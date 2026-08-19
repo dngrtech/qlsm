@@ -3,6 +3,7 @@ import os
 
 from ui import db
 from ui.models import QLInstance, InstanceStatus
+from ui.runtime import runtime_extravars
 from ui.task_logic.ansible_instance_mgmt import (
     _SYSTEM_HOOKS,
     _build_ld_preload_paths,
@@ -104,6 +105,7 @@ def apply_instance_hooks_logic(instance_id, restart_service=True):
         "restart_service": restart_service,
         "lan_rate_uses_hook": bool(instance.host.lan_rate_uses_hook),
     }
+    extravars.update(runtime_extravars(instance.host))
     runner_result, error_msg = _run_ansible_playbook(
         instance,
         "update_instance_hooks.yml",

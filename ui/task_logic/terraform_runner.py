@@ -8,9 +8,25 @@ import re         # For parsing error messages
 # Import database and models - requires app context
 from ui import db
 from ui.models import HostStatus # Only need HostStatus here
+from ui.runtime import host_runtime, runtime_paths
 from .common import append_log # Import from the common module
 
 log = logging.getLogger(__name__)
+
+
+def _os_vars(host):
+    """Terraform -var args selecting the OS image for a host's runtime.
+
+    Every Terraform entry point (provision, resize, destroy) must pass these.
+    They feed a data "vultr_os" lookup, so omitting them on resize would
+    re-resolve os_id to the variable default and Vultr would reinstall the
+    operating system on a live server.
+    """
+    paths = runtime_paths(host_runtime(host))
+    return [
+        f"-var=os_name={paths['os_name']}",
+        f"-var=os_family={paths['os_family']}",
+    ]
 
 
 def _terraform_env():

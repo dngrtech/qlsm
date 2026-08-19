@@ -3,6 +3,7 @@ import FloatingListbox from '../common/FloatingListbox';
 import { providerOptions } from '../../utils/providerData';
 import { HOST_NAME_MAX_LENGTH, HOST_NAME_PATTERN } from '../../utils/resourceValidation';
 import { STANDALONE_TIMEZONES } from '../../utils/formatters';
+import { RUNTIME_OPTIONS } from '../../constants/runtimes';
 import SelfHostFields from './SelfHostFields';
 import StandaloneAuthSection from './StandaloneAuthSection';
 
@@ -49,6 +50,8 @@ function AddHostFormFields({
   onTestConnection,
   onSwitchToSelfHost,
   osInfo,
+  runtime,
+  onRuntimeChange,
 }) {
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
@@ -92,6 +95,30 @@ function AddHostFormFields({
           return selectedOpt ? selectedOpt.name : 'Select Provider';
         }}
       />
+
+      {/* Runtime -- immutable once the host is created */}
+      <div data-testid="runtime-picker">
+        <FloatingListbox
+          label="Server Runtime"
+          value={runtime}
+          onChange={onRuntimeChange}
+          options={RUNTIME_OPTIONS}
+          getOptionKey={(opt) => opt.id}
+          getOptionDisplay={(opt) => opt.name}
+          getSelectedDisplay={(val, opts) => opts.find(o => o.id === val)?.name || 'minqlx'}
+        />
+        <p className="mt-1.5 text-xs text-theme-muted">
+          {RUNTIME_OPTIONS.find(o => o.id === runtime)?.description}
+        </p>
+        <p
+          data-testid="runtime-immutable-warning"
+          className="mt-1.5 text-xs"
+          style={{ color: 'var(--accent-warning, var(--text-muted))' }}
+        >
+          This cannot be changed after the host is created. Moving a host between
+          runtimes means saving a preset and deploying a new host.
+        </p>
+      </div>
 
       {/* Cloud provider fields */}
       {!isStandalone && !isSelf && (

@@ -513,7 +513,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     render(
       <AddInstanceForm
         initialData={{
-          hosts: [],
+          hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
           presets: [],
           defaultConfigContents: {
             'server.cfg': '',
@@ -522,7 +522,7 @@ describe('AddInstanceForm draft lifecycle', () => {
             'workshop.txt': '',
           },
         }}
-        initialHostId={null}
+        initialHostId={1}
         onSubmit={vi.fn()}
         onCancel={vi.fn()}
         isLoadingSubmit={false}
@@ -532,6 +532,7 @@ describe('AddInstanceForm draft lifecycle', () => {
       />
     );
 
+    await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
     expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('false');
 
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
@@ -708,7 +709,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     render(
       <AddInstanceForm
         initialData={{
-          hosts: [],
+          hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
           presets: [{ id: 1, name: 'my-preset', is_builtin: false }],
           defaultConfigContents: {
             'server.cfg': '',
@@ -717,7 +718,7 @@ describe('AddInstanceForm draft lifecycle', () => {
             'workshop.txt': '',
           },
         }}
-        initialHostId={null}
+        initialHostId={1}
         onSubmit={onSubmit}
         onCancel={vi.fn()}
         isLoadingSubmit={false}
@@ -727,6 +728,7 @@ describe('AddInstanceForm draft lifecycle', () => {
       />
     );
 
+    await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
@@ -1012,7 +1014,7 @@ describe('AddInstanceForm draft lifecycle', () => {
       render(
         <AddInstanceForm
           initialData={{
-            hosts: [],
+            hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
             presets: [{ id: 1, name: 'my-preset', is_builtin: false }],
             defaultConfigContents: {
               'server.cfg': '',
@@ -1021,7 +1023,7 @@ describe('AddInstanceForm draft lifecycle', () => {
               'workshop.txt': '',
             },
           }}
-          initialHostId={null}
+          initialHostId={1}
           onSubmit={vi.fn()}
           onCancel={vi.fn()}
           isLoadingSubmit={false}
@@ -1031,6 +1033,7 @@ describe('AddInstanceForm draft lifecycle', () => {
         />
       );
 
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
@@ -1494,6 +1497,116 @@ describe('AddInstanceForm draft lifecycle', () => {
       expect(savedPreset).not.toHaveProperty('zmq_stats_password');
       expect(savedPreset).not.toHaveProperty('zmq_rcon_password');
       expect(savedPreset).not.toHaveProperty('auto_generate_passwords');
+    });
+  });
+
+  describe('preset runtime compatibility', () => {
+    const renderForm = (hosts, initialHostId) => render(
+      <AddInstanceForm
+        initialData={{
+          hosts,
+          presets: [{ id: 1, name: 'my-preset', is_builtin: false }],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+        }}
+        initialHostId={initialHostId}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    const loadThePreset = async () => {
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+    };
+
+    it('cannot open the preset loader before a host is chosen', () => {
+      // With no host there is no runtime to check a preset against, so the
+      // gate has nothing to gate on -- the entry point closes instead.
+      renderForm([{ id: 1, name: 'deb-host', runtime: 'minqlx' }], null);
+
+      expect(screen.getByTestId('selected-host')).toHaveTextContent('none');
+      expect(screen.getByRole('button', { name: /load preset/i })).toBeDisabled();
+    });
+
+    it('enables the preset loader once a host is chosen', async () => {
+      renderForm([{ id: 1, name: 'deb-host', runtime: 'minqlx' }], 1);
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      expect(screen.getByRole('button', { name: /load preset/i })).toBeEnabled();
+    });
+
+    it('clears a loaded preset when the host switches to the other runtime', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', runtime: 'minqlx' });
+      renderForm(
+        [
+          { id: 1, name: 'deb-host', runtime: 'minqlx' },
+          { id: 2, name: 'ubu-host', runtime: 'minqlxtended' },
+        ],
+        1,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      await loadThePreset();
+
+      fireEvent.click(screen.getByRole('button', { name: /select host 2/i }));
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/no longer matches this host and was cleared/i));
+      expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
+    });
+
+    it('keeps a loaded preset when the new host runs the same runtime', async () => {
+      // The clear is destructive, so it must fire only on a genuine mismatch --
+      // dropping the operator's loaded config on a same-runtime swap would be a
+      // worse bug than the one the gate exists to prevent.
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', runtime: 'minqlx' });
+      renderForm(
+        [
+          { id: 1, name: 'deb-host-a', runtime: 'minqlx' },
+          { id: 2, name: 'deb-host-b', runtime: 'minqlx' },
+        ],
+        1,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      await loadThePreset();
+
+      fireEvent.click(screen.getByRole('button', { name: /select host 2/i }));
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+      expect(screen.getByText('Editing preset:')).toBeInTheDocument();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('treats a runtime-less preset and a runtime-less host as compatible', async () => {
+      // Legacy rows predate the runtime column, and nothing but minqlx ever
+      // existed, so both sides normalize to minqlx and nothing is cleared.
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset' });
+      renderForm(
+        [
+          { id: 1, name: 'legacy-a' },
+          { id: 2, name: 'legacy-b' },
+        ],
+        1,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      await loadThePreset();
+
+      fireEvent.click(screen.getByRole('button', { name: /select host 2/i }));
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
+      expect(screen.getByText('Editing preset:')).toBeInTheDocument();
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
   });
 });

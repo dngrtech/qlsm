@@ -7,6 +7,7 @@ import { providerOptions } from '../../utils/providerData';
 import AddHostFormFields from './AddHostFormFields';
 import { validateHostName } from '../../utils/resourceValidation';
 import { getTimezoneForRegion } from '../../utils/formatters';
+import { DEFAULT_RUNTIME } from '../../constants/runtimes';
 
 const PROVIDER_LIST_OPTIONS = [
   { id: 'self', name: 'QLSM Host (self-deployment)' },
@@ -30,6 +31,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
   const [provider, setProvider] = useState('self');
+  const [runtime, setRuntime] = useState(DEFAULT_RUNTIME);
   const [selfHostExists, setSelfHostExists] = useState(false);
   const [providerOptionsReady, setProviderOptionsReady] = useState(false);
   const [selectedContinent, setSelectedContinent] = useState('');
@@ -135,6 +137,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setName('');
     setNameError(null);
     setProvider(selfHostExists ? 'standalone' : 'self');
+    setRuntime(DEFAULT_RUNTIME);
     setSelectedContinent('');
     setRegion('');
     setMachineSize('');
@@ -298,6 +301,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
             ? { ssh_password: sshPassword }
             : { ssh_key: sshKey }),
           timezone,
+          runtime,
         };
       } else if (provider === 'self') {
         hostData = {
@@ -306,6 +310,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           ip_address: ipAddress.trim(),
           timezone,
           ssh_user: sshUser.trim(),
+          runtime,
         };
       } else {
         hostData = {
@@ -314,6 +319,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           region,
           machine_size: machineSize,
           timezone: getTimezoneForRegion(region),
+          runtime,
         };
       }
 
@@ -437,6 +443,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onTestConnection={handleTestConnection}
                         onSwitchToSelfHost={handleSwitchToSelfHost}
                         osInfo={selfHostOsInfo}
+                        runtime={runtime}
+                        onRuntimeChange={setRuntime}
                       />
                     ) : (
                       <div className="text-sm text-theme-muted">Loading host options...</div>

@@ -9,7 +9,7 @@ from ui import db
 from ui.models import Host, HostStatus
 from ui.vultr_plans import get_plan
 from .common import append_log
-from .terraform_runner import _run_terraform_command, run_terraform_with_retry
+from .terraform_runner import _run_terraform_command, run_terraform_with_retry, _os_vars
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def resize_host_logic(host_id, new_plan):
         f"-var=instance_name={host.name}",
         f"-var=vultr_region={host.region}",
         f"-var=vultr_plan={new_plan}",
-    ]
+    ] + _os_vars(host)
     _, error = run_terraform_with_retry(host, apply_args, terraform_root_dir)
     if error:
         host.status = HostStatus.ERROR

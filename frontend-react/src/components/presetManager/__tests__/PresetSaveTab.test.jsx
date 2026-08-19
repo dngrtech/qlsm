@@ -48,7 +48,15 @@ describe('PresetSaveTab', () => {
     expect(screen.getByText('New preset')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: /save preset/i });
     fireEvent.click(btn);
-    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlx' }));
+  });
+
+  it('stamps the runtime of the host the preset is saved from', async () => {
+    const onSavePreset = vi.fn();
+    setup({ onSavePreset, host: { runtime: 'minqlxtended' } });
+    fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'fresh-name' } });
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlxtended' }));
   });
 
   it('enters overwrite mode and auto-fills description when name matches a non-builtin preset', () => {
@@ -73,12 +81,31 @@ describe('PresetSaveTab', () => {
     expect(desc.value).toBe('my own text');
   });
 
+  it('normalises an unrecognised host runtime rather than passing it through', async () => {
+    // A host row carrying a value the frontend does not know about must still
+    // stamp a runtime the backend will accept. runtimeLabel() collapses it to
+    // minqlx; a bare `host?.runtime || DEFAULT` would have forwarded it.
+    const onSavePreset = vi.fn();
+    setup({ onSavePreset, host: { runtime: 'minqlx-from-the-future' } });
+    fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'fresh-name' } });
+    fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlx' }));
+  });
+
   it('calls onOverwritePreset with the matched id when overwriting', async () => {
     const onOverwritePreset = vi.fn();
     setup({ onOverwritePreset });
     fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'duel-cfg' } });
     fireEvent.click(screen.getByRole('button', { name: /overwrite preset/i }));
-    await waitFor(() => expect(onOverwritePreset).toHaveBeenCalledWith(1, { description: 'Comp duel' }));
+    await waitFor(() => expect(onOverwritePreset).toHaveBeenCalledWith(1, { description: 'Comp duel', runtime: 'minqlx' }));
+  });
+
+  it('stamps the host runtime when overwriting too', async () => {
+    const onOverwritePreset = vi.fn();
+    setup({ onOverwritePreset, host: { runtime: 'minqlxtended' } });
+    fireEvent.change(screen.getByLabelText('Preset Name'), { target: { value: 'duel-cfg' } });
+    fireEvent.click(screen.getByRole('button', { name: /overwrite preset/i }));
+    await waitFor(() => expect(onOverwritePreset).toHaveBeenCalledWith(1, { description: 'Comp duel', runtime: 'minqlxtended' }));
   });
 
   it('clears name and description via Save as new instead', () => {
@@ -119,7 +146,7 @@ describe('PresetSaveTab', () => {
 
     resolveValidation({ is_valid: true });
 
-    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null }));
+    await waitFor(() => expect(onSavePreset).toHaveBeenCalledWith({ name: 'fresh-name', description: null, runtime: 'minqlx' }));
     expect(onSavePreset).not.toHaveBeenCalledWith(expect.objectContaining({ name: '' }));
   });
 });
