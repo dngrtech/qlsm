@@ -17,12 +17,29 @@ describe('RconCommandInput', () => {
       // The fleet page mounts this permanently, so a user who clicks away
       // during the deferred re-focus window must keep their focus.
       const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+      fireEvent.mouseDown(elsewhere);
       elsewhere.focus();
       vi.advanceTimersByTime(400);
       expect(document.activeElement).toBe(elsewhere);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('claims focus once enabled even if something else already holds it, as long as the user never interacted', () => {
+    // Reproduces the RCON console modal case: closing the row's "Actions"
+    // menu to launch the modal leaves DOM focus on that menu's own trigger
+    // button (Headless UI restores focus there on close), and Headless
+    // UI's Dialog FocusTrap can independently land on some other in-panel
+    // element while the field is still disabled. Neither is a real user
+    // gesture, so becoming enabled should still win the field focus.
+    const { rerender } = render(<><button type="button">Elsewhere</button><RconCommandInput disabled onSend={() => true} /></>);
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    elsewhere.focus();
+    expect(document.activeElement).toBe(elsewhere);
+
+    rerender(<><button type="button">Elsewhere</button><RconCommandInput disabled={false} onSend={() => true} /></>);
+    expect(input()).toHaveFocus();
   });
 
   it('does not submit empty or disabled commands', () => {
