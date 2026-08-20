@@ -7,7 +7,7 @@ Hosts are added from **Servers** -> **Add New Host**. <img src="../../images/add
 Every host runs one of two Quake Live server runtimes, chosen from the **Server Runtime** picker on the Add Host form, right below **Provider**:
 
 - **minqlx** — the original runtime, and every plugin QLSM ships today. Provisions/expects **Debian 12**.
-- **minqlxtended** — a hard fork with no plugin compatibility with minqlx. Provisions/expects **Ubuntu 24.04**, and requires **Python 3.12 or newer** on the target machine.
+- **minqlxtended** — a hard fork with no plugin compatibility with minqlx. Provisions/expects **Ubuntu 24.04**, and requires **Python 3.12 or newer** on the target machine. Every instance on a minqlxtended host runs at **99k LAN rate**; 25k is not offered on this runtime, and the per-instance toggle shows as on and cannot be changed. See [99k LAN Rate](../features/99k-lan-rate.md#minqlxtended-hosts).
 
 For Vultr cloud hosts, QLSM provisions the matching OS image automatically — there's no separate OS choice.
 
