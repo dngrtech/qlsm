@@ -248,6 +248,93 @@ def test_a_call_valued_default_argument_does_not_truncate_the_signature():
     assert scan_incompatibilities(source, MINQLXTENDED) == []
 
 
+@pytest.mark.parametrize('default_expr', [
+    'is_bot=[1, 2, 3]',
+    'flags={1, 2, 3}',
+    "meta={'k0':0,'k1':1,'k2':2}",
+])
+def test_a_default_value_with_a_top_level_comma_does_not_split_the_signature(default_expr):
+    """A default's own commas -- inside a list/set/dict literal -- must not
+    be mistaken for parameter separators. Splitting on every comma regardless
+    of nesting would inflate the parameter count and flag a correctly-ported
+    two-argument handler as stale. Mutation-verified in the fix report: each
+    of these three cases genuinely flags under a naive `.split(',')` and
+    doesn't under the bracket-depth-aware split."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        f'    def handle_connect(self, player, {default_expr}):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_string_default_containing_a_comma_does_not_split_an_unparseable_signature():
+    """A comma inside a *string* default, unlike inside a bracketed literal,
+    can't actually reach the split logic on a normal file: `code_only()`
+    blanks the whole string token -- quotes and all -- before `_scan_params`
+    ever sees it, so the naive split doesn't misbehave on it either (verified
+    in the fix report; it was a vacuous case). The one path where a raw
+    string's comma *is* live is the untokenizable fallback, where `masked`
+    is the unmasked original text: a syntax error anywhere in the file (the
+    trailing broken `def bad(:` below) forces every def in the file,
+    including an otherwise-fine one, to be scanned unmasked. Mutation-
+    verified: this genuinely flags under a naive `.split(',')` and doesn't
+    under the string-aware split."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        "    def handle_connect(self, player, sep=', x, '):\n"
+        '        pass\n'
+        'def bad(:\n'
+        '    pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_an_unterminated_signature_is_skipped_rather_than_guessed():
+    """A `def` with no closing paren anywhere in the file is only reachable on
+    an already-broken file. The old `[^)]*\\)` regex simply failed to match --
+    a silent miss, the safe direction. The depth-walk that replaced it must
+    fail the same way rather than returning whatever it accumulated running
+    off the end of the text."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        '    def handle_connect(self, player\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+# --- BOM handling -----------------------------------------------------------
+
+def test_a_bom_prefixed_minqlx_import_is_still_flagged():
+    """A leading UTF-8 BOM (U+FEFF) is not `\\s`, so it defeats the
+    `^\\s*import` anchor unless stripped first. Not hypothetical:
+    ql-assets/data/minqlxtended-plugins/player_info.py ships with a BOM in
+    this repo today."""
+    reasons = scan_incompatibilities('\ufeffimport minqlx\n', MINQLXTENDED)
+    assert reasons
+
+
+def test_classify_still_hash_matches_a_bom_prefixed_file():
+    """`classify()` must hash the text exactly as given, BOM included -- a
+    baseline file's manifest sha256 is computed over its bytes as shipped, so
+    stripping the BOM before hashing here would break the allow-list."""
+    text = '\ufeffimport minqlx\n'
+    digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    verdict, reasons = classify(text, MINQLXTENDED, baseline_sha256=digest)
+    assert verdict == VERDICT_COMPATIBLE
+    assert reasons == []
+
+
 # --- classify -------------------------------------------------------------
 
 def test_a_hash_match_is_compatible_even_when_tokens_look_wrong():

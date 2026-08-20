@@ -160,26 +160,60 @@ def _line_of(text, index):
 
 
 def _scan_params(text, start):
-    """The parameter-list text between a `def`'s opening `(` (at `start`) and
-    its matching close paren, tracking nesting depth so an inner `(...)` in a
-    default value doesn't get mistaken for the signature's own close paren."""
+    """Top-level parameter strings between a `def`'s opening `(` (at `start`)
+    and its matching close paren, or `None` if the signature never closes.
+
+    Tracks nesting depth across `()`, `[]` and `{}`, and skips over string
+    literals, so a comma belonging to a default value -- `is_bot=[1, 2, 3]`,
+    `sep=", "` -- is never mistaken for a parameter separator; only a comma
+    at depth 1 (directly inside the signature's own parens) splits.
+
+    Running off the end of `text` without returning to depth 0 means the
+    signature is unterminated -- only reachable on an already-broken file.
+    Returning `None` there instead of the partial text the walk accumulated
+    keeps that the same silent miss the old `[^)]*\\)` regex produced, rather
+    than guessing at a parameter list that was never actually written.
+    """
     depth = 1
     index = start
-    while index < len(text) and depth > 0:
-        if text[index] == '(':
+    param_start = start
+    params = []
+    quote = None
+    length = len(text)
+    while index < length:
+        char = text[index]
+        if quote:
+            if char == '\\':
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in '"\'':
+            quote = char
+        elif char in '([{':
             depth += 1
-        elif text[index] == ')':
+        elif char in ')]}':
             depth -= 1
+            if depth == 0:
+                params.append(text[param_start:index])
+                return params
+        elif char == ',' and depth == 1:
+            params.append(text[param_start:index])
+            param_start = index + 1
         index += 1
-    return text[start:index - 1]
+    return None
 
 
 def _handler_params(masked):
     """Map handler name -> its parameter list, `self` dropped."""
     found = {}
     for match in _DEF.finditer(masked):
-        params_text = _scan_params(masked, match.end())
-        params = [p.strip() for p in params_text.split(',') if p.strip()]
+        raw_params = _scan_params(masked, match.end())
+        if raw_params is None:
+            continue  # unterminated signature -- unparseable, skip it
+        params = [p.strip() for p in raw_params if p.strip()]
         if params and params[0] == 'self':
             params = params[1:]
         found[match.group('name')] = (params, _line_of(masked, match.start()))
@@ -234,6 +268,13 @@ def scan_incompatibilities(text, target_runtime):
     """
     if not isinstance(text, str) or not text:
         return []
+    # A leading UTF-8 BOM (U+FEFF) is not `\s`, so it defeats every `^\s*`
+    # anchor below and a BOM'd `import minqlx` lands `unknown` instead of
+    # `incompatible`. This is local to scanning, not `classify()`'s hash --
+    # a baseline file's manifest sha256 is computed over its bytes as shipped,
+    # BOM included, so stripping it before hashing would break the allow-list.
+    if text.startswith('\ufeff'):
+        text = text[1:]
     target = normalize_runtime(target_runtime)
     masked = code_only(text)
     reasons = []
