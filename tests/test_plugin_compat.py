@@ -271,6 +271,108 @@ def test_a_default_value_with_a_top_level_comma_does_not_split_the_signature(def
     assert scan_incompatibilities(source, MINQLXTENDED) == []
 
 
+def test_a_three_param_lambda_default_does_not_inflate_game_start_arity():
+    """`lambda` opens no bracket, so its own parameter commas sit at the same
+    depth as the signature's -- a naive bracket-only depth tracker walks
+    straight past them. `game_start` dispatches 0 arguments on minqlxtended;
+    this handler takes only the implicit `cb` default and must not be flagged
+    for the lambda's 3 parameters."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("game_start", self.h)\n'
+        '    def h(self, cb=lambda a, b, c: a):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_two_param_lambda_default_does_not_inflate_player_connect_arity():
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.h)\n'
+        '    def h(self, player, is_bot, key=lambda a, b: a):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_single_param_lambda_default_is_not_flagged():
+    """A one-parameter lambda has no internal comma to mishandle, so this
+    passes even without the lambda-scope fix -- kept as a baseline alongside
+    the multi-param cases above rather than as proof of the fix itself."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        '    def handle_connect(self, player, cb=lambda a: a):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_lambda_body_containing_a_dict_literal_does_not_end_the_header_early():
+    """The lambda header must close on the `:` right after its own parameter
+    list (`a, b:`), not on the dict literal's key-value `:` one depth deeper
+    in the body. Targets `game_start` (expected 0 args on minqlxtended)
+    rather than a 2-arg event: with a wider arity gap, closing the header
+    early -- which merges only one comma's worth of text back into the
+    signature -- still overshoots the expected count and is guaranteed to
+    surface as a flag, rather than landing exactly on the boundary by
+    chance."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("game_start", self.h)\n'
+        '    def h(self, cb=lambda a, b: {1: 2}):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_lambda_nested_inside_a_call_default_does_not_split_the_signature():
+    """Composability check, not a lambda-specific regression test: a lambda
+    passed as an argument to another call is already inside that call's own
+    `(...)`, so `_scan_params`'s pre-existing bracket-depth tracking (round 2)
+    keeps every comma inside it below depth 1 whether or not `lambda` is
+    understood at all -- lambda-awareness can only matter for a comma that
+    sits at the very same depth as the signature's own, which a call-wrapped
+    lambda's commas never do. Kept because the team lead asked for this exact
+    shape and it's a real one plugin authors write; not counted among the
+    mutation-verified cases below."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        '    def handle_connect(self, player, cb=make(lambda a, b: a)):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_parameter_literally_named_lambda_fn_is_not_treated_as_the_keyword():
+    """`lambda` has to match as a whole word. Without a word-boundary check,
+    a parameter merely *named* something lambda-ish would open a bogus lambda
+    scope that never finds its terminating `:`, silently swallowing every
+    comma after it and merging the rest of the signature into one
+    parameter."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        '    def handle_connect(self, lambda_fn, is_bot):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
 def test_a_string_default_containing_a_comma_does_not_split_an_unparseable_signature():
     """A comma inside a *string* default, unlike inside a bracketed literal,
     can't actually reach the split logic on a normal file: `code_only()`

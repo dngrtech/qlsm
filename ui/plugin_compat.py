@@ -159,6 +159,10 @@ def _line_of(text, index):
     return text.count('\n', 0, index) + 1
 
 
+def _is_ident_char(char):
+    return char.isalnum() or char == '_'
+
+
 def _scan_params(text, start):
     """Top-level parameter strings between a `def`'s opening `(` (at `start`)
     and its matching close paren, or `None` if the signature never closes.
@@ -166,7 +170,20 @@ def _scan_params(text, start):
     Tracks nesting depth across `()`, `[]` and `{}`, and skips over string
     literals, so a comma belonging to a default value -- `is_bot=[1, 2, 3]`,
     `sep=", "` -- is never mistaken for a parameter separator; only a comma
-    at depth 1 (directly inside the signature's own parens) splits.
+    at depth 1 (directly inside the signature's own parens), with no lambda
+    header open (see below), splits.
+
+    A `lambda` default -- `cb=lambda a, b: a` -- opens no bracket, so its own
+    parameter commas sit at the very same depth as the signature's. On seeing
+    the whole word `lambda` (never `lambda_fn`) at depth *d*, that depth is
+    pushed onto `lambda_depths`; comma-splitting is suppressed for as long as
+    `lambda_depths` is non-empty. The header closes on the first `:` seen
+    back at that same depth *d* -- not on a `:` inside a nested bracket
+    (`lambda a: {1: 2}`, whose colon is one depth deeper), and not on an
+    annotation colon elsewhere in the signature (nothing pops the stack
+    unless it's open, and a lambda header can't itself contain one -- lambda
+    parameters can't be annotated). Depth-matching the closer to the opener
+    this way also makes nested lambdas resolve innermost-first for free.
 
     Running off the end of `text` without returning to depth 0 means the
     signature is unterminated -- only reachable on an already-broken file.
@@ -179,6 +196,7 @@ def _scan_params(text, start):
     param_start = start
     params = []
     quote = None
+    lambda_depths = []
     length = len(text)
     while index < length:
         char = text[index]
@@ -190,8 +208,16 @@ def _scan_params(text, start):
                 quote = None
             index += 1
             continue
+        if (char == 'l' and text[index:index + 6] == 'lambda'
+                and (index == 0 or not _is_ident_char(text[index - 1]))
+                and (index + 6 >= length or not _is_ident_char(text[index + 6]))):
+            lambda_depths.append(depth)
+            index += 6
+            continue
         if char in '"\'':
             quote = char
+        elif char == ':' and lambda_depths and lambda_depths[-1] == depth:
+            lambda_depths.pop()
         elif char in '([{':
             depth += 1
         elif char in ')]}':
@@ -199,7 +225,7 @@ def _scan_params(text, start):
             if depth == 0:
                 params.append(text[param_start:index])
                 return params
-        elif char == ',' and depth == 1:
+        elif char == ',' and depth == 1 and not lambda_depths:
             params.append(text[param_start:index])
             param_start = index + 1
         index += 1
