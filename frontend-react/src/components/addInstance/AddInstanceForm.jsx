@@ -32,6 +32,7 @@ import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
 import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import {
   getLanRateUnsupportedMessage,
+  isLanRateForcedOn,
   isLanRateSupported,
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
@@ -640,9 +641,16 @@ function AddInstanceForm({
   const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
   const selectedHostOsType = selectedHost?.os_type ?? null;
   const hasSelectedHost = Boolean(selectedHost);
-  const selectedHostShape = { os_type: selectedHostOsType, lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false };
+  const selectedHostShape = {
+    os_type: selectedHostOsType,
+    lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
+    runtime: selectedHost?.runtime ?? null,
+  };
   const lanRateSupported = !hasSelectedHost || isLanRateSupported(selectedHostShape);
-  const lanRateUnavailableReason = hasSelectedHost && !lanRateSupported
+  // QLSM deploys minqlxtended instances at 99k, so the toggle renders on and
+  // locked instead of offering a 25k it will not honour.
+  const lanRateForcedOn = hasSelectedHost && isLanRateForcedOn(selectedHostShape);
+  const lanRateUnavailableReason = hasSelectedHost && (lanRateForcedOn || !lanRateSupported)
     ? getLanRateUnsupportedMessage(selectedHostShape)
     : null;
   const redisDbOptions = useMemo(
@@ -1099,6 +1107,7 @@ function AddInstanceForm({
           lanRateEnabled={lanRateEnabled}
           onLanRateChange={setLanRateEnabled}
           lanRateDisabled={!lanRateSupported}
+          lanRateForcedOn={lanRateForcedOn}
           lanRateUnavailableReason={lanRateUnavailableReason}
           autoGeneratePasswords={autoGeneratePasswords}
           onAutoGeneratePasswordsChange={handleAutoGeneratePasswordsChange}

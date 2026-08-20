@@ -25,6 +25,27 @@ describe('InstanceOptionsRow', () => {
     expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
   });
 
+  it('renders the lan rate toggle on and locked when QLSM fixes 99k on', () => {
+    const onLanRateChange = vi.fn();
+    render(
+      <InstanceOptionsRow
+        lanRateEnabled={false}
+        onLanRateChange={onLanRateChange}
+        lanRateDisabled={false}
+        lanRateForcedOn={true}
+        lanRateUnavailableReason="99k LAN rate: QLSM runs minqlxtended hosts at 99k."
+      />
+    );
+
+    const toggle = screen.getByRole('button', { name: /Toggle 99k LAN Rate/ });
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent('QLSM runs minqlxtended hosts at 99k');
+
+    fireEvent.click(toggle);
+    expect(onLanRateChange).not.toHaveBeenCalled();
+  });
+
   const renderRow = (overrides = {}) => {
     const props = {
       lanRateEnabled: false,
