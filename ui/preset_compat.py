@@ -166,6 +166,15 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     checked = [path for path in checked_plugins if path not in stripped_paths]
 
     result = dict(response_data)
+    # NO CONSUMER. Nothing in the frontend reads the filtered scripts map:
+    # applyPresetData() (AddInstanceForm.jsx, EditInstanceConfigModal.jsx)
+    # never touches presetData.scripts -- the plugin files an instance gets
+    # come from the draft workspace, which _apply_runtime_filter() filters
+    # separately and independently. mergeReplacements() writes into this map,
+    # but nothing reads what it produces either. Enforcing the gate here and
+    # nowhere else is precisely what got the first P5 implementation rejected.
+    # Kept because it is part of the GET /presets/<id> response contract and
+    # removing it is a separate change; do not mistake it for the gate.
     result['scripts'] = kept
     result['checked_plugins'] = checked
     result['compatibility'] = {

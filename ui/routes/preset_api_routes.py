@@ -1336,12 +1336,30 @@ def update_preset_api(preset_id):
     if draft_id:
         from ui.routes.draft_routes import (
             _validate_draft_id, _draft_exists,
-            _get_draft_scripts_path
+            _get_draft_scripts_path, draft_filtered_runtime
         )
         if not _validate_draft_id(draft_id):
             return jsonify({"error": {"message": "Invalid draft_id"}}), 400
         if not _draft_exists(draft_id):
             return jsonify({"error": {"message": "Draft not found"}}), 400
+        # A draft that went through the compatibility gate holds the TARGET
+        # host's plugin set, not this preset's: incompatible files deleted,
+        # the target runtime's own defaults overlaid, accepted replacements
+        # swapped in. The block below rmtree's the preset's scripts and
+        # copytree's that draft in, while preset.runtime keeps saying what it
+        # said before -- so the row would claim one runtime and the files on
+        # disk would be the other's. Refuse rather than warn: a wrong preset
+        # is discovered much later, on a different host, by someone who was
+        # not here. "Save as new preset" is the operator's way out.
+        filtered_for = draft_filtered_runtime(draft_id)
+        preset_runtime = normalize_runtime(preset.runtime)
+        if filtered_for and normalize_runtime(filtered_for) != preset_runtime:
+            return jsonify({"error": {"message": (
+                f"This draft was filtered to run on {filtered_for}, but preset "
+                f"'{preset.name}' is a {preset_runtime} preset. Saving it back "
+                f"would leave the preset labelled {preset_runtime} while it "
+                f"holds {filtered_for} plugins. Save it as a new preset instead."
+            )}}), 400
 
     has_config_updates = 'configs' in data or any(
         key in data for key in API_TO_FILE_MAP.keys()

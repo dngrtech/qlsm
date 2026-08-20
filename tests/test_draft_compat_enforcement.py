@@ -7,8 +7,31 @@ instance_routes.py copies onto the instance.
 """
 import os
 
+from ui.plugin_compat import baseline_digest
 from ui.preset_compat import apply_compatibility, replacement_scripts
 from ui.routes.draft_routes import _seed_draft
+
+MINQLX_DEFAULT = os.path.join('configs', 'presets', '_builtin', 'default', 'scripts')
+MINQLXTENDED_DEFAULT = os.path.join(
+    'configs', 'presets', '_builtin', 'default-minqlxtended', 'scripts')
+
+# The nine files a minqlxtended-preset -> minqlx-host load used to delete
+# without ever naming them. They are shipped by the minqlx default preset and
+# absent from the minqlxtended one, so _seed_draft's overlay puts them in the
+# draft and the dialog -- computed from the SOURCE preset -- cannot list them.
+# They then miss the ql-assets hash allow-list (the shipped preset copies have
+# drifted from the vendored baseline), land `unknown`, and were deleted.
+UNREPORTED_OVERLAY_DELETIONS = {
+    'commlink.py',
+    'iouonegirl.py',
+    'mybalance.py',
+    'mydiscordbot.py',
+    os.path.join('discord_extensions', 'admin.py'),
+    os.path.join('discord_extensions', 'qlstats.py'),
+    os.path.join('discord_extensions', 'status.py'),
+    os.path.join('discord_extensions', 'topic_updater.py'),
+    os.path.join('extras', 'textart.py'),
+}
 
 MINQLX_PLUGIN = "import minqlx\n\n\nclass a(minqlx.Plugin):\n    RET = RET_STOP_ALL\n"
 
@@ -134,6 +157,26 @@ def _pys(root):
             for r, _d, fs in os.walk(root) for f in fs if f.endswith('.py')}
 
 
+def _digests(root):
+    """relpath -> baseline_digest for a shipped preset's scripts directory.
+
+    Walked here rather than imported from draft_routes so the oracle does not
+    reuse the implementation it is checking. The hashing RULE is shared on
+    purpose -- baseline_digest is the one rule the manifest, the gate and this
+    file must agree on, and re-deriving it would only re-create the raw-bytes
+    vs normalised-text mismatch that already cost this branch a fix round.
+    """
+    digests = {}
+    for root_dir, _dirs, filenames in os.walk(root):
+        for filename in filenames:
+            if not filename.endswith('.py'):
+                continue
+            full = os.path.join(root_dir, filename)
+            with open(full, 'r', encoding='utf-8') as handle:
+                digests[os.path.relpath(full, root)] = baseline_digest(handle.read())
+    return digests
+
+
 def test_real_default_preset_survives_a_matched_runtime_load(app):
     """The regression test for the 53 -> 40 over-strip, against the real preset.
 
@@ -208,13 +251,31 @@ def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_pa
     report = apply_compatibility(
         {'scripts': scripts, 'checked_plugins': sorted(scripts)},
         'minqlx', 'minqlxtended')
-    reported_kept = {name for name in report['scripts'] if name.endswith('.py')}
+    # The oracle is `compatibility.stripped` -- the list the dialog actually
+    # renders (PresetCompatibilityDialog.jsx maps over it). `report['scripts']`
+    # is the filtered copy nothing in the frontend reads: applyPresetData()
+    # never touches presetData.scripts, the draft workspace supplies the files.
+    # It is the same dead field the original P5 implementation was rejected for
+    # enforcing on, so an assertion built from it proves nothing about what the
+    # operator was shown.
+    reported_stripped = {entry['path']
+                         for entry in report['compatibility']['stripped']}
+    reported_kept = source_files - reported_stripped
     assert reported_kept, (
-        'the fixture must leave at least one file KEPT, or on_disk == reported_kept '
-        'degenerates to set() == set() and passes against a filter that deletes everything')
-    assert reported_kept != source_files, (
+        'the fixture must leave at least one file KEPT, or the disk comparison '
+        'degenerates and passes against a filter that deletes everything')
+    assert reported_stripped, (
         'fixture must actually exercise cross-runtime stripping, or this '
         'test cannot tell a correct filter from a disabled one')
+
+    # A draft file byte-identical to what the TARGET runtime's own default
+    # preset ships at that path is exempt from the filter -- deleting the
+    # target's own shipped baseline is never correct -- so it can legitimately
+    # survive even while the report lists it stripped. Folded into the expected
+    # set rather than weakened to a subset check, so both directions stay
+    # pinned.
+    exempt = {rel for rel, digest in _digests(MINQLXTENDED_DEFAULT).items()
+              if rel in scripts and baseline_digest(scripts[rel]) == digest}
 
     draft = tmp_path / 'draft'
     with app.app_context():
@@ -222,7 +283,119 @@ def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_pa
                     target_runtime='minqlxtended', source_runtime='minqlx')
     on_disk = _pys(str(draft))
 
-    assert on_disk == reported_kept, (
+    expected_on_disk = reported_kept | (reported_stripped & exempt)
+    assert on_disk == expected_on_disk, (
         'the draft on disk and the compatibility report disagree about what '
         'a real minqlx -> minqlxtended preset load keeps: '
-        f'disk-only={on_disk - reported_kept} report-only={reported_kept - on_disk}')
+        f'disk-only={on_disk - expected_on_disk} '
+        f'report-only={expected_on_disk - on_disk}')
+
+
+def _seed_the_cross_runtime_overlay(app, tmp_path):
+    """A minqlxtended preset loaded onto a minqlx host, the production way.
+
+    'default' is not a test convenience: create_draft passes the TARGET
+    runtime's builtin default whenever the runtimes differ (draft_routes.py,
+    `runtimes_differ`), so for a minqlx host that is exactly this name. The
+    draft therefore ends up holding the minqlx default's 53 files with the
+    minqlxtended preset's 38 laid over the top, and the filter walks all of it.
+    """
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), os.path.abspath(MINQLXTENDED_DEFAULT), 'default',
+                    target_runtime='minqlx', source_runtime='minqlxtended')
+    return draft
+
+
+def test_a_cross_runtime_load_keeps_the_target_runtimes_own_shipped_plugins(
+        app_with_builtin_presets, tmp_path):
+    """The target's own default preset is overlaid FIRST, then filtered.
+
+    Requires app_with_builtin_presets, not `app`: without the builtin preset
+    rows, resolve_preset_subdir('default') answers a path that does not exist,
+    the overlay branch never runs, and this test would pass vacuously against
+    a filter that deletes the whole overlay. The overlay is the production
+    path -- production always has those rows.
+    """
+    source_files = _pys(MINQLXTENDED_DEFAULT)
+    overlay_files = _pys(MINQLX_DEFAULT)
+    assert len(source_files) == 38 and len(overlay_files) == 53, (
+        f'expected the two shipped defaults to hold 38 and 53 .py files, found '
+        f'{len(source_files)} and {len(overlay_files)} -- run pytest from the '
+        f'repo root')
+
+    on_disk = _pys(str(_seed_the_cross_runtime_overlay(
+        app_with_builtin_presets, tmp_path)))
+
+    # Files only the TARGET's default preset has. Nothing in the source preset
+    # overwrote them, so whatever is on disk under those paths came from the
+    # target runtime's own shipped baseline -- which the target runtime can, by
+    # definition, run.
+    overlay_only = overlay_files - source_files
+    assert overlay_only, (
+        'the two shipped defaults must differ for this test to mean anything')
+    assert overlay_only <= on_disk, (
+        f'the load deleted {len(overlay_only - on_disk)} file(s) that came from '
+        f'the TARGET runtime\'s own default preset: '
+        f'{sorted(overlay_only - on_disk)}')
+
+
+def test_a_cross_runtime_load_deletes_nothing_the_dialog_never_listed(
+        app_with_builtin_presets, tmp_path):
+    """The shown-vs-deleted invariant, over the file set production really has.
+
+    The dialog is computed from the SOURCE preset (that is what GET /presets
+    returns), while the draft holds the source preset ON TOP OF the target
+    runtime's default. Anything deleted out of the half the dialog never saw is
+    a file vanishing from an operator's config with no notice anywhere.
+    """
+    source_files = _pys(MINQLXTENDED_DEFAULT)
+    overlay_files = _pys(MINQLX_DEFAULT)
+
+    scripts = {}
+    for rel in source_files:
+        with open(os.path.join(MINQLXTENDED_DEFAULT, rel), 'r', encoding='utf-8') as handle:
+            scripts[rel] = handle.read()
+    report = apply_compatibility(
+        {'scripts': scripts, 'checked_plugins': sorted(scripts)},
+        'minqlxtended', 'minqlx')
+    shown = {entry['path'] for entry in report['compatibility']['stripped']}
+    assert shown, 'the dialog must list something, or this test cannot fail'
+
+    on_disk = _pys(str(_seed_the_cross_runtime_overlay(
+        app_with_builtin_presets, tmp_path)))
+    deleted = (source_files | overlay_files) - on_disk
+    assert deleted, (
+        'the fixture must actually strip something, or a disabled filter passes')
+    assert deleted <= shown, (
+        f'{len(deleted - shown)} file(s) were deleted from the draft without '
+        f'ever appearing in the dialog: {sorted(deleted - shown)}')
+
+
+def test_the_nine_silently_deleted_plugins_survive(
+        app_with_builtin_presets, tmp_path):
+    """Names it, so a regression reads as a regression and not as a set diff.
+
+    These nine were deleted from every cross-runtime load onto a minqlx host
+    and appeared in no dialog, no report and no log the operator sees.
+    """
+    on_disk = _pys(str(_seed_the_cross_runtime_overlay(
+        app_with_builtin_presets, tmp_path)))
+    assert UNREPORTED_OVERLAY_DELETIONS <= on_disk, (
+        f'still deleted without notice: '
+        f'{sorted(UNREPORTED_OVERLAY_DELETIONS - on_disk)}')
+
+    # And they really are absent from the dialog -- if they were listed, their
+    # deletion would merely be unwanted rather than silent, and the assertion
+    # above would be pinning the wrong property.
+    scripts = {}
+    for rel in _pys(MINQLXTENDED_DEFAULT):
+        with open(os.path.join(MINQLXTENDED_DEFAULT, rel), 'r', encoding='utf-8') as handle:
+            scripts[rel] = handle.read()
+    report = apply_compatibility(
+        {'scripts': scripts, 'checked_plugins': sorted(scripts)},
+        'minqlxtended', 'minqlx')
+    shown = {entry['path'] for entry in report['compatibility']['stripped']}
+    assert UNREPORTED_OVERLAY_DELETIONS.isdisjoint(shown), (
+        f'these are listed in the dialog after all, so this test is pinning '
+        f'the wrong thing: {sorted(UNREPORTED_OVERLAY_DELETIONS & shown)}')

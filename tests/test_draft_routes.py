@@ -1428,3 +1428,158 @@ class TestCreateDraftRuntimeGate:
 
         scripts = set(os.listdir(os.path.join(drafts_base, draft_id, 'scripts')))
         assert 'aliases.py' in scripts  # same runtime -- must survive untouched
+
+    def test_an_unresolvable_source_runtime_keeps_every_file(
+        self, client, auth_headers, preset_with_scripts, monkeypatch, drafts_base
+    ):
+        """IMPORTANT: "I could not read the source's runtime" must not be
+        spelled the same way as "the source is minqlx".
+
+        _resolve_source_runtime() answers None when the preset row is missing,
+        and normalize_runtime(None) is 'minqlx' -- so against a minqlxtended
+        target the two runtimes "differ", the filter runs, and files go. A
+        missing builtin/preset row is reachable on a deployment where
+        `flask sync-builtin-presets` has not run yet, and the cost of guessing
+        wrong here is an operator's plugins deleted with no dialog behind it.
+        """
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE',
+                            str(preset_with_scripts / 'configs'))
+        response = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default',
+            'target_runtime': 'minqlxtended',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        scripts = set(os.listdir(os.path.join(drafts_base, draft_id, 'scripts')))
+        assert {'balance.py', 'ban.py'} <= scripts, (
+            f'an unresolvable source runtime deleted files: {scripts}')
+
+    def test_a_resolvable_minqlx_source_still_filters(
+        self, client, app, auth_headers, preset_with_scripts, monkeypatch, drafts_base
+    ):
+        """The other half of the test above: with a row to read, the gate still
+        works. Same request, same fixture files, one ConfigPreset row added --
+        so the test above cannot be passing because the filter is inert.
+        """
+        preset_path = preset_with_scripts / 'configs' / 'presets' / 'default'
+        with app.app_context():
+            db.session.add(ConfigPreset(
+                name='default', description='default', path=str(preset_path),
+                is_builtin=False, runtime='minqlx'))
+            db.session.commit()
+
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE',
+                            str(preset_with_scripts / 'configs'))
+        response = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default',
+            'target_runtime': 'minqlxtended',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        scripts = set(os.listdir(os.path.join(drafts_base, draft_id, 'scripts')))
+        assert not {'balance.py', 'ban.py'} & scripts, (
+            f'a resolved cross-runtime load must still strip: {scripts}')
+
+
+def test_seed_draft_skips_the_filter_when_the_source_runtime_is_unresolved(app, tmp_path):
+    """The unit-level statement of the same rule, at the seam create_draft uses."""
+    from ui.routes.draft_routes import UNRESOLVED_RUNTIME, _seed_draft
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / 'x.py').write_text("import minqlx\nRET_STOP_ALL\n")
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime='minqlxtended',
+                    source_runtime=UNRESOLVED_RUNTIME)
+    assert (draft / 'x.py').exists(), (
+        'an unresolved source runtime must keep files, not delete them')
+
+
+def test_seed_draft_still_filters_a_source_runtime_of_none(app, tmp_path):
+    """None keeps its old meaning: untagged content is minqlx.
+
+    normalize_runtime()'s convention is used by callers all over the backend
+    and is not this branch's to change. Only create_draft, which can tell
+    "no row" from "a row saying minqlx", passes the sentinel.
+    """
+    from ui.routes.draft_routes import _seed_draft
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / 'x.py').write_text("import minqlx\nRET_STOP_ALL\n")
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime='minqlxtended',
+                    source_runtime=None)
+    assert not (draft / 'x.py').exists()
+
+
+def test_seed_draft_reports_which_runtime_it_filtered_for(app, tmp_path):
+    """The one place that knows a draft is a derived artefact.
+
+    preset_api_routes refuses to overwrite a preset with a draft filtered for
+    another runtime, and it learns that from the marker create_draft writes
+    from this return value. If _seed_draft stopped reporting it, the guard
+    would go quietly unreachable while its own tests kept passing against a
+    file nothing creates.
+    """
+    from ui.routes.draft_routes import _seed_draft
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / 'x.py').write_text("import minqlx\nRET_STOP_ALL\n")
+    with app.app_context():
+        assert _seed_draft(str(tmp_path / 'cross'), str(source),
+                           target_runtime='minqlxtended',
+                           source_runtime='minqlx') == 'minqlxtended'
+        assert _seed_draft(str(tmp_path / 'matched'), str(source),
+                           target_runtime='minqlx',
+                           source_runtime='minqlx') is None
+        assert _seed_draft(str(tmp_path / 'none'), str(source)) is None
+
+
+class TestDraftRuntimeMarker:
+    """POST /drafts records what the compatibility gate did to the draft."""
+
+    def test_a_cross_runtime_draft_is_marked(
+        self, client, app, auth_headers, tmp_path, monkeypatch, drafts_base
+    ):
+        from ui.routes.draft_routes import RUNTIME_MARKER_FILE, draft_filtered_runtime
+        configs_base = _make_runtime_preset_tree(app, tmp_path, 'mx-preset', 'minqlx')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(configs_base))
+
+        response = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'mx-preset',
+            'target_runtime': 'minqlxtended',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        marker = os.path.join(drafts_base, draft_id, RUNTIME_MARKER_FILE)
+        assert os.path.isfile(marker)
+        # ...and inside the draft root, never inside the two directories that
+        # get copied onto a preset or an instance.
+        assert not os.path.exists(os.path.join(drafts_base, draft_id, 'scripts',
+                                               RUNTIME_MARKER_FILE))
+        with app.app_context():
+            assert draft_filtered_runtime(draft_id) == 'minqlxtended'
+
+    def test_a_matched_runtime_draft_is_not_marked(
+        self, client, app, auth_headers, tmp_path, monkeypatch, drafts_base
+    ):
+        """No marker means Overwrite Preset stays allowed for the common case."""
+        from ui.routes.draft_routes import RUNTIME_MARKER_FILE, draft_filtered_runtime
+        configs_base = _make_runtime_preset_tree(app, tmp_path, 'mx-preset', 'minqlx')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(configs_base))
+
+        response = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'mx-preset',
+            'target_runtime': 'minqlx',
+        }, headers=auth_headers)
+        assert response.status_code == 201
+        draft_id = response.get_json()['data']['draft_id']
+
+        assert not os.path.exists(
+            os.path.join(drafts_base, draft_id, RUNTIME_MARKER_FILE))
+        with app.app_context():
+            assert draft_filtered_runtime(draft_id) is None
