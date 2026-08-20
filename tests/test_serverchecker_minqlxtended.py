@@ -90,7 +90,7 @@ def _build(module, game=None, players=()):
     plugin.hooks = []
     plugin.cvars = {'net_port': '27960', 'sv_hostname': 'QLSM Test',
                     'sv_maxclients': '16', 'fs_basepath': '/home/ql/steamcmd/steamapps'}
-    plugin._players = list(players)
+    plugin.connected_players = list(players)
     plugin.game = game
     plugin.db = FakeRedis()
     plugin._match_start_time = None

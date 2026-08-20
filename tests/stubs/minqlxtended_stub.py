@@ -210,11 +210,6 @@ class GameClient:
         cls._instances.clear()
 
 
-#: Every @thread call the stub deferred, as (function name, args, kwargs). Lets a test
-#: assert that work was scheduled without that work having run.
-THREAD_CALLS = []
-
-
 def thread(func=None, force=False):
     """Stand-in for @minqlxtended.thread (_core.py:694): return at once, run nothing.
 
@@ -230,13 +225,19 @@ def thread(func=None, force=False):
     def decorate(target):
         @functools.wraps(target)
         def wrapper(*args, **kwargs):
-            THREAD_CALLS.append((target.__name__, args, kwargs))
+            return None
         return wrapper
     return decorate(func) if func is not None else decorate
 
 
 class Plugin:
-    """Minimal Plugin base. Tests assign `game`, `_players`, `db` and `cvars`.
+    """Minimal Plugin base. Tests assign `game`, `connected_players`, `db` and `cvars`.
+
+    The connected-player list is `connected_players`, not `_players`: specqueue owns an
+    attribute called `_players` of its own (specqueue.py:446, its spectator queue) and
+    assigns to it in __init__. A stub backing `players()` with the same name would hand
+    that plugin's internal queue back as the connected-player list — silently, and only
+    for the one plugin where it matters most.
 
     `game` is a class attribute rather than one set in __new__ because on the engine
     it is a property over global level state (_plugin.py:221), not per-instance data —
@@ -265,7 +266,7 @@ class Plugin:
         instance.messages = []
         instance.center_prints = []
         instance.sounds = []
-        instance._players = []
+        instance.connected_players = []
         instance._loaded_plugins = {cls.__name__: instance}
         return instance
 
@@ -326,7 +327,7 @@ class Plugin:
         return self.cvars.get(name, default)
 
     def players(self):
-        return list(self._players)
+        return list(self.connected_players)
 
     def msg(self, msg, chat_channel=None, **kwargs):
         self.messages.append(msg)
@@ -345,7 +346,7 @@ class Plugin:
 
     def player(self, name, player_list=None):
         """_plugin.py:644. Accepts a client id or a Player; None when absent."""
-        candidates = player_list if player_list is not None else self._players
+        candidates = player_list if player_list is not None else self.connected_players
         if isinstance(name, int):
             for candidate in candidates:
                 if getattr(candidate, "id", None) == name:
@@ -355,14 +356,14 @@ class Plugin:
 
     def find_player(self, name, player_list=None):
         """_plugin.py:738. Every player whose cleaned name contains `name`."""
-        candidates = player_list if player_list is not None else self._players
+        candidates = player_list if player_list is not None else self.connected_players
         needle = self.clean_text(name).lower()
         return [p for p in candidates
                 if needle in self.clean_text(getattr(p, "name", "")).lower()]
 
     def teams(self, player_list=None):
         """_plugin.py:766. Players bucketed by team, keyed by the Team enum's value."""
-        candidates = player_list if player_list is not None else self._players
+        candidates = player_list if player_list is not None else self.connected_players
         buckets = {team.value: [] for team in Team}
         for candidate in candidates:
             team = getattr(candidate, "team", Team.SPECTATOR)
@@ -402,7 +403,6 @@ def install_stub():
     module.Return = Return
     module.Priority = Priority
     module.thread = thread
-    module.THREAD_CALLS = THREAD_CALLS
     module.next_frame = next_frame
     module.delay = delay
     module.parse_infostring = parse_infostring

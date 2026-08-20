@@ -130,13 +130,25 @@ def test_preset_scripts_match_the_baseline_ports():
     player on every pass, while ql-assets/data/minqlx-plugins/specqueue.py is
     correct. This stops the minqlxtended side acquiring its own version of that.
     """
+    import difflib
     import filecmp
-    drifted = [
-        name for name in PRESET_VISIBLE_PORTS
-        if not filecmp.cmp(os.path.join(BASELINE_DIR, name),
-                           os.path.join(PRESET_DIR, 'scripts', name), shallow=False)
-    ]
-    assert drifted == [], f"preset copies drifted from the baseline: {drifted}"
+
+    report = []
+    for name in PRESET_VISIBLE_PORTS:
+        baseline = os.path.join(BASELINE_DIR, name)
+        copy = os.path.join(PRESET_DIR, 'scripts', name)
+        if filecmp.cmp(baseline, copy, shallow=False):
+            continue
+        # "files differ" alone sends the reader off to diff 2400 lines by hand.
+        with open(baseline, encoding='utf-8') as a, open(copy, encoding='utf-8') as b:
+            diff = list(difflib.unified_diff(
+                a.readlines(), b.readlines(),
+                fromfile=baseline, tofile=copy, n=1))
+        report.append(''.join(diff[:40]))
+
+    assert report == [], (
+        "preset copies drifted from the baseline; re-copy from "
+        f"{BASELINE_DIR}:\n\n" + "\n".join(report))
 
 
 def test_the_system_plugin_is_not_pickable():

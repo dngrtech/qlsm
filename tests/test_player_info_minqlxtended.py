@@ -126,7 +126,7 @@ def test_find_by_name_or_id_is_available_on_the_plugin(module):
 
 def test_find_by_name_or_id_reports_when_nothing_matches(module):
     plugin = module.player_info()
-    plugin._players = []
+    plugin.connected_players = []
     asker = FakePlayer()
     assert plugin.find_by_name_or_id(asker, 'nobody') is None
     assert 'no players matched' in asker.told[0]
@@ -135,14 +135,14 @@ def test_find_by_name_or_id_reports_when_nothing_matches(module):
 def test_find_by_name_or_id_returns_a_single_match(module):
     plugin = module.player_info()
     target = FakePlayer(client_id=4, name='sarge')
-    plugin._players = [target]
+    plugin.connected_players = [target]
     asker = FakePlayer(client_id=1, name='doom')
     assert plugin.find_by_name_or_id(asker, 'sarge') is target
 
 
 def test_find_by_name_or_id_refuses_an_ambiguous_match(module):
     plugin = module.player_info()
-    plugin._players = [FakePlayer(client_id=4, name='sarge'),
+    plugin.connected_players = [FakePlayer(client_id=4, name='sarge'),
                        FakePlayer(client_id=5, name='sarge2')]
     asker = FakePlayer(client_id=1, name='doom')
     assert plugin.find_by_name_or_id(asker, 'sarge') is None
