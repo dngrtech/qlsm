@@ -192,6 +192,10 @@ function AddInstanceForm({
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
   const pluginsManagerRef = useRef(null);
   const [draftPreset, setDraftPreset] = useState(defaultPresetNameForRuntime(initialHostRuntime));
+  // Bare filenames the operator accepted a runtime replacement for, from the
+  // preset compatibility dialog. Sent to the draft seed so the server writes
+  // the replacement files. Cleared whenever a different preset seed loads.
+  const [acceptedReplacements, setAcceptedReplacements] = useState([]);
   const [factoryServerTree, setFactoryServerTree] = useState(initialData.defaultFactoryTree || []);
 
   // Hooks tab state. There is no instance yet, so hook files come from the
@@ -280,6 +284,19 @@ function AddInstanceForm({
     }
   }, []);
 
+  // Hoisted above pluginsAdapter (below) so its runtime is available to feed
+  // the draft seed; lanRateSupported/lanRateForcedOn/redisDbOptions further
+  // down still read off these same consts.
+  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
+  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
+  const selectedHostOsType = selectedHost?.os_type ?? null;
+  const hasSelectedHost = Boolean(selectedHost);
+  const selectedHostShape = {
+    os_type: selectedHostOsType,
+    lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
+    runtime: selectedHost?.runtime ?? null,
+  };
+
   const configsAdapter = useStateAdapter({
     initialFiles: configContents,
     initialFolders: [],
@@ -292,6 +309,8 @@ function AddInstanceForm({
   const pluginsAdapter = useDraftAdapter({
     source: 'preset',
     preset: draftPreset || 'default',
+    targetRuntime: selectedHostShape.runtime,
+    acceptedReplacements,
     active: true,
   });
 
@@ -388,6 +407,7 @@ function AddInstanceForm({
       setEnabledHookOrder(seed.enabledHooks);
       initialEnabledHookOrderRef.current = seed.enabledHooks;
       setDraftPreset(defaultPresetNameForRuntime(newRuntime));
+      setAcceptedReplacements([]);
     }
     if (hostId) {
       seededRuntimeRef.current = newRuntime;
@@ -496,6 +516,7 @@ function AddInstanceForm({
     initialCheckedPluginsRef.current = selectable;
     loadedPresetCheckedPluginsRef.current = selectable;
     setDraftPreset(defaultPresetNameForRuntime(initialHostRuntime));
+    setAcceptedReplacements([]);
     seededRuntimeRef.current = runtimeLabel(initialHostRuntime);
     resetFactories(initialData.defaultFactories || {});
     setFactoryServerTree(initialData.defaultFactoryTree || []);
@@ -640,15 +661,6 @@ function AddInstanceForm({
     prevPortRef.current = port;
   }, [port, syncConfigFile]);
 
-  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
-  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
-  const selectedHostOsType = selectedHost?.os_type ?? null;
-  const hasSelectedHost = Boolean(selectedHost);
-  const selectedHostShape = {
-    os_type: selectedHostOsType,
-    lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
-    runtime: selectedHost?.runtime ?? null,
-  };
   const lanRateSupported = !hasSelectedHost || isLanRateSupported(selectedHostShape);
   // QLSM deploys minqlxtended instances at 99k, so the toggle renders on and
   // locked instead of offering a 25k it will not honour.
@@ -795,6 +807,10 @@ function AddInstanceForm({
     if (!pendingPreset) return;
     const { id, data } = pendingPreset;
     setPendingPreset(null);
+    // Set this BEFORE applyPresetData: that calls setDraftPreset, which re-seeds
+    // the draft. Both state updates batch into one render, so the reseed sees
+    // the accepted list and writes the replacement files server-side.
+    setAcceptedReplacements(acceptedPaths || []);
     await applyPresetData(id, mergeReplacements(data, acceptedPaths));
   }, [applyPresetData, pendingPreset]);
 

@@ -18,7 +18,7 @@ import {
 
 const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000;
 
-export function useDraftWorkspace({ source, preset, host, instanceId, active }) {
+export function useDraftWorkspace({ source, preset, host, instanceId, active, targetRuntime, acceptedReplacements }) {
   const [draftId, setDraftId] = useState(null);
   const [tree, setTree] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +40,11 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
     setMutationCount(0);
   }, []);
 
+  // A new array literal every render would re-fire the seeding effect forever.
+  // Key on the sorted contents instead, and rebuild the list from that key.
+  const acceptedKey = (acceptedReplacements || []).slice().sort().join(' ');
+  const acceptedReplacementsList = acceptedKey ? acceptedKey.split(' ') : [];
+
   useEffect(() => {
     if (!active) return;
     let cancelled = false;
@@ -49,7 +54,10 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
       setLoading(true);
       setError(null);
       try {
-        const { draft_id } = await createDraft({ source, preset, host, instanceId });
+        const { draft_id } = await createDraft({
+          source, preset, host, instanceId, targetRuntime,
+          acceptedReplacements: acceptedReplacementsList,
+        });
         if (cancelled) {
           discardDraft(draft_id).catch(() => {});
           return;
@@ -77,7 +85,7 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active }) 
         discardDraft(ownedDraftId).catch(() => {});
       }
     };
-  }, [active, source, preset, host, instanceId, stopHeartbeat, clearDraftState]);
+  }, [active, source, preset, host, instanceId, targetRuntime, acceptedKey, stopHeartbeat, clearDraftState]);
 
   useEffect(() => {
     if (!draftId || !active) return;

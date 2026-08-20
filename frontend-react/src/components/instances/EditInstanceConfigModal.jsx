@@ -133,6 +133,10 @@ function EditInstanceConfigModal({
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
   const [draftPreset, setDraftPreset] = useState(null); // null = seed from instance; string = seed from preset
+  // Bare filenames the operator accepted a runtime replacement for, from the
+  // preset compatibility dialog. Sent to the draft seed so the server writes
+  // the replacement files. Cleared whenever the draft seed resets.
+  const [acceptedReplacements, setAcceptedReplacements] = useState([]);
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const [droppedPluginCount, setDroppedPluginCount] = useState(0);
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
@@ -178,6 +182,8 @@ function EditInstanceConfigModal({
     preset: draftPreset || undefined,
     host: draftPreset ? undefined : scriptHostName,
     instanceId: draftPreset ? undefined : instanceId,
+    targetRuntime: hostRuntime,
+    acceptedReplacements,
     active: isOpen && (draftPreset != null || scriptHostName != null),
   });
   const {
@@ -305,6 +311,7 @@ function EditInstanceConfigModal({
         setActiveMainTab(initialTab);
         setScriptHostName(null);
         setDraftPreset(null);
+        setAcceptedReplacements([]);
         setHookAvailable([]);
         setHookMissing([]);
         setHookSystem([]);
@@ -591,6 +598,10 @@ function EditInstanceConfigModal({
     if (!pendingPreset) return;
     const { id, data } = pendingPreset;
     setPendingPreset(null);
+    // Set this BEFORE applyPresetData: that calls setDraftPreset, which re-seeds
+    // the draft. Both state updates batch into one render, so the reseed sees
+    // the accepted list and writes the replacement files server-side.
+    setAcceptedReplacements(acceptedPaths || []);
     await applyPresetData(id, mergeReplacements(data, acceptedPaths));
   }, [applyPresetData, pendingPreset]);
 

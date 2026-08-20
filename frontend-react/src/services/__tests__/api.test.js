@@ -26,6 +26,7 @@ vi.mock('axios', () => ({
 import {
   fetchInstanceHooks,
   fetchInstanceMinqlxLogs,
+  getPresetById,
   getSelfHostDefaults,
   importPreset,
   resizeHost,
@@ -178,6 +179,28 @@ describe('fetchInstanceMinqlxLogs', () => {
 
     const url = mocks.get.mock.calls[0][0];
     expect(url).not.toContain('filename');
+  });
+});
+
+describe('getPresetById targetRuntime', () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+  });
+
+  it('omits target_runtime when falsy', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { id: 'p1' } } });
+
+    await getPresetById('p1', { targetRuntime: undefined });
+
+    expect(mocks.get).toHaveBeenCalledWith('/presets/p1');
+  });
+
+  it('encodes target_runtime when present', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { id: 'p1' } } });
+
+    await getPresetById('p1', { targetRuntime: 'minqlxtended' });
+
+    expect(mocks.get).toHaveBeenCalledWith('/presets/p1?target_runtime=minqlxtended');
   });
 });
 
