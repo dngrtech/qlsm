@@ -57,6 +57,17 @@ def test_code_only_blanks_an_fstring_body_on_any_python_version():
     assert 'RET_STOP_ALL' not in masked
 
 
+def test_code_only_masks_forbidden_text_even_with_doubled_braces_in_an_fstring():
+    """On 3.12, FSTRING_MIDDLE's token text collapses a doubled `{{`/`}}` to a
+    single brace, so the token string is shorter than the source span it
+    covers. Masking has to blank by the token's start/end source coordinates,
+    not by `len(token.string)`, or the doubled-brace prefix throws off every
+    position after it and the tail of the line survives unmasked."""
+    masked = code_only('x = f"{{escaped}} import minqlx and RET_STOP_ALL"\n')
+    assert 'import minqlx' not in masked
+    assert 'RET_STOP_ALL' not in masked
+
+
 def test_an_fstring_body_is_not_flagged_as_a_minqlx_reference():
     """Same false positive as above, exercised through the public scanning
     entry point rather than `code_only()` directly."""
