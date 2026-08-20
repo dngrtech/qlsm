@@ -563,9 +563,10 @@ export const createPreset = async (presetData) => {
   }
 };
 
-export const getPresetById = async (presetId) => {
+export const getPresetById = async (presetId, { targetRuntime } = {}) => {
   try {
-    const response = await apiClient.get(`/presets/${presetId}`);
+    const query = targetRuntime ? `?target_runtime=${encodeURIComponent(targetRuntime)}` : '';
+    const response = await apiClient.get(`/presets/${presetId}${query}`);
     return response.data.data; // Assuming { "data": {...} }
   } catch (error) {
     console.error(`Failed to fetch preset ${presetId}:`, error.response ? error.response.data : error.message);
