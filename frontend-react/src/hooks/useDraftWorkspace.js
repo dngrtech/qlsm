@@ -42,8 +42,14 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active, ta
 
   // A new array literal every render would re-fire the seeding effect forever.
   // Key on the sorted contents instead, and rebuild the list from that key.
-  const acceptedKey = (acceptedReplacements || []).slice().sort().join(' ');
-  const acceptedReplacementsList = acceptedKey ? acceptedKey.split(' ') : [];
+  // JSON rather than join(' ')/split(' '): a filename containing a space does
+  // not round-trip through a space delimiter, and it fails in the worst
+  // possible way -- 'a b.py' splits into ['a', 'b.py'], so if b.py is itself a
+  // candidate the accept silently RETARGETS to a different file. No shipped
+  // plugin name has a space today, which is exactly why nothing would notice
+  // when one did.
+  const acceptedKey = JSON.stringify((acceptedReplacements || []).slice().sort());
+  const acceptedReplacementsList = JSON.parse(acceptedKey);
 
   useEffect(() => {
     if (!active) return;

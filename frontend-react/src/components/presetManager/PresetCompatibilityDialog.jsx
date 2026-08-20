@@ -55,11 +55,20 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
             <Dialog.Title as="h3" className="font-display text-lg font-semibold tracking-wide text-theme-primary">
               Some plugins won&apos;t carry over
             </Dialog.Title>
+            {/* The list below is what this preset LOSES. It is not the whole
+                story of what the instance ends up with: a cross-runtime load
+                seeds the target runtime's own default plugins first and lays
+                the preset over them, so the operator will meet plugins that
+                this preset never contained. Saying only "these won't be
+                installed" would leave them to discover that on the next
+                screen. */}
             <p className="mt-2 text-sm text-theme-secondary">
               This preset was saved from a {presetRuntime} host. The rest of the config loads as-is,
               but the plugins below won&apos;t be installed on this instance. Each one either uses
               an API that {targetRuntime} doesn&apos;t have, or can&apos;t be confirmed to run
-              there — the reason is shown for each.
+              there — the reason is shown for each. The instance still starts from
+              {' '}{targetRuntime}&apos;s own standard plugins, so the plugin list you end up with
+              is not simply this preset&apos;s minus what is listed here.
             </p>
 
             <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1 scrollbar-thin">

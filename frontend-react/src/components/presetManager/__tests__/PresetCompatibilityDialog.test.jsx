@@ -29,6 +29,16 @@ describe('PresetCompatibilityDialog', () => {
     });
   });
 
+  it('says the instance still gets the target runtime\'s own plugins', () => {
+    // The dialog lists what this preset loses, not what the instance ends up
+    // with: a cross-runtime load seeds the target runtime's default plugins
+    // underneath the preset, so plugins appear that were never listed here.
+    setup();
+    expect(screen.getByText(/starts from/)).toBeInTheDocument();
+    expect(screen.getByText(/not simply this preset's minus what is listed here/))
+      .toBeInTheDocument();
+  });
+
   it('shows the reason a plugin was stripped', () => {
     setup();
     expect(screen.getByText(/imports the minqlx module/)).toBeInTheDocument();
