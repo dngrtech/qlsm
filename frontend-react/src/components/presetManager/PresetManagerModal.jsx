@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { FolderOpen, LayoutGrid, LoaderCircle, Save } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
-import { isPresetRuntimeCompatible } from '../../utils/presetRuntimeCompat';
 import { deletePreset, importPreset, updatePreset } from '../../services/api';
 import { triggerPresetDownload } from '../../utils/presetDownload';
 import ConfirmationModal from '../ConfirmationModal';
@@ -70,9 +69,7 @@ function PresetManagerModal({
   }, [isOpen, initialTab]);
 
   const selectedPreset = presets.find((p) => p.id === selectedId) || (importedPresetPreview?.id === selectedId ? importedPresetPreview : null);
-  // PresetLoadTab already dims a preset from the other runtime, but a selection
-  // can outlive a host change, so gate the action itself as well.
-  const canLoadSelected = selectedId != null && !isLoadingPreset && isPresetRuntimeCompatible(selectedPreset, host);
+  const canLoadSelected = selectedId != null && !isLoadingPreset;
 
   const handleDownload = async (preset) => {
     setDownloadingId(preset.id);
