@@ -1,5 +1,5 @@
 """
-highfps.py - MinQLX plugin to detect players using FPS > 360
+highfps.py - minqlxtended plugin to detect players using FPS > 360
 
 How it works:
   Quake Live forces cl_maxpackets 125, so each client sends 125 packets/sec.
@@ -23,13 +23,13 @@ Commands:
   !highfps  - Show estimated FPS for all connected players (perm 2)
 """
 
-import minqlx
+import minqlxtended
 import ctypes
 import os
 import time
 
 
-class highfps(minqlx.Plugin):
+class highfps(minqlxtended.Plugin):
     def __init__(self):
         super().__init__()
 
@@ -161,7 +161,7 @@ class highfps(minqlx.Plugin):
                     fps, threshold, wc, max_warn
                 )
             )
-            minqlx.console_print(
+            minqlxtended.console_print(
                 "[highfps] {} (ID:{}) ~{:.0f} FPS "
                 "(warning {}/{})\n".format(
                     player.clean_name, player.id, fps, wc, max_warn

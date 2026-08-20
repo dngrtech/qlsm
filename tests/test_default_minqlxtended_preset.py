@@ -37,10 +37,79 @@ def test_preset_is_builtin_and_stamped_minqlxtended(manifest):
     assert manifest['description'].strip()
 
 
-def test_preset_declares_no_binaries(manifest):
-    """The .so companions are P4. Declaring one that does not exist makes
-    _validate_binary_descriptions reject the whole preset at seed time."""
-    assert manifest.get('binary_descriptions', {}) == {}
+def test_the_declared_binary_is_the_highfps_hook(manifest):
+    """P4 ships one .so companion, and only one.
+
+    _validate_binary_descriptions (ui/builtin_presets.py:27) rejects the whole preset
+    at seed time if a declared key has no file behind it, so a typo here takes the
+    preset out entirely rather than degrading it.
+    """
+    assert set(manifest.get('binary_descriptions', {})) == {'scripts/highfps_hook.so'}
+
+
+def test_every_declared_binary_exists(manifest):
+    """A declared key with no file behind it takes the whole preset out at seed time,
+    so this is the cheap check that stops a typo becoming a missing preset."""
+    for key in manifest.get('binary_descriptions', {}):
+        assert os.path.isfile(os.path.join(PRESET_DIR, key)), key
+
+
+#: sha256 of highfps_hook.so as built in dngrtech/qlsm_plugins at `462e3e5`.
+#:
+#: The hook detours SV_ClientThink inside qzeroded and knows nothing about either
+#: Python runtime, so there is one build and both runtimes should ship it. Pinned by
+#: hash *as well as* compared against the minqlx copy below, so that rebuilding both at
+#: once still has to be a deliberate act that updates this line.
+HIGHFPS_HOOK_SHA256 = '8f73853c34042c94220f7c3dd04f32c36f75b68f41346afaf865377cb573e435'
+
+
+def test_the_hook_binary_is_the_current_qlsm_plugins_build():
+    import hashlib
+    with open(os.path.join(PRESET_DIR, 'scripts', 'highfps_hook.so'), 'rb') as handle:
+        digest = hashlib.sha256(handle.read()).hexdigest()
+    assert digest == HIGHFPS_HOOK_SHA256, (
+        "highfps_hook.so is not the build this preset was written against; "
+        "re-copy from qlsm_plugins/minqlxtended/highfps/ after running `make` there")
+
+
+def test_the_two_presets_ship_the_same_hook_build():
+    """The hook is runtime-agnostic, so there is one build and both presets ship it.
+
+    This replaces a `test_the_minqlx_preset_hook_is_known_stale` that existed for the
+    length of one commit. QLSM's minqlx preset had been shipping a highfps that predated
+    the qlsm_plugins review fixes in `ad193dc` — a different .so build (16768 bytes
+    against 18112) and a highfps.py missing the safe !highfps baseline. `971c5dd` on
+    `main` synced both, so the two runtimes are back on one build and this can be a plain
+    equality assertion again.
+    """
+    import filecmp
+    ours = os.path.join(PRESET_DIR, 'scripts', 'highfps_hook.so')
+    theirs = os.path.join(MINQLX_PRESET_DIR, 'scripts', 'highfps_hook.so')
+    assert filecmp.cmp(ours, theirs, shallow=False), (
+        "highfps_hook.so differs between the two presets; it is runtime-agnostic and "
+        "should be the same binary in both — rebuild via `make` in qlsm_plugins and "
+        "re-copy, rather than rebuilding one of them alone")
+
+
+def test_the_two_presets_ship_the_same_highfps_source():
+    """The .py differs only by runtime; everything else must track together."""
+    with open(os.path.join(PRESET_DIR, 'scripts', 'highfps.py'), encoding='utf-8') as handle:
+        ours = handle.read()
+    with open(os.path.join(MINQLX_PRESET_DIR, 'scripts', 'highfps.py'), encoding='utf-8') as handle:
+        theirs = handle.read()
+    assert ours == theirs.replace('import minqlx\n', 'import minqlxtended\n') \
+                         .replace('minqlx.Plugin', 'minqlxtended.Plugin') \
+                         .replace('minqlx.console_print', 'minqlxtended.console_print') \
+                         .replace('MinQLX plugin', 'minqlxtended plugin'), (
+        "the two highfps copies have diverged by more than the runtime rename")
+
+
+def test_the_hook_description_matches_the_minqlx_one(manifest):
+    """Same binary, same explanation. The UI shows this text next to the file."""
+    import json as _json
+    with open(os.path.join(MINQLX_PRESET_DIR, 'preset.json'), 'r', encoding='utf-8') as handle:
+        theirs = _json.load(handle)['binary_descriptions']['scripts/highfps_hook.so']
+    assert manifest['binary_descriptions']['scripts/highfps_hook.so'] == theirs
 
 
 def test_checked_plugins_mirror_the_minqlx_default(checked_plugins):
@@ -69,11 +138,51 @@ def test_every_checked_plugin_ships_in_the_preset(checked_plugins):
 BASELINE_ONLY = {'serverchecker.py', 'reset_acc.py', 'suppress_join_msg.py'}
 
 
+#: Pickable plugins that are not in the vendored baseline.
+#:
+#: highfps lives in dngrtech/qlsm_plugins, not in ql-assets/data/. It ships only in the
+#: preset on both runtimes, exactly as its minqlx counterpart does, because it needs a
+#: native .so companion beside it and the baseline directory carries no binaries.
+PRESET_ONLY = {'highfps.py'}
+
+
 def test_scripts_match_the_vendored_baseline():
-    """The picker offers the whole baseline bar the three that are deliberately out."""
+    """The picker offers the whole baseline bar the three that are deliberately out,
+    plus the preset-only plugins that do not live in the baseline at all."""
     preset_scripts = {n for n in os.listdir(os.path.join(PRESET_DIR, 'scripts')) if n.endswith('.py')}
     baseline = {n for n in os.listdir(BASELINE_DIR) if n.endswith('.py')}
-    assert preset_scripts == baseline - BASELINE_ONLY
+    assert preset_scripts == (baseline - BASELINE_ONLY) | PRESET_ONLY
+
+
+def test_the_preset_offers_highfps_exactly_as_the_minqlx_default_does():
+    """Parity is the point: an operator moving between runtimes is offered the same
+    set. highfps ships in both presets' scripts/ and is checked in neither."""
+    for directory in (PRESET_DIR, MINQLX_PRESET_DIR):
+        assert os.path.isfile(os.path.join(directory, 'scripts', 'highfps.py')), directory
+        with open(os.path.join(directory, 'checked_plugins.json'), 'r', encoding='utf-8') as handle:
+            assert 'highfps.py' not in json.load(handle), directory
+
+
+def test_the_ported_highfps_is_the_current_qlsm_plugins_version():
+    """Ported from dngrtech/qlsm_plugins at `462e3e5`, which carries the review fixes
+    from `ad193dc`.
+
+    QLSM's *minqlx* preset copy predated those until `971c5dd` on `main` synced it, so at
+    the time of the port, porting from it would have carried a false-positive source onto
+    the new runtime. Both copies now carry these fixes and
+    test_the_two_presets_ship_the_same_highfps_source keeps them together; these markers
+    stay as the explicit record of what had to be true for the port to be correct.
+
+    Each marker below is one of those fixes.
+    """
+    with open(os.path.join(PRESET_DIR, 'scripts', 'highfps.py'), 'r', encoding='utf-8') as handle:
+        source = handle.read()
+    # A !highfps baseline of 0 reports counts-since-connect as FPS.
+    assert 'not sampled yet' in source
+    # A non-numeric or zero sample interval used to raise or divide by zero.
+    assert 'max(1, int(self.get_cvar("qlx_highfpsSampleInterval")' in source
+    # Detection fires above threshold + padding, not at the threshold itself.
+    assert 'qlx_highfpsPadding' in source
 
 
 def test_no_minqlx_plugin_leaked_into_the_preset():
