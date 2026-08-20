@@ -1,0 +1,156 @@
+"""The gate strips what cannot run and offers what can."""
+import json
+import os
+
+import pytest
+
+from ui.preset_compat import (
+    apply_compatibility,
+    baseline_hashes,
+    replacement_scripts,
+)
+from ui.runtime import MINQLX, MINQLXTENDED
+
+
+def test_baseline_hashes_reads_the_manifest():
+    hashes = baseline_hashes(MINQLXTENDED)
+    assert 'essentials.py' in hashes
+    assert len(hashes['essentials.py']) == 64
+
+
+def test_baseline_hashes_match_the_files_on_disk():
+    """A manifest that disagrees with its own directory would silently strip
+    every file it covers.
+
+    Resolved through the module's own ASSETS_DIR rather than a literal relative
+    path, so this test asserts what the production lookup actually reads and
+    does not quietly depend on pytest's working directory.
+    """
+    import hashlib
+    from ui.preset_compat import ASSETS_DIR
+    directory = os.path.join(ASSETS_DIR, 'minqlxtended-plugins')
+    for name, digest in baseline_hashes(MINQLXTENDED).items():
+        path = os.path.join(directory, name)
+        if not os.path.exists(path):
+            continue
+        with open(path, 'rb') as handle:
+            assert hashlib.sha256(handle.read()).hexdigest() == digest, name
+
+
+def test_baseline_hashes_survive_a_changed_working_directory(tmp_path, monkeypatch):
+    """ql-assets/ is shipped, read-only repo content. If this lookup were
+    working-directory-relative, a CWD change would empty the allow-list, every
+    plugin would fall through to the scanner as `unknown`, and a cross-runtime
+    load would silently strip all of them."""
+    monkeypatch.chdir(tmp_path)
+    assert 'essentials.py' in baseline_hashes(MINQLXTENDED)
+
+
+def test_replacement_scripts_come_from_the_runtime_default_preset():
+    scripts = replacement_scripts(MINQLXTENDED)
+    assert 'myFun.py' in scripts
+    assert 'import minqlxtended' in scripts['myFun.py']
+
+
+def test_replacement_scripts_exclude_the_non_pickable_baseline_files():
+    """serverchecker.py ships via the baseline directory and is not an option
+    the operator picks, so it must never be offered as a replacement."""
+    assert 'serverchecker.py' not in replacement_scripts(MINQLXTENDED)
+
+
+def test_matching_runtimes_return_the_response_untouched():
+    response = {'scripts': {'anything.py': 'import minqlx\n'}, 'checked_plugins': ['anything.py']}
+    result = apply_compatibility(response, MINQLX, MINQLX)
+    assert result is response
+    assert 'compatibility' not in result
+
+
+def test_a_none_target_runtime_returns_the_response_untouched():
+    response = {'scripts': {'anything.py': 'import minqlx\n'}}
+    assert apply_compatibility(response, MINQLX, None) is response
+
+
+def test_an_incompatible_script_is_stripped_and_reported():
+    response = {
+        'scripts': {'mine.py': 'import minqlx\nx = minqlx.RET_STOP_ALL\n'},
+        'checked_plugins': ['mine.py'],
+    }
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert 'mine.py' not in result['scripts']
+    assert result['checked_plugins'] == []
+    stripped = result['compatibility']['stripped']
+    assert [entry['path'] for entry in stripped] == ['mine.py']
+    assert stripped[0]['verdict'] == 'incompatible'
+    assert stripped[0]['reasons']
+
+
+def test_a_baseline_file_survives_by_hash():
+    scripts = replacement_scripts(MINQLXTENDED)
+    response = {'scripts': {'essentials.py': scripts['essentials.py']}, 'checked_plugins': ['essentials.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert 'essentials.py' in result['scripts']
+    assert result['checked_plugins'] == ['essentials.py']
+    assert result['compatibility']['stripped'] == []
+
+
+def test_an_unknown_script_is_stripped_too():
+    """Not provably broken is not the same as safe. The design strips anything
+    that is not provably compatible."""
+    response = {'scripts': {'custom.py': 'x = 1\n'}, 'checked_plugins': ['custom.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert 'custom.py' not in result['scripts']
+    assert result['compatibility']['stripped'][0]['verdict'] == 'unknown'
+
+
+def test_a_same_named_target_plugin_is_offered_as_a_replacement():
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}, 'checked_plugins': ['myFun.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['replacement'] == 'myFun.py'
+    assert 'import minqlxtended' in result['compatibility']['replacements']['myFun.py']
+
+
+def test_a_plugin_with_no_counterpart_is_offered_nothing():
+    """mybalance.py has no minqlxtended equivalent; inventing one would be a
+    silent swap of non-equivalent behaviour."""
+    response = {'scripts': {'mybalance.py': 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['replacement'] is None
+    assert 'mybalance.py' not in result['compatibility']['replacements']
+
+
+def test_a_subdirectory_helper_is_stripped_but_offered_no_replacement():
+    """scripts/ may hold subdirectories of helper modules imported by a root
+    plugin. They are not plugins, can never be in checked_plugins, and must not
+    be silently relocated into the plugin root by a replacement offer."""
+    response = {'scripts': {'extras/balance.py': 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['path'] == 'extras/balance.py'
+    assert entry['replacement'] is None
+    assert result['compatibility']['replacements'] == {}
+
+
+def test_non_python_scripts_are_carried_through_unclassified():
+    """The .so hooks detour qzeroded and know nothing about either runtime."""
+    response = {'scripts': {'highfps_hook.so': 'YmFzZTY0', 'notes.txt': 'hello'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['scripts']['highfps_hook.so'] == 'YmFzZTY0'
+    assert result['scripts']['notes.txt'] == 'hello'
+    assert result['compatibility']['stripped'] == []
+
+
+def test_the_original_response_is_not_mutated():
+    response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': ['mine.py']}
+    apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert 'mine.py' in response['scripts']
+    assert response['checked_plugins'] == ['mine.py']
+
+
+def test_the_reverse_direction_strips_a_minqlxtended_plugin_for_a_minqlx_host():
+    response = {'scripts': {'ported.py': 'import minqlxtended\n'}, 'checked_plugins': ['ported.py']}
+    result = apply_compatibility(response, MINQLXTENDED, MINQLX)
+    assert 'ported.py' not in result['scripts']
+    assert result['compatibility']['target_runtime'] == MINQLX
+    assert result['compatibility']['preset_runtime'] == MINQLXTENDED
