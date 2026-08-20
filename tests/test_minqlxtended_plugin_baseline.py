@@ -3,11 +3,12 @@
 A plugin file that drifts from the manifest is a plugin nobody can diff against
 upstream, which is the whole point of pinning a commit.
 """
-import hashlib
 import json
 import os
 
 import pytest
+
+from ui.plugin_compat import baseline_digest
 
 BASELINE_DIR = os.path.join('ql-assets', 'data', 'minqlxtended-plugins')
 MANIFEST_PATH = os.path.join(BASELINE_DIR, 'manifest.json')
@@ -38,11 +39,6 @@ QLSM_PLUGINS = [
 ]
 
 
-def _sha256(path):
-    with open(path, 'rb') as handle:
-        return hashlib.sha256(handle.read()).hexdigest()
-
-
 @pytest.fixture(scope='module')
 def manifest():
     with open(MANIFEST_PATH, 'r', encoding='utf-8') as handle:
@@ -69,10 +65,20 @@ def test_manifest_covers_every_python_file_in_the_directory(manifest):
 
 
 def test_every_manifest_hash_matches_the_file_on_disk(manifest):
-    mismatched = [
-        name for name, entry in manifest['files'].items()
-        if _sha256(os.path.join(BASELINE_DIR, name)) != entry['sha256']
-    ]
+    """Hashing goes through baseline_digest, the same rule the generator and
+    the compatibility gate use -- not a local raw-byte hash. This baseline
+    happens to have zero CRLF files today, so a raw-byte hash agrees with
+    baseline_digest by luck alone; the two rules would silently diverge the
+    moment a CRLF file was vendored in, and this test would flag the wrong
+    component (the file, not the hashing rule) as broken. See
+    ui.plugin_compat.baseline_digest for why the normalisation exists at all.
+    """
+    mismatched = []
+    for name, entry in manifest['files'].items():
+        with open(os.path.join(BASELINE_DIR, name), 'r', encoding='utf-8') as handle:
+            text = handle.read()
+        if baseline_digest(text) != entry['sha256']:
+            mismatched.append(name)
     assert mismatched == [], f"sha256 drift: {mismatched}"
 
 
