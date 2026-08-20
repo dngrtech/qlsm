@@ -32,7 +32,6 @@ import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
 import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import {
   getLanRateUnsupportedMessage,
-  isLanRateAlwaysOn,
   isLanRateSupported,
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
@@ -641,11 +640,9 @@ function AddInstanceForm({
   const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
   const selectedHostOsType = selectedHost?.os_type ?? null;
   const hasSelectedHost = Boolean(selectedHost);
-  const selectedHostShape = { os_type: selectedHostOsType, lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false, runtime: selectedHost?.runtime ?? null };
+  const selectedHostShape = { os_type: selectedHostOsType, lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false };
   const lanRateSupported = !hasSelectedHost || isLanRateSupported(selectedHostShape);
-  // Fixed on by the runtime: the toggle renders on and locked, not hidden.
-  const lanRateAlwaysOn = hasSelectedHost && isLanRateAlwaysOn(selectedHostShape);
-  const lanRateUnavailableReason = hasSelectedHost && (lanRateAlwaysOn || !lanRateSupported)
+  const lanRateUnavailableReason = hasSelectedHost && !lanRateSupported
     ? getLanRateUnsupportedMessage(selectedHostShape)
     : null;
   const redisDbOptions = useMemo(
@@ -1102,7 +1099,6 @@ function AddInstanceForm({
           lanRateEnabled={lanRateEnabled}
           onLanRateChange={setLanRateEnabled}
           lanRateDisabled={!lanRateSupported}
-          lanRateAlwaysOn={lanRateAlwaysOn}
           lanRateUnavailableReason={lanRateUnavailableReason}
           autoGeneratePasswords={autoGeneratePasswords}
           onAutoGeneratePasswordsChange={handleAutoGeneratePasswordsChange}

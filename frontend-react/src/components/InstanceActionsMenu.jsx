@@ -7,7 +7,6 @@ import InfoTooltip from './common/InfoTooltip';
 import {
   canEnableLanRate,
   getLanRateUnsupportedMessage,
-  isLanRateAlwaysOn,
 } from '../utils/lanRateCompatibility';
 
 // Define InstanceStatus constants to match backend enum values
@@ -41,18 +40,13 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
   const hostShape = {
     os_type: instance.host_os_type,
     lan_rate_uses_hook: instance.host_lan_rate_uses_hook,
-    runtime: instance.host_runtime,
   };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,
     currentEnabled: instance.lan_rate_enabled,
   });
-  // The runtime provides 99k itself on minqlxtended: the row reads ON and the
-  // action is inert, so it is greyed out rather than left looking clickable.
-  const lanRateAlwaysOn = isLanRateAlwaysOn(hostShape);
-  const lanRateDisplayEnabled = Boolean(instance.lan_rate_enabled) || lanRateAlwaysOn;
-  const lanRateActionDisabled = !isActionable || !canToggleLanRate || lanRateAlwaysOn;
-  const lanRateUnsupportedReason = lanRateAlwaysOn || (!canToggleLanRate && !instance.lan_rate_enabled)
+  const lanRateActionDisabled = !isActionable || !canToggleLanRate;
+  const lanRateUnsupportedReason = !canToggleLanRate && !instance.lan_rate_enabled
     ? getLanRateUnsupportedMessage(hostShape)
     : null;
 
@@ -175,12 +169,12 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
                         <span className="flex flex-1 items-center gap-1.5 text-left">
                           <span>99k LAN Rate</span>
                           {lanRateUnsupportedReason && (
-                            <InfoTooltip text={lanRateUnsupportedReason} variant={lanRateAlwaysOn ? 'info' : 'danger'} size={13} />
+                            <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={13} />
                           )}
                         </span>
-                        <span className={`ml-2 inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${lanRateDisplayEnabled ? 'text-emerald-400' : 'text-theme-muted'}`}
-                          style={lanRateDisplayEnabled ? { background: 'rgba(34,217,127,0.12)' } : { background: 'rgba(100,116,139,0.12)' }}>
-                          {lanRateDisplayEnabled ? <><Check size={10} /> ON</> : 'OFF'}
+                        <span className={`ml-2 inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${instance.lan_rate_enabled ? 'text-emerald-400' : 'text-theme-muted'}`}
+                          style={instance.lan_rate_enabled ? { background: 'rgba(34,217,127,0.12)' } : { background: 'rgba(100,116,139,0.12)' }}>
+                          {instance.lan_rate_enabled ? <><Check size={10} /> ON</> : 'OFF'}
                         </span>
                       </button>
                     )}

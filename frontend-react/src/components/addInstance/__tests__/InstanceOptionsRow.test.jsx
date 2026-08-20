@@ -25,27 +25,6 @@ describe('InstanceOptionsRow', () => {
     expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent('99k LAN rate is not compatible with Ubuntu.');
   });
 
-  it('renders the lan rate toggle on and locked when the runtime always provides it', () => {
-    const onLanRateChange = vi.fn();
-    render(
-      <InstanceOptionsRow
-        lanRateEnabled={false}
-        onLanRateChange={onLanRateChange}
-        lanRateDisabled={false}
-        lanRateAlwaysOn={true}
-        lanRateUnavailableReason="99k LAN rate is always on for minqlxtended hosts."
-      />
-    );
-
-    const toggle = screen.getByRole('button', { name: /Toggle 99k LAN Rate/ });
-    expect(toggle).toBeDisabled();
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('lan-rate-tooltip')).toHaveTextContent('always on for minqlxtended hosts');
-
-    fireEvent.click(toggle);
-    expect(onLanRateChange).not.toHaveBeenCalled();
-  });
-
   const renderRow = (overrides = {}) => {
     const props = {
       lanRateEnabled: false,
