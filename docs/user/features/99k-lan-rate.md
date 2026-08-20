@@ -22,10 +22,6 @@ On small servers (2–4 players, low-intensity gametypes) there is effectively n
 
 99k LAN rate works on any supported host OS — the LD_PRELOAD library is OS-independent.
 
-## minqlxtended Hosts
-
-minqlxtended hooks its own LAN-detection function unconditionally, as part of the runtime itself — every client on a minqlxtended host already gets the 99k rate, whether or not `force_rate.so` is loaded. Because of this, the **99k LAN Rate** toggle appears **on and disabled** on minqlxtended instances, with a tooltip explaining why. There is nothing to enable, disable, or configure; it's a property of the [Server Runtime](../getting-started/add-host.md#server-runtime), not a per-instance QLSM setting, on these hosts.
-
 ## How To Enable
 
 ### At deploy time
