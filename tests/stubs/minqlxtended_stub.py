@@ -6,6 +6,7 @@ Event arities are taken from _events.py so a handler with a stale signature
 raises here exactly as the engine would raise at plugin load.
 """
 import enum
+import functools
 import sys
 import types
 
@@ -66,7 +67,15 @@ class Priority(enum.IntEnum):
 
 
 def next_frame(func):
-    """_core.py:586. Runs inline here; the engine defers one server frame."""
+    """_core.py:586. Runs inline here; the engine defers one server frame.
+
+    functools.wraps is load-bearing, not tidiness: add_hook checks a handler's
+    signature at registration, and the engine's own decorator wraps (_core.py:598)
+    so a decorated handler still reports the arity it was written with. A stub
+    wrapper without it makes every decorated handler look like it takes no
+    arguments, and every hook registration fail.
+    """
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
@@ -75,6 +84,7 @@ def next_frame(func):
 def delay(time):
     """_core.py:605. Runs inline here; the engine schedules on a timer."""
     def decorate(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
         return wrapper
@@ -226,10 +236,25 @@ class Plugin:
         instance.center_prints = []
         instance.sounds = []
         instance._players = []
-        instance.plugins = {}
+        instance._loaded_plugins = {cls.__name__: instance}
         instance.game = None
         instance.db = None
         return instance
+
+    @property
+    def plugins(self):
+        """_plugin.py:203. A copy of the loaded-plugin registry, including this one.
+
+        Both halves matter. myFun does
+        `self.plugins.pop(self.__class__.__name__)` to skip itself while scanning for
+        conflicting !sound commands: it needs its own name present or the pop raises,
+        and it needs a copy or the pop would evict a live plugin from the registry.
+        """
+        return self._loaded_plugins.copy()
+
+    @plugins.setter
+    def plugins(self, value):
+        self._loaded_plugins = dict(value)
 
     def add_hook(self, event, handler, priority=0):
         import inspect
