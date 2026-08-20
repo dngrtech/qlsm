@@ -55,14 +55,25 @@ def test_every_checked_plugin_ships_in_the_preset(checked_plugins):
     assert missing == [], f"checked but not shipped: {missing}"
 
 
-def test_scripts_match_the_vendored_upstream_baseline():
-    """The picker offers exactly what upstream ships. serverchecker is excluded
-    deliberately: it is a SYSTEM_PLUGIN, prepended to qlx_plugins for every
-    instance (ansible_instance_mgmt.py:27) and backfilled from the baseline, so
-    an operator must never be able to untick it."""
+#: Baseline plugins the picker deliberately does not offer.
+#:
+#: serverchecker is a SYSTEM_PLUGIN, prepended to qlx_plugins for every instance
+#: (ansible_instance_mgmt.py:27) and backfilled from the baseline, so an operator must
+#: never be able to untick it.
+#:
+#: reset_acc and suppress_join_msg are not in the minqlx default preset's scripts/
+#: either. The minqlxtended default mirrors the minqlx default's selection, so that an
+#: operator moving between runtimes is offered the same set. Both remain available:
+#: everything in the baseline lands in every instance's plugin directory regardless of
+#: preset, and a host that wants them can enable them by name.
+BASELINE_ONLY = {'serverchecker.py', 'reset_acc.py', 'suppress_join_msg.py'}
+
+
+def test_scripts_match_the_vendored_baseline():
+    """The picker offers the whole baseline bar the three that are deliberately out."""
     preset_scripts = {n for n in os.listdir(os.path.join(PRESET_DIR, 'scripts')) if n.endswith('.py')}
     baseline = {n for n in os.listdir(BASELINE_DIR) if n.endswith('.py')}
-    assert preset_scripts == baseline - {'serverchecker.py'}
+    assert preset_scripts == baseline - BASELINE_ONLY
 
 
 def test_no_minqlx_plugin_leaked_into_the_preset():
@@ -96,3 +107,39 @@ def test_factories_directory_matches_the_minqlx_default():
     ours = sorted(os.listdir(os.path.join(PRESET_DIR, 'factories')))
     theirs = sorted(os.listdir(os.path.join(MINQLX_PRESET_DIR, 'factories')))
     assert ours == theirs
+
+
+# The QLSM ports that are pickable from this preset. myFun, specqueue, player_info and
+# commands ship in the minqlx default preset's scripts/, so their ports ship here.
+# reset_acc and suppress_join_msg do not ship in the minqlx default preset, so they stay
+# baseline-only: present in every instance's plugin directory, not offered by the picker.
+PRESET_VISIBLE_PORTS = ['commands.py', 'myFun.py', 'player_info.py', 'specqueue.py']
+
+
+def test_the_preset_ships_the_pickable_qlsm_ports():
+    missing = [name for name in PRESET_VISIBLE_PORTS
+               if not os.path.isfile(os.path.join(PRESET_DIR, 'scripts', name))]
+    assert missing == [], f"missing from the preset: {missing}"
+
+
+def test_preset_scripts_match_the_baseline_ports():
+    """The preset carries copies, and two copies drift.
+
+    The minqlx side already has exactly this drift: its default preset's
+    specqueue.py has the AFK sweep dedented out of its elif, so it spectates every
+    player on every pass, while ql-assets/data/minqlx-plugins/specqueue.py is
+    correct. This stops the minqlxtended side acquiring its own version of that.
+    """
+    import filecmp
+    drifted = [
+        name for name in PRESET_VISIBLE_PORTS
+        if not filecmp.cmp(os.path.join(BASELINE_DIR, name),
+                           os.path.join(PRESET_DIR, 'scripts', name), shallow=False)
+    ]
+    assert drifted == [], f"preset copies drifted from the baseline: {drifted}"
+
+
+def test_the_system_plugin_is_not_pickable():
+    """serverchecker is backfilled as a SYSTEM_PLUGIN and must never be untickable."""
+    assert not os.path.isfile(
+        os.path.join(PRESET_DIR, 'scripts', 'serverchecker.py'))

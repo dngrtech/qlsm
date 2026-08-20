@@ -7,10 +7,32 @@ These files are synced to every minqlxtended host by `setup_host.yml` and
 backfilled into each instance's plugin directory by `add_qlds_instance.yml`.
 Anything here is available to an instance whether or not a preset ships it.
 
-`serverchecker.py` is **not** upstream. It is QLSM's own plugin, ported to the
-minqlxtended API, and it is a hard dependency of live status: it writes
-`minqlx:server_status:<port>`, which `ui/task_logic/service_runtime.py` reads.
-`manifest.json` marks it `"origin": "qlsm"` so a diff against upstream skips it.
+## QLSM's own plugins
+
+Seven files here are **not** upstream. They are QLSM's own plugins, ported to the
+minqlxtended API, and `manifest.json` marks each `"origin": "qlsm"` so a diff against
+upstream skips them. Their minqlx originals live in `ql-assets/data/minqlx-plugins/`.
+
+| File | Notes |
+|---|---|
+| `serverchecker.py` | Hard dependency of live status: writes `minqlx:server_status:<port>`, which `ui/task_logic/service_runtime.py` reads. Never pickable — a `SYSTEM_PLUGIN`, backfilled into every instance. |
+| `myFun.py` | Sound-trigger plugin. Keeps its `minqlx:myFun:*` Redis keys and its Steam Workshop item titles verbatim; both are matched by exact string. |
+| `specqueue.py` | Spectator queue. Ported from the `minqlx-plugins/` copy, **not** the default preset's copy — see the warning below. |
+| `player_info.py` | Does **not** carry the iouonegirl abstract base across. That base installs itself at import by downloading from a minqlx plugin repository; the one helper this plugin used from it is inlined. |
+| `commands.py` | `!plugins` / `!lc`. Unrelated to upstream's `votecommands.py`, which adds `/pass` and `/veto`. |
+| `reset_acc.py` | Needs no engine patch here — `gclient_t` is writable memory. The per-weapon WEAP arrays are `WEAPONS` fields with no setter (`python_objects.c:1156`), so they survive a reset and the plugin no longer claims otherwise. |
+| `suppress_join_msg.py` | Suppresses the "joined the battle" centre-print. |
+
+`serverchecker.py`, `reset_acc.py` and `suppress_join_msg.py` are baseline-only: present
+in every instance's plugin directory, but not in `default-minqlxtended`'s `scripts/`, so
+the picker does not offer them. The other four mirror the minqlx default preset, which
+ships exactly those four.
+
+> ⚠️ **Port from `ql-assets/data/minqlx-plugins/`, never from a preset's `scripts/`.**
+> The two copies of `specqueue.py` on the minqlx side have diverged, and the preset copy
+> is the broken one: its AFK sweep is dedented out of its `elif`, so it moves every
+> player to spectator on every pass. `tests/test_default_minqlxtended_preset.py` pins
+> the minqlxtended preset copies to the baseline so this cannot recur here.
 
 ## Re-vendoring against a newer upstream
 
