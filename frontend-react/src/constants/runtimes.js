@@ -33,3 +33,17 @@ const RUNTIME_LOG_FILENAMES = {
 };
 
 export const runtimeLogFilename = (value) => RUNTIME_LOG_FILENAMES[runtimeLabel(value)];
+
+// The builtin preset a new instance seeds from, per host runtime. Plugins are
+// not interchangeable between runtimes, so seeding from the wrong one ships
+// files that cannot load. Mirrors _DEFAULT_PRESET_BY_RUNTIME in
+// ui/preset_support.py -- the two must not drift.
+const DEFAULT_PRESET_BY_RUNTIME = {
+  minqlx: 'default',
+  minqlxtended: 'default-minqlxtended',
+};
+
+export function defaultPresetNameForRuntime(runtime) {
+  const key = typeof runtime === 'string' ? runtime.trim().toLowerCase() : '';
+  return DEFAULT_PRESET_BY_RUNTIME[key] || DEFAULT_PRESET_BY_RUNTIME.minqlx;
+}

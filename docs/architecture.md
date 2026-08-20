@@ -221,6 +221,38 @@ qlsm/
 4. Ansible `add_qlds_instance.yml` → Deploys to host
 5. Instance status → RUNNING
 
+Before step 1, opening the Add Instance form (or changing the selected host) seeds
+the draft from a runtime-matched builtin preset: the chosen host's `runtime` resolves
+to a preset name — `default` for minqlx, `default-minqlxtended` for minqlxtended —
+via `defaultPresetNameForRuntime()` in the frontend (`frontend-react/src/constants/runtimes.js`)
+and `default_preset_name_for_runtime()` in the backend (`ui/preset_support.py`). The two
+are deliberate mirrors of the same runtime → preset mapping and must not drift, since
+seeding from the wrong runtime's preset would ship plugins that cannot load.
+
+Three backend paths carry *plugin* files out of a default preset, and each resolves the
+name through `ui/preset_support.py` rather than hardcoding `default`: the draft workspace
+overlay (`ui/routes/draft_routes.py`), the no-draft instance-create fallback — `draft_id`
+is optional on `POST /api/instances`, so this runs for API clients and for the UI after a
+draft-creation failure (`ui/routes/instance_routes.py`) — and the preset-read overlay
+that backs the preset GET/create/update/import responses (`_read_preset_scripts()` in
+`ui/routes/preset_api_routes.py`, which takes the preset's own `runtime`).
+
+Five other backend paths still hardcode `'default'`, knowingly rather than by oversight.
+Four of them serve *config files* or *factories* — `_read_default_config` and the
+default-factories copy in `ui/routes/instance_routes.py`, `GET /api/default-config/<filename>`
+in `ui/routes/index_routes.py` (what the Add Instance form fetches for `server.cfg`,
+`mappool.txt`, `access.txt` and `workshop.txt`), and the no-preset fallback in
+`ui/routes/factory_routes.py`. The two builtin presets are byte-identical in exactly those
+files, pinned by `test_runtime_agnostic_config_matches_the_minqlx_default` and
+`test_factories_directory_matches_the_minqlx_default` in
+`tests/test_default_minqlxtended_preset.py`, so they return the same bytes either way —
+only plugins differ between runtimes. The fifth, the no-argument fallback in
+`_get_scripts_base_path()` (`ui/routes/script_routes.py`), *would* return the minqlx plugin
+list on a minqlxtended host, but it only browses: nothing seeds an instance through it, and
+its client wrapper (`getScriptTree` in `services/api.js`) has no caller in the React app,
+which uses the draft workspace instead. Converting all five is backlog, not part of the
+runtime split.
+
 ### Instance Config Update
 1. User edits config, plugins, or factories → `PUT /api/instances/<id>/config`
 2. Managed config and factory maps are synced in `configs/<host>/<id>/`; plugin changes are committed from a draft workspace when `draft_id` is provided

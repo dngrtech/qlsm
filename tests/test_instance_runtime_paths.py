@@ -17,10 +17,12 @@ def _instance(app, runtime, port, *, lan_rate=True, hook_migrated=True, name="h"
         db.session.add(host)
         db.session.flush()
         inst = QLInstance(
-            name="i", port=port, hostname="hn", host_id=host.id,
+            # Name and ZMQ ports derive from `port` so a single test can build
+            # two instances without tripping their unique constraints.
+            name=f"i-{port}", port=port, hostname="hn", host_id=host.id,
             lan_rate_enabled=lan_rate, status=InstanceStatus.RUNNING,
-            zmq_rcon_port=28888, zmq_rcon_password="a",
-            zmq_stats_port=29999, zmq_stats_password="b",
+            zmq_rcon_port=port + 1000, zmq_rcon_password="a",
+            zmq_stats_port=port + 2000, zmq_stats_password="b",
         )
         db.session.add(inst)
         db.session.commit()
@@ -41,6 +43,38 @@ def test_qlx_plugins_path_unchanged_for_minqlx(app):
     with app.app_context():
         args = mod._build_qlds_args_string(db.session.get(QLInstance, inst.id))
     assert "+set qlx_pluginsPath /home/ql/qlds-27961/minqlx-plugins" in args
+
+
+def test_minqlxtended_always_emits_sv_lanforcerate_1(app):
+    """The load-bearing assertion for the "QLSM runs minqlxtended at 99k"
+    decision: with the stored flag off, the generated argument string must still
+    carry `sv_lanForceRate 1`, so the locked-on toggle the UI renders is the
+    cvar the server actually gets."""
+    inst = _instance(app, MINQLXTENDED, 27970, lan_rate=False, name="argstr")
+    with app.app_context():
+        args = mod._build_qlds_args_string(db.session.get(QLInstance, inst.id))
+    assert "+set sv_lanForceRate 1" in args
+    assert "+set sv_lanForceRate 0" not in args
+
+
+def test_minqlxtended_stored_flag_is_left_alone(app):
+    """The column stays honest: forcing it True would make a preset saved here
+    switch 99k on for a minqlx host, where the operator owns the choice."""
+    inst = _instance(app, MINQLXTENDED, 27971, lan_rate=False, name="stored")
+    with app.app_context():
+        args = mod._build_qlds_args_string(db.session.get(QLInstance, inst.id))
+        assert db.session.get(QLInstance, inst.id).lan_rate_enabled is False
+    assert "+set sv_lanForceRate 1" in args
+
+
+def test_minqlx_sv_lanforcerate_still_follows_the_stored_flag(app):
+    off = _instance(app, MINQLX, 27972, lan_rate=False, name="mq-off")
+    on = _instance(app, MINQLX, 27973, lan_rate=True, name="mq-on")
+    with app.app_context():
+        off_args = mod._build_qlds_args_string(db.session.get(QLInstance, off.id))
+        on_args = mod._build_qlds_args_string(db.session.get(QLInstance, on.id))
+    assert "+set sv_lanForceRate 0" in off_args
+    assert "+set sv_lanForceRate 1" in on_args
 
 
 def test_force_rate_never_loads_on_minqlxtended(app):

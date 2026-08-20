@@ -14,6 +14,7 @@ from rq import get_current_job
 from ui import db
 from ui.constants import resolve_redis_db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
+from ui.lan_rate_policy import effective_lan_rate
 from ui.runtime import host_runtime, log_filename_pattern, runtime_extravars, runtime_paths
 from .common import append_log # Import from the common module
 from . import service_runtime
@@ -116,7 +117,10 @@ def _build_qlds_args_string(instance):
 
     parts = []
 
-    if instance.lan_rate_enabled:
+    # effective_lan_rate(), not instance.lan_rate_enabled: QLSM runs
+    # minqlxtended hosts at 99k as a policy choice, and what the UI shows has to
+    # be the cvar that actually lands here.
+    if effective_lan_rate(instance):
         parts += ['+set sv_lanForceRate 1']
     else:
         parts += ['+set sv_lanForceRate 0']

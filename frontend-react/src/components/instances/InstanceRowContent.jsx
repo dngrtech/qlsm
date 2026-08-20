@@ -1,6 +1,7 @@
 import { Zap, Users } from 'lucide-react';
 import StatusIndicator from '../StatusIndicator';
 import InstanceActionsMenu from '../InstanceActionsMenu';
+import { isLanRateForcedOn } from '../../utils/lanRateCompatibility';
 
 export default function InstanceRowContent({
     inst,
@@ -20,6 +21,11 @@ export default function InstanceRowContent({
     onViewMinqlxLogs,
     onOpenRcon,
 }) {
+    // QLSM runs minqlxtended hosts at 99k, so the Rate column must not read 25k
+    // while the details modal reads Enabled for the same instance.
+    const lanRateOn = inst.lan_rate_enabled
+        || isLanRateForcedOn({ runtime: inst.host_runtime ?? host?.runtime ?? null });
+
     return (
         <>
             <button
@@ -40,13 +46,13 @@ export default function InstanceRowContent({
                 {inst.port}
             </span>
             <span
-                className={`instance-rate-cell flex items-center gap-1 text-[12px] font-mono font-semibold ${inst.lan_rate_enabled
+                className={`instance-rate-cell flex items-center gap-1 text-[12px] font-mono font-semibold ${lanRateOn
                     ? 'text-[var(--accent-warning)]'
                     : 'text-theme-muted'
                     }`}
             >
-                {inst.lan_rate_enabled && <Zap size={12} />}
-                {inst.lan_rate_enabled ? '99k' : '25k'}
+                {lanRateOn && <Zap size={12} />}
+                {lanRateOn ? '99k' : '25k'}
             </span>
             <span className="instance-players-cell flex items-center gap-1.5" title="View live status">
                 {serverStatus

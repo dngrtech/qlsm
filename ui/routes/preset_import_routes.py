@@ -128,7 +128,7 @@ def _replace_binary_metadata(preset_name, entries):
 def _preset_response(preset):
     data = preset.to_dict()
     data.update(_read_preset_configs(preset.path))
-    data['scripts'] = _read_preset_scripts(preset.path)
+    data['scripts'] = _read_preset_scripts(preset.path, preset.runtime)
     data['factories'] = _read_preset_factories(preset.path)
     data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
     data['checked_factories'] = _read_preset_checked_factories(preset.path)

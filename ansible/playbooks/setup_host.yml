@@ -495,7 +495,7 @@
         - "{{ qlds_base_dir }}"
         - "{{ minqlx_shared_dir }}"
         - "{{ common_assets_dir }}"
-        - "{{ common_assets_dir }}/minqlx-plugins" # For plugins sync
+        - "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}" # For plugins sync
         - "{{ common_assets_dir }}/scripts"       # For scripts sync
 
   #######################################################################

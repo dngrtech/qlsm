@@ -2,12 +2,44 @@ import os
 import re
 
 from ui.database import get_preset_by_name
+from ui.runtime import MINQLXTENDED, normalize_runtime
 
 
 PRESETS_DIR = os.path.join('configs', 'presets')
 BUILTIN_PRESETS_DIR = os.path.join(PRESETS_DIR, '_builtin')
 PRESET_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
 INTERNAL_PRESET_NAMES = {'_builtin'}
+DEFAULT_PRESET_NAME = 'default'
+
+# The builtin preset that carries a runtime's plugin baseline. Plugins are not
+# interchangeable between the two runtimes, so every path that seeds an
+# instance, a draft or a preset response from "the default preset" has to
+# resolve the name through here -- hardcoding 'default' silently means "the
+# minqlx one" and ships files that cannot import. Mirrors
+# DEFAULT_PRESET_BY_RUNTIME in the frontend's constants/runtimes.js -- the two
+# must not drift.
+_DEFAULT_PRESET_BY_RUNTIME = {
+    MINQLXTENDED: 'default-minqlxtended',
+}
+
+
+def default_preset_name_for_runtime(runtime):
+    """The builtin preset supplying `runtime`'s baseline plugins.
+
+    Falls back to the minqlx default for anything unrecognized: a NULL runtime
+    column means the row predates the feature, and nothing but minqlx has ever
+    existed.
+    """
+    return _DEFAULT_PRESET_BY_RUNTIME.get(
+        normalize_runtime(runtime), DEFAULT_PRESET_NAME
+    )
+
+
+def default_preset_name_for_preset(preset_name):
+    """The builtin preset to overlay beneath the preset named `preset_name`."""
+    preset = get_preset_by_name(preset_name) if preset_name else None
+    return default_preset_name_for_runtime(getattr(preset, 'runtime', None))
+
 
 
 def user_preset_path(name, configs_base=None):

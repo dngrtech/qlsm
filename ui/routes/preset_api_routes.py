@@ -13,6 +13,7 @@ from ui.database import get_presets, create_preset, get_preset, update_preset, d
 from ui.models import BinaryMetadata
 from ui.preset_support import (
     PRESETS_DIR,
+    default_preset_name_for_runtime,
     is_internal_preset_name,
     resolve_preset_subdir,
     validate_user_preset_name,
@@ -571,12 +572,18 @@ def _read_script_file(filepath):
         return f.read()
 
 
-def _read_preset_scripts(preset_path):
+def _read_preset_scripts(preset_path, runtime=None):
     """Read all plugin scripts from a preset's scripts/ folder.
 
-    For non-default presets that have their own scripts folder, the default
-    preset's scripts are merged in first so they are not lost. Preset-specific
-    files take priority over defaults with the same relative path.
+    For non-default presets that have their own scripts folder, the builtin
+    default preset's scripts are merged in first so they are not lost.
+    Preset-specific files take priority over defaults with the same relative
+    path.
+
+    `runtime` is the preset's own runtime: the default to merge is the builtin
+    for that runtime, because plugins are not interchangeable between the two.
+    Omitting it means minqlx, which is what every caller predating the runtime
+    column meant.
     """
     scripts = {}
     scripts_dir = os.path.join(preset_path, 'scripts')
@@ -587,8 +594,9 @@ def _read_preset_scripts(preset_path):
     # only needs to store its customisations (new or overridden files).
     # Use the basename of preset_path (the preset name) rather than a
     # CWD-dependent os.path.abspath comparison for robustness.
-    default_scripts_dir = resolve_preset_subdir('default', 'scripts')
-    if os.path.basename(preset_path) != 'default' and os.path.exists(default_scripts_dir):
+    default_preset_name = default_preset_name_for_runtime(runtime)
+    default_scripts_dir = resolve_preset_subdir(default_preset_name, 'scripts')
+    if os.path.basename(preset_path) != default_preset_name and os.path.exists(default_scripts_dir):
         for root, _, files in os.walk(default_scripts_dir):
             for filename in files:
                 if filename.lower().endswith(SCRIPT_READ_EXTENSIONS):
@@ -1160,7 +1168,7 @@ def create_preset_api():
         # Return preset data with config content and scripts for immediate use
         response_data = new_preset.to_dict()
         response_data.update(_read_preset_configs(preset_path))
-        response_data['scripts'] = _read_preset_scripts(preset_path)
+        response_data['scripts'] = _read_preset_scripts(preset_path, new_preset.runtime)
         response_data['factories'] = _read_preset_factories(preset_path)
         response_data['checked_plugins'] = _read_preset_checked_plugins(preset_path)
         response_data['checked_factories'] = _read_preset_checked_factories(preset_path)
@@ -1209,7 +1217,7 @@ def get_preset_api(preset_id):
     # Build response with metadata, config content, and scripts
     response_data = preset.to_dict()
     response_data.update(_read_preset_configs(preset.path))
-    response_data['scripts'] = _read_preset_scripts(preset.path)
+    response_data['scripts'] = _read_preset_scripts(preset.path, preset.runtime)
     response_data['factories'] = _read_preset_factories(preset.path)
     response_data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
     response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
@@ -1426,7 +1434,7 @@ def update_preset_api(preset_id):
 
             response_data = updated_preset.to_dict()
             response_data.update(_read_preset_configs(updated_preset.path))
-            response_data['scripts'] = _read_preset_scripts(updated_preset.path)
+            response_data['scripts'] = _read_preset_scripts(updated_preset.path, updated_preset.runtime)
             response_data['factories'] = _read_preset_factories(updated_preset.path)
             response_data['checked_plugins'] = _read_preset_checked_plugins(updated_preset.path)
             response_data['checked_factories'] = _read_preset_checked_factories(updated_preset.path)

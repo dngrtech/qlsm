@@ -15,6 +15,7 @@ Host limit: each host can have a maximum of **8 instances**, using game ports 27
 When the add new QLDS instance form opens, config is preloaded from the **default preset**.
 
 - Default preset is a built-in baseline template — it cannot be modified or deleted.
+- Which default preset loads, and which plugins come with it, depends on the selected host's [Server Runtime](add-host.md#server-runtime): minqlx hosts start from `default`, minqlxtended hosts start from `default-minqlxtended`. Switching the **Host Server** field to a host on the other runtime reloads the form with that runtime's default preset and plugins, since the two runtimes don't share plugins.
 - Modify the preloaded values freely before deploying; those changes only affect this instance.
 - To save a customized starting point, use **Save Preset** and enter a new preset name.
 
