@@ -100,8 +100,6 @@ def test_a_dotted_minqlxtended_reference_is_not_flagged_for_minqlxtended():
     'flags = minqlx.CVAR_ARCHIVE\n',
     'player.set_health(100)\n',
     'player.god()\n',
-    'self.play_sound("x")\n',
-    'self.center_print("x")\n',
     'name = minqlx.TEAMS[1]\n',
 ])
 def test_removed_minqlx_apis_are_incompatible_with_minqlxtended(snippet):
@@ -466,3 +464,52 @@ def test_a_clean_file_with_no_hash_match_is_unknown():
 def test_a_wrong_hash_falls_through_to_the_scanner():
     verdict, _ = classify('import minqlx\n', MINQLXTENDED, baseline_sha256='deadbeef')
     assert verdict == VERDICT_INCOMPATIBLE
+
+
+def test_play_sound_and_center_print_are_not_flagged():
+    """Both exist on minqlxtended -- 10 of the 40 files in QLSM's own shipped
+    minqlxtended baseline call them, and minqlxtended_stub.py implements both."""
+    text = (
+        "import minqlxtended\n"
+        "class p(minqlxtended.Plugin):\n"
+        "    def f(self):\n"
+        "        self.play_sound('sound/x.ogg')\n"
+        "        self.center_print('hi')\n"
+    )
+    assert scan_incompatibilities(text, 'minqlxtended') == []
+
+
+def test_module_scope_all_caps_assignment_is_the_authors_own_symbol():
+    """MOD_LIST is a name a real plugin author would plausibly pick."""
+    text = (
+        "import minqlxtended\n"
+        "MOD_LIST = ['rocket', 'rail']\n"
+        "class p(minqlxtended.Plugin):\n"
+        "    def f(self):\n"
+        "        return MOD_LIST\n"
+    )
+    assert scan_incompatibilities(text, 'minqlxtended') == []
+
+
+def test_all_caps_constant_not_assigned_locally_is_still_flagged():
+    """The narrowing must not disarm the pattern for genuine Quake constants."""
+    text = (
+        "import minqlxtended\n"
+        "class p(minqlxtended.Plugin):\n"
+        "    def f(self, d):\n"
+        "        return d['mod'] == MOD_ROCKET\n"
+    )
+    reasons = scan_incompatibilities(text, 'minqlxtended')
+    assert any('MOD_*' in r for r in reasons)
+
+
+def test_indented_assignment_does_not_suppress():
+    """Only a module-scope assignment counts as the author defining the name."""
+    text = (
+        "import minqlxtended\n"
+        "class p(minqlxtended.Plugin):\n"
+        "    def f(self):\n"
+        "        MOD_ROCKET = 1\n"
+        "        return MOD_ROCKET\n"
+    )
+    assert scan_incompatibilities(text, 'minqlxtended') != []

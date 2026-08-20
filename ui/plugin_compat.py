@@ -101,8 +101,6 @@ _REMOVED_ON_MINQLXTENDED = [
     (re.compile(r'\.set_score\s*\('), 'calls set_score() (a property on minqlxtended)'),
     (re.compile(r'\.god\s*\('), 'calls god() (a property on minqlxtended)'),
     (re.compile(r'\.noclip\s*\('), 'calls noclip() (a property on minqlxtended)'),
-    (re.compile(r'\bself\.play_sound\s*\('), 'calls Plugin.play_sound(), removed on minqlxtended'),
-    (re.compile(r'\bself\.center_print\s*\('), 'calls Plugin.center_print(), removed on minqlxtended'),
     (re.compile(r'\bself\.lock\s*\('), 'calls Plugin.lock(), removed on minqlxtended'),
     (re.compile(r'\bself\.tempban\s*\('), 'calls Plugin.tempban(), removed on minqlxtended'),
     (re.compile(r'\bself\.slap\s*\('), 'calls Plugin.slap(), removed on minqlxtended'),
@@ -145,6 +143,26 @@ _EVENT_ARITY = {
         'round_end': 3, 'team_switch_attempt': 4, 'kill': 3, 'death': 3,
     },
 }
+
+# An ALL-CAPS name the file itself binds at module scope is the author's own
+# symbol, not a Quake constant the target runtime removed. Only column 0
+# counts: an assignment inside a function or class body is a local, and a
+# local named MOD_ROCKET does not make a reference to MOD_ROCKET elsewhere
+# in the file safe.
+_MODULE_SCOPE_ASSIGN = re.compile(
+    r'^(?P<name>[A-Z][A-Z0-9_]*)\s*(?::[^=\n]+)?=(?!=)', re.M)
+
+# Only the prefix patterns can collide with an author's identifiers. Anchored
+# patterns (imports, `minqlx.`, `TEAMS[`, method calls) cannot, so suppression
+# must never apply to them.
+_SUPPRESSIBLE_PREFIXES = ('RET_', 'PRI_', 'WP_', 'MOD_', 'ET_', 'SS_',
+                          'CVAR_', 'SVF_', 'TR_', 'SAY_')
+
+
+def _locally_defined(masked):
+    """ALL-CAPS names the file binds at module scope (column 0)."""
+    return {m.group('name') for m in _MODULE_SCOPE_ASSIGN.finditer(masked)}
+
 
 _ADD_HOOK = re.compile(
     r'\badd_hook\s*\(\s*["\'](?P<event>\w+)["\']\s*,\s*self\.(?P<handler>\w+)')
@@ -304,10 +322,16 @@ def scan_incompatibilities(text, target_runtime):
     target = normalize_runtime(target_runtime)
     masked = code_only(text)
     reasons = []
+    local_names = _locally_defined(masked)
     for pattern, description in _PATTERNS_BY_TARGET[target]:
-        match = pattern.search(masked)
-        if match:
-            reasons.append(f'line {_line_of(masked, match.start())}: {description}')
+        for match in pattern.finditer(masked):
+            token = match.group(0)
+            if (token.startswith(_SUPPRESSIBLE_PREFIXES)
+                    and token in local_names):
+                continue  # the author's own module-scope symbol
+            reasons.append(
+                f'line {_line_of(masked, match.start())}: {description}')
+            break
     reasons.extend(_scan_arities(text, masked, target))
     return reasons
 
