@@ -29,12 +29,19 @@ def test_baseline_hashes_match_the_files_on_disk():
     import hashlib
     from ui.preset_compat import ASSETS_DIR
     directory = os.path.join(ASSETS_DIR, 'minqlxtended-plugins')
-    for name, digest in baseline_hashes(MINQLXTENDED).items():
+    hashes = baseline_hashes(MINQLXTENDED)
+    assert hashes, 'manifest must not be empty, or the loop below checks nothing'
+    compared = 0
+    for name, digest in hashes.items():
         path = os.path.join(directory, name)
         if not os.path.exists(path):
             continue
         with open(path, 'rb') as handle:
             assert hashlib.sha256(handle.read()).hexdigest() == digest, name
+        compared += 1
+    # A manifest that returned {} would make this loop a no-op that still
+    # passes -- assert real comparisons actually happened.
+    assert compared > 0
 
 
 def test_baseline_hashes_survive_a_changed_working_directory(tmp_path, monkeypatch):
@@ -154,3 +161,48 @@ def test_the_reverse_direction_strips_a_minqlxtended_plugin_for_a_minqlx_host():
     assert 'ported.py' not in result['scripts']
     assert result['compatibility']['target_runtime'] == MINQLX
     assert result['compatibility']['preset_runtime'] == MINQLXTENDED
+
+
+def test_replacement_scripts_skips_a_file_that_is_not_utf8(tmp_path, monkeypatch):
+    """One plugin saved in the wrong encoding must not take down every other
+    file's read: UnicodeDecodeError is a ValueError, not an OSError, so the
+    per-file except clause has to catch both."""
+    import ui.preset_compat as preset_compat
+    preset_dir = tmp_path / 'default-minqlxtended' / 'scripts'
+    preset_dir.mkdir(parents=True)
+    (preset_dir / 'good.py').write_text('import minqlxtended\n', encoding='utf-8')
+    (preset_dir / 'bad.py').write_bytes(b'# broken \xe9 latin-1 comment\nimport minqlxtended\n')
+    monkeypatch.setattr(preset_compat, 'BUILTIN_PRESETS_DIR', str(tmp_path))
+    scripts = preset_compat.replacement_scripts(MINQLXTENDED)
+    assert scripts == {'good.py': 'import minqlxtended\n'}
+
+
+def test_apply_compatibility_completes_when_a_replacement_candidate_is_unreadable(tmp_path, monkeypatch):
+    """The crash reproduced above must not surface through apply_compatibility
+    either: a bad file among the replacement candidates must not take down an
+    otherwise-unrelated preset load."""
+    import ui.preset_compat as preset_compat
+    preset_dir = tmp_path / 'default-minqlxtended' / 'scripts'
+    preset_dir.mkdir(parents=True)
+    (preset_dir / 'bad.py').write_bytes(b'\xe9 not utf-8\n')
+    monkeypatch.setattr(preset_compat, 'BUILTIN_PRESETS_DIR', str(tmp_path))
+    response = {'scripts': {'mine.py': 'import minqlx\nx = minqlx.RET_STOP_ALL\n'}, 'checked_plugins': ['mine.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert 'mine.py' not in result['scripts']
+    assert result['checked_plugins'] == []
+
+
+def test_checked_plugins_as_a_string_falls_back_to_empty_instead_of_exploding():
+    """A hand-edited checked_plugins.json can hold anything. On the matched-
+    runtime path a bad value passes through harmlessly; this gate must not
+    turn that into silent corruption (a string iterates into characters) just
+    because the runtimes now differ."""
+    response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 'nope'}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['checked_plugins'] == []
+
+
+def test_checked_plugins_as_an_int_falls_back_to_empty_instead_of_raising():
+    response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 42}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['checked_plugins'] == []

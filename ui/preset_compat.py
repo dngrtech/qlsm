@@ -79,7 +79,11 @@ def replacement_scripts(runtime):
         try:
             with open(os.path.join(directory, name), 'r', encoding='utf-8') as handle:
                 scripts[name] = handle.read()
-        except OSError:
+        except (OSError, ValueError):
+            # ValueError catches UnicodeDecodeError: one plugin saved in the
+            # wrong encoding must not take down every other file's read, or a
+            # single bad script anywhere in the preset directory would fail
+            # every cross-runtime preset load, not just its own.
             continue
     return scripts
 
@@ -150,10 +154,16 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
             offered[entry['replacement']] = candidates[entry['replacement']]
 
     stripped_paths = {entry['path'] for entry in stripped}
-    checked = [
-        path for path in (response_data.get('checked_plugins') or [])
-        if path not in stripped_paths
-    ]
+    checked_plugins = response_data.get('checked_plugins')
+    if not isinstance(checked_plugins, list):
+        # A hand-edited checked_plugins.json is read by _read_preset_checked_
+        # plugins() with a bare json.load() and no type guard, so a string or
+        # int can reach here on the matched-runtime path today and pass
+        # through harmlessly. This gate must not turn that into a crash
+        # (str iterates into characters; int raises TypeError) just because
+        # the runtimes now differ.
+        checked_plugins = []
+    checked = [path for path in checked_plugins if path not in stripped_paths]
 
     result = dict(response_data)
     result['scripts'] = kept
