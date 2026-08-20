@@ -1913,5 +1913,72 @@ describe('AddInstanceForm draft lifecycle', () => {
       await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetB'));
       expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetB).toEqual([]);
     });
+
+    it('leaves the active preset\'s accepted replacements intact when a subsequent load is cancelled', async () => {
+      // Regression, round 2: an earlier fix cleared acceptedReplacements
+      // speculatively at the start of every load, before it was known whether
+      // the load would even complete. Since acceptedKey is a dependency of
+      // useDraftWorkspace's seeding effect, that speculative clear re-seeded
+      // preset A's still-active draft with an empty list immediately -- so
+      // cancelling the load of preset B destroyed a replacement the operator
+      // had explicitly accepted for A. Fixed by making the accepted list an
+      // argument to applyPresetData (called only on confirm, never on cancel)
+      // instead of ambient state cleared ahead of time.
+      mocks.getPresetById
+        .mockResolvedValueOnce({
+          name: 'presetA',
+          runtime: 'minqlxtended',
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              {
+                path: 'essentials.py',
+                verdict: 'incompatible',
+                reasons: ['uses a minqlxtended-only API'],
+                replacement: 'essentials_mqx.py',
+              },
+            ],
+            replacements: { 'essentials.py': 'essentials_mqx.py' },
+          },
+        })
+        .mockResolvedValueOnce({
+          name: 'presetB',
+          runtime: 'minqlxtended',
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              { path: 'other.py', verdict: 'incompatible', reasons: ['unrelated'], replacement: null },
+            ],
+            replacements: {},
+          },
+        });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      // Load preset A and confirm, accepting the offered replacement.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      let dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+
+      // Start loading preset B, then cancel out of its compatibility dialog.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+      // Preset A is still the active preset, and it must still show its
+      // accepted replacement -- not silently reseeded to an empty list.
+      expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA');
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+    });
   });
 });

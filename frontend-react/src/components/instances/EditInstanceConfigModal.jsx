@@ -514,7 +514,7 @@ function EditInstanceConfigModal({
     pluginsHaveChanges,
   ]);
 
-  const applyPresetData = useCallback(async (presetId, presetData) => {
+  const applyPresetData = useCallback(async (presetId, presetData, acceptedPaths = []) => {
     setPresetError(null);
     try {
       const newConfigs = { ...(presetData.configs || {}) };
@@ -537,7 +537,11 @@ function EditInstanceConfigModal({
       setCheckedPlugins(selectable);
       setDroppedPluginCount(dropped.length);
       setPluginNoticeDismissed(false);
+      // acceptedPaths defaults to [] (a plain default, not a speculative clear
+      // elsewhere) so a no-dialog load carries nothing forward, and both state
+      // updates land in the same render as the one re-seed this load causes.
       setDraftPreset(presetData.name);
+      setAcceptedReplacements(acceptedPaths);
       if (presetData.enabled_hooks !== undefined && presetData.enabled_hooks !== null) {
         setHookEnabledOrder(presetData.enabled_hooks);
         setHooksLoaded(true);
@@ -583,13 +587,6 @@ function EditInstanceConfigModal({
   const handleLoadPreset = useCallback(async (presetId) => {
     setPresetError(null);
     try {
-      // Every load starts from a clean slate -- only handleConfirmPresetCompatibility
-      // ever repopulates this. Without the clear, a load that needs no dialog (or a
-      // cross-runtime load of a preset that happens to share a filename) would still
-      // carry a previous preset's accepted replacements into this one's draft; the
-      // backend trusts this list rather than re-deriving it, so correctness has to
-      // live here.
-      setAcceptedReplacements([]);
       const presetData = await getPresetById(presetId, { targetRuntime: hostRuntime });
       if (presetData.compatibility?.stripped?.length) {
         setPendingPreset({ id: presetId, data: presetData });
@@ -605,11 +602,12 @@ function EditInstanceConfigModal({
     if (!pendingPreset) return;
     const { id, data } = pendingPreset;
     setPendingPreset(null);
-    // Set this BEFORE applyPresetData: that calls setDraftPreset, which re-seeds
-    // the draft. Both state updates batch into one render, so the reseed sees
-    // the accepted list and writes the replacement files server-side.
-    setAcceptedReplacements(acceptedPaths || []);
-    await applyPresetData(id, mergeReplacements(data, acceptedPaths));
+    // applyPresetData sets both draftPreset and acceptedReplacements together
+    // (see its own body) -- the accepted list is an argument to "apply this
+    // preset", not ambient state some other codepath clears speculatively. A
+    // cancelled load therefore calls nothing here at all, leaving whatever
+    // preset is currently active, and its accepted replacements, untouched.
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths), acceptedPaths);
   }, [applyPresetData, pendingPreset]);
 
   const handleCancelPresetCompatibility = useCallback(() => {

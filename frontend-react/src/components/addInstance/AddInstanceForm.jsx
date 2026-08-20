@@ -674,7 +674,7 @@ function AddInstanceForm({
   );
 
   // Handle loading a preset
-  const applyPresetData = useCallback(async (presetId, presetData) => {
+  const applyPresetData = useCallback(async (presetId, presetData, acceptedPaths = []) => {
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
@@ -728,8 +728,12 @@ function AddInstanceForm({
       // The preset's plugin/hook selection is now the seed, so the seeded
       // runtime is the preset's (see seededRuntimeRef above).
       seededRuntimeRef.current = runtimeLabel(presetData.runtime);
-      // Reseed draft workspace with the loaded preset's scripts
+      // Reseed draft workspace with the loaded preset's scripts. acceptedPaths
+      // defaults to [] (a plain default, not a speculative clear elsewhere) so
+      // a no-dialog load carries nothing forward, and both state updates land
+      // in the same render as the one re-seed this load causes.
       setDraftPreset(presetData.name);
+      setAcceptedReplacements(acceptedPaths);
       loadedPresetConfigRef.current = newConfigs;
 
       // Reflect the preset's hooks: available files + enabled order/status.
@@ -790,13 +794,6 @@ function AddInstanceForm({
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
-      // Every load starts from a clean slate -- only handleConfirmPresetCompatibility
-      // ever repopulates this. Without the clear, a load that needs no dialog (or a
-      // cross-runtime load of a preset that happens to share a filename) would still
-      // carry a previous preset's accepted replacements into this one's draft; the
-      // backend trusts this list rather than re-deriving it, so correctness has to
-      // live here.
-      setAcceptedReplacements([]);
       const presetData = await getPresetById(presetId, { targetRuntime: selectedHostShape.runtime });
       if (presetData.compatibility?.stripped?.length) {
         setPendingPreset({ id: presetId, data: presetData });
@@ -814,11 +811,12 @@ function AddInstanceForm({
     if (!pendingPreset) return;
     const { id, data } = pendingPreset;
     setPendingPreset(null);
-    // Set this BEFORE applyPresetData: that calls setDraftPreset, which re-seeds
-    // the draft. Both state updates batch into one render, so the reseed sees
-    // the accepted list and writes the replacement files server-side.
-    setAcceptedReplacements(acceptedPaths || []);
-    await applyPresetData(id, mergeReplacements(data, acceptedPaths));
+    // applyPresetData sets both draftPreset and acceptedReplacements together
+    // (see its own body) -- the accepted list is an argument to "apply this
+    // preset", not ambient state some other codepath clears speculatively. A
+    // cancelled load therefore calls nothing here at all, leaving whatever
+    // preset is currently active, and its accepted replacements, untouched.
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths), acceptedPaths);
   }, [applyPresetData, pendingPreset]);
 
   const handleCancelPresetCompatibility = useCallback(() => {
