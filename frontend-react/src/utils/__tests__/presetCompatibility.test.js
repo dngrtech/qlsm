@@ -34,9 +34,15 @@ describe('mergeReplacements', () => {
   });
 
   it('ignores a path the backend never offered', () => {
-    // Defends against a stale checkbox surviving a re-fetch.
+    // Defends against a stale checkbox surviving a re-fetch. toBeUndefined()
+    // alone can't tell "key absent" from "key present but undefined", so
+    // assert on key presence and on checked_plugins directly -- the real
+    // risk is a plugin file that doesn't exist on the instance getting
+    // ticked as enabled.
     const merged = mergeReplacements(presetData, ['mybalance.py']);
-    expect(merged.scripts['mybalance.py']).toBeUndefined();
+    expect(Object.keys(merged.scripts)).toEqual(['kept.py']);
+    expect('mybalance.py' in merged.scripts).toBe(false);
+    expect(merged.checked_plugins).toEqual(['kept.py']);
   });
 
   it('does not duplicate a path already checked', () => {
