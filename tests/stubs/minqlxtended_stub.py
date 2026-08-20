@@ -210,17 +210,26 @@ def thread(func=None, force=False):
 class Plugin:
     """Minimal Plugin base. Tests assign `game`, `_players`, `db` and `cvars`."""
 
-    def __init__(self):
-        self.hooks = []
-        self.commands = []
-        self.cvars = {}
-        self.messages = []
-        self.center_prints = []
-        self.sounds = []
-        self._players = []
-        self.plugins = {}
-        self.game = None
-        self.db = None
+    def __new__(cls, *args, **kwargs):
+        """Set instance state up here, not in __init__, exactly as _plugin.py:137 does.
+
+        A plugin's own __init__ overrides this class's and almost never calls
+        super().__init__() — on the engine it does not have to, because __new__ has
+        already run. A stub that initialised in __init__ would raise AttributeError on
+        the first add_hook of every plugin written the normal way.
+        """
+        instance = super().__new__(cls)
+        instance.hooks = []
+        instance.commands = []
+        instance.cvars = {}
+        instance.messages = []
+        instance.center_prints = []
+        instance.sounds = []
+        instance._players = []
+        instance.plugins = {}
+        instance.game = None
+        instance.db = None
+        return instance
 
     def add_hook(self, event, handler, priority=0):
         import inspect
