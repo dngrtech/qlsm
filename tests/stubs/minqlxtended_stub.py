@@ -210,15 +210,45 @@ class GameClient:
         cls._instances.clear()
 
 
+#: Every @thread call the stub deferred, as (function name, args, kwargs). Lets a test
+#: assert that work was scheduled without that work having run.
+THREAD_CALLS = []
+
+
 def thread(func=None, force=False):
-    """Pass-through stand-in for @minqlxtended.thread: run inline, synchronously."""
+    """Stand-in for @minqlxtended.thread (_core.py:694): return at once, run nothing.
+
+    Deliberately not a pass-through. On the engine the decorated body runs on another
+    thread while the caller carries on, so a constructor that kicks off a worker
+    returns immediately. Running it inline instead means any plugin whose worker
+    polls forever hangs the test run at import — specqueue's __init__ ends with
+    _start_afk_position_poll(), which is exactly that loop.
+
+    A test that wants the body calls the undecorated function through __wrapped__,
+    or calls the plain method it delegates to.
+    """
     def decorate(target):
-        return target
+        @functools.wraps(target)
+        def wrapper(*args, **kwargs):
+            THREAD_CALLS.append((target.__name__, args, kwargs))
+        return wrapper
     return decorate(func) if func is not None else decorate
 
 
 class Plugin:
-    """Minimal Plugin base. Tests assign `game`, `_players`, `db` and `cvars`."""
+    """Minimal Plugin base. Tests assign `game`, `_players`, `db` and `cvars`.
+
+    `game` is a class attribute rather than one set in __new__ because on the engine
+    it is a property over global level state (_plugin.py:221), not per-instance data —
+    a plugin's __init__ can and does read it. specqueue's does, on its first line of
+    real work. Assigning `plugin.game = ...` still shadows it per instance, which is
+    how the serverchecker tests use it. `db` is a class attribute for the same
+    reason — it is a property over the shared connection on the engine
+    (_plugin.py:178), and specqueue's __init__ sweeps clan tags through it.
+    """
+
+    game = None
+    db = None
 
     def __new__(cls, *args, **kwargs):
         """Set instance state up here, not in __init__, exactly as _plugin.py:137 does.
@@ -237,8 +267,6 @@ class Plugin:
         instance.sounds = []
         instance._players = []
         instance._loaded_plugins = {cls.__name__: instance}
-        instance.game = None
-        instance.db = None
         return instance
 
     @property
@@ -374,6 +402,7 @@ def install_stub():
     module.Return = Return
     module.Priority = Priority
     module.thread = thread
+    module.THREAD_CALLS = THREAD_CALLS
     module.next_frame = next_frame
     module.delay = delay
     module.parse_infostring = parse_infostring
