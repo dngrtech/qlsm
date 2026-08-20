@@ -757,7 +757,7 @@ Config presets are stored on the filesystem at `configs/presets/<name>/`. The da
 |----------|--------|-------------|
 | `/presets` | GET | List all presets (metadata only) |
 | `/presets` | POST | Create preset (saves to filesystem) |
-| `/presets/<id>` | GET | Get preset with config content (reads from filesystem) |
+| `/presets/<id>` | GET | Get preset with config content (reads from filesystem); accepts optional `target_runtime` to filter plugins for cross-runtime compatibility (see below) |
 | `/presets/<id>` | PUT | Update preset |
 | `/presets/<id>` | DELETE | Delete preset (removes DB record + folder) |
 | `/presets/<id>/download` | GET | Download preset export |
@@ -897,6 +897,32 @@ Responses:
 For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility. A `null` `enabled_hooks` value means the preset was saved without recording hook enablement — loading it does not touch the target instance's current `ld_preload_hooks`.
 
 `scripts` values are UTF-8 text for `.py`/`.txt` files. `.so` plugin files and font files are binary, so their values are base64-encoded; write requests must send `.so` and font content the same way (raw bytes are only accepted for `.so` plugin files and font files arriving through preset ZIP import, not through this JSON API).
+
+#### Cross-Runtime Compatibility (`target_runtime`)
+
+`GET /api/presets/{preset_id}` accepts an optional `target_runtime` query parameter (`?target_runtime=minqlxtended`) naming the runtime the preset is about to be loaded onto. `400 Bad Request` if present and not one of `"minqlx"` / `"minqlxtended"`. Omitting it, or passing the same value as the preset's own `runtime`, returns the response exactly as documented above — `scripts` and `checked_plugins` are the preset's stored contents, and there is no `compatibility` key.
+
+When `target_runtime` differs from the preset's `runtime`, `scripts` contains only the plugin files kept for the target runtime, `checked_plugins` drops any that were removed, and the response gains a `compatibility` block:
+
+```json
+"compatibility": {
+  "preset_runtime": "minqlx",
+  "target_runtime": "minqlxtended",
+  "stripped": [
+    {
+      "path": "mybalance.py",
+      "verdict": "incompatible",
+      "reasons": ["line 12: imports the minqlx module"],
+      "replacement": "balance.py"
+    }
+  ],
+  "replacements": {
+    "balance.py": "... file contents ..."
+  }
+}
+```
+
+Only root-level `.py` files are classified — `.so` hook binaries, `.txt` files, and fonts are always kept as-is. `stripped` lists every removed plugin file, sorted by path. `verdict` is `"incompatible"` when a specific reason was found, or `"unknown"` when nothing conclusive was found and the file was removed rather than assumed safe (`reasons` is `[]` in that case). `replacement` is the filename of a same-named plugin available on the target runtime, or `null` when there is no counterpart; a file inside a preset's plugin subfolder is always reported with `replacement: null`. `replacements` maps each offered filename to its file content, so the caller can apply it without a second request.
 
 ### Preset Name Validation
 - Pattern: `^[a-zA-Z0-9_-]+$` (letters, numbers, hyphens, underscores)

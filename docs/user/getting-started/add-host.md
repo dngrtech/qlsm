@@ -17,7 +17,7 @@ For a **self** host, there's no equivalent inline check: QLSM has no way to dete
 
 **This choice is permanent.** There is no setting to change it later. Moving a host to the other runtime means saving a preset from the existing host and deploying a brand-new host with the other runtime selected.
 
-**Presets do not carry across runtimes.** A preset saved from a minqlx instance cannot be loaded onto a minqlxtended host, and vice versa, because the plugins in one do not run on the other. The Preset Manager's Load tab shows an incompatible preset greyed out, labeled with the runtime it was saved from, and does nothing if you click it. See [Presets And Default Config](../presets/overview.md).
+**Presets carry across runtimes.** A preset saved from a minqlx instance can be loaded onto a minqlxtended host, and vice versa: your server config, map pool, and other settings come across intact, while plugins that can't run on the target runtime are removed — with a replacement offered where one exists — before you confirm the load. See [Presets And Default Config](../presets/overview.md) for the details.
 
 ## Self-Host Deployment
 

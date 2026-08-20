@@ -243,7 +243,7 @@ function AddInstanceForm({
   // selection alone, while a cross-runtime switch re-seeds. Invariant: every
   // place that replaces the plugin/hook seed must point this at the runtime
   // the new seed came from -- the mount/reset effect, handleHostChange, and
-  // handleLoadPreset. Leave it stale in any one of them and the next host
+  // applyPresetData. Leave it stale in any one of them and the next host
   // change compares against the wrong runtime and silently re-seeds over what
   // the operator has.
   const seededRuntimeRef = useRef(runtimeLabel(initialHostRuntime));
