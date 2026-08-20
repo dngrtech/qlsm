@@ -161,43 +161,66 @@ def test_real_default_preset_survives_a_matched_runtime_load(app):
         assert _pys(draft) == source_files, 'matched-runtime load lost files'
 
 
-def test_real_default_preset_cross_runtime_filter_matches_the_report(app):
-    """The full real preset run through a genuine CROSS-runtime filter.
+def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_path):
+    """The real preset, run through a genuine CROSS-runtime filter, still
+    agrees between what the report says was kept and what lands on disk --
+    for both a file that gets stripped and one that survives.
 
-    The matched-runtime test above only proves an untouched load stays
-    untouched; nothing exercises minqlx -> minqlxtended filtering against the
-    actual shipped files, where the hash-drifted `unknown` files at the heart
-    of the 53 -> 40 over-strip are never touched by a same-runtime load. This
-    builds the same response_data apply_compatibility() would receive from
-    the real preset's files and asserts the two halves of the gate -- what
-    survives on disk, and what the report says was kept -- agree.
+    Every one of the real preset's 53 files opens with `import minqlx`, so
+    on an unmodified minqlx -> minqlxtended filter every single one is
+    INCOMPATIBLE and the kept set is empty on both sides -- the assertion
+    would degenerate to set() == set() and pass against a filter that
+    deletes everything unconditionally. This is NOT a test of the
+    hash-drifted `unknown` files from the 53 -> 40 regression: those only
+    matter on a matched-runtime load (see the test above), because a
+    cross-runtime load never reaches the hash-vs-scanner distinction for
+    files the scanner already flags on content alone. What this test
+    actually proves is narrower and still real: swap one real file's
+    content for its minqlxtended-baseline counterpart (so it hash-matches
+    and is judged compatible), and the report and the disk must agree on
+    BOTH the 52 files that get stripped AND the one that survives, using
+    real preset content rather than single-line synthetic fixtures.
     """
-    import tempfile
+    import shutil
     src = 'configs/presets/_builtin/default/scripts'
     source_files = _pys(src)
     assert len(source_files) == 53, (
         f'expected the real default preset to have 53 .py files, found '
         f'{len(source_files)} -- run pytest from the repo root')
 
+    good_name = 'aliases.py'
+    good_content_path = os.path.join('ql-assets', 'data', 'minqlxtended-plugins', good_name)
+    with open(good_content_path, 'r', encoding='utf-8') as handle:
+        good_content = handle.read()
+
+    # A copy of the real preset with one file's content swapped for the
+    # hash-matched minqlxtended original -- not a synthetic fixture, and not
+    # a mutation of the shipped preset on disk.
+    seeded_src = tmp_path / 'src'
+    shutil.copytree(src, str(seeded_src))
+    (seeded_src / good_name).write_text(good_content)
+
     scripts = {}
     for rel in source_files:
-        with open(os.path.join(src, rel), 'r', encoding='utf-8') as handle:
+        with open(seeded_src / rel, 'r', encoding='utf-8') as handle:
             scripts[rel] = handle.read()
 
     report = apply_compatibility(
         {'scripts': scripts, 'checked_plugins': sorted(scripts)},
         'minqlx', 'minqlxtended')
     reported_kept = {name for name in report['scripts'] if name.endswith('.py')}
+    assert reported_kept, (
+        'the fixture must leave at least one file KEPT, or on_disk == reported_kept '
+        'degenerates to set() == set() and passes against a filter that deletes everything')
     assert reported_kept != source_files, (
         'fixture must actually exercise cross-runtime stripping, or this '
         'test cannot tell a correct filter from a disabled one')
 
-    with tempfile.TemporaryDirectory() as tmp:
-        draft = os.path.join(tmp, 'draft')
-        with app.app_context():
-            _seed_draft(draft, src, 'default',
-                        target_runtime='minqlxtended', source_runtime='minqlx')
-        on_disk = _pys(draft)
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(seeded_src), 'default',
+                    target_runtime='minqlxtended', source_runtime='minqlx')
+    on_disk = _pys(str(draft))
 
     assert on_disk == reported_kept, (
         'the draft on disk and the compatibility report disagree about what '
