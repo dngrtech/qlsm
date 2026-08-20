@@ -14,6 +14,7 @@ from flask import Blueprint, request, jsonify, current_app, send_file
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 from ui import db
+from ui.database import get_host_by_name, get_preset_by_name
 from ui.models import BinaryMetadata
 from ui.plugin_compat import VERDICT_COMPATIBLE, classify
 from ui.preset_compat import baseline_hashes, replacement_scripts
@@ -92,7 +93,7 @@ def _cleanup_stale_drafts():
         pass
 
 
-def _apply_runtime_filter(draft_scripts_path, target_runtime, accepted_replacements):
+def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, accepted_replacements):
     """Delete what cannot run on `target_runtime`; write accepted replacements.
 
     This is THE enforcement point for the compatibility gate. The preset GET
@@ -101,10 +102,21 @@ def _apply_runtime_filter(draft_scripts_path, target_runtime, accepted_replaceme
     copied wholesale by instance_routes.py, so this is where stripping has to
     actually happen or the gate is decorative.
 
+    Mirrors apply_compatibility()'s own early return line for line: a matched
+    runtime must cost nothing and delete nothing, or the two halves of the
+    gate -- what the operator is shown, and what actually lands on disk --
+    can silently disagree, which is the exact failure class this rework
+    exists to eliminate.
+
     Returns the relative paths removed, for the caller to log.
     """
-    hashes = baseline_hashes(target_runtime)
-    candidates = replacement_scripts(target_runtime)
+    source = normalize_runtime(source_runtime)
+    target = normalize_runtime(target_runtime)
+    if source == target:
+        return []
+
+    hashes = baseline_hashes(target)
+    candidates = replacement_scripts(target)
     removed = []
 
     for root, _dirs, filenames in os.walk(draft_scripts_path):
@@ -116,14 +128,20 @@ def _apply_runtime_filter(draft_scripts_path, target_runtime, accepted_replaceme
                 with open(full_path, 'r', encoding='utf-8') as handle:
                     text = handle.read()
             except (OSError, ValueError):
-                # Unreadable or wrongly-encoded: it cannot be proven compatible,
-                # and the allow-list is the only source of `compatible`.
-                text = None
-            if text is None:
-                verdict = None
-            else:
-                verdict, _reasons = classify(
-                    text, target_runtime, baseline_sha256=hashes.get(filename))
+                # Unreadable, or not valid UTF-8 (ValueError covers
+                # UnicodeDecodeError): _read_preset_scripts() on the GET path
+                # hits this exact failure and silently omits the file from
+                # what the operator is shown, instead of reporting it
+                # stripped. Deleting a file the dialog never displayed as
+                # incompatible would widen the strip past what was promised.
+                continue
+            if not text.strip():
+                # An empty file (a bare __init__.py marking a package) cannot
+                # be incompatible with anything, and removing it breaks
+                # imports for every sibling module that did survive.
+                continue
+            verdict, _reasons = classify(
+                text, target, baseline_sha256=hashes.get(filename))
             if verdict == VERDICT_COMPATIBLE:
                 continue
             try:
@@ -133,9 +151,12 @@ def _apply_runtime_filter(draft_scripts_path, target_runtime, accepted_replaceme
                 continue
 
     for name in accepted_replacements or []:
-        # Client-supplied. Only a bare root-level filename the target actually
-        # offers is honoured -- mirrors _strip_entry()'s rule in preset_compat,
-        # and stops '../x.py' writing outside the draft.
+        # Client-supplied. Membership in `candidates` is what actually stops
+        # '../x.py' or any other traversal -- replacement_scripts() only ever
+        # returns bare filenames read from a flat preset scripts/ directory,
+        # so nothing containing a separator can pass this check in the first
+        # place. The separator/suffix checks below are defence in depth, not
+        # the live guard.
         if name not in candidates:
             continue
         if '/' in name or os.sep in name or not name.endswith('.py'):
@@ -151,14 +172,18 @@ def _apply_runtime_filter(draft_scripts_path, target_runtime, accepted_replaceme
 
 
 def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRESET_NAME,
-                target_runtime=None, accepted_replacements=None):
+                target_runtime=None, accepted_replacements=None, source_runtime=None):
     """Copy source plugin files into a draft directory.
 
     For non-default presets, the runtime-matched default preset's scripts are
     copied first so the full plugin list is always visible.  Preset-specific
     files overlay on top.  This mirrors _read_preset_scripts() in
-    preset_api_routes.py. When `target_runtime` is given, the overlay is
-    chosen by the target's runtime rather than the source's.
+    preset_api_routes.py. `default_preset_name` is expected to already be
+    chosen by the caller for the target's runtime when one is given.
+
+    `target_runtime` and `source_runtime` together gate the compatibility
+    filter at the end of this function: a matched runtime costs nothing and
+    deletes nothing, same as `apply_compatibility()` on the GET side.
     """
     default_scripts = os.path.abspath(
         resolve_preset_subdir(default_preset_name, SCRIPTS_DIR, CONFIGS_BASE)
@@ -193,7 +218,7 @@ def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRE
     # calls separately would let an incompatible default overlay through.
     if target_runtime:
         removed = _apply_runtime_filter(
-            draft_scripts_path, normalize_runtime(target_runtime),
+            draft_scripts_path, source_runtime, target_runtime,
             accepted_replacements)
         if removed:
             current_app.logger.info(
@@ -349,6 +374,25 @@ def _get_source_path(data):
     return path
 
 
+def _resolve_source_runtime(data):
+    """The runtime of the content `_seed_draft` is about to copy from.
+
+    Mirrors the values `apply_compatibility`'s caller already trusts for the
+    GET-side comparison -- `preset.runtime`, a host's `runtime` column -- so
+    the two halves of the gate agree on what "the source" is. An unknown
+    preset/host name (or a row that predates the runtime column) resolves to
+    None here; normalize_runtime() turns that into minqlx at the call site,
+    the same "untagged content is minqlx" convention used everywhere else.
+    """
+    if data.get('source') == 'preset':
+        preset = get_preset_by_name(data.get('preset')) if data.get('preset') else None
+        return getattr(preset, 'runtime', None)
+    if data.get('source') == 'instance':
+        host = get_host_by_name(data.get('host')) if data.get('host') else None
+        return getattr(host, 'runtime', None)
+    return None
+
+
 @draft_api_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_draft():
@@ -366,8 +410,11 @@ def create_draft():
         return jsonify({"error": {"message": "Invalid target_runtime."}}), 400
 
     accepted = data.get('accepted_replacements')
-    if accepted is not None and not isinstance(accepted, list):
-        return jsonify({"error": {"message": "accepted_replacements must be a list."}}), 400
+    if accepted is not None and (
+        not isinstance(accepted, list)
+        or not all(isinstance(name, str) for name in accepted)
+    ):
+        return jsonify({"error": {"message": "accepted_replacements must be a list of strings."}}), 400
 
     _cleanup_stale_drafts()
 
@@ -376,10 +423,17 @@ def create_draft():
 
     try:
         os.makedirs(os.path.dirname(draft_scripts_path), exist_ok=True)
-        # The overlay follows the TARGET host's runtime when we know it. Using
-        # the source preset's runtime is what put minqlx defaults onto a
-        # minqlxtended host: the overlay is seeded before the gate can see it.
-        if target_runtime:
+        # The overlay follows the TARGET host's runtime, but only when it
+        # actually differs from the source's -- mirroring apply_compatibility's
+        # own preset==target early return. Using the target unconditionally is
+        # what put minqlx defaults onto a minqlxtended host in the first place;
+        # keying it on target_runtime alone (ignoring whether the source
+        # already matches) reintroduces the same bug from the other side.
+        source_runtime = _resolve_source_runtime(data) if target_runtime else None
+        runtimes_differ = bool(target_runtime) and (
+            normalize_runtime(source_runtime) != normalize_runtime(target_runtime)
+        )
+        if runtimes_differ:
             default_preset_name = default_preset_name_for_runtime(target_runtime)
         elif data.get('source') == 'preset':
             default_preset_name = default_preset_name_for_preset(data.get('preset'))
@@ -387,7 +441,8 @@ def create_draft():
             default_preset_name = DEFAULT_PRESET_NAME
         _seed_draft(draft_scripts_path, source_path, default_preset_name,
                     target_runtime=target_runtime,
-                    accepted_replacements=accepted)
+                    accepted_replacements=accepted,
+                    source_runtime=source_runtime)
     except OSError as e:
         current_app.logger.error(f"Failed to create draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to create draft workspace"}}), 500
