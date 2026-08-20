@@ -48,6 +48,8 @@ def test_the_declared_binary_is_the_highfps_hook(manifest):
 
 
 def test_every_declared_binary_exists(manifest):
+    """A declared key with no file behind it takes the whole preset out at seed time,
+    so this is the cheap check that stops a typo becoming a missing preset."""
     for key in manifest.get('binary_descriptions', {}):
         assert os.path.isfile(os.path.join(PRESET_DIR, key)), key
 
@@ -56,8 +58,8 @@ def test_every_declared_binary_exists(manifest):
 #:
 #: The hook detours SV_ClientThink inside qzeroded and knows nothing about either
 #: Python runtime, so there is one build and both runtimes should ship it. Pinned by
-#: hash rather than compared against the minqlx preset's copy because that copy is
-#: *stale* — see the test below.
+#: hash *as well as* compared against the minqlx copy below, so that rebuilding both at
+#: once still has to be a deliberate act that updates this line.
 HIGHFPS_HOOK_SHA256 = '8f73853c34042c94220f7c3dd04f32c36f75b68f41346afaf865377cb573e435'
 
 
@@ -163,8 +165,13 @@ def test_the_preset_offers_highfps_exactly_as_the_minqlx_default_does():
 
 def test_the_ported_highfps_is_the_current_qlsm_plugins_version():
     """Ported from dngrtech/qlsm_plugins at `462e3e5`, which carries the review fixes
-    from `ad193dc`. QLSM's *minqlx* preset copy predates those and is stale — porting
-    from it would have carried a false-positive source onto the new runtime.
+    from `ad193dc`.
+
+    QLSM's *minqlx* preset copy predated those until `971c5dd` on `main` synced it, so at
+    the time of the port, porting from it would have carried a false-positive source onto
+    the new runtime. Both copies now carry these fixes and
+    test_the_two_presets_ship_the_same_highfps_source keeps them together; these markers
+    stay as the explicit record of what had to be true for the port to be correct.
 
     Each marker below is one of those fixes.
     """
