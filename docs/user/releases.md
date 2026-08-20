@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.27.1` | 2026-08-20 | [#185](https://github.com/dngrtech/qlsm/pull/185) | Fix the RCON command field not taking keyboard focus in the console modal. |
 | `v1.27.0` | 2026-08-17 | [#179](https://github.com/dngrtech/qlsm/pull/179) | Set ZMQ stats and RCON passwords manually when creating an instance. |
 | `v1.26.4` | 2026-08-14 | [#178](https://github.com/dngrtech/qlsm/pull/178) | Bug fixes and improvements. |
 | `v1.26.3` | 2026-08-14 | [#176](https://github.com/dngrtech/qlsm/pull/176) | Fix redis-py version incompatibilities in the bundled `kickban`, `player_info`, `silence`, and `voteban` plugins. On hosts with a newer bundled redis-py, `!ban` could kick a player without recording the ban, and `!unsilence`/`!voteunban` silently failed to clear the silence or vote ban. |
