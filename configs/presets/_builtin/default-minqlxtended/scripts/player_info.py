@@ -398,8 +398,11 @@ class player_info(minqlxtended.Plugin):
             ban = {"expires": expires, "reason": "deactivated account", "issued": now, "issued_by": "player_info"}
             db.hmset(base_key + ":{}".format(ban_id), ban)
             db.execute()
-            self.kick(player.id, "banned from this server because of deactivated account.")
+            # Plugin has no kick method on either runtime, so the minqlx original's
+            # call here was an AttributeError waiting to happen. Player.kick takes the
+            # reason directly (_player.py:926).
+            player.kick("banned from this server because of deactivated account.")
         except:
             n = player.name
-            self.kick(player.id, "kicked because of deactivated account.")
+            player.kick("kicked because of deactivated account.")
             self.msg("{} has been kicked, but could not be banned. Contact iouonegirl".format(n))

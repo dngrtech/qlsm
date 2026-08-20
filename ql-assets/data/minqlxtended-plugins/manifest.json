@@ -86,7 +86,7 @@
     },
     "player_info.py": {
       "origin": "qlsm",
-      "sha256": "92e4f69a2c78acee4d254892362c69282c7778152071df32524575e2f680b3c1"
+      "sha256": "92fb51e6568a1bc0191c1faa182f88c5ce6697842c2e00c093429958123bb193"
     },
     "plugin_manager.py": {
       "origin": "upstream",

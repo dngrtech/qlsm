@@ -147,3 +147,13 @@ def test_find_by_name_or_id_refuses_an_ambiguous_match(module):
     asker = FakePlayer(client_id=1, name='doom')
     assert plugin.find_by_name_or_id(asker, 'sarge') is None
     assert 'players matched' in asker.told[0]
+
+
+def test_it_does_not_call_a_nonexistent_plugin_kick(source):
+    """`self.kick(...)` is not a Plugin method on either runtime.
+
+    The minqlx original calls it in the deactivated-account path, where it would have
+    raised AttributeError. The port uses Player.kick(reason) (_player.py:926), which
+    exists and takes the reason directly rather than an id plus a reason.
+    """
+    assert 'self.kick(' not in source
