@@ -11,6 +11,7 @@ from flask_jwt_extended import jwt_required
 from ui import db
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
 from ui.models import BinaryMetadata
+from ui.preset_compat import apply_compatibility
 from ui.preset_support import (
     PRESETS_DIR,
     default_preset_name_for_runtime,
@@ -1224,6 +1225,15 @@ def get_preset_api(preset_id):
     response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset.path)
     response_data['lan_rate_enabled'] = _read_preset_lan_rate_enabled(preset.path)
     response_data['user_hooks'] = _read_preset_user_hooks(preset)
+
+    # Optional: classify this preset's plugins against the runtime of the host
+    # it is about to be loaded onto. Absent, or equal to the preset's own
+    # runtime, and the response is exactly what it has always been.
+    target_runtime = request.args.get('target_runtime')
+    if target_runtime is not None and not is_valid_runtime(target_runtime):
+        return jsonify({"error": {"message": "Invalid target_runtime."}}), 400
+    response_data = apply_compatibility(
+        response_data, preset.runtime, target_runtime)
 
     return jsonify({"data": response_data})
 
