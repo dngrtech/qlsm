@@ -1194,3 +1194,77 @@ def test_draft_seeds_user_hooks_from_preset(app, client, auth_headers, tmp_path,
     with app.app_context():
         draft_user_hooks = draft_routes._get_draft_user_hooks_path(draft_id)
     assert os.path.isfile(os.path.join(draft_user_hooks, "boost.so"))
+
+
+def test_seed_draft_removes_incompatible_plugins(app, tmp_path):
+    """The whole point: a minqlx plugin must not survive into a minqlxtended draft."""
+    from ui.routes.draft_routes import _seed_draft
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / 'bad.py').write_text("import minqlx\nRET_STOP_ALL\n")
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime='minqlxtended')
+    assert not (draft / 'bad.py').exists()
+
+
+def test_seed_draft_keeps_a_baseline_file(app, tmp_path):
+    """A file byte-identical to the target baseline must survive."""
+    import json
+    from ui.routes.draft_routes import _seed_draft
+    manifest = json.load(open(
+        'ql-assets/data/minqlxtended-plugins/manifest.json', encoding='utf-8'))
+    name = sorted(manifest['files'])[0]
+    text = open(f'ql-assets/data/minqlxtended-plugins/{name}',
+                encoding='utf-8').read()
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / name).write_text(text)
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime='minqlxtended')
+    assert (draft / name).exists()
+
+
+def test_accepted_replacement_writes_target_content(app, tmp_path):
+    """Accepting a replacement must swap the FILE, not just tick the name.
+
+    This is the second half of the Critical: adding the name to checked_plugins
+    while leaving the minqlx file under it enables minqlx code on the host.
+    """
+    from ui.routes.draft_routes import _seed_draft
+    from ui.preset_compat import replacement_scripts
+    candidates = replacement_scripts('minqlxtended')
+    name = sorted(candidates)[0]
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / name).write_text("import minqlx\nRET_STOP_ALL\n")
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime='minqlxtended',
+                    accepted_replacements=[name])
+    assert (draft / name).read_text() == candidates[name]
+
+
+def test_no_target_runtime_leaves_the_draft_untouched(app, tmp_path):
+    """Same-runtime loads are the common case and must cost nothing."""
+    from ui.routes.draft_routes import _seed_draft
+    source = tmp_path / 'src'
+    source.mkdir()
+    (source / 'anything.py').write_text("import minqlx\nRET_STOP_ALL\n")
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime=None)
+    assert (draft / 'anything.py').exists()
+
+
+def test_replacement_name_cannot_escape_the_draft(app, tmp_path):
+    """accepted_replacements comes from the client; it must not write outside."""
+    from ui.routes.draft_routes import _seed_draft
+    source = tmp_path / 'src'
+    source.mkdir()
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), target_runtime='minqlxtended',
+                    accepted_replacements=['../escaped.py', 'sub/dir.py'])
+    assert not (tmp_path / 'escaped.py').exists()
