@@ -119,3 +119,35 @@ def test_player_loaded_hooks_at_lowest_priority(module):
     plugin = module.myFun()
     priorities = {event: priority for event, _h, priority in plugin.hooks}
     assert priorities['player_loaded'] == minqlxtended.Priority.LOWEST
+
+
+def test_sound_paths_are_validated_before_reaching_the_console(module):
+    """`!sound <path>` reaches console_command("fdir {}"), and the engine console
+    treats ';' as a command separator — so an unfiltered argument hands the caller
+    the rest of the console. Permission 3 gates who can try it, which makes this a
+    moderator-scope hole rather than an open one, but a moderator asking for a sound
+    should not get the console.
+
+    Fixed on the minqlx copy in `8f4c8e3` on main. The port predates that fix, so it
+    is applied here too — otherwise the same input is safe on one runtime and not the
+    other.
+    """
+    assert module.is_safe_sound_path('sound/vo/crash.ogg')
+    assert module.is_safe_sound_path('doompack/hi-there_1.wav')
+    assert module.is_safe_sound_path('a-b_c.d/e')
+
+    assert not module.is_safe_sound_path('')
+    assert not module.is_safe_sound_path('x; quit')
+    assert not module.is_safe_sound_path('sound/a b.ogg')
+    assert not module.is_safe_sound_path('"; rcon')
+    # re's `$` also matches just before a trailing newline, so the anchor has to be
+    # `\Z`. Unreachable via chat (args arrive whitespace-split) but free to get right.
+    assert not module.is_safe_sound_path('sound/ok.ogg\n')
+
+
+def test_the_fdir_call_is_guarded_by_that_check(source):
+    """A helper nothing calls is not a fix. Assert the guard precedes the call."""
+    code_only = [re.sub(r'#.*', '', line) for line in source.splitlines()]
+    guard = next(i for i, line in enumerate(code_only) if 'is_safe_sound_path(msg[1])' in line)
+    call = next(i for i, line in enumerate(code_only) if 'console_command("fdir' in line)
+    assert guard < call, "the fdir call is not gated by the path check"
