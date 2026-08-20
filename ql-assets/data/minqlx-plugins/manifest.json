@@ -45,7 +45,7 @@
       "sha256": "91c42756268f5ee564a5bd193d9f993d4970ee64c65e2618655d7a17d4e5f306"
     },
     "commands.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "62f65a7d07638d5c41e92d41c042f00bc17022f1b9d1a01b8b42643455400bd4"
     },
     "commlink.py": {
@@ -133,7 +133,7 @@
       "sha256": "5ddd6a60a432da805d2e23074777eb60d82a189cc4b9117fddc15518695e4593"
     },
     "myFun.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "aa6a1b81e5d0c61346cb550fa164726e9e8f84ce02ca5db99158443d402e8a59"
     },
     "mybalance.py": {
@@ -161,7 +161,7 @@
       "sha256": "2d0f9a1f1e82cd24973ac37e319d618562be8ae82b33e079a82f20c6b846ea43"
     },
     "player_info.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "c920ee9369bc19208841db56fdb4997ec581d5824b0a993450719e8ef2a7e50d"
     },
     "playerpings.py": {
@@ -189,7 +189,7 @@
       "sha256": "9f545b7c24e19bd7dcbcc7427c04c3e237714f4ba9846866556470abe1c89c01"
     },
     "reset_acc.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "3dc3b7b3dff90477f4daa47c67e71368d513c28dd3cc394a990b8486228458df"
     },
     "restartserver.py": {
@@ -201,7 +201,7 @@
       "sha256": "331c72eeee69e7d6f5e8289ceb0e53dcf2de5c7b05bef6819878f19cab83cf9d"
     },
     "serverchecker.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "9117922f19fffdbd5468d706bca6c63e6f6a8244dd25034db3e904e1c18fa7ec"
     },
     "servers.py": {
@@ -221,11 +221,11 @@
       "sha256": "b160fcf87b4e99e8aa09801fc6f3972da4d3066b658280bb2952c5e9471cd2c7"
     },
     "specqueue.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "5747ca99b4fec5463cc087f50edb01374c3dcddbccc16214da6554d8efc5e0d5"
     },
     "suppress_join_msg.py": {
-      "origin": "upstream",
+      "origin": "qlsm",
       "sha256": "8dcae52def8fc9b3eff0efbd4874d92949ebb60141894518a31a963519183f8d"
     },
     "sv_fps.py": {

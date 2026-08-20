@@ -315,8 +315,9 @@ def scan_incompatibilities(text, target_runtime):
     # A leading UTF-8 BOM (U+FEFF) is not `\s`, so it defeats every `^\s*`
     # anchor below and a BOM'd `import minqlx` lands `unknown` instead of
     # `incompatible`. This is local to scanning, not `classify()`'s hash --
-    # a baseline file's manifest sha256 is computed over its bytes as shipped,
-    # BOM included, so stripping it before hashing would break the allow-list.
+    # the manifest sha256 goes through `baseline_digest`, which normalises
+    # line endings but does not strip the BOM, so stripping it here before
+    # hashing would break the allow-list.
     if text.startswith('\ufeff'):
         text = text[1:]
     target = normalize_runtime(target_runtime)
