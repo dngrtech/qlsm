@@ -57,8 +57,9 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
             </Dialog.Title>
             <p className="mt-2 text-sm text-theme-secondary">
               This preset was saved from a {presetRuntime} host. The rest of the config loads as-is,
-              but the plugins below can't be confirmed to run on {targetRuntime}, so they
-              won't be installed on this instance.
+              but the plugins below won&apos;t be installed on this instance. Each one either uses
+              an API that {targetRuntime} doesn&apos;t have, or can&apos;t be confirmed to run
+              there — the reason is shown for each.
             </p>
 
             <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
