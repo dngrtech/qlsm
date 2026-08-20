@@ -17,6 +17,7 @@ Cvars:
   qlx_highfpsSampleInterval - Seconds between FPS checks (default 5)
   qlx_highfpsAction         - "warn" or "kick" (default "kick")
   qlx_highfpsWarnings       - Warnings before kick when action=kick (default 3)
+  qlx_highfpsPadding        - Extra FPS above threshold before detection fires (default 10)
 
 Commands:
   !highfps  - Show estimated FPS for all connected players (perm 2)
@@ -108,7 +109,10 @@ class highfps(minqlx.Plugin):
         return int(self.get_cvar("qlx_highfpsWarnings") or "3")
 
     def _get_sample_interval(self):
-        return int(self.get_cvar("qlx_highfpsSampleInterval") or "5")
+        try:
+            return max(1, int(self.get_cvar("qlx_highfpsSampleInterval") or "5"))
+        except ValueError:
+            return 5
 
     def _estimate_fps(self, client_id, elapsed):
         """Return estimated FPS for a client over the given elapsed time."""
@@ -213,8 +217,13 @@ class highfps(minqlx.Plugin):
         lines = ["^2[highfps] ^7Estimated player FPS:"]
 
         for p in self.players():
+            # Only players seen by the periodic sampler have a valid baseline;
+            # defaulting prev to 0 would show counts-since-connect as FPS.
+            prev = self.last_counts.get(p.id)
+            if prev is None:
+                lines.append("  {}: ^3n/a (not sampled yet)".format(p.clean_name))
+                continue
             current = self.lib.get_usercmd_count(p.id)
-            prev = self.last_counts.get(p.id, 0)
             delta = current - prev
             fps = delta / elapsed
 

@@ -70,27 +70,36 @@ def test_the_hook_binary_is_the_current_qlsm_plugins_build():
         "re-copy from qlsm_plugins/minqlxtended/highfps/ after running `make` there")
 
 
-def test_the_minqlx_preset_hook_is_known_stale():
-    """Documents a real, open defect on the *minqlx* side — deliberately not fixed here.
+def test_the_two_presets_ship_the_same_hook_build():
+    """The hook is runtime-agnostic, so there is one build and both presets ship it.
 
-    configs/presets/_builtin/default/scripts/highfps_hook.so and highfps.py both
-    predate the qlsm_plugins review fixes in `ad193dc` (safe !highfps baseline, cvar
-    clamp, native guards). The minqlxtended copies added by this change are current,
-    so right now the two runtimes ship different highfps builds.
-
-    That is the wrong way round and needs a sync on `main`, where minqlx-side fixes
-    belong — the same treatment specqueue/myFun/player_info got in `8f4c8e3`. This
-    test exists so the gap is recorded in code rather than only in a plan document,
-    and it will fail the moment the sync lands, which is the prompt to delete it and
-    restore a plain byte-identity assertion between the two presets.
+    This replaces a `test_the_minqlx_preset_hook_is_known_stale` that existed for the
+    length of one commit. QLSM's minqlx preset had been shipping a highfps that predated
+    the qlsm_plugins review fixes in `ad193dc` — a different .so build (16768 bytes
+    against 18112) and a highfps.py missing the safe !highfps baseline. `971c5dd` on
+    `main` synced both, so the two runtimes are back on one build and this can be a plain
+    equality assertion again.
     """
-    import hashlib
-    with open(os.path.join(MINQLX_PRESET_DIR, 'scripts', 'highfps_hook.so'), 'rb') as handle:
-        digest = hashlib.sha256(handle.read()).hexdigest()
-    assert digest != HIGHFPS_HOOK_SHA256, (
-        "the minqlx preset's highfps_hook.so now matches the current build — the sync "
-        "has landed. Delete this test and assert byte-identity between the two presets "
-        "instead.")
+    import filecmp
+    ours = os.path.join(PRESET_DIR, 'scripts', 'highfps_hook.so')
+    theirs = os.path.join(MINQLX_PRESET_DIR, 'scripts', 'highfps_hook.so')
+    assert filecmp.cmp(ours, theirs, shallow=False), (
+        "highfps_hook.so differs between the two presets; it is runtime-agnostic and "
+        "should be the same binary in both — rebuild via `make` in qlsm_plugins and "
+        "re-copy, rather than rebuilding one of them alone")
+
+
+def test_the_two_presets_ship_the_same_highfps_source():
+    """The .py differs only by runtime; everything else must track together."""
+    with open(os.path.join(PRESET_DIR, 'scripts', 'highfps.py'), encoding='utf-8') as handle:
+        ours = handle.read()
+    with open(os.path.join(MINQLX_PRESET_DIR, 'scripts', 'highfps.py'), encoding='utf-8') as handle:
+        theirs = handle.read()
+    assert ours == theirs.replace('import minqlx\n', 'import minqlxtended\n') \
+                         .replace('minqlx.Plugin', 'minqlxtended.Plugin') \
+                         .replace('minqlx.console_print', 'minqlxtended.console_print') \
+                         .replace('MinQLX plugin', 'minqlxtended plugin'), (
+        "the two highfps copies have diverged by more than the runtime rename")
 
 
 def test_the_hook_description_matches_the_minqlx_one(manifest):
