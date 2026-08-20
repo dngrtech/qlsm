@@ -15,5 +15,7 @@ export const presetRuntimeStripWarning = (preset, host) => {
   const presetRuntime = runtimeLabel(preset?.runtime);
   const hostRuntime = runtimeLabel(host?.runtime);
   return `Saved from a ${presetRuntime} host; this host runs ${hostRuntime}. `
-    + 'Server config loads as-is, but plugins that cannot run here are removed.';
+    + 'Server config loads as-is. Plugins are kept only if they match this '
+    + "runtime's shipped versions — anything custom or edited is removed. "
+    + 'You will see the full list first, with a replacement offered where one exists.';
 };

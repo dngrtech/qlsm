@@ -93,7 +93,7 @@ describe('PresetLoadTab', () => {
 
     await userEvent.click(screen.getByText('minqlx-preset'));
     expect(onSelect).toHaveBeenCalledWith(1);
-    expect(screen.getByText(/plugins that cannot run here are removed/i)).toBeInTheDocument();
+    expect(screen.getByText(/kept only if they match/i)).toBeInTheDocument();
   });
 
   it('shows the runtime badge on a matching row too', () => {
@@ -141,7 +141,7 @@ describe('PresetLoadTab', () => {
       />
     );
 
-    expect(screen.queryByText(/plugins that cannot run here are removed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/kept only if they match/i)).not.toBeInTheDocument();
     expect(screen.getByText('Comp duel')).toBeInTheDocument();
     await userEvent.click(screen.getByText('minqlx-preset'));
     expect(onSelect).toHaveBeenCalledWith(4);
@@ -160,7 +160,7 @@ describe('PresetLoadTab', () => {
       />
     );
 
-    expect(screen.queryByText(/plugins that cannot run here are removed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/kept only if they match/i)).not.toBeInTheDocument();
     expect(screen.getByText('Legacy cfg')).toBeInTheDocument();
     await userEvent.click(screen.getByText('legacy-preset'));
     expect(onSelect).toHaveBeenCalledWith(5);
