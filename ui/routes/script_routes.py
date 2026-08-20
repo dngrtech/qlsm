@@ -44,6 +44,12 @@ def _get_scripts_base_path(preset=None, host=None, instance_id=None):
         return os.path.join(base, host, str(instance_id), SCRIPTS_DIR)
     else:
         # Default to default preset
+        # TODO(runtime-split): hardcoding 'default' returns the minqlx plugin list
+        # even on a minqlxtended host. Knowingly deferred, not an oversight: this
+        # path only browses -- nothing seeds an instance through it, and the client
+        # wrapper (getScriptTree in services/api.js) has no caller in the React app.
+        # See the "Five other backend paths still hardcode 'default'" paragraph under
+        # Instance Deployment in docs/architecture.md.
         return os.path.abspath(resolve_preset_subdir('default', SCRIPTS_DIR, CONFIGS_BASE))
 
 
