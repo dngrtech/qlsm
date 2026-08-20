@@ -336,6 +336,22 @@ def scan_incompatibilities(text, target_runtime):
     return reasons
 
 
+def baseline_digest(text):
+    """The one hashing rule the manifest and the gate must agree on.
+
+    Line endings are normalised to LF first. The generator reads files as
+    bytes and the gate reads them as text (which already converts CRLF to LF),
+    so hashing the raw bytes on one side and the decoded text on the other
+    silently disagrees for every CRLF file -- 9 of the 63 files in the minqlx
+    baseline. Normalising on both sides is what makes the allow-list work at
+    all; changing it on one side only moves the mismatch.
+    """
+    if not isinstance(text, str):
+        text = text.decode('utf-8')
+    normalised = text.replace('\r\n', '\n').replace('\r', '\n')
+    return hashlib.sha256(normalised.encode('utf-8')).hexdigest()
+
+
 def classify(text, target_runtime, baseline_sha256=None):
     """Verdict for one file against `target_runtime`.
 
@@ -343,8 +359,7 @@ def classify(text, target_runtime, baseline_sha256=None):
     filename, or None when the baseline has no file by that name.
     """
     if baseline_sha256 and isinstance(text, str):
-        digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
-        if digest == baseline_sha256:
+        if baseline_digest(text) == baseline_sha256:
             return VERDICT_COMPATIBLE, []
     reasons = scan_incompatibilities(text, target_runtime)
     if reasons:

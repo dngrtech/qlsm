@@ -513,3 +513,18 @@ def test_indented_assignment_does_not_suppress():
         "        return MOD_ROCKET\n"
     )
     assert scan_incompatibilities(text, 'minqlxtended') != []
+
+
+def test_crlf_file_matches_its_own_baseline_digest():
+    """A CRLF baseline file must still be recognised as compatible.
+
+    The generator reads bytes; the gate reads text (which converts CRLF to LF).
+    Without a shared normalisation rule the two digests differ and 9 of the 63
+    minqlx baseline files can never reach VERDICT_COMPATIBLE.
+    """
+    from ui.plugin_compat import baseline_digest
+    crlf_bytes = b"import minqlx\r\nx = 1\r\n"
+    digest = baseline_digest(crlf_bytes.decode('utf-8'))
+    as_read_in_text_mode = "import minqlx\nx = 1\n"
+    verdict, _ = classify(as_read_in_text_mode, 'minqlx', baseline_sha256=digest)
+    assert verdict == VERDICT_COMPATIBLE
