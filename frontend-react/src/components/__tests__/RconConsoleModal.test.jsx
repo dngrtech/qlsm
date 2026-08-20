@@ -60,6 +60,42 @@ describe('RconConsoleModal', () => {
 
   afterEach(() => resetRconSocketForTests());
 
+  it('focuses the command input once the RCON socket connects, even though Headless UI has already moved focus elsewhere in the panel', async () => {
+    const socket = createSocket();
+    renderModal(socket);
+
+    // Headless UI's Dialog grabs initial focus into the panel on open (the
+    // command input is still disabled at this point, so it lands on some
+    // other focusable element, e.g. a header button) — none of that is a
+    // real user gesture, so it must not block the claim below once RCON
+    // connects.
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+
+    act(() => socket.trigger('connect'));
+    await waitFor(() => expect(screen.getByPlaceholderText('Enter command...')).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByPlaceholderText('Enter command...')).toHaveFocus());
+  });
+
+  it('still claims focus when a launcher element outside the modal (e.g. the row Actions menu button that opened it) is left focused', async () => {
+    const socket = createSocket();
+    socketFactory.io.mockReturnValue(socket);
+    render(
+      <>
+        <button type="button">Actions</button>
+        <RconConsoleModal isOpen onClose={vi.fn()} instance={instance} />
+      </>
+    );
+    // Headless UI's Menu restores focus to its own trigger button when a
+    // menu item closes it — simulate that leftover focus surviving the
+    // modal opening, since the trigger sits entirely outside the dialog.
+    screen.getByRole('button', { name: 'Actions' }).focus();
+    expect(screen.getByRole('button', { name: 'Actions' })).toHaveFocus();
+
+    act(() => socket.trigger('connect'));
+    await waitFor(() => expect(screen.getByPlaceholderText('Enter command...')).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByPlaceholderText('Enter command...')).toHaveFocus());
+  });
+
   it('joins, sends a command, and appends the command and response', async () => {
     const socket = createSocket();
     renderModal(socket);
