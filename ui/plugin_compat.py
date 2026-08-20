@@ -22,6 +22,23 @@ VERDICT_COMPATIBLE = 'compatible'
 VERDICT_INCOMPATIBLE = 'incompatible'
 VERDICT_UNKNOWN = 'unknown'
 
+# PEP 701 (Python 3.12) retokenized f-strings: what used to be one STRING
+# token is now FSTRING_START / FSTRING_MIDDLE / FSTRING_END, with the
+# embedded `{expr}` tokenized as ordinary code in between. Those three names
+# don't exist on 3.10/3.11, so they're resolved defensively -- this module
+# has to mask correctly on whichever interpreter runs it (worktree dev boxes
+# are 3.10; CI and production are 3.12), or an f-string body silently stops
+# being masked on the newer interpreter alone.
+_MASK_TOKEN_TYPES = {tokenize.COMMENT, tokenize.STRING}
+_MASK_TOKEN_TYPES.update(
+    token_type for token_type in (
+        getattr(tokenize, 'FSTRING_START', None),
+        getattr(tokenize, 'FSTRING_MIDDLE', None),
+        getattr(tokenize, 'FSTRING_END', None),
+    )
+    if token_type is not None
+)
+
 
 def code_only(text):
     """`text` with every comment and string blanked to spaces.
@@ -38,7 +55,7 @@ def code_only(text):
         lines = text.splitlines(keepends=True)
         masked = [list(line) for line in lines]
         for token in tokenize.generate_tokens(io.StringIO(text).readline):
-            if token.type not in (tokenize.COMMENT, tokenize.STRING):
+            if token.type not in _MASK_TOKEN_TYPES:
                 continue
             (srow, scol), (erow, ecol) = token.start, token.end
             for row in range(srow, erow + 1):
@@ -106,9 +123,18 @@ _PATTERNS_BY_TARGET = {
     MINQLX: _REMOVED_ON_MINQLX,
 }
 
-# Only the six events whose dispatch signature differs between the runtimes.
-# Everything else has the same arity on both, and listing it here could only
-# produce false positives. Values are the argument count excluding `self`.
+# The events whose dispatch signature changed between the runtimes. Arity
+# checking can only catch the subset where the argument *count* changed --
+# `game_end` (1/1), `kill` (3/3) and `death` (3/3) keep the same count but
+# change argument *meaning* instead (`game_end`'s argument goes from a stats
+# dict to a bool; `kill`/`death`'s third argument goes from a stats dict to a
+# means-of-death value). They stay in the table anyway, both so a `*args`
+# handler on one of them is genuinely exercised by the "absorbs anything"
+# bypass below rather than skipped for being absent from the table, and so a
+# handler with the wrong *count* on them still gets caught. Every other event
+# has the same arity on both runtimes and is deliberately left out -- adding
+# it here could only produce false positives. Values are the argument count
+# excluding `self`.
 _EVENT_ARITY = {
     MINQLX: {
         'player_connect': 1, 'game_start': 1, 'game_end': 1,
@@ -122,18 +148,38 @@ _EVENT_ARITY = {
 
 _ADD_HOOK = re.compile(
     r'\badd_hook\s*\(\s*["\'](?P<event>\w+)["\']\s*,\s*self\.(?P<handler>\w+)')
-_DEF = re.compile(r'^\s*def\s+(?P<name>\w+)\s*\((?P<params>[^)]*)\)', re.M)
+# Matches only up to the opening `(` of the signature -- the parameter list
+# itself is captured by walking forward from there (see `_scan_params`),
+# because a plain `[^)]*` class stops at the first `)`, which a call-valued
+# default like `is_bot=default_factory()` closes before the signature does.
+_DEF = re.compile(r'^\s*def\s+(?P<name>\w+)\s*\(', re.M)
 
 
 def _line_of(text, index):
     return text.count('\n', 0, index) + 1
 
 
+def _scan_params(text, start):
+    """The parameter-list text between a `def`'s opening `(` (at `start`) and
+    its matching close paren, tracking nesting depth so an inner `(...)` in a
+    default value doesn't get mistaken for the signature's own close paren."""
+    depth = 1
+    index = start
+    while index < len(text) and depth > 0:
+        if text[index] == '(':
+            depth += 1
+        elif text[index] == ')':
+            depth -= 1
+        index += 1
+    return text[start:index - 1]
+
+
 def _handler_params(masked):
     """Map handler name -> its parameter list, `self` dropped."""
     found = {}
     for match in _DEF.finditer(masked):
-        params = [p.strip() for p in match.group('params').split(',') if p.strip()]
+        params_text = _scan_params(masked, match.end())
+        params = [p.strip() for p in params_text.split(',') if p.strip()]
         if params and params[0] == 'self':
             params = params[1:]
         found[match.group('name')] = (params, _line_of(masked, match.start()))
@@ -149,14 +195,19 @@ def _scan_arities(text, masked, target_runtime):
 
     `_ADD_HOOK` runs against the raw `text`, not `masked`: `code_only()` blanks
     every string literal, including the quoted event name `add_hook()` needs to
-    identify which event a handler is registered for. `_handler_params` still
-    reads `masked`, since a string-valued default argument could otherwise hide
-    a comma from the parameter-count logic.
+    identify which event a handler is registered for. A match is then required
+    to land outside every masked span -- otherwise a commented-out or
+    docstring-embedded `add_hook()` call would register a handler that was
+    never actually wired up. `_handler_params` still reads `masked`, since a
+    string-valued default argument could otherwise hide a comma from the
+    parameter-count logic.
     """
     arities = _EVENT_ARITY[target_runtime]
     handlers = _handler_params(masked)
     reasons = []
     for match in _ADD_HOOK.finditer(text):
+        if not masked[match.start():match.end()].strip():
+            continue  # inside a comment or string -- code_only() blanked it
         event = match.group('event')
         if event not in arities:
             continue

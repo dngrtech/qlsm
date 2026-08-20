@@ -46,6 +46,24 @@ def test_code_only_returns_the_text_unchanged_when_it_cannot_tokenize():
     assert 'import minqlx' in code_only(broken)
 
 
+def test_code_only_blanks_an_fstring_body_on_any_python_version():
+    """PEP 701 (3.12) retokenizes an f-string as FSTRING_START/MIDDLE/END
+    instead of one STRING token. The dev venv here is 3.10, where this masks
+    correctly either way — but CI and production both run 3.12, where a mask
+    that only knows about STRING lets an f-string's literal text straight
+    through unmasked."""
+    masked = code_only('x = f"note: import minqlx and RET_STOP_ALL"\n')
+    assert 'import minqlx' not in masked
+    assert 'RET_STOP_ALL' not in masked
+
+
+def test_an_fstring_body_is_not_flagged_as_a_minqlx_reference():
+    """Same false positive as above, exercised through the public scanning
+    entry point rather than `code_only()` directly."""
+    source = 'x = f"note: import minqlx and RET_STOP_ALL"\n'
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
 # --- minqlx source, minqlxtended target -----------------------------------
 
 def test_a_bare_minqlx_import_is_incompatible_with_minqlxtended():
@@ -126,9 +144,27 @@ def test_the_correct_player_connect_arity_is_not_flagged():
     assert scan_incompatibilities(source, MINQLXTENDED) == []
 
 
-def test_an_unchanged_event_arity_is_never_flagged():
-    """`map` is (mapname, factory) on both runtimes — flagging it would be a
-    false positive on every plugin that hooks it."""
+def test_an_event_with_equal_arity_on_both_runtimes_is_never_flagged():
+    """`game_end` takes one argument on both runtimes — same count, different
+    meaning (a stats dict on minqlx, a bool on minqlxtended). It stays in
+    `_EVENT_ARITY` on purpose, so this has to genuinely run the count
+    comparison and find it equal, not just skip because the event is absent
+    from the table (see the not-in-table case below)."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("game_end", self.handle_game_end)\n'
+        '    def handle_game_end(self, data):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_an_event_not_in_the_arity_table_is_never_flagged():
+    """`map` is (mapname, factory) on both runtimes but isn't in
+    `_EVENT_ARITY` at all — a different path than the equal-arity case above,
+    where the event is present but the counts happen to match."""
     source = (
         'import minqlxtended\n'
         'class p(minqlxtended.Plugin):\n'
@@ -147,6 +183,55 @@ def test_a_handler_taking_star_args_is_never_flagged():
         '    def __init__(self):\n'
         '        self.add_hook("kill", self.handle_kill)\n'
         '    def handle_kill(self, *args):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_stale_round_end_arity_is_incompatible_with_minqlx():
+    """`_EVENT_ARITY[MINQLX]` had zero coverage — every prior arity test
+    targeted minqlxtended. minqlx's round_end dispatches one argument; a
+    handler ported from minqlxtended without updating its signature is
+    stale."""
+    source = (
+        'import minqlx\n'
+        'class p(minqlx.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("round_end", self.handle_round_end)\n'
+        '    def handle_round_end(self, data, extra):\n'
+        '        pass\n'
+    )
+    reasons = scan_incompatibilities(source, MINQLX)
+    assert any('round_end' in r for r in reasons), reasons
+
+
+def test_a_commented_out_add_hook_call_does_not_trigger_an_arity_check():
+    """`_ADD_HOOK` has to run against raw text to see the quoted event name
+    (`code_only()` blanks it), which means it could match a call sitting
+    inside a comment. The handler here is never actually registered — only a
+    real, live `add_hook()` call may trigger the arity comparison."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        pass\n'
+        '    # self.add_hook("player_connect", self.handle_connect)\n'
+        '    def handle_connect(self, player):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_call_valued_default_argument_does_not_truncate_the_signature():
+    """A nested `(...)` in a default value must not truncate the captured
+    parameter list at the first `)` — that would misdetect a correctly-ported
+    two-argument handler as stale."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("player_connect", self.handle_connect)\n'
+        '    def handle_connect(self, player, is_bot=default_factory()):\n'
         '        pass\n'
     )
     assert scan_incompatibilities(source, MINQLXTENDED) == []
