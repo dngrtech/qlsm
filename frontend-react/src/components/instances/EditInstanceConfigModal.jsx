@@ -8,6 +8,8 @@ import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
+import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
+import { mergeReplacements } from '../../utils/presetCompatibility';
 import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
 import { partitionCheckedPaths, resolveRootPluginPaths, toQlxPluginNames } from '../fileManager/pluginSelection';
@@ -123,6 +125,7 @@ function EditInstanceConfigModal({
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [savedPresetForDownload, setSavedPresetForDownload] = useState(null);
+  const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
@@ -504,10 +507,9 @@ function EditInstanceConfigModal({
     pluginsHaveChanges,
   ]);
 
-  const handleLoadPreset = useCallback(async (presetId) => {
+  const applyPresetData = useCallback(async (presetId, presetData) => {
     setPresetError(null);
     try {
-      const presetData = await getPresetById(presetId);
       const newConfigs = { ...(presetData.configs || {}) };
       CONFIG_FILES_ORDER.forEach(file => {
         const presetKey = CONFIG_KEY_MAP[file] || file;
@@ -570,6 +572,31 @@ function EditInstanceConfigModal({
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
   }, [hostLanRateUsesHook, hostOsType, hostRuntime, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
+
+  const handleLoadPreset = useCallback(async (presetId) => {
+    setPresetError(null);
+    try {
+      const presetData = await getPresetById(presetId, { targetRuntime: hostRuntime });
+      if (presetData.compatibility?.stripped?.length) {
+        setPendingPreset({ id: presetId, data: presetData });
+        return;
+      }
+      await applyPresetData(presetId, presetData);
+    } catch (err) {
+      setPresetError(err.message || `Failed to load preset ${presetId}.`);
+    }
+  }, [applyPresetData, hostRuntime]);
+
+  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+    if (!pendingPreset) return;
+    const { id, data } = pendingPreset;
+    setPendingPreset(null);
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths));
+  }, [applyPresetData, pendingPreset]);
+
+  const handleCancelPresetCompatibility = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
 
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
@@ -1210,6 +1237,13 @@ function EditInstanceConfigModal({
         onPresetDeleted={handlePresetDeleted}
         onPresetRenamed={handlePresetRenamed}
         onPresetImported={handlePresetImported}
+      />
+
+      <PresetCompatibilityDialog
+        isOpen={Boolean(pendingPreset)}
+        compatibility={pendingPreset?.data?.compatibility}
+        onConfirm={handleConfirmPresetCompatibility}
+        onCancel={handleCancelPresetCompatibility}
       />
     </>
   );

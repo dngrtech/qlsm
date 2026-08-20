@@ -37,7 +37,9 @@ import {
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
 import { defaultPresetNameForRuntime, runtimeLabel } from '../../constants/runtimes';
-import { presetRuntimeMismatchMessage } from '../../utils/presetRuntimeCompat';
+import { presetRuntimeStripWarning } from '../../utils/presetRuntimeCompat';
+import { mergeReplacements } from '../../utils/presetCompatibility';
+import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
@@ -168,6 +170,7 @@ function AddInstanceForm({
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Local presets state (allows filtering after deletion without refetching)
   const [presets, setPresets] = useState(initialData.presets || []);
@@ -360,8 +363,8 @@ function AddInstanceForm({
     if (carriedPreset && hostId && !isInitialLoad) {
       if (runtimeLabel(carriedPreset.runtime) !== newRuntime) {
         setPresetClearedNotice(
-          `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared. `
-          + presetRuntimeMismatchMessage(carriedPreset, newHostRecord)
+          `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared — reload it here to apply it. `
+          + presetRuntimeStripWarning(carriedPreset, newHostRecord)
         );
         setLoadedPreset(null);
         loadedPresetConfigRef.current = null;
@@ -659,11 +662,10 @@ function AddInstanceForm({
   );
 
   // Handle loading a preset
-  const handleLoadPreset = useCallback(async (presetId) => {
+  const applyPresetData = useCallback(async (presetId, presetData) => {
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
-      const presetData = await getPresetById(presetId);
       const newConfigs = extractPresetConfigs(presetData);
 
       // Extract hostname and port from preset server.cfg, patching newConfigs before setting state
@@ -772,6 +774,33 @@ function AddInstanceForm({
     }
   }, [checkedPlugins, lanRateEnabled, lanRateSupported, resetConfigs, resetFactories, syncConfigState]);
 
+  const handleLoadPreset = useCallback(async (presetId) => {
+    setIsLoadingPreset(true);
+    try {
+      setInternalFormError(null);
+      const presetData = await getPresetById(presetId, { targetRuntime: selectedHostShape.runtime });
+      if (presetData.compatibility?.stripped?.length) {
+        setPendingPreset({ id: presetId, data: presetData });
+        return;
+      }
+      await applyPresetData(presetId, presetData);
+    } catch (err) {
+      setInternalFormError(err.error?.message || err.message || `Failed to load preset.`);
+    } finally {
+      setIsLoadingPreset(false);
+    }
+  }, [applyPresetData, selectedHostShape.runtime]);
+
+  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+    if (!pendingPreset) return;
+    const { id, data } = pendingPreset;
+    setPendingPreset(null);
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths));
+  }, [applyPresetData, pendingPreset]);
+
+  const handleCancelPresetCompatibility = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
 
   // Handle saving current config as a preset
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
@@ -1329,6 +1358,13 @@ function AddInstanceForm({
         onPresetRenamed={handlePresetRenamed}
         onPresetImported={handlePresetImported}
         initialOverwriteName={loadedPreset && !loadedPreset.is_builtin ? loadedPreset.name : null}
+      />
+
+      <PresetCompatibilityDialog
+        isOpen={Boolean(pendingPreset)}
+        compatibility={pendingPreset?.data?.compatibility}
+        onConfirm={handleConfirmPresetCompatibility}
+        onCancel={handleCancelPresetCompatibility}
       />
 
       <FullScreenConfigEditorModal isOpen={isFullScreenEditorOpen} onClose={handleCloseFullScreenEditor} onSave={handleSaveFullScreenEditor} fileName={editingFileDetails.name} initialContent={editingFileDetails.content} language={editingFileDetails.language} linterSource={editingFileDetails.linterSource} />

@@ -474,7 +474,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99'));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
     await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
 
     expect(restartToggle).toHaveAttribute('aria-pressed', 'true');
@@ -510,7 +510,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99'));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
 
     const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'));
@@ -550,7 +550,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99'));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -587,7 +587,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99'));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -1152,7 +1152,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99'));
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
 
       fireEvent.click(screen.getByRole('button', { name: /plugins/i }));
       await waitFor(() => {
@@ -1249,6 +1249,93 @@ describe('EditInstanceConfigModal preset saving', () => {
       fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
 
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('preset compatibility gate on load', () => {
+    const renderModal = () => render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        onClose={vi.fn()}
+        instanceId={1}
+        instanceName="Test123"
+        onConfigSaved={vi.fn()}
+      />
+    );
+
+    it('sends the host runtime with the preset fetch', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', configs: {}, factories: {} });
+      renderModal();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+    });
+
+    it('applies directly when the response carries no compatibility block', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', configs: {}, factories: {} });
+      renderModal();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "my-preset" loaded successfully.'));
+      expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
+    });
+
+    it('does not apply a preset immediately when the response has stripped plugins', async () => {
+      // The matched-pair regression test: without the compatibility gate this
+      // response would apply exactly like the no-compatibility-block case
+      // above, so showSuccess firing here is the bug the gate exists to
+      // prevent.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        configs: {},
+        factories: {},
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [
+            { path: 'essentials.py', verdict: 'incompatible', reasons: ['uses a minqlxtended-only API'], replacement: null },
+          ],
+          replacements: {},
+        },
+      });
+      renderModal();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await screen.findByText(/won.t carry over/i);
+      expect(mocks.showSuccess).not.toHaveBeenCalled();
+    });
+
+    it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
+      // stripped: [] is a real response shape -- every plugin scanned clean --
+      // and it must not surface a dialog with nothing in it.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        configs: {},
+        factories: {},
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [],
+          replacements: {},
+        },
+      });
+      renderModal();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "my-preset" loaded successfully.'));
+      expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
     });
   });
 });

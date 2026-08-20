@@ -546,7 +546,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     await waitFor(() => expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('true'));
   });
 
@@ -585,7 +585,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     await waitFor(() => expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('false'));
   });
 
@@ -626,7 +626,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('true');
   });
 
@@ -740,7 +740,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     await waitFor(() => expect(screen.getByRole('button', { name: /folder actions for existingFolder/i })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /folder actions for existingFolder/i }));
@@ -1056,7 +1056,7 @@ describe('AddInstanceForm draft lifecycle', () => {
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
       expect(await screen.findByRole('status')).toHaveTextContent(
         /2 plugins that can't be enabled were deselected/i
       );
@@ -1760,6 +1760,103 @@ describe('AddInstanceForm draft lifecycle', () => {
       await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
       expect(screen.getByText('Editing preset:')).toBeInTheDocument();
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('preset compatibility gate on load', () => {
+    const renderOnHost = () => render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [{ id: 1, name: 'deb-host', runtime: 'minqlx' }],
+          presets: [{ id: 1, name: 'my-preset', is_builtin: false }],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+        }}
+        initialHostId={1}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    it('sends the host runtime with the preset fetch', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', runtime: 'minqlx' });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: 'minqlx' }));
+    });
+
+    it('applies directly when the response carries no compatibility block', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', runtime: 'minqlx' });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+      expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
+    });
+
+    it('does not apply a preset immediately when the response has stripped plugins', async () => {
+      // The matched-pair regression test: without the compatibility gate this
+      // response would apply exactly like the no-compatibility-block case
+      // above, so "Editing preset:" appearing here is the bug the gate exists
+      // to prevent.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlxtended',
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [
+            { path: 'essentials.py', verdict: 'incompatible', reasons: ['uses a minqlxtended-only API'], replacement: null },
+          ],
+          replacements: {},
+        },
+      });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await screen.findByText(/won.t carry over/i);
+      expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
+    });
+
+    it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
+      // stripped: [] is a real response shape -- every plugin scanned clean --
+      // and it must not surface a dialog with nothing in it.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlxtended',
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [],
+          replacements: {},
+        },
+      });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+      expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
     });
   });
 });
