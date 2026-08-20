@@ -29,6 +29,15 @@ UPSTREAM_PLUGINS = [
 ]
 
 
+# QLSM's own plugins, ported to the minqlxtended API. Not upstream, so a diff against
+# the pinned upstream commit must skip them. Listed rather than derived from the
+# manifest, so that a port silently reclassified as upstream fails here.
+QLSM_PLUGINS = [
+    'commands.py', 'myFun.py', 'player_info.py', 'reset_acc.py', 'serverchecker.py',
+    'specqueue.py', 'suppress_join_msg.py',
+]
+
+
 def _sha256(path):
     with open(path, 'rb') as handle:
         return hashlib.sha256(handle.read()).hexdigest()
@@ -97,3 +106,18 @@ def test_requirements_carry_the_upstream_floors():
         body = handle.read()
     for requirement in ('redis>=5.1.0', 'hiredis>=3.0.0', 'requests>=2.33.0', 'pyzmq>=25.1.1'):
         assert requirement in body, requirement
+
+
+def test_qlsm_ports_are_marked_qlsm(manifest):
+    for name in QLSM_PLUGINS:
+        assert manifest['files'][name]['origin'] == 'qlsm', name
+
+
+def test_every_qlsm_port_is_vendored():
+    missing = [name for name in QLSM_PLUGINS
+               if not os.path.isfile(os.path.join(BASELINE_DIR, name))]
+    assert missing == [], f"missing QLSM ports: {missing}"
+
+
+def test_the_baseline_is_upstream_plus_qlsm_and_nothing_else(manifest):
+    assert set(manifest['files']) == set(UPSTREAM_PLUGINS) | set(QLSM_PLUGINS)

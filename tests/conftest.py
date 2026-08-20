@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 import pytest
 from ui import create_app, db
@@ -57,3 +58,29 @@ def app_context(app):
     """An application context for the app."""
     with app.app_context() as ctx:
         yield ctx
+
+
+@pytest.fixture(autouse=True)
+def _reset_minqlxtended_stub_state():
+    """Clear the minqlxtended stub's shared state between tests.
+
+    GameClient caches one live-memory view per client id, the way the engine hands
+    back the same gclient_t for the same slot. That cache is process-wide, so without
+    this a test reading GameClient(2).accuracy_shots sees whatever an earlier test
+    wrote there. Autouse rather than opt-in: the tests that would be misled are the
+    ones that never thought to ask.
+
+    No-op unless the stub has been installed, so it costs nothing for the rest of the
+    suite.
+    """
+    yield
+    stub = sys.modules.get('minqlxtended')
+    if stub is not None and getattr(stub, '_qlsm_stub', False):
+        stub.GameClient.reset_all()
+        stub.cvars.clear()
+        stub.configstrings.clear()
+        stub.console_lines.clear()
+        stub.console_commands.clear()
+        stub.logged_exceptions.clear()
+        stub.Plugin.game = None
+        stub.Plugin.db = None

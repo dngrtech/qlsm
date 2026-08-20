@@ -20,6 +20,10 @@
       "origin": "upstream",
       "sha256": "63d4b858b4c38b19b3fcc7e9094ce4a5dcdbb6745ec3b990b5ba37ec837b9b9c"
     },
+    "commands.py": {
+      "origin": "qlsm",
+      "sha256": "46440173c28b60747e7ad5150d9ecea4c7253a365fe924f565f6c99179e6d9ea"
+    },
     "custom_votes.py": {
       "origin": "upstream",
       "sha256": "399ae4dab636b007defc4012f282574ff125fabda2e9af00bdfb85872347062c"
@@ -68,6 +72,10 @@
       "origin": "upstream",
       "sha256": "7c1741718eab59fcea47d0d6798f35c6b0bcb24e102d9edf7df53bd524e1d8b3"
     },
+    "myFun.py": {
+      "origin": "qlsm",
+      "sha256": "3bbd5bef33136cbed1db7e7b8cfd0c62e81e4f16e1246440bb05acf4ac8ce048"
+    },
     "names.py": {
       "origin": "upstream",
       "sha256": "ed7713340354e6886872baa27419c7ae333d1e0749f8ad4904db90d6520a10ad"
@@ -75,6 +83,10 @@
     "permission.py": {
       "origin": "upstream",
       "sha256": "102a3ba975a3f18f05cab68bade5c744a8ff95d3259b4d7a6904ba6bf71b16c6"
+    },
+    "player_info.py": {
+      "origin": "qlsm",
+      "sha256": "92fb51e6568a1bc0191c1faa182f88c5ce6697842c2e00c093429958123bb193"
     },
     "plugin_manager.py": {
       "origin": "upstream",
@@ -92,6 +104,10 @@
       "origin": "upstream",
       "sha256": "177e2c1649d392fcd645ac949a409614e78412a26549a09891e21e991e029eaa"
     },
+    "reset_acc.py": {
+      "origin": "qlsm",
+      "sha256": "f5e62422b1bf60079cbf281ed2663a1d4bd7d3ffb857b53a49c07b845f2c298d"
+    },
     "scores.py": {
       "origin": "upstream",
       "sha256": "f8835916d5d1fbc8abd058198a286a374afee6fb395ec55583e819b885f45c0d"
@@ -108,9 +124,17 @@
       "origin": "upstream",
       "sha256": "96dad15fe70d367dcf7ffa9fe91920ba6731aa5b197455a62c2bb1a9ebf55abb"
     },
+    "specqueue.py": {
+      "origin": "qlsm",
+      "sha256": "04f5fad3c086d9472e4942f2fe2b93d652ce3d097197223a39ee306138a0ddfa"
+    },
     "stats.py": {
       "origin": "upstream",
       "sha256": "7ee7f44ca30749a9598fc6a38e1af47512b1336d127e5cf89822d3be857010a1"
+    },
+    "suppress_join_msg.py": {
+      "origin": "qlsm",
+      "sha256": "ab0220ab1db527a2479f56c3e5e87f5566a94e3df089ffe3fa19d7e9977b12ed"
     },
     "sv_fps.py": {
       "origin": "upstream",
