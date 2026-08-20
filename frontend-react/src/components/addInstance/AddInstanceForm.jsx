@@ -790,6 +790,13 @@ function AddInstanceForm({
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
+      // Every load starts from a clean slate -- only handleConfirmPresetCompatibility
+      // ever repopulates this. Without the clear, a load that needs no dialog (or a
+      // cross-runtime load of a preset that happens to share a filename) would still
+      // carry a previous preset's accepted replacements into this one's draft; the
+      // backend trusts this list rather than re-deriving it, so correctness has to
+      // live here.
+      setAcceptedReplacements([]);
       const presetData = await getPresetById(presetId, { targetRuntime: selectedHostShape.runtime });
       if (presetData.compatibility?.stripped?.length) {
         setPendingPreset({ id: presetId, data: presetData });

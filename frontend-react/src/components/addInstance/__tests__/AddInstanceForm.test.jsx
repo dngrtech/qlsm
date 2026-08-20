@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   fileManagerProps: [],
   // Preset names the plugin draft adapter was opened against, newest last.
   draftAdapterPresets: [],
+  // Last acceptedReplacements the plugin draft adapter saw for each preset name --
+  // proves whether a stale accepted list from a previous preset leaked onto this one.
+  draftAdapterAcceptedReplacementsByPreset: {},
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
   savePreset: vi.fn(),
@@ -112,9 +115,12 @@ vi.mock('../../fileManager', () => ({
       </div>
     );
   }),
-  useDraftAdapter: ({ preset } = {}) => {
+  useDraftAdapter: ({ preset, acceptedReplacements } = {}) => {
     if (mocks.draftAdapterPresets[mocks.draftAdapterPresets.length - 1] !== preset) {
       mocks.draftAdapterPresets.push(preset);
+    }
+    if (preset) {
+      mocks.draftAdapterAcceptedReplacementsByPreset[preset] = acceptedReplacements || [];
     }
     return {
     draftId: 'draft-123',
@@ -275,6 +281,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     vi.clearAllMocks();
     mocks.fileManagerProps = [];
     mocks.draftAdapterPresets = [];
+    mocks.draftAdapterAcceptedReplacementsByPreset = {};
     if (!AddInstanceForm) {
       ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
     }
@@ -1857,6 +1864,54 @@ describe('AddInstanceForm draft lifecycle', () => {
 
       await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
       expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
+    });
+
+    it('does not carry a confirmed preset\'s accepted replacements onto the next preset loaded', async () => {
+      // Regression: handleLoadPreset used to leave acceptedReplacements untouched
+      // when the next load needed no compatibility confirmation of its own, so a
+      // stale accepted filename from preset A rode along into preset B's draft
+      // seed. Fixed by clearing at the top of every load; only the compatibility
+      // dialog's confirm handler is allowed to repopulate it.
+      mocks.getPresetById
+        .mockResolvedValueOnce({
+          name: 'presetA',
+          runtime: 'minqlxtended',
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              {
+                path: 'essentials.py',
+                verdict: 'incompatible',
+                reasons: ['uses a minqlxtended-only API'],
+                replacement: 'essentials_mqx.py',
+              },
+            ],
+            replacements: { 'essentials.py': 'essentials_mqx.py' },
+          },
+        })
+        .mockResolvedValueOnce({ name: 'presetB', runtime: 'minqlx' });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      // Load preset A and confirm the compatibility dialog, accepting the one
+      // offered replacement (pre-checked by the dialog itself).
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+
+      // Now load preset B, which needs no confirmation of its own.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetB'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetB).toEqual([]);
     });
   });
 });

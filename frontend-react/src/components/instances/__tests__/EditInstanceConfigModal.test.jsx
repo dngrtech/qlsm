@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
   useDraftWorkspace: vi.fn(),
+  // Last acceptedReplacements the plugin draft adapter saw for each preset name --
+  // proves whether a stale accepted list from a previous preset leaked onto this one.
+  draftAdapterAcceptedReplacementsByPreset: {},
 }));
 
 vi.mock('@headlessui/react', () => {
@@ -204,10 +207,15 @@ vi.mock('../../fileManager', () => ({
       </div>
     );
   }),
-  useDraftAdapter: () => ({
-    ...mocks.useDraftWorkspace(),
-    hasChanges: false,
-  }),
+  useDraftAdapter: ({ preset, acceptedReplacements } = {}) => {
+    if (preset) {
+      mocks.draftAdapterAcceptedReplacementsByPreset[preset] = acceptedReplacements || [];
+    }
+    return {
+      ...mocks.useDraftWorkspace(),
+      hasChanges: false,
+    };
+  },
   useStateAdapter: ({ initialFiles = {}, initialFolders = [], serverTree = [] } = {}) => {
     const [files, setFiles] = React.useState(initialFiles);
     const [folders, setFolders] = React.useState(initialFolders);
@@ -296,6 +304,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     vi.clearAllMocks();
     mocks.fileManagerProps = [];
     mocks.hooksTabProps = [];
+    mocks.draftAdapterAcceptedReplacementsByPreset = {};
     if (!EditInstanceConfigModal) {
       ({ default: EditInstanceConfigModal } = await import('../EditInstanceConfigModal'));
     }
@@ -1336,6 +1345,57 @@ describe('EditInstanceConfigModal preset saving', () => {
 
       await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "my-preset" loaded successfully.'));
       expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
+    });
+
+    it('does not carry a confirmed preset\'s accepted replacements onto the next preset loaded', async () => {
+      // Regression: handleLoadPreset used to leave acceptedReplacements untouched
+      // when the next load needed no compatibility confirmation of its own, so a
+      // stale accepted filename from preset A rode along into preset B's draft
+      // seed. Fixed by clearing at the top of every load; only the compatibility
+      // dialog's confirm handler is allowed to repopulate it.
+      mocks.getPresetById
+        .mockResolvedValueOnce({
+          name: 'presetA',
+          configs: {},
+          factories: {},
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              {
+                path: 'essentials.py',
+                verdict: 'incompatible',
+                reasons: ['uses a minqlxtended-only API'],
+                replacement: 'essentials_mqx.py',
+              },
+            ],
+            replacements: { 'essentials.py': 'essentials_mqx.py' },
+          },
+        })
+        .mockResolvedValueOnce({ name: 'presetB', configs: {}, factories: {} });
+      renderModal();
+
+      // Load preset A and confirm the compatibility dialog, accepting the one
+      // offered replacement (pre-checked by the dialog itself).
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      // @headlessui/react is mocked to plain <div>s in this file (no role="dialog"
+      // to scope by), so disambiguate from the outer "Load Preset" trigger by DOM
+      // order: PresetCompatibilityDialog's own confirm button renders last.
+      const loadPresetButtons = screen.getAllByRole('button', { name: /load preset/i });
+      fireEvent.click(loadPresetButtons[loadPresetButtons.length - 1]);
+
+      await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "presetA" loaded successfully.'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+
+      // Now load preset B, which needs no confirmation of its own.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "presetB" loaded successfully.'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetB).toEqual([]);
     });
   });
 });
