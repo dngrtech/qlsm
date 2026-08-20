@@ -58,6 +58,7 @@ TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 EXT_SUPPORTED_GAMETYPES = ("ca", "ctf", "dom", "ft", "tdm", "duel", "ffa")
 RATING_KEY = "minqlx:players:{0}:ratings:{1}" # 0 == steam_id, 1 == short gametype.
 MAX_ATTEMPTS = 3
+HTTP_TIMEOUT_SECONDS = 10
 CACHE_EXPIRE = 60*30 # 30 minutes TTL.
 DEFAULT_RATING = 1500
 SUPPORTED_GAMETYPES = ("ca", "ctf", "dom", "ft", "tdm")
@@ -287,7 +288,9 @@ class player_info(minqlxtended.Plugin):
         while attempts < MAX_ATTEMPTS:
             attempts += 1
             url = f"{self.api_url}{sid}"
-            res = requests.get(url)
+            # Without a timeout this blocks its worker thread for as long as the
+            # remote takes to answer, which for an unreachable qlstats is forever.
+            res = requests.get(url, timeout=HTTP_TIMEOUT_SECONDS)
             last_status = res.status_code
             if res.status_code != requests.codes.ok:
                 continue

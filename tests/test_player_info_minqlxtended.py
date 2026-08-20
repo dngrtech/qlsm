@@ -157,3 +157,29 @@ def test_it_does_not_call_a_nonexistent_plugin_kick(source):
     exists and takes the reason directly rather than an id plus a reason.
     """
     assert 'self.kick(' not in source
+
+
+def test_every_outbound_http_call_passes_a_timeout(source):
+    """requests.get with no timeout blocks its worker thread until the remote answers,
+    which for an unreachable qlstats is indefinitely. This plugin retries MAX_ATTEMPTS
+    times inside a @thread, so a hung endpoint parks the thread for good.
+
+    Fixed on the minqlx copy in `8f4c8e3` on main; the port predates it. Walked as an
+    AST rather than grepped so a second call site cannot be added without a timeout.
+    """
+    import ast
+    # The file carries a UTF-8 BOM; the `source` fixture decodes as plain utf-8,
+    # so the mark survives as \ufeff and ast.parse would reject it.
+    tree = ast.parse(source.lstrip('\ufeff'))
+    calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in ('get', 'post')
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == 'requests'
+    ]
+    assert calls, "expected at least one requests call; has the fetch moved?"
+    untimed = [node.lineno for node in calls
+               if not any(kw.arg == 'timeout' for kw in node.keywords)]
+    assert untimed == [], f"requests calls with no timeout at lines {untimed}"

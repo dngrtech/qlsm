@@ -74,7 +74,7 @@
     },
     "myFun.py": {
       "origin": "qlsm",
-      "sha256": "3bbd5bef33136cbed1db7e7b8cfd0c62e81e4f16e1246440bb05acf4ac8ce048"
+      "sha256": "c41ab804adf77b7048e2aa2183c5da2604823bed0a2895c16e02586b0b1b4a24"
     },
     "names.py": {
       "origin": "upstream",
@@ -86,7 +86,7 @@
     },
     "player_info.py": {
       "origin": "qlsm",
-      "sha256": "92fb51e6568a1bc0191c1faa182f88c5ce6697842c2e00c093429958123bb193"
+      "sha256": "6faabd4794a0153430eb78aae8025fa5b21fa8cafed64930a7686852787bbf4d"
     },
     "plugin_manager.py": {
       "origin": "upstream",
