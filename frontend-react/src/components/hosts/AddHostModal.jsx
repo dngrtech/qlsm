@@ -7,7 +7,6 @@ import { providerOptions } from '../../utils/providerData';
 import AddHostFormFields from './AddHostFormFields';
 import { validateHostName } from '../../utils/resourceValidation';
 import { getTimezoneForRegion } from '../../utils/formatters';
-import { DEFAULT_RUNTIME } from '../../constants/runtimes';
 
 const PROVIDER_LIST_OPTIONS = [
   { id: 'self', name: 'QLSM Host (self-deployment)' },
@@ -31,7 +30,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
   const [provider, setProvider] = useState('self');
-  const [runtime, setRuntime] = useState(DEFAULT_RUNTIME);
+  // No default: the runtime is immutable once the host exists, so the operator
+  // picks it explicitly or the form does not submit.
+  const [runtime, setRuntime] = useState('');
+  const [runtimeError, setRuntimeError] = useState(null);
   const [selfHostExists, setSelfHostExists] = useState(false);
   const [providerOptionsReady, setProviderOptionsReady] = useState(false);
   const [selectedContinent, setSelectedContinent] = useState('');
@@ -137,7 +139,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setName('');
     setNameError(null);
     setProvider(selfHostExists ? 'standalone' : 'self');
-    setRuntime(DEFAULT_RUNTIME);
+    setRuntime('');
+    setRuntimeError(null);
     setSelectedContinent('');
     setRegion('');
     setMachineSize('');
@@ -248,6 +251,15 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       return;
     }
     setNameError(null);
+
+    if (!runtime) {
+      // Belongs to the field, not the modal's generic error slot at the bottom
+      // of the form: the radios sit near the top, and an unassociated message
+      // announces nothing to a screen reader landing on them.
+      setRuntimeError('Server runtime is required.');
+      return;
+    }
+    setRuntimeError(null);
 
     if (provider === 'standalone') {
       if (!ipAddress || !ipAddress.trim()) {
@@ -444,7 +456,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onSwitchToSelfHost={handleSwitchToSelfHost}
                         osInfo={selfHostOsInfo}
                         runtime={runtime}
-                        onRuntimeChange={setRuntime}
+                        runtimeError={runtimeError}
+                        onRuntimeChange={(value) => {
+                          setRuntime(value);
+                          setRuntimeError(null);
+                        }}
                       />
                     ) : (
                       <div className="text-sm text-theme-muted">Loading host options...</div>

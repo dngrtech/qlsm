@@ -16,8 +16,12 @@ MINQLXTENDED = 'minqlxtended'
 
 VALID_RUNTIMES = (MINQLX, MINQLXTENDED)
 
-# The default is minqlx and stays minqlx until P6 flips it. It is what an
-# unaware operator gets, and the choice is irreversible.
+# Nothing ever "flips" this: the Add Host form pre-selects no runtime at all,
+# because the choice is irreversible and QLSM will not make it on an operator's
+# behalf. This constant is the fallback for the two cases where no human is
+# choosing -- a host row that predates the runtime column, and an API payload
+# that omits the field -- and it points at minqlx because that is the
+# conservative answer, not because it is anyone's default.
 DEFAULT_RUNTIME = MINQLX
 
 _RUNTIME_PATHS = {
