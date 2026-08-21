@@ -347,6 +347,55 @@ def test_build_qlds_args_always_injects_empty_net_ip(test_app):
             assert '+set net_ip ""' in result
 
 
+def test_build_qlds_args_pairs_sv_servertype_with_lan_force_rate(test_app):
+    """sv_serverType must track the 99k toggle, alongside sv_lanForceRate.
+
+    The 99k trick is two mechanisms, not one: force_rate.so patches
+    Sys_IsLANAddress so sv_lanForceRate 1 assigns rate 99999, and
+    sv_serverType 1 tells the engine it is a LAN server. PR #100 removed the
+    second on the premise that the hook made it redundant -- true for the rate
+    number, false for how the server actually plays -- and every 99k instance
+    ran degraded from 2026-06-01.
+
+    Nothing covered either cvar at the time, which is why the removal shipped
+    unnoticed. Assert them as a pair, so the two halves cannot drift apart
+    again.
+    """
+    with test_app.app_context():
+        enabled = _build_qlds_args_string(
+            _make_instance_for_args(lan_rate_enabled=True))
+        assert '+set sv_serverType 1' in enabled
+        assert '+set sv_lanForceRate 1' in enabled
+        assert '+set sv_serverType 2' not in enabled
+
+        disabled = _build_qlds_args_string(
+            _make_instance_for_args(lan_rate_enabled=False))
+        assert '+set sv_serverType 2' in disabled
+        assert '+set sv_lanForceRate 0' in disabled
+        assert '+set sv_serverType 1' not in disabled
+
+
+def test_build_qlds_args_sv_servertype_follows_forced_99k_on_minqlxtended(test_app):
+    """A forced-99k host gets sv_serverType 1 even with the column set False.
+
+    This is the branch-specific half. QLSM fixes 99k on for every minqlxtended
+    host (lan_rate_forced_on), and instance.lan_rate_enabled keeps whatever the
+    column happened to store -- often False. Deriving sv_serverType from the
+    raw column instead of effective_lan_rate() would hand every minqlxtended
+    instance sv_serverType 2 alongside sv_lanForceRate 1: exactly the broken
+    pairing this fix exists to eliminate, and with no toggle to escape it.
+    """
+    with test_app.app_context():
+        forced = _make_instance_for_args(
+            lan_rate_enabled=False,
+            host=SimpleNamespace(provider='standalone', runtime='minqlxtended'))
+        result = _build_qlds_args_string(forced)
+
+        assert '+set sv_serverType 1' in result
+        assert '+set sv_lanForceRate 1' in result
+        assert '+set sv_serverType 2' not in result
+
+
 # Pure unit tests for _extract_pip_warning (no mocks required)
 from ui.task_logic.ansible_instance_mgmt import _extract_pip_warning
 
