@@ -6,7 +6,8 @@ import { Info } from 'lucide-react';
 /**
  * Reusable info tooltip with instant hover response and themed design.
  *
- * @param {string}  text       - Tooltip message text
+ * @param {React.ReactNode} text - Tooltip content. A string for plain messages;
+ *                               a node where the tooltip needs markup, e.g. a link.
  * @param {number}  [size=14]  - Icon size in px
  * @param {'top'|'bottom'|'left'|'right'} [placement='top'] - Preferred placement
  * @param {string}  [iconClassName] - Extra classes for the icon wrapper
