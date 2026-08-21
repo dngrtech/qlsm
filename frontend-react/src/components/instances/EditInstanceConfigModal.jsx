@@ -8,6 +8,8 @@ import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
+import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
+import { mergeReplacements } from '../../utils/presetCompatibility';
 import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
 import { partitionCheckedPaths, resolveRootPluginPaths, toQlxPluginNames } from '../fileManager/pluginSelection';
@@ -123,6 +125,7 @@ function EditInstanceConfigModal({
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [savedPresetForDownload, setSavedPresetForDownload] = useState(null);
+  const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
@@ -130,6 +133,10 @@ function EditInstanceConfigModal({
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
   const [draftPreset, setDraftPreset] = useState(null); // null = seed from instance; string = seed from preset
+  // Bare filenames the operator accepted a runtime replacement for, from the
+  // preset compatibility dialog. Sent to the draft seed so the server writes
+  // the replacement files. Cleared whenever the draft seed resets.
+  const [acceptedReplacements, setAcceptedReplacements] = useState([]);
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const [droppedPluginCount, setDroppedPluginCount] = useState(0);
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
@@ -175,6 +182,8 @@ function EditInstanceConfigModal({
     preset: draftPreset || undefined,
     host: draftPreset ? undefined : scriptHostName,
     instanceId: draftPreset ? undefined : instanceId,
+    targetRuntime: hostRuntime,
+    acceptedReplacements,
     active: isOpen && (draftPreset != null || scriptHostName != null),
   });
   const {
@@ -302,6 +311,7 @@ function EditInstanceConfigModal({
         setActiveMainTab(initialTab);
         setScriptHostName(null);
         setDraftPreset(null);
+        setAcceptedReplacements([]);
         setHookAvailable([]);
         setHookMissing([]);
         setHookSystem([]);
@@ -504,10 +514,9 @@ function EditInstanceConfigModal({
     pluginsHaveChanges,
   ]);
 
-  const handleLoadPreset = useCallback(async (presetId) => {
+  const applyPresetData = useCallback(async (presetId, presetData, acceptedPaths = []) => {
     setPresetError(null);
     try {
-      const presetData = await getPresetById(presetId);
       const newConfigs = { ...(presetData.configs || {}) };
       CONFIG_FILES_ORDER.forEach(file => {
         const presetKey = CONFIG_KEY_MAP[file] || file;
@@ -528,7 +537,11 @@ function EditInstanceConfigModal({
       setCheckedPlugins(selectable);
       setDroppedPluginCount(dropped.length);
       setPluginNoticeDismissed(false);
+      // acceptedPaths defaults to [] (a plain default, not a speculative clear
+      // elsewhere) so a no-dialog load carries nothing forward, and both state
+      // updates land in the same render as the one re-seed this load causes.
       setDraftPreset(presetData.name);
+      setAcceptedReplacements(acceptedPaths);
       if (presetData.enabled_hooks !== undefined && presetData.enabled_hooks !== null) {
         setHookEnabledOrder(presetData.enabled_hooks);
         setHooksLoaded(true);
@@ -570,6 +583,36 @@ function EditInstanceConfigModal({
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
   }, [hostLanRateUsesHook, hostOsType, hostRuntime, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
+
+  const handleLoadPreset = useCallback(async (presetId) => {
+    setPresetError(null);
+    try {
+      const presetData = await getPresetById(presetId, { targetRuntime: hostRuntime });
+      if (presetData.compatibility?.stripped?.length) {
+        setPendingPreset({ id: presetId, data: presetData });
+        return;
+      }
+      await applyPresetData(presetId, presetData);
+    } catch (err) {
+      setPresetError(err.message || `Failed to load preset ${presetId}.`);
+    }
+  }, [applyPresetData, hostRuntime]);
+
+  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+    if (!pendingPreset) return;
+    const { id, data } = pendingPreset;
+    setPendingPreset(null);
+    // applyPresetData sets both draftPreset and acceptedReplacements together
+    // (see its own body) -- the accepted list is an argument to "apply this
+    // preset", not ambient state some other codepath clears speculatively. A
+    // cancelled load therefore calls nothing here at all, leaving whatever
+    // preset is currently active, and its accepted replacements, untouched.
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths), acceptedPaths);
+  }, [applyPresetData, pendingPreset]);
+
+  const handleCancelPresetCompatibility = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
 
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
@@ -1210,6 +1253,13 @@ function EditInstanceConfigModal({
         onPresetDeleted={handlePresetDeleted}
         onPresetRenamed={handlePresetRenamed}
         onPresetImported={handlePresetImported}
+      />
+
+      <PresetCompatibilityDialog
+        isOpen={Boolean(pendingPreset)}
+        compatibility={pendingPreset?.data?.compatibility}
+        onConfirm={handleConfirmPresetCompatibility}
+        onCancel={handleCancelPresetCompatibility}
       />
     </>
   );

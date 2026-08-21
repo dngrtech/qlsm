@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   fileManagerProps: [],
   // Preset names the plugin draft adapter was opened against, newest last.
   draftAdapterPresets: [],
+  // Last acceptedReplacements the plugin draft adapter saw for each preset name --
+  // proves whether a stale accepted list from a previous preset leaked onto this one.
+  draftAdapterAcceptedReplacementsByPreset: {},
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
   savePreset: vi.fn(),
@@ -112,9 +115,12 @@ vi.mock('../../fileManager', () => ({
       </div>
     );
   }),
-  useDraftAdapter: ({ preset } = {}) => {
+  useDraftAdapter: ({ preset, acceptedReplacements } = {}) => {
     if (mocks.draftAdapterPresets[mocks.draftAdapterPresets.length - 1] !== preset) {
       mocks.draftAdapterPresets.push(preset);
+    }
+    if (preset) {
+      mocks.draftAdapterAcceptedReplacementsByPreset[preset] = acceptedReplacements || [];
     }
     return {
     draftId: 'draft-123',
@@ -275,6 +281,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     vi.clearAllMocks();
     mocks.fileManagerProps = [];
     mocks.draftAdapterPresets = [];
+    mocks.draftAdapterAcceptedReplacementsByPreset = {};
     if (!AddInstanceForm) {
       ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
     }
@@ -546,7 +553,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     await waitFor(() => expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('true'));
   });
 
@@ -585,7 +592,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     await waitFor(() => expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('false'));
   });
 
@@ -626,7 +633,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     expect(screen.getByTestId('lan-rate-enabled')).toHaveTextContent('true');
   });
 
@@ -740,7 +747,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
     await waitFor(() => expect(screen.getByRole('button', { name: /folder actions for existingFolder/i })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /folder actions for existingFolder/i }));
@@ -1056,7 +1063,7 @@ describe('AddInstanceForm draft lifecycle', () => {
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1));
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: null }));
       expect(await screen.findByRole('status')).toHaveTextContent(
         /2 plugins that can't be enabled were deselected/i
       );
@@ -1760,6 +1767,218 @@ describe('AddInstanceForm draft lifecycle', () => {
       await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('2'));
       expect(screen.getByText('Editing preset:')).toBeInTheDocument();
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('preset compatibility gate on load', () => {
+    const renderOnHost = () => render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [{ id: 1, name: 'deb-host', runtime: 'minqlx' }],
+          presets: [{ id: 1, name: 'my-preset', is_builtin: false }],
+          defaultConfigContents: {
+            'server.cfg': '',
+            'mappool.txt': '',
+            'access.txt': '',
+            'workshop.txt': '',
+          },
+        }}
+        initialHostId={1}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    it('sends the host runtime with the preset fetch', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', runtime: 'minqlx' });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith(1, { targetRuntime: 'minqlx' }));
+    });
+
+    it('applies directly when the response carries no compatibility block', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', runtime: 'minqlx' });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+      expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
+    });
+
+    it('does not apply a preset immediately when the response has stripped plugins', async () => {
+      // The matched-pair regression test: without the compatibility gate this
+      // response would apply exactly like the no-compatibility-block case
+      // above, so "Editing preset:" appearing here is the bug the gate exists
+      // to prevent.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlxtended',
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [
+            { path: 'essentials.py', verdict: 'incompatible', reasons: ['uses a minqlxtended-only API'], replacement: null },
+          ],
+          replacements: {},
+        },
+      });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await screen.findByText(/won.t carry over/i);
+      expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
+    });
+
+    it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
+      // stripped: [] is a real response shape -- every plugin scanned clean --
+      // and it must not surface a dialog with nothing in it.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlxtended',
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [],
+          replacements: {},
+        },
+      });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+      expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
+    });
+
+    it('does not carry a confirmed preset\'s accepted replacements onto the next preset loaded', async () => {
+      // Regression: handleLoadPreset used to leave acceptedReplacements untouched
+      // when the next load needed no compatibility confirmation of its own, so a
+      // stale accepted filename from preset A rode along into preset B's draft
+      // seed. Fixed by clearing at the top of every load; only the compatibility
+      // dialog's confirm handler is allowed to repopulate it.
+      mocks.getPresetById
+        .mockResolvedValueOnce({
+          name: 'presetA',
+          runtime: 'minqlxtended',
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              {
+                path: 'essentials.py',
+                verdict: 'incompatible',
+                reasons: ['uses a minqlxtended-only API'],
+                replacement: 'essentials_mqx.py',
+              },
+            ],
+            replacements: { 'essentials.py': 'essentials_mqx.py' },
+          },
+        })
+        .mockResolvedValueOnce({ name: 'presetB', runtime: 'minqlx' });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      // Load preset A and confirm the compatibility dialog, accepting the one
+      // offered replacement (pre-checked by the dialog itself).
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+
+      // Now load preset B, which needs no confirmation of its own.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetB'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetB).toEqual([]);
+    });
+
+    it('leaves the active preset\'s accepted replacements intact when a subsequent load is cancelled', async () => {
+      // Regression, round 2: an earlier fix cleared acceptedReplacements
+      // speculatively at the start of every load, before it was known whether
+      // the load would even complete. Since acceptedKey is a dependency of
+      // useDraftWorkspace's seeding effect, that speculative clear re-seeded
+      // preset A's still-active draft with an empty list immediately -- so
+      // cancelling the load of preset B destroyed a replacement the operator
+      // had explicitly accepted for A. Fixed by making the accepted list an
+      // argument to applyPresetData (called only on confirm, never on cancel)
+      // instead of ambient state cleared ahead of time.
+      mocks.getPresetById
+        .mockResolvedValueOnce({
+          name: 'presetA',
+          runtime: 'minqlxtended',
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              {
+                path: 'essentials.py',
+                verdict: 'incompatible',
+                reasons: ['uses a minqlxtended-only API'],
+                replacement: 'essentials_mqx.py',
+              },
+            ],
+            replacements: { 'essentials.py': 'essentials_mqx.py' },
+          },
+        })
+        .mockResolvedValueOnce({
+          name: 'presetB',
+          runtime: 'minqlxtended',
+          compatibility: {
+            preset_runtime: 'minqlxtended',
+            target_runtime: 'minqlx',
+            stripped: [
+              { path: 'other.py', verdict: 'incompatible', reasons: ['unrelated'], replacement: null },
+            ],
+            replacements: {},
+          },
+        });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      // Load preset A and confirm, accepting the offered replacement.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      let dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /load preset/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA'));
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+
+      // Start loading preset B, then cancel out of its compatibility dialog.
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+      // Preset A is still the active preset, and it must still show its
+      // accepted replacement -- not silently reseeded to an empty list.
+      expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA');
+      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
     });
   });
 });

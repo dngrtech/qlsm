@@ -72,7 +72,7 @@ describe('PresetManagerModal', () => {
     expect(onLoadPreset).toHaveBeenCalledWith(1);
   });
 
-  it('keeps Load Selected disabled when the selected preset is incompatible with the host', () => {
+  it('enables Load Selected for a preset that mismatches the host runtime -- the backend strips, it does not block', () => {
     render(
       <PresetManagerModal
         {...base}
@@ -82,7 +82,7 @@ describe('PresetManagerModal', () => {
       />
     );
     fireEvent.click(screen.getByText('load-row'));
-    expect(screen.getByRole('button', { name: /load selected/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /load selected/i })).not.toBeDisabled();
   });
 
   it('enables Load Selected for a matching preset when a host is set', () => {

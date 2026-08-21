@@ -1526,3 +1526,82 @@ def test_get_preset_does_not_filter_stale_checked_plugins(client, app, tmp_path,
     assert response.get_json()['data'].get('checked_plugins') == [
         'balance.py', 'extras/textart.py',
     ]
+
+
+def _filtered_draft(app, target_runtime, filename='essentials.py'):
+    """A draft that the compatibility gate filtered for `target_runtime`."""
+    from ui.routes.draft_routes import RUNTIME_MARKER_FILE
+    draft_id = str(uuid.uuid4())
+    draft_base = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    draft_scripts = os.path.join(draft_base, 'scripts')
+    os.makedirs(draft_scripts, exist_ok=True)
+    with open(os.path.join(draft_scripts, filename), 'w') as handle:
+        handle.write('# filtered for %s\n' % target_runtime)
+    if target_runtime:
+        with open(os.path.join(draft_base, RUNTIME_MARKER_FILE), 'w') as handle:
+            handle.write(target_runtime)
+    return draft_id
+
+
+def _set_preset_runtime(app, preset_id, runtime):
+    with app.app_context():
+        preset = db.session.get(ConfigPreset, preset_id)
+        preset.runtime = runtime
+        db.session.commit()
+
+
+def test_overwriting_a_preset_with_a_cross_runtime_draft_is_refused(client, app):
+    """A minqlx preset must not be overwritten with a minqlxtended-filtered draft.
+
+    Loading a minqlx preset onto a minqlxtended instance is allowed now, and
+    the draft it produces has had its minqlx-only plugins deleted and
+    minqlxtended's own defaults laid in. Overwrite Preset rmtree's the preset's
+    scripts and copytree's that draft in -- but leaves preset.runtime saying
+    minqlx. The row would then be lying about the files beside it, and the next
+    operator to load that preset onto a minqlx host finds it gutted.
+    """
+    preset_id, preset_path = _create_preset_folder(app, 'cross-runtime-overwrite')
+    _set_preset_runtime(app, preset_id, 'minqlx')
+    scripts_dir = os.path.join(preset_path, 'scripts')
+    os.makedirs(scripts_dir, exist_ok=True)
+    with open(os.path.join(scripts_dir, 'original.py'), 'w') as handle:
+        handle.write('# the preset as saved\n')
+
+    draft_id = _filtered_draft(app, 'minqlxtended')
+    response = client.put(f'/api/presets/{preset_id}',
+                          headers=auth_headers(app, DEFAULT_USER),
+                          json={'draft_id': draft_id})
+
+    assert response.status_code == 400
+    assert 'minqlxtended' in response.get_json()['error']['message']
+    # And the refusal happened before any filesystem mutation.
+    assert os.path.exists(os.path.join(scripts_dir, 'original.py'))
+    assert not os.path.exists(os.path.join(scripts_dir, 'essentials.py'))
+
+
+def test_overwriting_a_preset_with_a_matching_runtime_draft_is_allowed(client, app):
+    """The refusal is about the runtimes disagreeing, not about the marker."""
+    preset_id, preset_path = _create_preset_folder(app, 'same-runtime-overwrite')
+    _set_preset_runtime(app, preset_id, 'minqlxtended')
+
+    draft_id = _filtered_draft(app, 'minqlxtended')
+    response = client.put(f'/api/presets/{preset_id}',
+                          headers=auth_headers(app, DEFAULT_USER),
+                          json={'draft_id': draft_id})
+
+    assert response.status_code == 200
+    assert os.path.exists(os.path.join(preset_path, 'scripts', 'essentials.py'))
+
+
+def test_overwriting_a_preset_with_an_unfiltered_draft_is_allowed(client, app):
+    """No marker means the gate never touched the draft -- the ordinary case."""
+    preset_id, preset_path = _create_preset_folder(app, 'unfiltered-overwrite')
+    _set_preset_runtime(app, preset_id, 'minqlx')
+
+    draft_id = _filtered_draft(app, None)
+    response = client.put(f'/api/presets/{preset_id}',
+                          headers=auth_headers(app, DEFAULT_USER),
+                          json={'draft_id': draft_id})
+
+    assert response.status_code == 200
+    assert os.path.exists(os.path.join(preset_path, 'scripts', 'essentials.py'))

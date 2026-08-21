@@ -37,7 +37,9 @@ import {
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
 import { defaultPresetNameForRuntime, runtimeLabel } from '../../constants/runtimes';
-import { presetRuntimeMismatchMessage } from '../../utils/presetRuntimeCompat';
+import { presetRuntimeStripWarning } from '../../utils/presetRuntimeCompat';
+import { mergeReplacements } from '../../utils/presetCompatibility';
+import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
@@ -168,6 +170,7 @@ function AddInstanceForm({
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Local presets state (allows filtering after deletion without refetching)
   const [presets, setPresets] = useState(initialData.presets || []);
@@ -189,6 +192,10 @@ function AddInstanceForm({
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
   const pluginsManagerRef = useRef(null);
   const [draftPreset, setDraftPreset] = useState(defaultPresetNameForRuntime(initialHostRuntime));
+  // Bare filenames the operator accepted a runtime replacement for, from the
+  // preset compatibility dialog. Sent to the draft seed so the server writes
+  // the replacement files. Cleared whenever a different preset seed loads.
+  const [acceptedReplacements, setAcceptedReplacements] = useState([]);
   const [factoryServerTree, setFactoryServerTree] = useState(initialData.defaultFactoryTree || []);
 
   // Hooks tab state. There is no instance yet, so hook files come from the
@@ -240,7 +247,7 @@ function AddInstanceForm({
   // selection alone, while a cross-runtime switch re-seeds. Invariant: every
   // place that replaces the plugin/hook seed must point this at the runtime
   // the new seed came from -- the mount/reset effect, handleHostChange, and
-  // handleLoadPreset. Leave it stale in any one of them and the next host
+  // applyPresetData. Leave it stale in any one of them and the next host
   // change compares against the wrong runtime and silently re-seeds over what
   // the operator has.
   const seededRuntimeRef = useRef(runtimeLabel(initialHostRuntime));
@@ -277,6 +284,19 @@ function AddInstanceForm({
     }
   }, []);
 
+  // Hoisted above pluginsAdapter (below) so its runtime is available to feed
+  // the draft seed; lanRateSupported/lanRateForcedOn/redisDbOptions further
+  // down still read off these same consts.
+  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
+  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
+  const selectedHostOsType = selectedHost?.os_type ?? null;
+  const hasSelectedHost = Boolean(selectedHost);
+  const selectedHostShape = {
+    os_type: selectedHostOsType,
+    lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
+    runtime: selectedHost?.runtime ?? null,
+  };
+
   const configsAdapter = useStateAdapter({
     initialFiles: configContents,
     initialFolders: [],
@@ -289,6 +309,8 @@ function AddInstanceForm({
   const pluginsAdapter = useDraftAdapter({
     source: 'preset',
     preset: draftPreset || 'default',
+    targetRuntime: selectedHostShape.runtime,
+    acceptedReplacements,
     active: true,
   });
 
@@ -360,8 +382,8 @@ function AddInstanceForm({
     if (carriedPreset && hostId && !isInitialLoad) {
       if (runtimeLabel(carriedPreset.runtime) !== newRuntime) {
         setPresetClearedNotice(
-          `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared. `
-          + presetRuntimeMismatchMessage(carriedPreset, newHostRecord)
+          `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared — reload it here to apply it. `
+          + presetRuntimeStripWarning(carriedPreset, newHostRecord)
         );
         setLoadedPreset(null);
         loadedPresetConfigRef.current = null;
@@ -385,6 +407,7 @@ function AddInstanceForm({
       setEnabledHookOrder(seed.enabledHooks);
       initialEnabledHookOrderRef.current = seed.enabledHooks;
       setDraftPreset(defaultPresetNameForRuntime(newRuntime));
+      setAcceptedReplacements([]);
     }
     if (hostId) {
       seededRuntimeRef.current = newRuntime;
@@ -493,6 +516,7 @@ function AddInstanceForm({
     initialCheckedPluginsRef.current = selectable;
     loadedPresetCheckedPluginsRef.current = selectable;
     setDraftPreset(defaultPresetNameForRuntime(initialHostRuntime));
+    setAcceptedReplacements([]);
     seededRuntimeRef.current = runtimeLabel(initialHostRuntime);
     resetFactories(initialData.defaultFactories || {});
     setFactoryServerTree(initialData.defaultFactoryTree || []);
@@ -637,15 +661,6 @@ function AddInstanceForm({
     prevPortRef.current = port;
   }, [port, syncConfigFile]);
 
-  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
-  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
-  const selectedHostOsType = selectedHost?.os_type ?? null;
-  const hasSelectedHost = Boolean(selectedHost);
-  const selectedHostShape = {
-    os_type: selectedHostOsType,
-    lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
-    runtime: selectedHost?.runtime ?? null,
-  };
   const lanRateSupported = !hasSelectedHost || isLanRateSupported(selectedHostShape);
   // QLSM deploys minqlxtended instances at 99k, so the toggle renders on and
   // locked instead of offering a 25k it will not honour.
@@ -659,11 +674,10 @@ function AddInstanceForm({
   );
 
   // Handle loading a preset
-  const handleLoadPreset = useCallback(async (presetId) => {
+  const applyPresetData = useCallback(async (presetId, presetData, acceptedPaths = []) => {
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
-      const presetData = await getPresetById(presetId);
       const newConfigs = extractPresetConfigs(presetData);
 
       // Extract hostname and port from preset server.cfg, patching newConfigs before setting state
@@ -714,8 +728,12 @@ function AddInstanceForm({
       // The preset's plugin/hook selection is now the seed, so the seeded
       // runtime is the preset's (see seededRuntimeRef above).
       seededRuntimeRef.current = runtimeLabel(presetData.runtime);
-      // Reseed draft workspace with the loaded preset's scripts
+      // Reseed draft workspace with the loaded preset's scripts. acceptedPaths
+      // defaults to [] (a plain default, not a speculative clear elsewhere) so
+      // a no-dialog load carries nothing forward, and both state updates land
+      // in the same render as the one re-seed this load causes.
       setDraftPreset(presetData.name);
+      setAcceptedReplacements(acceptedPaths);
       loadedPresetConfigRef.current = newConfigs;
 
       // Reflect the preset's hooks: available files + enabled order/status.
@@ -772,6 +790,38 @@ function AddInstanceForm({
     }
   }, [checkedPlugins, lanRateEnabled, lanRateSupported, resetConfigs, resetFactories, syncConfigState]);
 
+  const handleLoadPreset = useCallback(async (presetId) => {
+    setIsLoadingPreset(true);
+    try {
+      setInternalFormError(null);
+      const presetData = await getPresetById(presetId, { targetRuntime: selectedHostShape.runtime });
+      if (presetData.compatibility?.stripped?.length) {
+        setPendingPreset({ id: presetId, data: presetData });
+        return;
+      }
+      await applyPresetData(presetId, presetData);
+    } catch (err) {
+      setInternalFormError(err.error?.message || err.message || `Failed to load preset.`);
+    } finally {
+      setIsLoadingPreset(false);
+    }
+  }, [applyPresetData, selectedHostShape.runtime]);
+
+  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+    if (!pendingPreset) return;
+    const { id, data } = pendingPreset;
+    setPendingPreset(null);
+    // applyPresetData sets both draftPreset and acceptedReplacements together
+    // (see its own body) -- the accepted list is an argument to "apply this
+    // preset", not ambient state some other codepath clears speculatively. A
+    // cancelled load therefore calls nothing here at all, leaving whatever
+    // preset is currently active, and its accepted replacements, untouched.
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths), acceptedPaths);
+  }, [applyPresetData, pendingPreset]);
+
+  const handleCancelPresetCompatibility = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
 
   // Handle saving current config as a preset
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
@@ -1329,6 +1379,13 @@ function AddInstanceForm({
         onPresetRenamed={handlePresetRenamed}
         onPresetImported={handlePresetImported}
         initialOverwriteName={loadedPreset && !loadedPreset.is_builtin ? loadedPreset.name : null}
+      />
+
+      <PresetCompatibilityDialog
+        isOpen={Boolean(pendingPreset)}
+        compatibility={pendingPreset?.data?.compatibility}
+        onConfirm={handleConfirmPresetCompatibility}
+        onCancel={handleCancelPresetCompatibility}
       />
 
       <FullScreenConfigEditorModal isOpen={isFullScreenEditorOpen} onClose={handleCloseFullScreenEditor} onSave={handleSaveFullScreenEditor} fileName={editingFileDetails.name} initialContent={editingFileDetails.content} language={editingFileDetails.language} linterSource={editingFileDetails.linterSource} />

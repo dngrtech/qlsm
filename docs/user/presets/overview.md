@@ -18,7 +18,11 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 
 ## Server Runtime Compatibility
 
-A preset remembers which [Server Runtime](../getting-started/add-host.md#server-runtime) — minqlx or minqlxtended — it was saved from, because the two runtimes don't share plugins. On the **Load Preset** tab, a preset saved from the other runtime than your current host appears greyed out with a small label naming its runtime, and clicking it does nothing. Save a fresh preset from an instance on the runtime you want to reuse it on instead.
+A preset remembers which [Server Runtime](../getting-started/add-host.md#server-runtime) — minqlx or minqlxtended — it was saved from. On the **Load Preset** tab, every preset row shows that runtime as a small badge, so you can see at a glance whether it matches your current host.
+
+You can load a preset saved from the other runtime — it's no longer blocked. Your server config, map pool, access list, workshop items, and factory selections all come across intact. Plugins are the exception: minqlx and minqlxtended plugins aren't interchangeable — they're written against different APIs — so plugins from the other runtime are left out when the preset's plugins are copied across. You'll see the full list first, with a reason for each, and can swap in the matching plugin for your runtime where one exists.
+
+Picking a mismatched preset shows a short warning under its name, and loading it opens a dialog listing every affected plugin before anything changes. Where the same plugin exists for your runtime, QLSM offers it as a replacement and you choose whether to take it — replacements are checked by default. Plugins with no equivalent are listed with the reason they were dropped, and nothing is applied until you confirm.
 
 ## Built-in Presets
 

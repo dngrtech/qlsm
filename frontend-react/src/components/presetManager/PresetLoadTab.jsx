@@ -3,7 +3,7 @@ import { Menu } from '@headlessui/react';
 import { Download, LoaderCircle, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { classNames } from '../../utils/uiUtils';
 import { runtimeLabel } from '../../constants/runtimes';
-import { isPresetRuntimeCompatible, presetRuntimeMismatchMessage } from '../../utils/presetRuntimeCompat';
+import { presetRuntimeMatches, presetRuntimeStripWarning } from '../../utils/presetRuntimeCompat';
 
 function PresetRowMenu({ preset, onDownload, onRename, onRequestDelete, isDownloading, boundaryRef }) {
   const buttonRef = React.useRef(null);
@@ -129,35 +129,33 @@ function PresetLoadTab({
     <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto rounded-md border border-[var(--surface-border)] scrollbar-thin">
       {presets.map((preset) => {
         const selected = preset.id === selectedId;
-        // Only diverge from the pre-runtime-gate rendering when this specific
-        // preset is actually incompatible -- a matching pair (including the
-        // legacy no-runtime-vs-no-runtime case) must render identically to
-        // before this gate existed.
-        const incompatible = !isPresetRuntimeCompatible(preset, host);
+        // A mismatch no longer blocks selection -- the backend strips what
+        // can't run and offers replacements -- but the operator still needs
+        // to see it coming before they click.
+        const mismatched = !presetRuntimeMatches(preset, host);
         return (
           <div
             key={preset.id}
-            onClick={() => { if (!incompatible) onSelect(preset.id); }}
+            onClick={() => onSelect(preset.id)}
             className={classNames(
-              'group flex items-center gap-3 border-b border-[var(--surface-border)] px-3.5 py-2.5 last:border-b-0 transition-colors',
-              incompatible ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+              'group flex items-center gap-3 border-b border-[var(--surface-border)] px-3.5 py-2.5 last:border-b-0 cursor-pointer transition-colors',
               selected
                 ? 'bg-[var(--accent-primary)]/10 shadow-[inset_2px_0_0_var(--accent-primary)]'
                 : 'hover:bg-[var(--surface-elevated)]'
             )}
           >
             <div className="min-w-0 flex-1">
-              <div className={classNames('truncate text-sm font-semibold', selected ? 'text-[var(--accent-primary)]' : 'text-[var(--text-primary)]')}>
-                {preset.name}
+              <div className="flex items-center gap-2">
+                <div className={classNames('truncate text-sm font-semibold', selected ? 'text-[var(--accent-primary)]' : 'text-[var(--text-primary)]')}>
+                  {preset.name}
+                </div>
+                <span className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)] border border-[var(--surface-border)]">
+                  {runtimeLabel(preset.runtime)}
+                </span>
               </div>
-              {incompatible ? (
-                <div className="mt-0.5 flex items-center gap-2">
-                  <span className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)] border border-[var(--surface-border)]">
-                    {runtimeLabel(preset.runtime)}
-                  </span>
-                  <span className="truncate text-xs text-[var(--text-muted)]">
-                    {presetRuntimeMismatchMessage(preset, host)}
-                  </span>
+              {mismatched ? (
+                <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
+                  {presetRuntimeStripWarning(preset, host)}
                 </div>
               ) : (
                 <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">

@@ -757,7 +757,7 @@ Config presets are stored on the filesystem at `configs/presets/<name>/`. The da
 |----------|--------|-------------|
 | `/presets` | GET | List all presets (metadata only) |
 | `/presets` | POST | Create preset (saves to filesystem) |
-| `/presets/<id>` | GET | Get preset with config content (reads from filesystem) |
+| `/presets/<id>` | GET | Get preset with config content (reads from filesystem); accepts optional `target_runtime` to filter plugins for cross-runtime compatibility (see below) |
 | `/presets/<id>` | PUT | Update preset |
 | `/presets/<id>` | DELETE | Delete preset (removes DB record + folder) |
 | `/presets/<id>/download` | GET | Download preset export |
@@ -809,7 +809,7 @@ GET /presets/validate-name?name=my-preset
 
 `configs` is the preferred format for preset writes. It accepts flat `.cfg` and `.txt` filenames and syncs the preset config set, removing unprotected config files omitted from the map. The protected baseline files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` cannot be removed. The legacy keys `server_cfg`, `mappool_txt`, `access_txt`, and `workshop_txt` are still accepted for compatibility, but they are partial writes and do not support custom files.
 
-`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings; entries that are not root-level `.py` files (anything containing `/`, or `__init__.py`) are silently stripped rather than rejected, because minqlx loads every `qlx_plugins` entry as a top-level module and cannot load those. This stripping applies uniformly to preset create, update, and import. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving — its sibling `user-hooks/` directory is merge-copied into the preset's `user-hooks/` directory the same way.
+`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings; entries that are not root-level `.py` files (anything containing `/`, or `__init__.py`) are silently stripped rather than rejected, because minqlx loads every `qlx_plugins` entry as a top-level module and cannot load those. This stripping applies uniformly to preset create, update, and import. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving — its sibling `user-hooks/` directory is merge-copied into the preset's `user-hooks/` directory the same way. On `PUT /presets/<id>`, a draft that was created with a `target_runtime` differing from its source (see [Cross-Runtime Compatibility](#cross-runtime-compatibility-target_runtime)) holds the *target* runtime's plugin set, not the preset's; overwriting a preset with such a draft returns `400 Bad Request` rather than silently replacing a minqlx preset's plugins with minqlxtended ones. Save it as a new preset instead.
 
 `enabled_hooks` is an optional list of `.so` filenames (LD_PRELOAD order) recording which of the preset's `user-hooks/` files should be enabled when the preset is loaded onto an instance. It must be a list of `.so` filenames. When saving a preset from an instance's current state, the frontend populates this from that instance's currently-enabled hooks. `null`/absent means the preset predates this feature or was saved without any hooks captured.
 
@@ -897,6 +897,40 @@ Responses:
 For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility. A `null` `enabled_hooks` value means the preset was saved without recording hook enablement — loading it does not touch the target instance's current `ld_preload_hooks`.
 
 `scripts` values are UTF-8 text for `.py`/`.txt` files. `.so` plugin files and font files are binary, so their values are base64-encoded; write requests must send `.so` and font content the same way (raw bytes are only accepted for `.so` plugin files and font files arriving through preset ZIP import, not through this JSON API).
+
+#### Cross-Runtime Compatibility (`target_runtime`)
+
+`GET /api/presets/{preset_id}` accepts an optional `target_runtime` query parameter (`?target_runtime=minqlxtended`) naming the runtime the preset is about to be loaded onto. `400 Bad Request` if present and not one of `"minqlx"` / `"minqlxtended"`. Omitting it, or passing the same value as the preset's own `runtime`, returns the response exactly as documented above — `scripts` and `checked_plugins` are the preset's stored contents, and there is no `compatibility` key.
+
+When `target_runtime` differs from the preset's `runtime`, `scripts` contains only the plugin files kept for the target runtime, `checked_plugins` drops any that were removed, and the response gains a `compatibility` block:
+
+```json
+"compatibility": {
+  "preset_runtime": "minqlx",
+  "target_runtime": "minqlxtended",
+  "stripped": [
+    {
+      "path": "balance.py",
+      "verdict": "incompatible",
+      "reasons": ["line 1: imports the minqlx module"],
+      "replacement": "balance.py"
+    },
+    {
+      "path": "discord_extensions/admin.py",
+      "verdict": "incompatible",
+      "reasons": ["line 11: imports the minqlx module"],
+      "replacement": null
+    }
+  ],
+  "replacements": {
+    "balance.py": "... file contents ..."
+  }
+}
+```
+
+Every `.py` file is classified, including files inside the preset's plugin subfolders (`discord_extensions/`, `extras/`) — those are stripped and reported by their full relative path, as the example above shows. `.so` hook binaries, `.txt` files, and fonts are always kept as-is. `stripped` lists every removed plugin file, sorted by path. `verdict` is `"incompatible"` when a specific reason was found, or `"unknown"` when nothing conclusive was found and the file was removed rather than assumed safe (`reasons` is `[]` in that case).
+
+`replacement` is only ever the entry's **own** filename, offered when the target runtime ships a plugin by that exact name, and `null` otherwise. A replacement is never a differently-named plugin: `mybalance.py` is not offered `balance.py`, because they are not the same plugin. Only root-level files are ever offered one — a file inside a plugin subfolder always reports `replacement: null`, since swapping in the target's root-level `balance.py` for a stripped `extras/balance.py` would relocate the file as well as replace it. `replacements` maps each offered filename to its file content, so the caller can apply it without a second request.
 
 ### Preset Name Validation
 - Pattern: `^[a-zA-Z0-9_-]+$` (letters, numbers, hyphens, underscores)

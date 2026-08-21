@@ -78,7 +78,7 @@ describe('PresetLoadTab', () => {
     expect(screen.getByText(/no presets available/i)).toBeInTheDocument();
   });
 
-  it('blocks selecting a preset from the other runtime', async () => {
+  it('allows selecting a preset from the other runtime and shows the strip warning', async () => {
     const onSelect = vi.fn();
     render(
       <PresetLoadTab
@@ -92,8 +92,23 @@ describe('PresetLoadTab', () => {
     );
 
     await userEvent.click(screen.getByText('minqlx-preset'));
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith(1);
     expect(screen.getByText(/not interchangeable/i)).toBeInTheDocument();
+  });
+
+  it('shows the runtime badge on a matching row too', () => {
+    render(
+      <PresetLoadTab
+        presets={[{ id: 6, name: 'match-preset', runtime: 'minqlxtended', description: 'd' }]}
+        host={{ runtime: 'minqlxtended' }}
+        onSelect={vi.fn()}
+        onRequestDelete={vi.fn()}
+        onRequestRename={vi.fn()}
+        onDownload={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('minqlxtended')).toBeInTheDocument();
   });
 
   it('still allows a matching preset', async () => {
