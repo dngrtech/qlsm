@@ -4,10 +4,12 @@ Hosts are added from **Servers** -> **Add New Host**. <img src="../../images/add
 
 ## Server Runtime
 
-Every host runs one of two Quake Live server runtimes, chosen from the **Server Runtime** picker on the Add Host form, right below **Provider**:
+Every host runs one of two Quake Live server runtimes, chosen from the **Server Runtime** radio buttons on the Add Host form, right below **Provider**:
 
 - **minqlx** — the original runtime, and every plugin QLSM ships today. Provisions/expects **Debian 12**.
 - **minqlxtended** — a hard fork with no plugin compatibility with minqlx. Provisions/expects **Ubuntu 24.04**, and requires **Python 3.12 or newer** on the target machine.
+
+**Neither option is pre-selected.** QLSM will not make this choice for you: it is permanent, so the form refuses to submit until you pick one and shows *Server runtime is required.* if you try. Each option has an ⓘ tooltip with a one-line description, what it means for the provider you have selected, and a link to that runtime's GitHub repository.
 
 For Vultr cloud hosts, QLSM provisions the matching OS image automatically — there's no separate OS choice.
 

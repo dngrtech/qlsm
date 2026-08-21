@@ -53,6 +53,9 @@ vi.mock('../AddHostFormFields', () => ({
       <button type="button" onClick={() => props.onStandaloneAuthMethodChange?.('key')}>Use ssh key</button>
       <input aria-label="SSH Password" value={props.sshPassword || ''} onChange={props.onSshPasswordChange} />
       <textarea aria-label="SSH Private Key" value={props.sshKey || ''} onChange={props.onSshKeyChange} />
+      <div data-testid="runtime-value">{props.runtime}</div>
+      <button type="button" onClick={() => props.onRuntimeChange('minqlx')}>Choose minqlx runtime</button>
+      <button type="button" onClick={() => props.onRuntimeChange('minqlxtended')}>Choose minqlxtended runtime</button>
       <div data-testid="connection-status">{props.connectionTestStatus}</div>
       <div data-testid="connection-message">{props.connectionTestMessage}</div>
       <button type="button" onClick={props.onTestConnection}>Test connection</button>
@@ -88,6 +91,7 @@ describe('AddHostModal self provider', () => {
     await waitFor(() => expect(screen.getByLabelText('SSH User')).toHaveValue('rage'));
     await waitFor(() => expect(screen.getByLabelText('Server address')).toHaveValue('203.0.113.10'));
     fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
+    fireEvent.click(screen.getByRole('button', { name: /choose minqlx runtime/i }));
     fireEvent.click(screen.getByRole('button', { name: /add host/i }));
 
     await waitFor(() => expect(mocks.createHost).toHaveBeenCalledWith({
@@ -156,6 +160,7 @@ describe('AddHostModal self provider', () => {
     await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('success'));
     await waitFor(() => expect(screen.getByTestId('connection-message')).toHaveTextContent('Connection successful. Detected OS: Ubuntu 24.04.2 LTS.'));
 
+    fireEvent.click(screen.getByRole('button', { name: /choose minqlx runtime/i }));
     fireEvent.click(screen.getByRole('button', { name: /add host/i }));
 
     await waitFor(() => expect(mocks.createHost).toHaveBeenCalledWith({
@@ -296,5 +301,55 @@ describe('AddHostModal — QLSM-detected redirect', () => {
     await waitFor(() =>
       expect(screen.getByTestId('connection-status')).toHaveTextContent('success')
     );
+  });
+});
+
+describe('AddHostModal runtime selection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getHosts.mockResolvedValue([]);
+    mocks.getSelfHostDefaults.mockResolvedValue({
+      ssh_user: 'rage',
+      host_ip: '203.0.113.10',
+      provider_capabilities: { vultr: { configured: true } },
+    });
+  });
+
+  it('opens with no runtime selected', async () => {
+    // The runtime is immutable once the host exists, so QLSM refuses to make
+    // the irreversible pick for an operator who never looked at the field.
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('runtime-value')).toHaveTextContent('');
+  });
+
+  it('refuses to create a host until a runtime is picked', async () => {
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText('Host Name'), { target: { value: 'self-host' } });
+    await waitFor(() => expect(screen.getByLabelText('SSH User')).toHaveValue('rage'));
+    fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add host/i }));
+
+    expect(await screen.findByText('Server runtime is required.')).toBeInTheDocument();
+    expect(mocks.createHost).not.toHaveBeenCalled();
+  });
+
+  it('sends the runtime the operator picked', async () => {
+    mocks.createHost.mockResolvedValue({ message: 'Self host queued.' });
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText('Host Name'), { target: { value: 'self-host' } });
+    await waitFor(() => expect(screen.getByLabelText('SSH User')).toHaveValue('rage'));
+    fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
+    fireEvent.click(screen.getByRole('button', { name: /choose minqlxtended runtime/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add host/i }));
+
+    await waitFor(() => expect(mocks.createHost).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: 'minqlxtended' }),
+    ));
   });
 });

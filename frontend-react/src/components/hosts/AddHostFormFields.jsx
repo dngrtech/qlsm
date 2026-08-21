@@ -3,7 +3,8 @@ import FloatingListbox from '../common/FloatingListbox';
 import { providerOptions } from '../../utils/providerData';
 import { HOST_NAME_MAX_LENGTH, HOST_NAME_PATTERN } from '../../utils/resourceValidation';
 import { STANDALONE_TIMEZONES } from '../../utils/formatters';
-import { RUNTIME_OPTIONS } from '../../constants/runtimes';
+import { RUNTIME_OPTIONS, runtimeTooltipTail } from '../../constants/runtimes';
+import InfoTooltip from '../common/InfoTooltip';
 import SelfHostFields from './SelfHostFields';
 import StandaloneAuthSection from './StandaloneAuthSection';
 
@@ -96,20 +97,46 @@ function AddHostFormFields({
         }}
       />
 
-      {/* Runtime -- immutable once the host is created */}
+      {/* Runtime -- immutable once the host is created, so nothing is
+          pre-selected: the operator picks, QLSM never picks for them. */}
       <div data-testid="runtime-picker">
-        <FloatingListbox
-          label="Server Runtime"
-          value={runtime}
-          onChange={onRuntimeChange}
-          options={RUNTIME_OPTIONS}
-          getOptionKey={(opt) => opt.id}
-          getOptionDisplay={(opt) => opt.name}
-          getSelectedDisplay={(val, opts) => opts.find(o => o.id === val)?.name || 'minqlx'}
-        />
-        <p className="mt-1.5 text-xs text-theme-muted">
-          {RUNTIME_OPTIONS.find(o => o.id === runtime)?.description}
-        </p>
+        <label className={labelClass}>Server Runtime</label>
+        <fieldset className="mt-3 flex flex-wrap gap-x-6 gap-y-2" aria-label="Server runtime">
+          {RUNTIME_OPTIONS.map((option) => (
+            <div key={option.id} className="inline-flex items-center gap-1.5">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-theme-secondary">
+                <input
+                  type="radio"
+                  name="host-runtime"
+                  value={option.id}
+                  checked={runtime === option.id}
+                  onChange={() => onRuntimeChange(option.id)}
+                  className="h-4 w-4"
+                  style={{ accentColor: 'var(--accent-primary)' }}
+                />
+                <span className="text-theme-primary">{option.name}</span>
+              </label>
+              <InfoTooltip
+                testId={`runtime-tooltip-${option.id}`}
+                text={(
+                  <span className="block space-y-1.5">
+                    <span className="block">{option.description}</span>
+                    <span className="block">{runtimeTooltipTail(option.id, provider)}</span>
+                    <a
+                      href={option.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block underline"
+                      style={{ color: 'var(--accent-info)' }}
+                    >
+                      {option.repoUrl.replace('https://', '')}
+                    </a>
+                  </span>
+                )}
+              />
+            </div>
+          ))}
+        </fieldset>
         <p
           data-testid="runtime-immutable-warning"
           className="mt-1.5 text-xs"

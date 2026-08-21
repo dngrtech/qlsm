@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import AddHostFormFields from '../AddHostFormFields';
@@ -103,5 +103,70 @@ describe('AddHostFormFields runtime picker', () => {
   it('tells the operator the choice cannot be changed later', () => {
     render(<AddHostFormFields {...baseProps} />);
     expect(screen.getByTestId('runtime-immutable-warning')).toHaveTextContent(/cannot be changed/i);
+  });
+});
+
+describe('AddHostFormFields runtime radios', () => {
+  it('starts with neither runtime selected', () => {
+    // The choice is irreversible, so QLSM makes no pick on the operator's
+    // behalf -- an unaware operator can never land on a runtime by default.
+    render(<AddHostFormFields {...baseProps} runtime="" />);
+    const radios = screen.getAllByRole('radio', { name: /minqlx/i });
+    expect(radios).toHaveLength(2);
+    radios.forEach(radio => expect(radio).not.toBeChecked());
+  });
+
+  it('checks only the selected runtime', () => {
+    render(<AddHostFormFields {...baseProps} runtime="minqlxtended" />);
+    expect(screen.getByRole('radio', { name: /^minqlxtended$/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /^minqlx$/i })).not.toBeChecked();
+  });
+
+  it('reports the runtime the operator picked', () => {
+    const onRuntimeChange = vi.fn();
+    render(<AddHostFormFields {...baseProps} runtime="" onRuntimeChange={onRuntimeChange} />);
+    fireEvent.click(screen.getByRole('radio', { name: /^minqlxtended$/i }));
+    expect(onRuntimeChange).toHaveBeenCalledWith('minqlxtended');
+  });
+});
+
+describe('AddHostFormFields runtime tooltips', () => {
+  const openTooltip = (runtimeId) => {
+    fireEvent.mouseEnter(screen.getByTestId(`runtime-tooltip-${runtimeId}`));
+    return screen.getByRole('tooltip');
+  };
+
+  it.each([
+    ['minqlx', 'https://github.com/MinoMino/minqlx'],
+    ['minqlxtended', 'https://github.com/tjone270/minqlxtended'],
+  ])('links %s to its upstream repo', (runtimeId, repoUrl) => {
+    // One render per runtime: InfoTooltip's close is debounced, so opening both
+    // in a single render leaves two bubbles mounted at once.
+    render(<AddHostFormFields {...baseProps} runtime="" />);
+    expect(within(openTooltip(runtimeId)).getByRole('link')).toHaveAttribute('href', repoUrl);
+  });
+
+  it('opens repo links in a new tab without leaking the opener', () => {
+    render(<AddHostFormFields {...baseProps} runtime="" />);
+    const link = within(openTooltip('minqlx')).getByRole('link');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('tells a cloud operator QLSM provisions the OS', () => {
+    render(<AddHostFormFields {...baseProps} provider="vultr" runtime="" />);
+    expect(openTooltip('minqlxtended')).toHaveTextContent('QLSM provisions Ubuntu 24.04.');
+  });
+
+  it('tells a standalone operator the requirement is checked before creation', () => {
+    render(<AddHostFormFields {...baseProps} provider="standalone" runtime="" />);
+    expect(openTooltip('minqlxtended')).toHaveTextContent(/Ubuntu 24.04 or newer.*checked before the host is created/i);
+  });
+
+  it('warns a self-host operator that nothing is checked up front', () => {
+    // This is the one path with no pre-check: the host is created, setup fails,
+    // and it lands in Error with deleting it the only way back.
+    render(<AddHostFormFields {...baseProps} provider="self" runtime="" />);
+    expect(openTooltip('minqlxtended')).toHaveTextContent(/not checked up front/i);
   });
 });
