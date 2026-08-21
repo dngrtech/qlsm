@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.27.2` | 2026-08-20 | [#187](https://github.com/dngrtech/qlsm/pull/187) | Restored `sv_serverType` to the qlds startup arguments — `1` when 99k LAN rate is enabled, `2` when it is off. [#100](https://github.com/dngrtech/qlsm/pull/100) removed it in `v1.10.8` on the premise that the `force_rate.so` hook made it unnecessary; the hook forces the rate to 99999 either way, but the cvar affects more than the rate, and 99k servers running without it played noticeably worse. Real client IPs in `rcon status` are unaffected — that display was never caused by this cvar; it came from stale NAT rules, fixed separately in `v1.26.2`. Note one behaviour change: a 99k instance whose hook fails to load will now reject players with "Server is for LAN clients only" instead of quietly running at 25000, making a hook failure visible rather than silent. |
 | `v1.27.1` | 2026-08-20 | [#185](https://github.com/dngrtech/qlsm/pull/185) | Fix the RCON command field not taking keyboard focus in the console modal. |
 | `v1.27.0` | 2026-08-17 | [#179](https://github.com/dngrtech/qlsm/pull/179) | Set ZMQ stats and RCON passwords manually when creating an instance. |
 | `v1.26.4` | 2026-08-14 | [#178](https://github.com/dngrtech/qlsm/pull/178) | Bug fixes and improvements. |
