@@ -121,9 +121,9 @@ def _build_qlds_args_string(instance):
     # minqlxtended hosts at 99k as a policy choice, and what the UI shows has to
     # be the cvar that actually lands here.
     if effective_lan_rate(instance):
-        parts += ['+set sv_lanForceRate 1']
+        parts += ['+set sv_serverType 1', '+set sv_lanForceRate 1']
     else:
-        parts += ['+set sv_lanForceRate 0']
+        parts += ['+set sv_serverType 2', '+set sv_lanForceRate 0']
 
     redis_db_index = resolve_redis_db(instance)
     parts += [
