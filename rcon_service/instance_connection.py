@@ -62,8 +62,10 @@ class InstanceConnection:
         self._recv_task: Optional[asyncio.Task] = None
         self._shutdown: bool = False
         
-        # Stats connection (optional)
+        # Stats connection (optional). Keep its requested target so a repeat
+        # subscription can replace stale credentials after an instance redeploy.
         self._stats_connection: Optional[StatsConnection] = None
+        self._stats_subscription: Optional[tuple[str, int, Optional[str]]] = None
     
     @property
     def connected(self) -> bool:
@@ -322,22 +324,32 @@ class InstanceConnection:
             stats_port: ZMQ stats port
             stats_password: Stats socket password (optional)
         """
+        requested_subscription = (ip, stats_port, stats_password)
         if self._stats_connection:
-            log.debug(f"[{self.host_id}:{self.instance_id}] Already subscribed to stats")
-            return
-        
+            if self._stats_subscription == requested_subscription:
+                log.debug(f"[{self.host_id}:{self.instance_id}] Already subscribed to stats")
+                return
+            log.info(
+                f"[{self.host_id}:{self.instance_id}] Reconnecting stats after "
+                "endpoint or credential change"
+            )
+            await self.unsubscribe_stats()
+
         log.debug(f"[{self.host_id}:{self.instance_id}] Subscribing to stats on port {stats_port}")
-        self._stats_connection = StatsConnection(
+        stats_connection = StatsConnection(
             host_id=self.host_id,
             instance_id=self.instance_id,
             zmq_context=self._context,
             on_event=self._handle_stats_event
         )
-        await self._stats_connection.connect(ip, stats_port, stats_password)
-    
+        if await stats_connection.connect(ip, stats_port, stats_password or ''):
+            self._stats_connection = stats_connection
+            self._stats_subscription = requested_subscription
+
     async def unsubscribe_stats(self) -> None:
-        """Unsubscribe from game stats events."""
+        """Unsubscribe from stats events."""
         if self._stats_connection:
             log.debug(f"[{self.host_id}:{self.instance_id}] Unsubscribing from stats")
             await self._stats_connection.disconnect()
             self._stats_connection = None
+        self._stats_subscription = None

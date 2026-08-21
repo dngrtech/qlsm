@@ -134,7 +134,7 @@
     },
     "myFun.py": {
       "origin": "qlsm",
-      "sha256": "aa6a1b81e5d0c61346cb550fa164726e9e8f84ce02ca5db99158443d402e8a59"
+      "sha256": "bdd66d6e313e4c1c520fde2f33000ac3247587dc770707df8d8add19034272c2"
     },
     "mybalance.py": {
       "origin": "upstream",
@@ -162,7 +162,7 @@
     },
     "player_info.py": {
       "origin": "qlsm",
-      "sha256": "c920ee9369bc19208841db56fdb4997ec581d5824b0a993450719e8ef2a7e50d"
+      "sha256": "73b5c3417d87cf58863d40adfb140ef3c87c14f3681350537cee95295a99c2e0"
     },
     "playerpings.py": {
       "origin": "upstream",

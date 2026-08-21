@@ -355,7 +355,7 @@ def test_build_qlds_args_pairs_sv_servertype_with_lan_force_rate(test_app):
     sv_serverType 1 tells the engine it is a LAN server. PR #100 removed the
     second on the premise that the hook made it redundant -- true for the rate
     number, false for how the server actually plays -- and every 99k instance
-    ran degraded from 2026-06-01.
+    ran degraded from 2026-06-01 until this test existed.
 
     Nothing covered either cvar at the time, which is why the removal shipped
     unnoticed. Assert them as a pair, so the two halves cannot drift apart

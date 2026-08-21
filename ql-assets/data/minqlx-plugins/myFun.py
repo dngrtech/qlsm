@@ -238,6 +238,22 @@ SOUND_PACKS = ["Default Quake Live Sounds", "Prestige Worldwide Soundhonks", "Fu
 ADDITIONAL_SOUNDPACKS = ['doompack.pk3', 'doompack2.pk3']
 
 
+SOUND_PATH_ALLOWED = re.compile(r"^[A-Za-z0-9_./-]+\Z")
+
+
+def is_safe_sound_path(value):
+    """Whether `value` is safe to interpolate into a console command.
+
+    The engine console treats ';' as a command separator, so an unfiltered value
+    reaching console_command() lets the caller append arbitrary commands. Callers of
+    !sound are permission-gated, but a moderator should not be silently handed the
+    whole console, and a path is a path: letters, digits, dot, slash, dash, underscore.
+
+    Anchored with \\Z rather than $, which also matches just before a trailing newline.
+    """
+    return bool(value) and bool(SOUND_PATH_ALLOWED.match(value))
+
+
 class myFun(minqlx.Plugin):
     Enabled_SoundPacks = []
     soundPacks = []
@@ -1087,6 +1103,11 @@ class myFun(minqlx.Plugin):
             player.tell("^3You have {} seconds before you can call another sound.".format(int(stop)))
         else:
             # check for a valid sound file
+            if not is_safe_sound_path(msg[1]):
+                player.tell("^1Invalid sound path^7: only letters, digits and ^3_ . / -^7 are allowed.")
+                minqlx.console_print("^3Admin {} tried calling sound with an unsafe path: {}"
+                                     .format(player, msg[1]))
+                return
             self.checking_file = True
             self.file_status = False
             minqlx.console_command("fdir {}".format(msg[1]))

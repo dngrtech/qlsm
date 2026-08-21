@@ -1975,16 +1975,16 @@ class specqueue(minqlx.Plugin):
                 elif now - self._afk_last_moved.get(sid, 0) >= afk_time:
                     self._afk_last_pos.pop(sid, None)
                     self._afk_last_moved.pop(sid, None)
-                name = getattr(player, "clean_name", None) or player.name
+                    name = getattr(player, "clean_name", None) or player.name
 
-                @minqlx.next_frame
-                def move(p=player, n=name):
-                    try:
-                        p.put("spectator")
-                        self.msg("^1{} was moved to spectator for being AFK.".format(n))
-                    except Exception:
-                        pass
-                move()
+                    @minqlx.next_frame
+                    def move(p=player, n=name):
+                        try:
+                            p.put("spectator")
+                            self.msg("^1{} was moved to spectator for being AFK.".format(n))
+                        except Exception:
+                            pass
+                    move()
 
     # Search for a player name match using the supplied string
     def find_player(self, name):
