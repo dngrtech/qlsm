@@ -31,6 +31,28 @@ If something isn't working, start by clicking "Re-run host setup" from the [host
 - Restart affected instances (manual or from the workshop update modal).
 - Configure scheduled host restart to keep updates consistent: [Configure Auto-Restart](../operations/auto-restart.md)
 
+## Problem: A minqlxtended host fails setup and lands in Error
+
+minqlxtended is compiled on the host itself and links against Python 3.12, so the machine's
+distribution must already provide it. **Host setup does not install a Python version** — it
+installs the distribution's own `python3`, whatever that happens to be — so a machine below the
+floor cannot be rescued by re-running setup. Setup checks the version first and stops before
+changing anything.
+
+Where you find out depends on the provider:
+
+- **Cloud hosts** — cannot hit this. QLSM provisions Ubuntu 24.04 for the minqlxtended runtime.
+- **Standalone hosts** — the Add Host form checks the detected version and refuses the
+  submission with an explanation, so the host is never created. An *undetectable* version is
+  also refused, deliberately: the runtime choice cannot be undone later.
+- **Self hosts** — there is no pre-check. The host record is created, setup fails on the version
+  check, and the host lands in **Error**.
+
+The fix is the distribution, not the package: Debian 12 has no `python3.12` in its archive, so
+installing one by hand is a dead end. Use **Ubuntu 24.04 or newer**, or create the host with the
+**minqlx** runtime, which has no version floor. Because the runtime is permanent, an Error host
+here has to be deleted and recreated. See [Server Runtime](../getting-started/add-host.md#server-runtime).
+
 ## Problem: Self-host stuck in REBOOTING state
 
 - QLSM auto-recovers this state on container startup — no manual action is needed.

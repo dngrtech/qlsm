@@ -16,6 +16,8 @@ System hooks are managed by QLSM and are read-only. They appear in the Hooks tab
 
 The only current system hook is **`force_rate.so`**, which is automatically registered when [99k LAN rate](99k-lan-rate.md) is enabled for an instance.
 
+**On a minqlxtended host, `force_rate.so` is never loaded — and that is correct.** Every minqlxtended instance runs at 99k LAN rate, but the fork implements that behaviour itself rather than through a preloaded library, so QLSM deliberately leaves the hook out. If you look at the Hooks tab on a minqlxtended instance and find no `force_rate.so` while the rate reads 99k, nothing is wrong or missing. Loading it there would in fact stop the server from starting, because both it and minqlxtended patch the same function. See [Server Runtime](../getting-started/add-host.md#server-runtime).
+
 ### User Hooks
 
 User hooks are `.so` files you upload yourself. They are fully under your control: you can upload, enable/disable, reorder, and delete them.
