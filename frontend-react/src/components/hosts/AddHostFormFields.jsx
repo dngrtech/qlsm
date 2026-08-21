@@ -53,6 +53,7 @@ function AddHostFormFields({
   osInfo,
   runtime,
   onRuntimeChange,
+  runtimeError,
 }) {
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
@@ -101,7 +102,11 @@ function AddHostFormFields({
           pre-selected: the operator picks, QLSM never picks for them. */}
       <div data-testid="runtime-picker">
         <label className={labelClass}>Server Runtime</label>
-        <fieldset className="mt-3 flex flex-wrap gap-x-6 gap-y-2" aria-label="Server runtime">
+        <fieldset
+          className="mt-3 flex flex-wrap gap-x-6 gap-y-2"
+          aria-label="Server runtime"
+          aria-describedby={runtimeError ? 'runtime-error' : undefined}
+        >
           {RUNTIME_OPTIONS.map((option) => (
             <div key={option.id} className="inline-flex items-center gap-1.5">
               <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-theme-secondary">
@@ -137,6 +142,16 @@ function AddHostFormFields({
             </div>
           ))}
         </fieldset>
+        {runtimeError && (
+          <p
+            id="runtime-error"
+            role="alert"
+            className="mt-1.5 text-xs"
+            style={{ color: 'var(--accent-danger)' }}
+          >
+            {runtimeError}
+          </p>
+        )}
         <p
           data-testid="runtime-immutable-warning"
           className="mt-1.5 text-xs"

@@ -54,6 +54,7 @@ vi.mock('../AddHostFormFields', () => ({
       <input aria-label="SSH Password" value={props.sshPassword || ''} onChange={props.onSshPasswordChange} />
       <textarea aria-label="SSH Private Key" value={props.sshKey || ''} onChange={props.onSshKeyChange} />
       <div data-testid="runtime-value">{props.runtime}</div>
+      <div data-testid="runtime-error">{props.runtimeError || ''}</div>
       <button type="button" onClick={() => props.onRuntimeChange('minqlx')}>Choose minqlx runtime</button>
       <button type="button" onClick={() => props.onRuntimeChange('minqlxtended')}>Choose minqlxtended runtime</button>
       <div data-testid="connection-status">{props.connectionTestStatus}</div>
@@ -321,20 +322,35 @@ describe('AddHostModal runtime selection', () => {
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
 
     await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId('runtime-value')).toHaveTextContent('');
+    expect(await screen.findByTestId('runtime-value')).toHaveTextContent('');
   });
 
   it('refuses to create a host until a runtime is picked', async () => {
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
 
     await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
-    fireEvent.change(screen.getByLabelText('Host Name'), { target: { value: 'self-host' } });
+    fireEvent.change(await screen.findByLabelText('Host Name'), { target: { value: 'self-host' } });
     await waitFor(() => expect(screen.getByLabelText('SSH User')).toHaveValue('rage'));
     fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
     fireEvent.click(screen.getByRole('button', { name: /add host/i }));
 
-    expect(await screen.findByText('Server runtime is required.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('runtime-error')).toHaveTextContent('Server runtime is required.'));
     expect(mocks.createHost).not.toHaveBeenCalled();
+  });
+
+  it('clears the runtime error once a runtime is picked', async () => {
+    render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+
+    await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
+    fireEvent.change(await screen.findByLabelText('Host Name'), { target: { value: 'self-host' } });
+    await waitFor(() => expect(screen.getByLabelText('SSH User')).toHaveValue('rage'));
+    fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add host/i }));
+    await waitFor(() => expect(screen.getByTestId('runtime-error')).toHaveTextContent('Server runtime is required.'));
+
+    fireEvent.click(screen.getByRole('button', { name: /choose minqlx runtime/i }));
+
+    await waitFor(() => expect(screen.getByTestId('runtime-error')).toHaveTextContent(''));
   });
 
   it('sends the runtime the operator picked', async () => {
@@ -342,7 +358,7 @@ describe('AddHostModal runtime selection', () => {
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
 
     await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));
-    fireEvent.change(screen.getByLabelText('Host Name'), { target: { value: 'self-host' } });
+    fireEvent.change(await screen.findByLabelText('Host Name'), { target: { value: 'self-host' } });
     await waitFor(() => expect(screen.getByLabelText('SSH User')).toHaveValue('rage'));
     fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
     fireEvent.click(screen.getByRole('button', { name: /choose minqlxtended runtime/i }));

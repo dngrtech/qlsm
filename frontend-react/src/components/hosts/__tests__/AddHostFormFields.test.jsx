@@ -111,7 +111,9 @@ describe('AddHostFormFields runtime radios', () => {
     // The choice is irreversible, so QLSM makes no pick on the operator's
     // behalf -- an unaware operator can never land on a runtime by default.
     render(<AddHostFormFields {...baseProps} runtime="" />);
-    const radios = screen.getAllByRole('radio', { name: /minqlx/i });
+    // The runtime radios are the only ones on the form for a cloud provider,
+    // so no name filter is needed -- and none of them may start checked.
+    const radios = screen.getAllByRole('radio');
     expect(radios).toHaveLength(2);
     radios.forEach(radio => expect(radio).not.toBeChecked());
   });
@@ -168,5 +170,25 @@ describe('AddHostFormFields runtime tooltips', () => {
     // and it lands in Error with deleting it the only way back.
     render(<AddHostFormFields {...baseProps} provider="self" runtime="" />);
     expect(openTooltip('minqlxtended')).toHaveTextContent(/not checked up front/i);
+  });
+});
+
+describe('AddHostFormFields runtime error', () => {
+  it('renders no error region when no runtime error is set', () => {
+    render(<AddHostFormFields {...baseProps} runtime="" runtimeError={null} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('announces the runtime error and ties it to the radio group', () => {
+    // Without the association a screen-reader user tabbing onto the radios is
+    // told nothing -- the message sits elsewhere in the document.
+    render(<AddHostFormFields {...baseProps} runtime="" runtimeError="Server runtime is required." />);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Server runtime is required.');
+
+    const group = screen.getByRole('group', { name: /server runtime/i });
+    expect(group).toHaveAttribute('aria-describedby', alert.id);
+    expect(alert.id).toBeTruthy();
   });
 });
