@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import sys
+import threading
 
 import pytest
 
@@ -97,6 +98,7 @@ def _build(module, game=None, players=()):
     plugin._current_workshop_item = None
     plugin._resolved_map = None
     plugin._map_workshop_cache = {}
+    plugin._stop_event = threading.Event()
     return plugin
 
 
@@ -113,8 +115,24 @@ def test_every_hook_registers_against_the_real_event_arities(module):
     plugin = _build(module)
     module.serverchecker._register_hooks(plugin)
     assert {event for event, _, _ in plugin.hooks} == {
-        'game_start', 'game_end', 'player_connect', 'player_disconnect', 'map'
+        'game_start', 'game_end', 'player_connect', 'player_disconnect', 'map',
+        'unload',
     }
+
+
+def test_unload_stops_the_update_thread(module):
+    """Without an unload hook, `!reload serverchecker` leaves the previous
+    thread polling forever and every reload adds another status writer."""
+    plugin = _build(module)
+    assert not plugin._stop_event.is_set()
+    module.serverchecker.handle_unload(plugin, 'serverchecker')
+    assert plugin._stop_event.is_set()
+
+
+def test_unload_of_another_plugin_leaves_us_running(module):
+    plugin = _build(module)
+    module.serverchecker.handle_unload(plugin, 'essentials')
+    assert not plugin._stop_event.is_set()
 
 
 def test_status_is_written_to_the_qlsm_redis_key(module):

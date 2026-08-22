@@ -672,7 +672,7 @@ class mybalance(iouonegirlPlugin):
 
             # Check if thread is ready or not
             ct = self.connectthreads[player.steam_id]
-            if ct.isAlive():
+            if ct.is_alive():
                 return "Fetching your skill rating..."
             try:
                 res = ct._result

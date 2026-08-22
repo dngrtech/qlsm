@@ -114,7 +114,7 @@
     },
     "serverchecker.py": {
       "origin": "qlsm",
-      "sha256": "25b73945b421ed2e84feaf8d73d93a3b92c1372ced62d21686a2465c7a435f74"
+      "sha256": "30d78a93ea57b3a8e6baf9698f64c4085988ce87ad8facd550ca4756b4c22a27"
     },
     "silence.py": {
       "origin": "upstream",

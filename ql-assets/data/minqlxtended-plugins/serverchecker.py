@@ -135,6 +135,7 @@ class serverchecker(minqlxtended.Plugin):
         self.add_hook("player_connect",    self.on_player_connect)
         self.add_hook("player_disconnect", self.on_player_disconnect)
         self.add_hook("map",               self.on_map)
+        self.add_hook("unload",            self.handle_unload)
 
     # ── Hooks ──────────────────────────────────────────────────────────────
 
@@ -160,6 +161,15 @@ class serverchecker(minqlxtended.Plugin):
         self._match_start_time = None
         self._refresh_workshop_item_for_map(mapname)
         self._update_status_async()
+
+    def handle_unload(self, plugin):
+        """Stop the update thread when this plugin is unloaded or reloaded.
+
+        Without this, `!reload serverchecker` leaves the previous thread
+        polling forever and every reload adds another status writer.
+        """
+        if plugin == self.__class__.__name__:
+            self._stop_event.set()
 
     @minqlxtended.thread
     def _update_status_async(self):
