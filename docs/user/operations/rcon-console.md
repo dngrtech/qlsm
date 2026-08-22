@@ -42,6 +42,7 @@ The console has a **Show real-time game events** checkbox enabled by default. Wh
 | "RCON not configured" | Missing IP, port, or password on the instance or host |
 | "Not authorized for this instance" | Room join did not complete before command was sent |
 | Connection errors | Check Redis service and host reachability |
+| Live stats stream stays empty, and the game server logs repeated ZMQ auth denials | An old instance record still points at the same stats port with the password it was created with. Close any console tab still open on the deleted instance, then reopen the console on the current one. |
 
 ## Related Pages
 

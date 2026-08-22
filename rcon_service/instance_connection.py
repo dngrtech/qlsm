@@ -14,7 +14,7 @@ import zmq
 import zmq.asyncio
 
 from .message_parser import parse_rcon_message
-from .stats_connection import StatsConnection
+from .stats_connection import StatsConnection, password_fingerprint
 
 log = logging.getLogger(__name__)
 
@@ -184,6 +184,7 @@ class InstanceConnection:
         if self._stats_connection:
             await self._stats_connection.disconnect()
             self._stats_connection = None
+        self._stats_subscription = None
         
         # Cancel receive task
         if self._recv_task and not self._recv_task.done():
@@ -329,13 +330,19 @@ class InstanceConnection:
             if self._stats_subscription == requested_subscription:
                 log.debug(f"[{self.host_id}:{self.instance_id}] Already subscribed to stats")
                 return
+            previous_ip, previous_port, previous_password = self._stats_subscription
             log.info(
-                f"[{self.host_id}:{self.instance_id}] Reconnecting stats after "
-                "endpoint or credential change"
+                f"[{self.host_id}:{self.instance_id}] Reconnecting stats after endpoint "
+                f"or credential change: {previous_ip}:{previous_port} "
+                f"fp={password_fingerprint(previous_password)} -> {ip}:{stats_port} "
+                f"fp={password_fingerprint(stats_password)}"
             )
             await self.unsubscribe_stats()
 
-        log.debug(f"[{self.host_id}:{self.instance_id}] Subscribing to stats on port {stats_port}")
+        log.debug(
+            f"[{self.host_id}:{self.instance_id}] Subscribing to stats on {ip}:{stats_port} "
+            f"fp={password_fingerprint(stats_password)}"
+        )
         stats_connection = StatsConnection(
             host_id=self.host_id,
             instance_id=self.instance_id,

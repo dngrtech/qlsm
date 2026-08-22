@@ -189,6 +189,18 @@ QLSM reserves Redis `DB 0`; minqlx instances use `DB 1..8` (Redis ships 16 datab
 `DB 1..8` is selectable at instance creation via the optional `redis_db` field; it defaults to the port-derived value (`port - REDIS_DB_PORT_OFFSET`) and there is no edit path afterward. `QLInstance.redis_db` is nullable — `NULL` means "derive from the port," which is how every pre-existing instance behaves. `ui.constants.resolve_redis_db(instance)` is the single function that resolves either case; both `ui/task_logic/ansible_instance_mgmt.py` and `ui/task_logic/server_status_poll.py` call it rather than re-deriving the formula.
 Self-host minqlx services receive `qlx_redisAddress`, `qlx_redisPassword`, and `qlx_redisDatabase` explicitly at deploy time.
 
+### Live Stats Endpoint Ownership
+
+`rcon_service.ConnectionManager` keys its RCON connections by `(host_id, instance_id)`, but a ZMQ stats socket is a physical endpoint. `zmq_stats_port` is derived from the game port (`29999 + (port - 27960)`), so recreating an instance mints a new `instance_id` while the endpoint stays exactly where it was. Two connections whose instance ids differ can therefore target the same `ip:stats_port`, each retrying the PLAIN handshake with the `zmq_stats_password` it was created with. QLDS accepts one and denies the other on repeat, which in the game server's journal reads like a firewall or a closed port rather than two subscribers contending for one socket.
+
+`ConnectionManager` therefore keeps a second registry, `_stats_targets`, keyed by `(ip, stats_port)` and recording which connection owns each endpoint:
+
+- `subscribe_stats()` evicts whatever other connection currently holds the target before claiming it — last subscriber wins.
+- `unsubscribe_stats()`, `disconnect()`, `disconnect_host()` and `disconnect_all()` release the endpoints their connections owned.
+- Within a single connection, `InstanceConnection.subscribe_stats()` compares `(ip, stats_port, stats_password)` against the live subscription and rebuilds the socket only when one of them changed.
+
+Stats passwords are never logged in plaintext. `rcon_service.stats_connection.password_fingerprint()` returns a truncated SHA-256 (`fp=<8 hex chars>`), which is enough to tell two credentials apart in the logs when reconciling against a game server's ZAP records.
+
 **QLInstance Model:** Represents a Quake Live server instance running on a specific `Host`. A private service-runtime baseline is persisted for safe `UPDATED` reconciliation; it is excluded from the API and backups and is not user-configurable.
 
 ```python

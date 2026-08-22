@@ -6,6 +6,7 @@ like player deaths, team switches, round ends, etc.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 from typing import Callable, Optional
@@ -14,6 +15,18 @@ import zmq
 import zmq.asyncio
 
 log = logging.getLogger(__name__)
+
+
+def password_fingerprint(password: Optional[str]) -> str:
+    """Return a short, non-reversible tag for a stats password.
+
+    Diagnosing a credential mismatch means comparing what QLSM sent against
+    what QLDS expected, and doing that from plaintext logs means leaking the
+    secret. A truncated digest is enough to tell two passwords apart.
+    """
+    if not password:
+        return "none"
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()[:8]
 
 
 class StatsConnection:
