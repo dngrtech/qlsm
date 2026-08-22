@@ -1607,11 +1607,12 @@ def test_overwriting_a_preset_with_an_unfiltered_draft_is_allowed(client, app):
     assert os.path.exists(os.path.join(preset_path, 'scripts', 'essentials.py'))
 
 
-def test_update_preset_from_draft_keeps_user_backup_files(client, app):
-    """Backups a user keeps beside their scripts survive the draft round-trip.
+def test_update_preset_from_draft_drops_backup_files(client, app):
+    """A backup that reaches a draft must not be written into the preset.
 
-    Preset archives drop .bak files, but saving a preset rewrites the real
-    scripts directory -- filtering there would delete the user's own backups.
+    A preset is a curated artefact, and its own export drops .bak files -- so
+    letting one land here would make the preset on disk differ from the archive
+    it produces, and the file could never survive a round-trip anyway.
     """
     draft_id = str(uuid.uuid4())
     draft_scripts = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'scripts')
@@ -1621,8 +1622,10 @@ def test_update_preset_from_draft_keeps_user_backup_files(client, app):
         f.write('print("ranked")')
     with open(os.path.join(draft_scripts, backup_name), 'w') as f:
         f.write('print("old ranked")')
+    with open(os.path.join(draft_scripts, 'bakery.py'), 'w') as f:
+        f.write('class bakery: pass')
 
-    preset_id, preset_path = _create_preset_folder(app, 'draft-keeps-backups')
+    preset_id, preset_path = _create_preset_folder(app, 'draft-drops-backups')
 
     headers = auth_headers(app, DEFAULT_USER)
     response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
@@ -1632,4 +1635,6 @@ def test_update_preset_from_draft_keeps_user_backup_files(client, app):
     assert response.status_code == 200
     preset_scripts = os.path.join(preset_path, 'scripts')
     assert os.path.exists(os.path.join(preset_scripts, 'ranked.py'))
-    assert os.path.exists(os.path.join(preset_scripts, backup_name))
+    assert not os.path.exists(os.path.join(preset_scripts, backup_name))
+    # The filter must not swallow a legitimately named script.
+    assert os.path.exists(os.path.join(preset_scripts, 'bakery.py'))
