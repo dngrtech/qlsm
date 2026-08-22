@@ -142,6 +142,13 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
+All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is **immutable** — there is no field or endpoint to change it after the host is created. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against).
+
+The Python 3.12 floor for `runtime: "minqlxtended"` is enforced differently per provider, because QLSM doesn't have the same evidence available at creation time for each:
+
+- **Standalone:** enforced synchronously. `POST /api/hosts` runs an SSH-based OS/Python detection before creating the row, and returns `400` immediately if the detected Python is older than 3.12 (or undetectable).
+- **Self:** *not* enforced at creation. Self-host creation only reads local `/etc/os-release`-style detection, which carries no Python version — there is no SSH session to probe, since the host *is* the QLSM server's own reachable target. `POST /api/hosts` returns `201` regardless of the host's actual Python version, the record is created, and asynchronous setup is queued. `ansible/playbooks/setup_host.yml` is the actual gate: it asserts the Python floor before building, and a self host whose Python is too old reaches `ERROR` status once that setup task runs and fails — after creation returned successfully, not instead of it.
+
 ### Self-Host Defaults
 
 ```
@@ -238,6 +245,7 @@ Example success response:
     "ssh_user": "ansible",
     "ssh_port": 22,
     "os_type": "debian",
+    "runtime": "minqlx",
     "is_standalone": false,
     "timezone": "America/New_York",
     "cpu_count": 1,
@@ -264,6 +272,8 @@ Example success response:
 `lan_rate_uses_hook: false` means the host uses the legacy iptables/sysctl mechanism for 99k LAN Rate. After running "Re-run Host Setup", `lan_rate_uses_hook` becomes `true` and instances can use the new hook-based mechanism on any OS.
 
 `firewall_pool_v2: false` means the host's firewall allow-list was rendered before the game/RCON port pool was widened, so the higher instance slots may not be reachable. A successful host setup run — initial or "Re-run Host Setup" — sets it to `true`.
+
+`runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and never changed afterward. `NULL`/legacy rows normalize to `"minqlx"`.
 
 ## Instances
 
@@ -367,6 +377,7 @@ Example success response:
     "host_name": "my-host-1",
     "host_ip_address": "144.202.73.249",
     "host_os_type": "debian",
+    "host_runtime": "minqlx",
     "port": 27960,
     "hostname": "My Duel Server",
     "lan_rate_enabled": false,
@@ -385,6 +396,8 @@ Example success response:
   }
 }
 ```
+
+`host_runtime` is read-only, mirrors the parent host's `runtime`, and is not a column on the instance itself — it exists so the frontend can show which minqlx fork the instance runs without a second lookup.
 
 ### Config Files Response (GET /instances/<id>/config)
 ```json
@@ -744,7 +757,7 @@ Config presets are stored on the filesystem at `configs/presets/<name>/`. The da
 |----------|--------|-------------|
 | `/presets` | GET | List all presets (metadata only) |
 | `/presets` | POST | Create preset (saves to filesystem) |
-| `/presets/<id>` | GET | Get preset with config content (reads from filesystem) |
+| `/presets/<id>` | GET | Get preset with config content (reads from filesystem); accepts optional `target_runtime` to filter plugins for cross-runtime compatibility (see below) |
 | `/presets/<id>` | PUT | Update preset |
 | `/presets/<id>` | DELETE | Delete preset (removes DB record + folder) |
 | `/presets/<id>/download` | GET | Download preset export |
@@ -786,6 +799,7 @@ GET /presets/validate-name?name=my-preset
   "checked_factories": ["duel.factories"],
   "enabled_hooks": ["ql_netfix.so"],
   "lan_rate_enabled": true,
+  "runtime": "minqlx",
   "binary_meta_source": {
     "context_type": "preset",
     "context_key": "default"
@@ -795,7 +809,7 @@ GET /presets/validate-name?name=my-preset
 
 `configs` is the preferred format for preset writes. It accepts flat `.cfg` and `.txt` filenames and syncs the preset config set, removing unprotected config files omitted from the map. The protected baseline files `server.cfg`, `mappool.txt`, `access.txt`, and `workshop.txt` cannot be removed. The legacy keys `server_cfg`, `mappool_txt`, `access_txt`, and `workshop_txt` are still accepted for compatibility, but they are partial writes and do not support custom files.
 
-`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings; entries that are not root-level `.py` files (anything containing `/`, or `__init__.py`) are silently stripped rather than rejected, because minqlx loads every `qlx_plugins` entry as a top-level module and cannot load those. This stripping applies uniformly to preset create, update, and import. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving — its sibling `user-hooks/` directory is merge-copied into the preset's `user-hooks/` directory the same way.
+`factories` is a flat `.factories` filename-to-content map and syncs the preset factory set. `checked_plugins` must be a list of strings; entries that are not root-level `.py` files (anything containing `/`, or `__init__.py`) are silently stripped rather than rejected, because minqlx loads every `qlx_plugins` entry as a top-level module and cannot load those. This stripping applies uniformly to preset create, update, and import. `checked_factories` must be a list of `.factories` filenames. `draft_id` copies staged plugin files into the preset without deleting the draft, so the form can continue editing after saving — its sibling `user-hooks/` directory is merge-copied into the preset's `user-hooks/` directory the same way. On `PUT /presets/<id>`, a draft that was created with a `target_runtime` differing from its source (see [Cross-Runtime Compatibility](#cross-runtime-compatibility-target_runtime)) holds the *target* runtime's plugin set, not the preset's; overwriting a preset with such a draft returns `400 Bad Request` rather than silently replacing a minqlx preset's plugins with minqlxtended ones. Save it as a new preset instead.
 
 `enabled_hooks` is an optional list of `.so` filenames (LD_PRELOAD order) recording which of the preset's `user-hooks/` files should be enabled when the preset is loaded onto an instance. It must be a list of `.so` filenames. When saving a preset from an instance's current state, the frontend populates this from that instance's currently-enabled hooks. `null`/absent means the preset predates this feature or was saved without any hooks captured.
 
@@ -803,11 +817,13 @@ GET /presets/validate-name?name=my-preset
 
 `binary_meta_source` is optional on `POST /presets` and `PUT /presets/<id>`. When provided, matching `.so` file descriptions are copied from the source context into the target preset context. Use this when saving an instance or another preset as a new preset.
 
+`runtime` is optional and records which minqlx fork (`"minqlx"` or `"minqlxtended"`) the preset was saved from — the frontend sends the host or instance's current runtime here. `400` if present and not one of the two valid values. On `POST /presets` (create), an absent value defaults to `"minqlx"`. On `PUT /presets/<id>` (update), the semantics are different and deliberately so: an absent `runtime` key means **leave unchanged**, not "reset to minqlx" — `update_preset_api` also serves plain rename/description edits that carry no originating host and no `runtime` key at all, and defaulting an absent value there would silently downgrade an existing minqlxtended preset back to minqlx on an unrelated save. Send the key only when you intend to set it.
+
 ### Download Preset Export
 
 `GET /api/presets/{preset_id}/download`
 
-Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, selection JSON files (`checked_plugins.json`, `checked_factories.json`, `enabled_hooks.json`, `lan_rate_enabled.json`), and generated export metadata.
+Downloads the saved preset as a ZIP archive. The archive contains the full saved preset directory, including configuration files, custom config folders, factories, scripts, user hooks, selection JSON files (`checked_plugins.json`, `checked_factories.json`, `enabled_hooks.json`, `lan_rate_enabled.json`), and generated export metadata — the `manifest.json`'s `preset` object includes `runtime`, so an imported archive round-trips which fork the preset was saved from.
 
 Responses:
 
@@ -845,6 +861,7 @@ Responses:
     "name": "duel-config",
     "description": "Standard duel settings",
     "path": "configs/presets/duel-config",
+    "runtime": "minqlx",
     "server_cfg": "...",
     "mappool_txt": "...",
     "access_txt": "...",
@@ -880,6 +897,40 @@ Responses:
 For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` may be `null`. A `null` `checked_factories` value means the preset predates explicit factory selection, so all files in `factories/` are treated as selected for compatibility. A `null` `enabled_hooks` value means the preset was saved without recording hook enablement — loading it does not touch the target instance's current `ld_preload_hooks`.
 
 `scripts` values are UTF-8 text for `.py`/`.txt` files. `.so` plugin files and font files are binary, so their values are base64-encoded; write requests must send `.so` and font content the same way (raw bytes are only accepted for `.so` plugin files and font files arriving through preset ZIP import, not through this JSON API).
+
+#### Cross-Runtime Compatibility (`target_runtime`)
+
+`GET /api/presets/{preset_id}` accepts an optional `target_runtime` query parameter (`?target_runtime=minqlxtended`) naming the runtime the preset is about to be loaded onto. `400 Bad Request` if present and not one of `"minqlx"` / `"minqlxtended"`. Omitting it, or passing the same value as the preset's own `runtime`, returns the response exactly as documented above — `scripts` and `checked_plugins` are the preset's stored contents, and there is no `compatibility` key.
+
+When `target_runtime` differs from the preset's `runtime`, `scripts` contains only the plugin files kept for the target runtime, `checked_plugins` drops any that were removed, and the response gains a `compatibility` block:
+
+```json
+"compatibility": {
+  "preset_runtime": "minqlx",
+  "target_runtime": "minqlxtended",
+  "stripped": [
+    {
+      "path": "balance.py",
+      "verdict": "incompatible",
+      "reasons": ["line 1: imports the minqlx module"],
+      "replacement": "balance.py"
+    },
+    {
+      "path": "discord_extensions/admin.py",
+      "verdict": "incompatible",
+      "reasons": ["line 11: imports the minqlx module"],
+      "replacement": null
+    }
+  ],
+  "replacements": {
+    "balance.py": "... file contents ..."
+  }
+}
+```
+
+Every `.py` file is classified, including files inside the preset's plugin subfolders (`discord_extensions/`, `extras/`) — those are stripped and reported by their full relative path, as the example above shows. `.so` hook binaries, `.txt` files, and fonts are always kept as-is. `stripped` lists every removed plugin file, sorted by path. `verdict` is `"incompatible"` when a specific reason was found, or `"unknown"` when nothing conclusive was found and the file was removed rather than assumed safe (`reasons` is `[]` in that case).
+
+`replacement` is only ever the entry's **own** filename, offered when the target runtime ships a plugin by that exact name, and `null` otherwise. A replacement is never a differently-named plugin: `mybalance.py` is not offered `balance.py`, because they are not the same plugin. Only root-level files are ever offered one — a file inside a plugin subfolder always reports `replacement: null`, since swapping in the target's root-level `balance.py` for a stripped `extras/balance.py` would relocate the file as well as replace it. `replacements` maps each offered filename to its file content, so the caller can apply it without a second request.
 
 ### Preset Name Validation
 - Pattern: `^[a-zA-Z0-9_-]+$` (letters, numbers, hyphens, underscores)

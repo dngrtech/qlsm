@@ -14,8 +14,18 @@ from flask import Blueprint, request, jsonify, current_app, send_file
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 from ui import db
+from ui.database import get_host_by_name, get_preset_by_name
 from ui.models import BinaryMetadata
-from ui.preset_support import resolve_preset_subdir
+from ui.plugin_compat import VERDICT_COMPATIBLE, baseline_digest, classify
+from ui.preset_compat import baseline_hashes, replacement_scripts, shipped_scripts
+from ui.preset_support import (
+    BUILTIN_PRESETS_DIR,
+    DEFAULT_PRESET_NAME,
+    default_preset_name_for_preset,
+    default_preset_name_for_runtime,
+    resolve_preset_subdir,
+)
+from ui.runtime import is_valid_runtime, normalize_runtime
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
@@ -26,6 +36,14 @@ CONFIGS_BASE = 'configs'
 PRESETS_DIR = 'presets'
 SCRIPTS_DIR = 'scripts'
 USER_HOOKS_DIR = 'user-hooks'
+# Written beside scripts/ when the compatibility gate actually filtered this
+# draft, naming the runtime it was filtered FOR. A filtered draft is a derived
+# artefact -- it holds the target runtime's plugin set, not the source's -- so
+# any caller about to write it back somewhere permanent has to be able to ask.
+# Deliberately outside scripts/ and user-hooks/: those two are the only
+# directories copied onto an instance or a preset, so the marker can never
+# travel with the files it describes.
+RUNTIME_MARKER_FILE = '.qlsm-filtered-for-runtime'
 
 
 def _get_drafts_base():
@@ -84,15 +102,210 @@ def _cleanup_stale_drafts():
         pass
 
 
-def _seed_draft(draft_scripts_path, source_path):
+# What `source_runtime` is when the preset/host row could not be read at all.
+# normalize_runtime() answers 'minqlx' for None, which is the right convention
+# for reading a legacy runtime column but the wrong one for deciding whether to
+# DELETE an operator's plugins: it makes "the row says minqlx" and "there is no
+# row" indistinguishable, so an unknown source drives a real strip against a
+# minqlxtended target. A distinct sentinel keeps the None convention intact for
+# every other caller while letting create_draft say "I could not tell", and the
+# filter declines to run rather than guessing in the deleting direction.
+UNRESOLVED_RUNTIME = object()
+
+
+def _record_filter_runtime(draft_base_path, target_runtime):
+    """Mark the draft rooted at `draft_base_path` as filtered for a runtime.
+
+    Best-effort: the marker exists so a later save can refuse to corrupt a
+    preset, and failing to write it must never fail the draft creation the
+    operator is waiting on. A missing marker reads as "not filtered", which
+    only costs the refusal -- the behaviour QLSM had before it existed.
+    """
+    try:
+        with open(os.path.join(draft_base_path, RUNTIME_MARKER_FILE),
+                  'w', encoding='utf-8') as handle:
+            handle.write(target_runtime)
+    except OSError:
+        pass
+
+
+def draft_filtered_runtime(draft_id):
+    """The runtime `draft_id`'s scripts were filtered for, or None.
+
+    None means the draft was never filtered (a matched-runtime load, or no
+    target runtime at all), so its scripts are the source's own files and
+    writing them back where they came from is safe.
+    """
+    path = os.path.join(_get_draft_base_path(draft_id), RUNTIME_MARKER_FILE)
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            value = handle.read().strip()
+    except (OSError, ValueError):
+        return None
+    return value if is_valid_runtime(value) else None
+
+
+def _target_default_preset_files(target_runtime):
+    """relpath -> file text for every .py the target runtime ships itself.
+
+    Delegates to preset_compat.shipped_scripts() so the compatibility REPORT and this
+    FILTER read the same directory the same way. They are the two halves of one
+    promise -- what the operator is shown, and what lands on disk -- and this gate has
+    already been rewritten twice over them drifting apart.
+    """
+    return shipped_scripts(target_runtime)
+
+
+def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, accepted_replacements):
+    """Delete what cannot run on `target_runtime`; write accepted replacements.
+
+    This is THE enforcement point for the compatibility gate. The preset GET
+    response is filtered too, but only to drive the dialog's preview -- nothing
+    consumes its `scripts` field. What lands on an instance is this directory,
+    copied wholesale by instance_routes.py, so this is where stripping has to
+    actually happen or the gate is decorative.
+
+    Mirrors apply_compatibility()'s own early return line for line: a matched
+    runtime must cost nothing and delete nothing, or the two halves of the
+    gate -- what the operator is shown, and what actually lands on disk --
+    can silently disagree, which is the exact failure class this rework
+    exists to eliminate.
+
+    Returns (relative paths removed, relative paths restored, the runtime filtered
+    for). The third element is None when neither early return was taken -- this function's two
+    guards are the only place that knows the difference between "filtered for
+    minqlxtended" and "left alone", and re-deriving that condition at a second
+    call site is how the two halves of this gate have already drifted apart
+    twice. Callers that persist anything about the draft key off it.
+    """
+    if source_runtime is UNRESOLVED_RUNTIME:
+        # See UNRESOLVED_RUNTIME: the source could not be identified, so
+        # "the runtimes differ" is a guess, and this function's mistake costs
+        # the operator files. Skipping keeps everything, which is the same
+        # thing QLSM did before the gate existed.
+        return [], [], None
+    source = normalize_runtime(source_runtime)
+    target = normalize_runtime(target_runtime)
+    if source == target:
+        return [], [], None
+
+    hashes = baseline_hashes(target)
+    candidates = replacement_scripts(target)
+    shipped_by_target = _target_default_preset_files(target)
+    shipped_digests = {rel: baseline_digest(text)
+                       for rel, text in shipped_by_target.items()}
+    removed = []
+    restored = []
+
+    for root, _dirs, filenames in os.walk(draft_scripts_path):
+        for filename in filenames:
+            if not filename.lower().endswith('.py'):
+                continue  # .so hooks and .txt data are runtime-agnostic
+            full_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(full_path, draft_scripts_path)
+            try:
+                with open(full_path, 'r', encoding='utf-8') as handle:
+                    text = handle.read()
+            except (OSError, ValueError):
+                # Unreadable, or not valid UTF-8 (ValueError covers
+                # UnicodeDecodeError): _read_preset_scripts() on the GET path
+                # hits this exact failure and silently omits the file from
+                # what the operator is shown, instead of reporting it
+                # stripped. Deleting a file the dialog never displayed as
+                # incompatible would widen the strip past what was promised.
+                continue
+            if not text.strip():
+                # An empty file (a bare __init__.py marking a package) cannot
+                # be incompatible with anything, and removing it breaks
+                # imports for every sibling module that did survive.
+                continue
+            if shipped_digests.get(rel_path) == baseline_digest(text):
+                # This file is byte-for-byte the one the TARGET runtime's own
+                # default preset ships at this path -- almost always because
+                # _seed_draft laid it down itself moments ago. Deleting the
+                # target's own baseline is never right, and the operator was
+                # never shown it: the dialog lists the SOURCE preset's files.
+                # Compared by content, not by name, so a source file that
+                # merely reuses a shipped filename is still classified below.
+                continue
+            verdict, _reasons = classify(
+                text, target, baseline_sha256=hashes.get(filename))
+            if verdict == VERDICT_COMPATIBLE:
+                continue
+            if (os.sep in rel_path or '/' in rel_path) and rel_path in shipped_by_target:
+                # A subdirectory file the TARGET runtime also ships at this exact path.
+                # _seed_draft laid the target's copy down and the source overlay wrote
+                # over it, so deleting now leaves nothing where the seed put something.
+                #
+                # Root-level files have a way out of that: _strip_entry offers the
+                # target's version and the operator ticks it. Subdirectory files never
+                # get the offer -- isEnableablePluginPath() rejects any path with a
+                # separator, so they cannot appear in the dialog at all -- which left
+                # mydiscordbot.py landing with an empty discord_extensions/ beside it
+                # and failing at load_extension().
+                #
+                # Restoring is not the same act as offering a replacement, and the
+                # reason _strip_entry declines to offer does not apply here: that
+                # concern is about relocating a subdirectory file into the plugin root,
+                # a path change. This writes the target's own file back to the path it
+                # already occupied, which is what the seed did before the overlay.
+                try:
+                    with open(full_path, 'w', encoding='utf-8') as handle:
+                        handle.write(shipped_by_target[rel_path])
+                    restored.append(rel_path)
+                except OSError:
+                    pass
+                continue
+            try:
+                os.remove(full_path)
+                removed.append(rel_path)
+            except OSError:
+                continue
+
+    for name in accepted_replacements or []:
+        # Client-supplied. Membership in `candidates` is what actually stops
+        # '../x.py' or any other traversal -- replacement_scripts() only ever
+        # returns bare filenames read from a flat preset scripts/ directory,
+        # so nothing containing a separator can pass this check in the first
+        # place. The separator/suffix checks below are defence in depth, not
+        # the live guard.
+        if name not in candidates:
+            continue
+        if '/' in name or os.sep in name or not name.endswith('.py'):
+            continue
+        try:
+            with open(os.path.join(draft_scripts_path, name), 'w',
+                      encoding='utf-8') as handle:
+                handle.write(candidates[name])
+        except OSError:
+            continue
+
+    return removed, restored, target
+
+
+def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRESET_NAME,
+                target_runtime=None, accepted_replacements=None, source_runtime=None):
     """Copy source plugin files into a draft directory.
 
-    For non-default presets, default scripts are copied first so the full
-    plugin list is always visible.  Preset-specific files overlay on top.
-    This mirrors _read_preset_scripts() in preset_api_routes.py.
+    For non-default presets, the runtime-matched default preset's scripts are
+    copied first so the full plugin list is always visible.  Preset-specific
+    files overlay on top.  This mirrors _read_preset_scripts() in
+    preset_api_routes.py. `default_preset_name` is expected to already be
+    chosen by the caller for the target's runtime when one is given.
+
+    `target_runtime` and `source_runtime` together gate the compatibility
+    filter at the end of this function: a matched runtime costs nothing and
+    deletes nothing, same as `apply_compatibility()` on the GET side, and a
+    `source_runtime` of UNRESOLVED_RUNTIME skips the filter outright.
+
+    Returns the runtime the draft was filtered FOR, or None when it was left
+    alone. A filtered draft is a derived artefact holding the target runtime's
+    plugin set rather than the source's, so the caller that owns the draft
+    directory records that before anything can write it back somewhere
+    permanent.
     """
     default_scripts = os.path.abspath(
-        resolve_preset_subdir('default', SCRIPTS_DIR, CONFIGS_BASE)
+        resolve_preset_subdir(default_preset_name, SCRIPTS_DIR, CONFIGS_BASE)
     )
     presets_root = os.path.join(os.path.abspath(CONFIGS_BASE), PRESETS_DIR)
     is_non_default_preset = (
@@ -118,6 +331,28 @@ def _seed_draft(draft_scripts_path, source_path):
         shutil.copytree(source_user_hooks, draft_user_hooks, dirs_exist_ok=True)
     elif not os.path.exists(draft_user_hooks):
         os.makedirs(draft_user_hooks, exist_ok=True)
+
+    # Enforce the compatibility gate last, over everything seeded above -- the
+    # default overlay and the source preset alike. Filtering the two copytree
+    # calls separately would let an incompatible default overlay through.
+    if not target_runtime:
+        return None
+    removed, restored, filtered_for = _apply_runtime_filter(
+        draft_scripts_path, source_runtime, target_runtime,
+        accepted_replacements)
+    if removed:
+        current_app.logger.info(
+            f"Draft seeded for {target_runtime}: removed "
+            f"{len(removed)} incompatible plugin(s): {', '.join(sorted(removed))}")
+    if restored:
+        # Logged separately from `removed` because it is a different outcome and the
+        # operator was shown neither: these never reach the dialog. Silence here would
+        # make an unexplained file swap look like the overlay never happened.
+        current_app.logger.info(
+            f"Draft seeded for {target_runtime}: restored "
+            f"{len(restored)} subdirectory helper(s) the source overlay wrote over: "
+            f"{', '.join(sorted(restored))}")
+    return filtered_for
 
 
 def _is_path_under(allowed_root, resolved_path):
@@ -268,6 +503,28 @@ def _get_source_path(data):
     return path
 
 
+def _resolve_source_runtime(data):
+    """The runtime of the content `_seed_draft` is about to copy from.
+
+    Mirrors the values `apply_compatibility`'s caller already trusts for the
+    GET-side comparison -- `preset.runtime`, a host's `runtime` column -- so
+    the two halves of the gate agree on what "the source" is.
+
+    Returns None when there is no row to read, which is NOT the same answer as
+    a row whose runtime column is NULL: the caller turns None into
+    UNRESOLVED_RUNTIME so the filter declines to delete on a guess. A row that
+    exists but predates the runtime column still resolves to None here and gets
+    the same treatment, which is the safe direction -- see UNRESOLVED_RUNTIME.
+    """
+    if data.get('source') == 'preset':
+        preset = get_preset_by_name(data.get('preset')) if data.get('preset') else None
+        return getattr(preset, 'runtime', None)
+    if data.get('source') == 'instance':
+        host = get_host_by_name(data.get('host')) if data.get('host') else None
+        return getattr(host, 'runtime', None)
+    return None
+
+
 @draft_api_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_draft():
@@ -280,6 +537,17 @@ def create_draft():
     if source_path is None:
         return jsonify({"error": {"message": "Invalid source. Provide preset name or host + instance_id."}}), 400
 
+    target_runtime = data.get('target_runtime')
+    if target_runtime is not None and not is_valid_runtime(target_runtime):
+        return jsonify({"error": {"message": "Invalid target_runtime."}}), 400
+
+    accepted = data.get('accepted_replacements')
+    if accepted is not None and (
+        not isinstance(accepted, list)
+        or not all(isinstance(name, str) for name in accepted)
+    ):
+        return jsonify({"error": {"message": "accepted_replacements must be a list of strings."}}), 400
+
     _cleanup_stale_drafts()
 
     draft_id = str(uuid.uuid4())
@@ -287,7 +555,37 @@ def create_draft():
 
     try:
         os.makedirs(os.path.dirname(draft_scripts_path), exist_ok=True)
-        _seed_draft(draft_scripts_path, source_path)
+        # The overlay follows the TARGET host's runtime, but only when it
+        # actually differs from the source's -- mirroring apply_compatibility's
+        # own preset==target early return. Using the target unconditionally is
+        # what put minqlx defaults onto a minqlxtended host in the first place;
+        # keying it on target_runtime alone (ignoring whether the source
+        # already matches) reintroduces the same bug from the other side.
+        source_runtime = _resolve_source_runtime(data) if target_runtime else None
+        runtimes_differ = bool(target_runtime) and (
+            normalize_runtime(source_runtime) != normalize_runtime(target_runtime)
+        )
+        if runtimes_differ:
+            default_preset_name = default_preset_name_for_runtime(target_runtime)
+        elif data.get('source') == 'preset':
+            default_preset_name = default_preset_name_for_preset(data.get('preset'))
+        else:
+            default_preset_name = DEFAULT_PRESET_NAME
+        # The overlay choice above may safely guess on an unresolvable source:
+        # whichever default it picks, the operator gains files, never loses
+        # them. The FILTER may not -- guessing there deletes plugins -- so it
+        # is told explicitly that the source is unknown and skips.
+        filtered_for = _seed_draft(
+            draft_scripts_path, source_path, default_preset_name,
+            target_runtime=target_runtime,
+            accepted_replacements=accepted,
+            source_runtime=(UNRESOLVED_RUNTIME if source_runtime is None
+                            else source_runtime))
+        if filtered_for:
+            # Recorded here rather than inside the filter because this is the
+            # only caller that owns a real draft root; _seed_draft is also
+            # called with bare paths whose parent is not a draft directory.
+            _record_filter_runtime(_get_draft_base_path(draft_id), filtered_for)
     except OSError as e:
         current_app.logger.error(f"Failed to create draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to create draft workspace"}}), 500

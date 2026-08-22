@@ -11,7 +11,7 @@ from rq import get_current_job
 from ui import db, rq
 from ui.models import Host, HostStatus
 from .common import append_log # Import from the common module
-from .terraform_runner import _run_terraform_command, run_terraform_with_retry # Import the runner helpers
+from .terraform_runner import _run_terraform_command, run_terraform_with_retry, _os_vars # Import the runner helpers
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def provision_host_logic(host_id, lock_token=None):
             f"-var=vultr_plan={host.machine_size}" # Assuming machine_size maps directly to plan ID
             # startup_script_path is now hardcoded in main.tf, no longer passed as a var
             # Add -var for instance_tags if needed
-        ]
+        ] + _os_vars(host)
         _, error = run_terraform_with_retry(host, ['apply', '-auto-approve', '-input=false', '-no-color'] + apply_vars, terraform_root_dir)
         if error:
             # Set error status if apply fails (retry already attempted by helper)

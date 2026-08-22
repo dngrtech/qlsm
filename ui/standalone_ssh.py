@@ -172,11 +172,27 @@ def _check_qlsm_running(client):
     return "dngrtech/qlsm" in output
 
 
+def _detect_remote_python_version(client):
+    """Return the host's python3 version as 'X.Y.Z', or None if undetectable.
+
+    Never raises: a host with no python3 is a valid answer (it simply cannot
+    run minqlxtended), not a connection failure.
+    """
+    try:
+        stdout_text, _ = _run_checked_command(client, "python3 -c 'import platform; print(platform.python_version())'")
+    except (StandaloneSSHError, paramiko.SSHException, OSError):
+        return None
+    version = (stdout_text or "").strip().split()[-1] if stdout_text and stdout_text.strip() else None
+    return version or None
+
+
 def detect_remote_os(*, host, port, username, timeout=30, password=None, key_filename=None):
     """Read /etc/os-release over SSH and map it onto QLSM's supported standalone OS types.
 
     Also runs `docker ps` in the same SSH session to detect whether the host is
-    already running QLSM containers (so the UI can offer a self-host redirect).
+    already running QLSM containers (so the UI can offer a self-host redirect),
+    and probes the host's python3 version so callers can gate the minqlxtended
+    runtime before the host is created.
     """
     try:
         with _ssh_session(
@@ -190,6 +206,7 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
         ) as client:
             stdout_text, _ = _run_checked_command(client, "cat /etc/os-release")
             qlsm_detected = _check_qlsm_running(client)
+            python_version = _detect_remote_python_version(client)
     except (paramiko.AuthenticationException, paramiko.SSHException, OSError, StandaloneSSHError) as exc:
         raise StandaloneSSHError(f"Unable to detect remote OS: {exc}") from exc
 
@@ -204,6 +221,7 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
         "pretty_name": detected_name,
         "os_type": _detect_supported_os_type(os_release_values),
         "qlsm_detected": qlsm_detected,
+        "python_version": python_version,
     }
 
 

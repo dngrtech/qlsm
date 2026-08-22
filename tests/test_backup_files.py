@@ -4,12 +4,13 @@ from ui.task_logic.backup_files import backup_file_trees, walk_tree
 
 
 class TestBackupFileTrees:
-    def test_returns_six_trees_in_configs_before_presets_order(self):
+    def test_returns_seven_trees_in_configs_before_presets_order(self):
         trees = backup_file_trees()
         prefixes = [t[0] for t in trees]
         assert prefixes == [
             'ssh-keys', 'terraform-state', 'configs', 'presets',
-            'plugins/minqlx-plugins', 'plugins/system-hooks',
+            'plugins/minqlx-plugins', 'plugins/minqlxtended-plugins',
+            'plugins/system-hooks',
         ]
         assert prefixes.index('configs') < prefixes.index('presets')
 
@@ -44,3 +45,21 @@ class TestWalkTree:
         (root / 'link.txt').symlink_to(real)
 
         assert list(walk_tree(str(root))) == []
+
+
+def test_backup_includes_both_plugin_baselines():
+    """A restore onto a fresh machine must carry both runtimes' baselines, or a
+    minqlxtended host comes back with no plugins."""
+    from ui.task_logic.backup_files import backup_file_trees
+
+    prefixes = [prefix for prefix, _, _ in backup_file_trees()]
+    assert 'plugins/minqlx-plugins' in prefixes
+    assert 'plugins/minqlxtended-plugins' in prefixes
+
+
+def test_missing_minqlxtended_baseline_is_not_an_error(tmp_path):
+    """P2 creates that directory; walking a missing root must yield nothing
+    rather than raise."""
+    from ui.task_logic.backup_files import walk_tree
+
+    assert list(walk_tree(str(tmp_path / "does-not-exist"))) == []

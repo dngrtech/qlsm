@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, Webhook, CheckCircle } from 'lucide-react';
+import { LoaderCircle, Save, FolderOpen, Settings, Code2, LayoutGrid, Webhook, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getAvailablePortsForHost, getFactoryContent, getFactoryTree, getPresetById, getPresets, savePreset, updatePreset } from '../../services/api';
@@ -9,6 +9,7 @@ import InstanceOptionsRow from './InstanceOptionsRow';
 import { buildRedisDbOptions, nextFreeRedisDb } from './redisDbOptions';
 import HooksTab from '../instances/HooksTab';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
+import InfoTooltip from '../common/InfoTooltip';
 import FullScreenConfigEditorModal from '../config/FullScreenConfigEditorModal';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
 import {
@@ -31,9 +32,14 @@ import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
 import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import {
   getLanRateUnsupportedMessage,
+  isLanRateForcedOn,
   isLanRateSupported,
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
+import { defaultPresetNameForRuntime, runtimeLabel } from '../../constants/runtimes';
+import { presetRuntimeStripWarning } from '../../utils/presetRuntimeCompat';
+import { mergeReplacements } from '../../utils/presetCompatibility';
+import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
@@ -130,6 +136,17 @@ function AddInstanceForm({
   onServerCfgLintStatusChange,
   onDirtyStateChange,
 }) {
+  // Plugin/hook seeds are per-runtime: minqlx plugins do not load on
+  // minqlxtended, so every seed site resolves through the selected host rather
+  // than a single flat default.
+  const initialHostRuntime = (initialData.hosts || [])
+    .find((host) => String(host.id) === String(initialHostId))?.runtime;
+  const seedForRuntime = useCallback((runtime) => (
+    (initialData.defaultSeedsByRuntime || {})[runtimeLabel(runtime)]
+      || { checkedPlugins: [], availableHooks: [], enabledHooks: [] }
+  ), [initialData.defaultSeedsByRuntime]);
+  const initialSeed = seedForRuntime(initialHostRuntime);
+
   const [name, setName] = useState('');
   const [selectedHostId, setSelectedHostId] = useState('');
   const [port, setPort] = useState('');
@@ -153,32 +170,41 @@ function AddInstanceForm({
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Local presets state (allows filtering after deletion without refetching)
   const [presets, setPresets] = useState(initialData.presets || []);
 
   // Loaded preset tracking
-  const [loadedPreset, setLoadedPreset] = useState(null); // { id, name, description } or null
+  const [loadedPreset, setLoadedPreset] = useState(null); // { id, name, description, runtime } or null
   const [isPresetModified, setIsPresetModified] = useState(false);
   const [isUpdatingPreset, setIsUpdatingPreset] = useState(false);
+  // Set when a host switch invalidates the loaded preset (runtime mismatch);
+  // explains the auto-clear so it isn't silent. Cleared on dismiss or on the
+  // next successful preset load.
+  const [presetClearedNotice, setPresetClearedNotice] = useState(null);
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories'
-  const initialPluginSeed = seedCheckedPlugins(initialData.defaultCheckedPlugins);
+  const initialPluginSeed = seedCheckedPlugins(initialSeed.checkedPlugins);
   const [checkedPlugins, setCheckedPlugins] = useState(initialPluginSeed.selectable);
   const [droppedPluginCount, setDroppedPluginCount] = useState(initialPluginSeed.dropped.length);
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
   const pluginsManagerRef = useRef(null);
-  const [draftPreset, setDraftPreset] = useState('default');
+  const [draftPreset, setDraftPreset] = useState(defaultPresetNameForRuntime(initialHostRuntime));
+  // Bare filenames the operator accepted a runtime replacement for, from the
+  // preset compatibility dialog. Sent to the draft seed so the server writes
+  // the replacement files. Cleared whenever a different preset seed loads.
+  const [acceptedReplacements, setAcceptedReplacements] = useState([]);
   const [factoryServerTree, setFactoryServerTree] = useState(initialData.defaultFactoryTree || []);
 
   // Hooks tab state. There is no instance yet, so hook files come from the
   // preset (default preset on first open); HooksTab renders in its instance-less
   // mode (view + toggle + reorder). enabledHookOrder is the LD_PRELOAD order sent
   // on create as enabled_hooks.
-  const [availableHooks, setAvailableHooks] = useState(initialData.defaultAvailableHooks || []);
-  const [enabledHookOrder, setEnabledHookOrder] = useState(initialData.defaultEnabledHooks || []);
-  const initialEnabledHookOrderRef = useRef(initialData.defaultEnabledHooks || []);
+  const [availableHooks, setAvailableHooks] = useState(initialSeed.availableHooks);
+  const [enabledHookOrder, setEnabledHookOrder] = useState(initialSeed.enabledHooks);
+  const initialEnabledHookOrderRef = useRef(initialSeed.enabledHooks);
   // True when the hook enablement/order differs from the loaded (or default)
   // preset baseline. Feeds both the unsaved-changes guard and the "(modified)"
   // preset indicator.
@@ -208,7 +234,23 @@ function AddInstanceForm({
   const initialConfigContentsRef = useRef(normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap()));
   const initialCheckedPluginsRef = useRef(initialPluginSeed.selectable);
   const loadedPresetConfigRef = useRef(null); // Stores config contents when preset is loaded, for modification detection
+  // Mirrors loadedPreset so handleHostChange can read it without taking it as a
+  // useCallback dependency. It must not: the mount/reset effect below depends on
+  // handleHostChange's identity and calls setLoadedPreset(null), so a new
+  // identity on every preset load would re-run that reset and wipe the preset
+  // the operator just loaded.
+  const loadedPresetRef = useRef(null);
+  useEffect(() => { loadedPresetRef.current = loadedPreset; }, [loadedPreset]);
   const loadedPresetCheckedPluginsRef = useRef(initialPluginSeed.selectable);
+  // The runtime the plugin/hook seed currently reflects. handleHostChange
+  // compares against it so a same-runtime host switch leaves the operator's
+  // selection alone, while a cross-runtime switch re-seeds. Invariant: every
+  // place that replaces the plugin/hook seed must point this at the runtime
+  // the new seed came from -- the mount/reset effect, handleHostChange, and
+  // applyPresetData. Leave it stale in any one of them and the next host
+  // change compares against the wrong runtime and silently re-seeds over what
+  // the operator has.
+  const seededRuntimeRef = useRef(runtimeLabel(initialHostRuntime));
   const loadedPresetLanRateRef = useRef(false);
 
   const readFactoryServerContent = useCallback(async (path) => {
@@ -242,6 +284,19 @@ function AddInstanceForm({
     }
   }, []);
 
+  // Hoisted above pluginsAdapter (below) so its runtime is available to feed
+  // the draft seed; lanRateSupported/lanRateForcedOn/redisDbOptions further
+  // down still read off these same consts.
+  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
+  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
+  const selectedHostOsType = selectedHost?.os_type ?? null;
+  const hasSelectedHost = Boolean(selectedHost);
+  const selectedHostShape = {
+    os_type: selectedHostOsType,
+    lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
+    runtime: selectedHost?.runtime ?? null,
+  };
+
   const configsAdapter = useStateAdapter({
     initialFiles: configContents,
     initialFolders: [],
@@ -254,6 +309,8 @@ function AddInstanceForm({
   const pluginsAdapter = useDraftAdapter({
     source: 'preset',
     preset: draftPreset || 'default',
+    targetRuntime: selectedHostShape.runtime,
+    acceptedReplacements,
     active: true,
   });
 
@@ -311,6 +368,51 @@ function AddInstanceForm({
 
   const handleHostChange = useCallback(async (hostId, isInitialLoad = false) => {
     setSelectedHostId(hostId);
+
+    const newHostRecord = (initialData.hosts || []).find((host) => String(host.id) === String(hostId));
+    const newRuntime = runtimeLabel(newHostRecord?.runtime);
+    const previousRuntime = seededRuntimeRef.current;
+
+    // A preset loaded against one host's runtime is not safe to carry over to
+    // a host on the other runtime -- its plugin selection came from the old
+    // runtime and would silently be submitted against the new one. Clear it
+    // (and say so) rather than leaving it in place unvalidated.
+    const carriedPreset = loadedPresetRef.current;
+    let presetCleared = false;
+    if (carriedPreset && hostId && !isInitialLoad) {
+      if (runtimeLabel(carriedPreset.runtime) !== newRuntime) {
+        setPresetClearedNotice(
+          `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared — reload it here to apply it. `
+          + presetRuntimeStripWarning(carriedPreset, newHostRecord)
+        );
+        setLoadedPreset(null);
+        loadedPresetConfigRef.current = null;
+        presetCleared = true;
+      }
+    }
+
+    // Re-seed from the new host's runtime. Plugins are not interchangeable
+    // between runtimes, so a cross-runtime switch has to move the seed with it
+    // -- otherwise the form ships minqlx files to a minqlxtended host. A
+    // same-runtime switch leaves whatever the operator selected in place.
+    if (hostId && !isInitialLoad && (newRuntime !== previousRuntime || presetCleared)) {
+      const seed = seedForRuntime(newRuntime);
+      const { selectable, dropped } = seedCheckedPlugins(seed.checkedPlugins);
+      setCheckedPlugins(selectable);
+      setDroppedPluginCount(dropped.length);
+      setPluginNoticeDismissed(false);
+      loadedPresetCheckedPluginsRef.current = selectable;
+      initialCheckedPluginsRef.current = selectable;
+      setAvailableHooks(seed.availableHooks);
+      setEnabledHookOrder(seed.enabledHooks);
+      initialEnabledHookOrderRef.current = seed.enabledHooks;
+      setDraftPreset(defaultPresetNameForRuntime(newRuntime));
+      setAcceptedReplacements([]);
+    }
+    if (hostId) {
+      seededRuntimeRef.current = newRuntime;
+    }
+
     let newAvailablePorts = [];
     if (hostId) {
       try {
@@ -367,7 +469,7 @@ function AddInstanceForm({
         syncConfigFile('server.cfg', currentServerCfg.replace(NET_PORT_REGEX, `// $1${currentPortVal}$2 (Port removed)`));
       }
     }
-  }, [initialData.hosts, syncConfigFile, syncConfigState]);
+  }, [initialData.hosts, seedForRuntime, syncConfigFile, syncConfigState]);
 
   useEffect(() => {
     const currentDefaultConfigs = normalizeConfigMap(initialData.defaultConfigContents || createEmptyConfigMap());
@@ -400,19 +502,22 @@ function AddInstanceForm({
     loadedPresetConfigRef.current = null;
     setIsPresetModified(false);
 
-    const defaultAvailableHooks = initialData.defaultAvailableHooks || [];
-    const defaultEnabledHooks = initialData.defaultEnabledHooks || [];
-    setAvailableHooks(defaultAvailableHooks);
-    setEnabledHookOrder(defaultEnabledHooks);
-    initialEnabledHookOrderRef.current = defaultEnabledHooks;
+    // Seeded from the host the modal opened on, not a flat default: the two
+    // runtimes ship different plugins.
+    const seed = seedForRuntime(initialHostRuntime);
+    setAvailableHooks(seed.availableHooks);
+    setEnabledHookOrder(seed.enabledHooks);
+    initialEnabledHookOrderRef.current = seed.enabledHooks;
 
-    const { selectable, dropped } = seedCheckedPlugins(initialData.defaultCheckedPlugins);
+    const { selectable, dropped } = seedCheckedPlugins(seed.checkedPlugins);
     setCheckedPlugins(selectable);
     setDroppedPluginCount(dropped.length);
     setPluginNoticeDismissed(false);
     initialCheckedPluginsRef.current = selectable;
     loadedPresetCheckedPluginsRef.current = selectable;
-    setDraftPreset('default');
+    setDraftPreset(defaultPresetNameForRuntime(initialHostRuntime));
+    setAcceptedReplacements([]);
+    seededRuntimeRef.current = runtimeLabel(initialHostRuntime);
     resetFactories(initialData.defaultFactories || {});
     setFactoryServerTree(initialData.defaultFactoryTree || []);
 
@@ -425,14 +530,13 @@ function AddInstanceForm({
     return () => { portFetchAbortRef.current?.abort(); };
   }, [
     handleHostChange,
-    initialData.defaultAvailableHooks,
-    initialData.defaultCheckedPlugins,
     initialData.defaultConfigContents,
-    initialData.defaultEnabledHooks,
     initialData.defaultFactories,
     initialData.defaultFactoryTree,
     initialHostId,
+    initialHostRuntime,
     resetFactories,
+    seedForRuntime,
     syncConfigState,
   ]);
 
@@ -557,13 +661,11 @@ function AddInstanceForm({
     prevPortRef.current = port;
   }, [port, syncConfigFile]);
 
-  const effectiveHostId = selectedHostId || (initialHostId ? String(initialHostId) : '');
-  const selectedHost = (initialData.hosts || []).find((host) => String(host.id) === String(effectiveHostId));
-  const selectedHostOsType = selectedHost?.os_type ?? null;
-  const hasSelectedHost = Boolean(selectedHost);
-  const selectedHostShape = { os_type: selectedHostOsType, lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false };
   const lanRateSupported = !hasSelectedHost || isLanRateSupported(selectedHostShape);
-  const lanRateUnavailableReason = hasSelectedHost && !lanRateSupported
+  // QLSM deploys minqlxtended instances at 99k, so the toggle renders on and
+  // locked instead of offering a 25k it will not honour.
+  const lanRateForcedOn = hasSelectedHost && isLanRateForcedOn(selectedHostShape);
+  const lanRateUnavailableReason = hasSelectedHost && (lanRateForcedOn || !lanRateSupported)
     ? getLanRateUnsupportedMessage(selectedHostShape)
     : null;
   const redisDbOptions = useMemo(
@@ -572,11 +674,10 @@ function AddInstanceForm({
   );
 
   // Handle loading a preset
-  const handleLoadPreset = useCallback(async (presetId) => {
+  const applyPresetData = useCallback(async (presetId, presetData, acceptedPaths = []) => {
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
-      const presetData = await getPresetById(presetId);
       const newConfigs = extractPresetConfigs(presetData);
 
       // Extract hostname and port from preset server.cfg, patching newConfigs before setting state
@@ -616,9 +717,23 @@ function AddInstanceForm({
       initialConfigContentsRef.current = newConfigs;
 
       // Track which preset was loaded (for update feature)
-      setLoadedPreset({ id: presetId, name: presetData.name, description: presetData.description || '', is_builtin: !!presetData.is_builtin });
-      // Reseed draft workspace with the loaded preset's scripts
+      setLoadedPreset({
+        id: presetId,
+        name: presetData.name,
+        description: presetData.description || '',
+        is_builtin: !!presetData.is_builtin,
+        runtime: presetData.runtime,
+      });
+      setPresetClearedNotice(null);
+      // The preset's plugin/hook selection is now the seed, so the seeded
+      // runtime is the preset's (see seededRuntimeRef above).
+      seededRuntimeRef.current = runtimeLabel(presetData.runtime);
+      // Reseed draft workspace with the loaded preset's scripts. acceptedPaths
+      // defaults to [] (a plain default, not a speculative clear elsewhere) so
+      // a no-dialog load carries nothing forward, and both state updates land
+      // in the same render as the one re-seed this load causes.
       setDraftPreset(presetData.name);
+      setAcceptedReplacements(acceptedPaths);
       loadedPresetConfigRef.current = newConfigs;
 
       // Reflect the preset's hooks: available files + enabled order/status.
@@ -675,9 +790,41 @@ function AddInstanceForm({
     }
   }, [checkedPlugins, lanRateEnabled, lanRateSupported, resetConfigs, resetFactories, syncConfigState]);
 
+  const handleLoadPreset = useCallback(async (presetId) => {
+    setIsLoadingPreset(true);
+    try {
+      setInternalFormError(null);
+      const presetData = await getPresetById(presetId, { targetRuntime: selectedHostShape.runtime });
+      if (presetData.compatibility?.stripped?.length) {
+        setPendingPreset({ id: presetId, data: presetData });
+        return;
+      }
+      await applyPresetData(presetId, presetData);
+    } catch (err) {
+      setInternalFormError(err.error?.message || err.message || `Failed to load preset.`);
+    } finally {
+      setIsLoadingPreset(false);
+    }
+  }, [applyPresetData, selectedHostShape.runtime]);
+
+  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+    if (!pendingPreset) return;
+    const { id, data } = pendingPreset;
+    setPendingPreset(null);
+    // applyPresetData sets both draftPreset and acceptedReplacements together
+    // (see its own body) -- the accepted list is an argument to "apply this
+    // preset", not ambient state some other codepath clears speculatively. A
+    // cancelled load therefore calls nothing here at all, leaving whatever
+    // preset is currently active, and its accepted replacements, untouched.
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths), acceptedPaths);
+  }, [applyPresetData, pendingPreset]);
+
+  const handleCancelPresetCompatibility = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
 
   // Handle saving current config as a preset
-  const handleSavePreset = useCallback(async ({ name, description }) => {
+  const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
     try {
       // Map internal config keys to API keys
@@ -686,6 +833,7 @@ function AddInstanceForm({
       const presetData = {
         name,
         description: description || null,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactories,
@@ -726,13 +874,14 @@ function AddInstanceForm({
     }
   }, [checkedPlugins, draftPreset, enabledHookOrder, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories]);
 
-  const handleOverwritePreset = useCallback(async (presetId, { description }) => {
+  const handleOverwritePreset = useCallback(async (presetId, { description, runtime }) => {
     setIsUpdatingPreset(true);
     try {
       const { files: serializedFactoriesUpdate } = serializeFactories();
       const { files: cfgFiles, folders: cfgFolders } = serializeConfigs();
       const presetData = {
         description,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactoriesUpdate,
@@ -1008,6 +1157,7 @@ function AddInstanceForm({
           lanRateEnabled={lanRateEnabled}
           onLanRateChange={setLanRateEnabled}
           lanRateDisabled={!lanRateSupported}
+          lanRateForcedOn={lanRateForcedOn}
           lanRateUnavailableReason={lanRateUnavailableReason}
           autoGeneratePasswords={autoGeneratePasswords}
           onAutoGeneratePasswordsChange={handleAutoGeneratePasswordsChange}
@@ -1019,6 +1169,21 @@ function AddInstanceForm({
         />
       </div>
       <div className="flex flex-col flex-grow min-h-0 mb-2">
+        {/* Shown when a host switch invalidated the loaded preset */}
+        {presetClearedNotice && (
+          <div role="status" className="alert-warning mb-3 flex items-start gap-2 text-sm flex-shrink-0">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--accent-warning)' }} />
+            <span className="flex-1 min-w-0 text-[var(--text-secondary)]">{presetClearedNotice}</span>
+            <button
+              type="button"
+              onClick={() => setPresetClearedNotice(null)}
+              aria-label="Dismiss"
+              className="flex-shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {/* Show loaded preset indicator */}
         {loadedPreset && (
           <div className="flex items-center text-sm text-[var(--text-secondary)] mb-2 flex-shrink-0">
@@ -1143,14 +1308,24 @@ function AddInstanceForm({
               <Save className="w-4 h-4 mr-2" />
               Save Preset
             </button>
-            <button
-              type="button"
-              onClick={() => { setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
-              className="btn btn-secondary"
-            >
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Load Preset
-            </button>
+            <span className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => { setPresetManagerTab('load'); setIsPresetManagerOpen(true); }}
+                className="btn btn-secondary"
+                disabled={!hasSelectedHost}
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Load Preset
+              </button>
+              {!hasSelectedHost && (
+                <InfoTooltip
+                  text="Select a host first. Presets are runtime-specific, and QLSM needs to know which runtime to check compatibility against before showing you any."
+                  variant="info"
+                  size={14}
+                />
+              )}
+            </span>
           </div>
         </div>
 
@@ -1191,6 +1366,7 @@ function AddInstanceForm({
         onClose={() => setIsPresetManagerOpen(false)}
         initialTab={presetManagerTab}
         zIndexClass="z-[60]"
+        host={selectedHost}
         presets={presets}
         isLoading={false}
         isLoadingPreset={isLoadingPreset}
@@ -1203,6 +1379,13 @@ function AddInstanceForm({
         onPresetRenamed={handlePresetRenamed}
         onPresetImported={handlePresetImported}
         initialOverwriteName={loadedPreset && !loadedPreset.is_builtin ? loadedPreset.name : null}
+      />
+
+      <PresetCompatibilityDialog
+        isOpen={Boolean(pendingPreset)}
+        compatibility={pendingPreset?.data?.compatibility}
+        onConfirm={handleConfirmPresetCompatibility}
+        onCancel={handleCancelPresetCompatibility}
       />
 
       <FullScreenConfigEditorModal isOpen={isFullScreenEditorOpen} onClose={handleCloseFullScreenEditor} onSave={handleSaveFullScreenEditor} fileName={editingFileDetails.name} initialContent={editingFileDetails.content} language={editingFileDetails.language} linterSource={editingFileDetails.linterSource} />

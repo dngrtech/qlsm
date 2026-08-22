@@ -16,6 +16,14 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 - A set of selected factory files
 - The [99k LAN Rate](../features/99k-lan-rate.md) toggle state
 
+## Server Runtime Compatibility
+
+A preset remembers which [Server Runtime](../getting-started/add-host.md#server-runtime) — minqlx or minqlxtended — it was saved from. On the **Load Preset** tab, every preset row shows that runtime as a small badge, so you can see at a glance whether it matches your current host.
+
+You can load a preset saved from the other runtime. Your server config, map pool, access list, workshop items, and factory selections all come across intact. Plugins are the exception: minqlx and minqlxtended plugins aren't interchangeable — they're written against different APIs — so plugins from the other runtime are left out when the preset's plugins are copied across. You'll see the full list first, with a reason for each, and can swap in the matching plugin for your runtime where one exists.
+
+Picking a mismatched preset shows a short warning under its name, and loading it opens a dialog listing every affected plugin before anything changes. Where the same plugin exists for your runtime, QLSM offers it as a replacement and you choose whether to take it — replacements are checked by default. Plugins with no equivalent are listed with the reason they were dropped, and nothing is applied until you confirm.
+
 ## Built-in Presets
 
 QLSM ships a set of **built-in presets** that provide ready-to-use baselines. Built-in presets **cannot be modified, renamed, or deleted** — they are read-only. The Preset Manager's Save tab treats a built-in name as a new-name validation conflict instead of overwrite mode, and the Load tab disables delete for built-ins.

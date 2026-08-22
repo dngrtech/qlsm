@@ -1,19 +1,22 @@
 # MinQLX Logs
 
-Use **View MinQLX Logs** from the instance action menu to read `minqlx.log` and rotated archives. This is the MinQLX plugin log — player events, chat/console output, votes, and plugin activity — as opposed to service/runtime output ([Server Logs](server-logs.md)) or the dedicated chat history ([Chat Logs](chat-logs.md)).
+Use **View MinQLX Logs** from the instance action menu to read the plugin log and its rotated archives. This is the plugin log — player events, chat/console output, votes, and plugin activity — as opposed to service/runtime output ([Server Logs](server-logs.md)) or the dedicated chat history ([Chat Logs](chat-logs.md)).
+
+**The filename depends on the host's [Server Runtime](../getting-started/add-host.md#server-runtime).** A minqlx host writes `minqlx.log`; a minqlxtended host writes `minqlxtended.log`. The menu item is called *View MinQLX Logs* on both — QLSM selects the right file for you when the modal opens.
 
 ![Instance Actions: View MinQLX Logs](../images/instance-actions-menu-view-minqlx-logs.png)
 
 ## File Selection
 
-The modal loads available files and keeps valid names only:
+The modal loads available files and keeps valid names only. Read `<log>` below as
+`minqlx.log` on a minqlx host and `minqlxtended.log` on a minqlxtended host:
 
-- `minqlx.log`
-- `minqlx.log.<number>` (for example `minqlx.log.1`)
+- `<log>`
+- `<log>.<number>` (for example `minqlx.log.1`, or `minqlxtended.log.1`)
 
 Sorting behavior:
 
-1. `minqlx.log` first
+1. `<log>` first
 2. then numeric archives in ascending order (`.1`, `.2`, ...)
 
 The UI keeps at most 11 entries (current file + 10 archives).

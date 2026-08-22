@@ -1526,3 +1526,168 @@ def test_get_preset_does_not_filter_stale_checked_plugins(client, app, tmp_path,
     assert response.get_json()['data'].get('checked_plugins') == [
         'balance.py', 'extras/textart.py',
     ]
+
+
+def _filtered_draft(app, target_runtime, filename='essentials.py'):
+    """A draft that the compatibility gate filtered for `target_runtime`."""
+    from ui.routes.draft_routes import RUNTIME_MARKER_FILE
+    draft_id = str(uuid.uuid4())
+    draft_base = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    draft_scripts = os.path.join(draft_base, 'scripts')
+    os.makedirs(draft_scripts, exist_ok=True)
+    with open(os.path.join(draft_scripts, filename), 'w') as handle:
+        handle.write('# filtered for %s\n' % target_runtime)
+    if target_runtime:
+        with open(os.path.join(draft_base, RUNTIME_MARKER_FILE), 'w') as handle:
+            handle.write(target_runtime)
+    return draft_id
+
+
+def _set_preset_runtime(app, preset_id, runtime):
+    with app.app_context():
+        preset = db.session.get(ConfigPreset, preset_id)
+        preset.runtime = runtime
+        db.session.commit()
+
+
+def test_overwriting_a_preset_with_a_cross_runtime_draft_is_refused(client, app):
+    """A minqlx preset must not be overwritten with a minqlxtended-filtered draft.
+
+    Loading a minqlx preset onto a minqlxtended instance is allowed now, and
+    the draft it produces has had its minqlx-only plugins deleted and
+    minqlxtended's own defaults laid in. Overwrite Preset rmtree's the preset's
+    scripts and copytree's that draft in -- but leaves preset.runtime saying
+    minqlx. The row would then be lying about the files beside it, and the next
+    operator to load that preset onto a minqlx host finds it gutted.
+    """
+    preset_id, preset_path = _create_preset_folder(app, 'cross-runtime-overwrite')
+    _set_preset_runtime(app, preset_id, 'minqlx')
+    scripts_dir = os.path.join(preset_path, 'scripts')
+    os.makedirs(scripts_dir, exist_ok=True)
+    with open(os.path.join(scripts_dir, 'original.py'), 'w') as handle:
+        handle.write('# the preset as saved\n')
+
+    draft_id = _filtered_draft(app, 'minqlxtended')
+    response = client.put(f'/api/presets/{preset_id}',
+                          headers=auth_headers(app, DEFAULT_USER),
+                          json={'draft_id': draft_id})
+
+    assert response.status_code == 400
+    assert 'minqlxtended' in response.get_json()['error']['message']
+    # And the refusal happened before any filesystem mutation.
+    assert os.path.exists(os.path.join(scripts_dir, 'original.py'))
+    assert not os.path.exists(os.path.join(scripts_dir, 'essentials.py'))
+
+
+def test_overwriting_a_preset_with_a_matching_runtime_draft_is_allowed(client, app):
+    """The refusal is about the runtimes disagreeing, not about the marker."""
+    preset_id, preset_path = _create_preset_folder(app, 'same-runtime-overwrite')
+    _set_preset_runtime(app, preset_id, 'minqlxtended')
+
+    draft_id = _filtered_draft(app, 'minqlxtended')
+    response = client.put(f'/api/presets/{preset_id}',
+                          headers=auth_headers(app, DEFAULT_USER),
+                          json={'draft_id': draft_id})
+
+    assert response.status_code == 200
+    assert os.path.exists(os.path.join(preset_path, 'scripts', 'essentials.py'))
+
+
+def test_overwriting_a_preset_with_an_unfiltered_draft_is_allowed(client, app):
+    """No marker means the gate never touched the draft -- the ordinary case."""
+    preset_id, preset_path = _create_preset_folder(app, 'unfiltered-overwrite')
+    _set_preset_runtime(app, preset_id, 'minqlx')
+
+    draft_id = _filtered_draft(app, None)
+    response = client.put(f'/api/presets/{preset_id}',
+                          headers=auth_headers(app, DEFAULT_USER),
+                          json={'draft_id': draft_id})
+
+    assert response.status_code == 200
+    assert os.path.exists(os.path.join(preset_path, 'scripts', 'essentials.py'))
+
+
+def test_update_preset_from_draft_drops_backup_files(client, app):
+    """A backup that reaches a draft must not be written into the preset.
+
+    A preset is a curated artefact, and its own export drops .bak files -- so
+    letting one land here would make the preset on disk differ from the archive
+    it produces, and the file could never survive a round-trip anyway.
+    """
+    draft_id = str(uuid.uuid4())
+    draft_scripts = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'scripts')
+    os.makedirs(draft_scripts, exist_ok=True)
+    backup_name = 'ranked.py.bak-pre-player-ip-connected-20260704-222233'
+    with open(os.path.join(draft_scripts, 'ranked.py'), 'w') as f:
+        f.write('print("ranked")')
+    with open(os.path.join(draft_scripts, backup_name), 'w') as f:
+        f.write('print("old ranked")')
+    with open(os.path.join(draft_scripts, 'bakery.py'), 'w') as f:
+        f.write('class bakery: pass')
+
+    # user-hooks travels the same draft->preset copy and must be filtered too,
+    # or the preset keeps a file its own export drops.
+    draft_hooks = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'user-hooks')
+    os.makedirs(draft_hooks, exist_ok=True)
+    with open(os.path.join(draft_hooks, 'myhook.so'), 'wb') as f:
+        f.write(b'\x7fELF')
+    with open(os.path.join(draft_hooks, 'myhook.so.bak'), 'wb') as f:
+        f.write(b'\x7fELF old')
+
+    preset_id, preset_path = _create_preset_folder(app, 'draft-drops-backups')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'draft_id': draft_id,
+    })
+
+    assert response.status_code == 200
+    preset_scripts = os.path.join(preset_path, 'scripts')
+    assert os.path.exists(os.path.join(preset_scripts, 'ranked.py'))
+    assert not os.path.exists(os.path.join(preset_scripts, backup_name))
+    # The filter must not swallow a legitimately named script.
+    assert os.path.exists(os.path.join(preset_scripts, 'bakery.py'))
+
+    preset_hooks = os.path.join(preset_path, 'user-hooks')
+    assert os.path.exists(os.path.join(preset_hooks, 'myhook.so'))
+    assert not os.path.exists(os.path.join(preset_hooks, 'myhook.so.bak'))
+
+
+def test_create_preset_from_draft_drops_backup_files(client, app):
+    """The create route copies drafts through its own call site -- cover it too.
+
+    create_preset_api and update_preset_api each carry their own near-identical
+    draft->preset copy, so a fix applied to one of them is not proof about the
+    other. This repo has been bitten by exactly that shape before.
+    """
+    draft_id = str(uuid.uuid4())
+    draft_base = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    draft_scripts = os.path.join(draft_base, 'scripts')
+    draft_hooks = os.path.join(draft_base, 'user-hooks')
+    os.makedirs(draft_scripts, exist_ok=True)
+    os.makedirs(draft_hooks, exist_ok=True)
+    backup_name = 'ranked.py.bak-pre-player-ip-connected-20260704-222233'
+    with open(os.path.join(draft_scripts, 'ranked.py'), 'w') as f:
+        f.write('print("ranked")')
+    with open(os.path.join(draft_scripts, backup_name), 'w') as f:
+        f.write('print("old ranked")')
+    with open(os.path.join(draft_hooks, 'myhook.so'), 'wb') as f:
+        f.write(b'\x7fELF')
+    with open(os.path.join(draft_hooks, 'myhook.so.bak'), 'wb') as f:
+        f.write(b'\x7fELF old')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'create-drops-backups',
+        'description': 'created from a draft holding backups',
+        'draft_id': draft_id,
+    })
+
+    assert response.status_code == 201
+    preset_path = os.path.join('configs', 'presets', 'create-drops-backups')
+    assert os.path.exists(os.path.join(preset_path, 'scripts', 'ranked.py'))
+    assert not os.path.exists(os.path.join(preset_path, 'scripts', backup_name))
+    assert os.path.exists(os.path.join(preset_path, 'user-hooks', 'myhook.so'))
+    assert not os.path.exists(
+        os.path.join(preset_path, 'user-hooks', 'myhook.so.bak')
+    )

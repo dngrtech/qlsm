@@ -8,6 +8,7 @@ from rq import get_current_job
 from ui import db
 from ui.constants import GAME_UDP_PORTS, RCON_TCP_PORTS
 from ui.models import Host, HostStatus, QLFilterStatus
+from ui.runtime import host_runtime
 from .common import append_log # Import from the common module
 # Note: No need to import _run_ansible_playbook as this task uses direct subprocess calls
 
@@ -158,6 +159,9 @@ def setup_host_ansible_logic(host_id, rerun=False):
         ansible_command_args += ['-e', json.dumps({
             'game_udp_ports': GAME_UDP_PORTS,
             'rcon_tcp_ports': RCON_TCP_PORTS,
+            # Read from the DB on every run, so re-running setup always
+            # rebuilds the runtime the host was created with.
+            'runtime': host_runtime(host),
         })]
         ansible_command_args.append(ansible_playbook_path)
 

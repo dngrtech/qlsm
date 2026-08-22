@@ -59,8 +59,8 @@ These cvars are ignored by QLSM regardless of whether they are present in `serve
 | --- | --- | --- |
 | `net_ip` | Forced by QLSM. | Ignored. QLSM always injects `""` (binds all interfaces, required for 99k LAN rate to work). |
 | `net_port` | Stored as the instance port and passed at launch. | Ignored. A value in `server.cfg` does not change the instance port. |
-| `sv_serverType` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `2`. |
-| `sv_lanForceRate` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `0`. |
+| `sv_serverType` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `2`. On minqlxtended hosts QLSM always injects `1`. |
+| `sv_lanForceRate` | Controlled by the 99k LAN rate toggle. | Ignored. QLSM injects `1` when 99k LAN rate is enabled, otherwise `0`. On minqlxtended hosts QLSM always injects `1` — see [99k LAN Rate](../features/99k-lan-rate.md). |
 | `net_strict` | Forced by QLSM. | Ignored. QLSM always injects `1`. |
 | `qlx_redisAddress` | Forced by QLSM. | Ignored. TCP hosts: `127.0.0.1:6379`. Socket-enabled hosts: `/var/run/redis/redis.sock`. |
 | `qlx_redisUnixSocket` | Forced by QLSM. | Ignored. Set to `1` on socket-enabled hosts; omitted on TCP hosts. |

@@ -8,6 +8,8 @@ import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
+import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
+import { mergeReplacements } from '../../utils/presetCompatibility';
 import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
 import { partitionCheckedPaths, resolveRootPluginPaths, toQlxPluginNames } from '../fileManager/pluginSelection';
@@ -22,6 +24,7 @@ import HooksTab from './HooksTab';
 import {
   canEnableLanRate,
   getLanRateUnsupportedMessage,
+  isLanRateForcedOn,
 } from '../../utils/lanRateCompatibility';
 
 const CONFIG_FILES_ORDER = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
@@ -94,6 +97,7 @@ function EditInstanceConfigModal({
   const [originalLanRateEnabled, setOriginalLanRateEnabled] = useState(false);
   const [hostOsType, setHostOsType] = useState(null);
   const [hostLanRateUsesHook, setHostLanRateUsesHook] = useState(false);
+  const [hostRuntime, setHostRuntime] = useState('minqlx');
 
   // Restart on Save state
   const [restartAfterSave, setRestartAfterSave] = useState(true);
@@ -121,6 +125,7 @@ function EditInstanceConfigModal({
   const [presetManagerTab, setPresetManagerTab] = useState('load');
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [savedPresetForDownload, setSavedPresetForDownload] = useState(null);
+  const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Scripts tab state
   const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks'
@@ -128,6 +133,10 @@ function EditInstanceConfigModal({
   const [initialCheckedPlugins, setInitialCheckedPlugins] = useState(new Set());
   const [scriptHostName, setScriptHostName] = useState(null);
   const [draftPreset, setDraftPreset] = useState(null); // null = seed from instance; string = seed from preset
+  // Bare filenames the operator accepted a runtime replacement for, from the
+  // preset compatibility dialog. Sent to the draft seed so the server writes
+  // the replacement files. Cleared whenever the draft seed resets.
+  const [acceptedReplacements, setAcceptedReplacements] = useState([]);
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const [droppedPluginCount, setDroppedPluginCount] = useState(0);
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
@@ -173,6 +182,8 @@ function EditInstanceConfigModal({
     preset: draftPreset || undefined,
     host: draftPreset ? undefined : scriptHostName,
     instanceId: draftPreset ? undefined : instanceId,
+    targetRuntime: hostRuntime,
+    acceptedReplacements,
     active: isOpen && (draftPreset != null || scriptHostName != null),
   });
   const {
@@ -300,6 +311,7 @@ function EditInstanceConfigModal({
         setActiveMainTab(initialTab);
         setScriptHostName(null);
         setDraftPreset(null);
+        setAcceptedReplacements([]);
         setHookAvailable([]);
         setHookMissing([]);
         setHookSystem([]);
@@ -341,6 +353,7 @@ function EditInstanceConfigModal({
           setScriptHostName(fetchedHostName);
           setHostOsType(instanceDetails.host_os_type || null);
           setHostLanRateUsesHook(instanceDetails.host_lan_rate_uses_hook === true);
+          setHostRuntime(instanceDetails.host_runtime || 'minqlx');
           setInstanceStatus(instanceDetails.status || null);
           const incomingFolders = Array.isArray(configData?.config_folders)
             ? configData.config_folders
@@ -428,17 +441,22 @@ function EditInstanceConfigModal({
   };
 
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
-  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook };
+  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,
     currentEnabled: originalLanRateEnabled && lanRateEnabled,
   });
-  const lanRateUnsupportedReason = !canToggleLanRate && !lanRateEnabled
+  // QLSM runs minqlxtended hosts at 99k: show it on and locked, but leave the
+  // saved value alone so a preset taken from this instance does not silently
+  // switch 99k on for a minqlx host, where the operator owns the choice.
+  const lanRateForcedOn = isLanRateForcedOn(hostShape);
+  const lanRateDisplayEnabled = lanRateEnabled || lanRateForcedOn;
+  const lanRateUnsupportedReason = lanRateForcedOn || (!canToggleLanRate && !lanRateEnabled)
     ? getLanRateUnsupportedMessage(hostShape)
     : null;
 
   const handleLanRateToggle = () => {
-    if (!canToggleLanRate) return;
+    if (!canToggleLanRate || lanRateForcedOn) return;
     setLanRateEnabled(prev => {
       const next = !prev;
       if (next !== originalLanRateEnabled) setRestartAfterSave(true);
@@ -496,10 +514,9 @@ function EditInstanceConfigModal({
     pluginsHaveChanges,
   ]);
 
-  const handleLoadPreset = useCallback(async (presetId) => {
+  const applyPresetData = useCallback(async (presetId, presetData, acceptedPaths = []) => {
     setPresetError(null);
     try {
-      const presetData = await getPresetById(presetId);
       const newConfigs = { ...(presetData.configs || {}) };
       CONFIG_FILES_ORDER.forEach(file => {
         const presetKey = CONFIG_KEY_MAP[file] || file;
@@ -520,7 +537,11 @@ function EditInstanceConfigModal({
       setCheckedPlugins(selectable);
       setDroppedPluginCount(dropped.length);
       setPluginNoticeDismissed(false);
+      // acceptedPaths defaults to [] (a plain default, not a speculative clear
+      // elsewhere) so a no-dialog load carries nothing forward, and both state
+      // updates land in the same render as the one re-seed this load causes.
       setDraftPreset(presetData.name);
+      setAcceptedReplacements(acceptedPaths);
       if (presetData.enabled_hooks !== undefined && presetData.enabled_hooks !== null) {
         setHookEnabledOrder(presetData.enabled_hooks);
         setHooksLoaded(true);
@@ -536,7 +557,7 @@ function EditInstanceConfigModal({
       // the same leniency the manual-toggle gate (canToggleLanRate) applies.
       if (presetData.lan_rate_enabled != null) {
         const canEnable = canEnableLanRate({
-          host: { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook },
+          host: { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime },
           currentEnabled: originalLanRateEnabled,
         });
         const nextLanRate = presetData.lan_rate_enabled && !canEnable ? false : presetData.lan_rate_enabled;
@@ -561,9 +582,39 @@ function EditInstanceConfigModal({
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
-  }, [hostLanRateUsesHook, hostOsType, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
+  }, [hostLanRateUsesHook, hostOsType, hostRuntime, originalLanRateEnabled, resetConfigs, resetFactories, showSuccess]);
 
-  const handleSavePreset = useCallback(async ({ name, description }) => {
+  const handleLoadPreset = useCallback(async (presetId) => {
+    setPresetError(null);
+    try {
+      const presetData = await getPresetById(presetId, { targetRuntime: hostRuntime });
+      if (presetData.compatibility?.stripped?.length) {
+        setPendingPreset({ id: presetId, data: presetData });
+        return;
+      }
+      await applyPresetData(presetId, presetData);
+    } catch (err) {
+      setPresetError(err.message || `Failed to load preset ${presetId}.`);
+    }
+  }, [applyPresetData, hostRuntime]);
+
+  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+    if (!pendingPreset) return;
+    const { id, data } = pendingPreset;
+    setPendingPreset(null);
+    // applyPresetData sets both draftPreset and acceptedReplacements together
+    // (see its own body) -- the accepted list is an argument to "apply this
+    // preset", not ambient state some other codepath clears speculatively. A
+    // cancelled load therefore calls nothing here at all, leaving whatever
+    // preset is currently active, and its accepted replacements, untouched.
+    await applyPresetData(id, mergeReplacements(data, acceptedPaths), acceptedPaths);
+  }, [applyPresetData, pendingPreset]);
+
+  const handleCancelPresetCompatibility = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
+
+  const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);
     setPresetError(null);
     try {
@@ -572,6 +623,7 @@ function EditInstanceConfigModal({
       const presetData = {
         name: name.trim(),
         description: description?.trim() || null,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactories,
@@ -622,7 +674,7 @@ function EditInstanceConfigModal({
     }
   }, [checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
-  const handleOverwritePreset = useCallback(async (presetId, { description }) => {
+  const handleOverwritePreset = useCallback(async (presetId, { description, runtime }) => {
     setIsSavingPreset(true);
     setPresetError(null);
     try {
@@ -633,6 +685,7 @@ function EditInstanceConfigModal({
       }
       const presetData = {
         description: description || null,
+        runtime,
         configs: cfgFiles,
         config_folders: cfgFolders,
         factories: serializedFactories,
@@ -952,20 +1005,20 @@ function EditInstanceConfigModal({
                                 <button
                                   type="button"
                                   onClick={handleLanRateToggle}
-                                  disabled={saving || loading || !canToggleLanRate}
+                                  disabled={saving || loading || !canToggleLanRate || lanRateForcedOn}
                                   className="neu-toggle"
-                                  aria-pressed={lanRateEnabled}
+                                  aria-pressed={lanRateDisplayEnabled}
                                 >
                                   <span className="sr-only">Toggle 99k LAN Rate</span>
-                                  <span className={`neu-toggle__track ${lanRateEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
-                                    <span className={`neu-toggle__knob ${lanRateEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+                                  <span className={`neu-toggle__track ${lanRateDisplayEnabled ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+                                    <span className={`neu-toggle__knob ${lanRateDisplayEnabled ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
                                   </span>
                                 </button>
                                 <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
-                                  <Zap size={16} className={`mr-1 ${lanRateEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
+                                  <Zap size={16} className={`mr-1 ${lanRateDisplayEnabled ? 'text-[var(--accent-warning)]' : 'text-[var(--text-muted)]'}`} />
                                   <span>99k LAN Rate</span>
                                   {lanRateUnsupportedReason && (
-                                    <InfoTooltip text={lanRateUnsupportedReason} variant="danger" size={14} />
+                                    <InfoTooltip text={lanRateUnsupportedReason} variant={lanRateForcedOn ? 'info' : 'danger'} size={14} />
                                   )}
                                 </span>
                               </div>
@@ -1189,6 +1242,7 @@ function EditInstanceConfigModal({
         onClose={() => { setIsPresetManagerOpen(false); setSavedPresetForDownload(null); setPresetError(null); }}
         initialTab={presetManagerTab}
         zIndexClass="z-[60]"
+        host={hostShape}
         presets={presets}
         isLoading={loadingPresets}
         onLoadPreset={handleLoadPreset}
@@ -1199,6 +1253,13 @@ function EditInstanceConfigModal({
         onPresetDeleted={handlePresetDeleted}
         onPresetRenamed={handlePresetRenamed}
         onPresetImported={handlePresetImported}
+      />
+
+      <PresetCompatibilityDialog
+        isOpen={Boolean(pendingPreset)}
+        compatibility={pendingPreset?.data?.compatibility}
+        onConfirm={handleConfirmPresetCompatibility}
+        onCancel={handleCancelPresetCompatibility}
       />
     </>
   );

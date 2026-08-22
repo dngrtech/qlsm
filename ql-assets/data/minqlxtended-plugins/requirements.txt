@@ -1,0 +1,8 @@
+# minqlxtended requires a modern redis-py under RESP3 -- these floors are
+# upstream's, and are incompatible with the redis<3.0 range the minqlx
+# baseline pins. Kept in lockstep with the vendored plugins' own upstream
+# requirements.txt at the commit named in README.md.
+redis>=5.1.0
+hiredis>=3.0.0        # redis-py 5.1 ignores anything older and uses the pure-Python parser
+requests>=2.33.0      # 2.32.0/2.32.1 are yanked; .netrc leak fixed in 2.32.4
+pyzmq>=25.1.1         # first cp312 wheel

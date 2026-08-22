@@ -22,6 +22,12 @@ On small servers (2–4 players, low-intensity gametypes) there is effectively n
 
 99k LAN rate works on any supported host OS — the LD_PRELOAD library is OS-independent.
 
+## minqlxtended Hosts
+
+On hosts running the **minqlxtended** runtime, QLSM runs every instance at 99k LAN rate and does not offer 25k.
+
+Hosts running the standard **minqlx** runtime are unaffected: the toggle stays yours to set, per instance, exactly as described below.
+
 ## How To Enable
 
 ### At deploy time

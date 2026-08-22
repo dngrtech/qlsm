@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import AddHostFormFields from '../AddHostFormFields';
@@ -72,5 +72,123 @@ describe('AddHostFormFields', () => {
     expect(screen.getByTestId('listbox-continent')).toHaveAttribute('data-disabled', 'true');
     expect(screen.getByTestId('listbox-region')).toHaveAttribute('data-disabled', 'true');
     expect(screen.getByTestId('listbox-machine-size-plan')).toHaveAttribute('data-disabled', 'true');
+  });
+});
+
+const baseProps = {
+  name: 'h', onNameChange: vi.fn(), nameError: null, onNameBlur: vi.fn(),
+  provider: 'vultr', providerListOptions: [{ id: 'vultr', name: 'Vultr' }],
+  onProviderChange: vi.fn(), vultrConfigured: true, vultrUnavailableMessage: '',
+  selectedContinent: '', onContinentChange: vi.fn(), vultrContinentOptions: [],
+  region: '', onRegionChange: vi.fn(), vultrFilteredRegions: [],
+  machineSize: '', onMachineSizeChange: vi.fn(), currentSizes: [],
+  ipAddress: '', onIpAddressChange: vi.fn(), sshPort: 22, onSshPortChange: vi.fn(),
+  sshUser: '', onSshUserChange: vi.fn(),
+  standaloneAuthMethod: 'key', onStandaloneAuthMethodChange: vi.fn(),
+  sshKey: '', onSshKeyChange: vi.fn(), sshPassword: '', onSshPasswordChange: vi.fn(),
+  timezone: '', onTimezoneChange: vi.fn(), connectionTestStatus: 'idle',
+  connectionTestMessage: '', onTestConnection: vi.fn(), onSwitchToSelfHost: vi.fn(),
+  osInfo: null, runtime: 'minqlx', onRuntimeChange: vi.fn(),
+};
+
+describe('AddHostFormFields runtime picker', () => {
+  it('renders the runtime picker for every provider', () => {
+    ['vultr', 'standalone', 'self'].forEach(provider => {
+      const { unmount } = render(<AddHostFormFields {...baseProps} provider={provider} />);
+      expect(screen.getByTestId('runtime-picker')).toBeInTheDocument();
+      unmount();
+    });
+  });
+
+  it('tells the operator the choice cannot be changed later', () => {
+    render(<AddHostFormFields {...baseProps} />);
+    expect(screen.getByTestId('runtime-immutable-warning')).toHaveTextContent(/cannot be changed/i);
+  });
+});
+
+describe('AddHostFormFields runtime radios', () => {
+  it('starts with neither runtime selected', () => {
+    // The choice is irreversible, so QLSM makes no pick on the operator's
+    // behalf -- an unaware operator can never land on a runtime by default.
+    render(<AddHostFormFields {...baseProps} runtime="" />);
+    // The runtime radios are the only ones on the form for a cloud provider,
+    // so no name filter is needed -- and none of them may start checked.
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(2);
+    radios.forEach(radio => expect(radio).not.toBeChecked());
+  });
+
+  it('checks only the selected runtime', () => {
+    render(<AddHostFormFields {...baseProps} runtime="minqlxtended" />);
+    expect(screen.getByRole('radio', { name: /^minqlxtended$/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /^minqlx$/i })).not.toBeChecked();
+  });
+
+  it('reports the runtime the operator picked', () => {
+    const onRuntimeChange = vi.fn();
+    render(<AddHostFormFields {...baseProps} runtime="" onRuntimeChange={onRuntimeChange} />);
+    fireEvent.click(screen.getByRole('radio', { name: /^minqlxtended$/i }));
+    expect(onRuntimeChange).toHaveBeenCalledWith('minqlxtended');
+  });
+});
+
+describe('AddHostFormFields runtime tooltips', () => {
+  const openTooltip = (runtimeId) => {
+    fireEvent.mouseEnter(screen.getByTestId(`runtime-tooltip-${runtimeId}`));
+    return screen.getByRole('tooltip');
+  };
+
+  it.each([
+    ['minqlx', 'https://github.com/MinoMino/minqlx'],
+    ['minqlxtended', 'https://github.com/tjone270/minqlxtended'],
+  ])('links %s to its upstream repo', (runtimeId, repoUrl) => {
+    // One render per runtime: InfoTooltip's close is debounced, so opening both
+    // in a single render leaves two bubbles mounted at once.
+    render(<AddHostFormFields {...baseProps} runtime="" />);
+    expect(within(openTooltip(runtimeId)).getByRole('link')).toHaveAttribute('href', repoUrl);
+  });
+
+  it('opens repo links in a new tab without leaking the opener', () => {
+    render(<AddHostFormFields {...baseProps} runtime="" />);
+    const link = within(openTooltip('minqlx')).getByRole('link');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('tells a cloud operator QLSM provisions the OS', () => {
+    render(<AddHostFormFields {...baseProps} provider="vultr" runtime="" />);
+    expect(openTooltip('minqlxtended')).toHaveTextContent('QLSM provisions Ubuntu 24.04.');
+  });
+
+  it('tells a standalone operator the requirement is checked before creation', () => {
+    render(<AddHostFormFields {...baseProps} provider="standalone" runtime="" />);
+    expect(openTooltip('minqlxtended')).toHaveTextContent(/Ubuntu 24.04 or newer.*checked before the host is created/i);
+  });
+
+  it('warns a self-host operator that nothing is checked up front', () => {
+    // This is the one path with no pre-check: the host is created, setup fails,
+    // and it lands in Error with deleting it the only way back.
+    render(<AddHostFormFields {...baseProps} provider="self" runtime="" />);
+    expect(openTooltip('minqlxtended')).toHaveTextContent(/not checked up front/i);
+  });
+});
+
+describe('AddHostFormFields runtime error', () => {
+  it('renders no error region when no runtime error is set', () => {
+    render(<AddHostFormFields {...baseProps} runtime="" runtimeError={null} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('announces the runtime error and ties it to the radio group', () => {
+    // Without the association a screen-reader user tabbing onto the radios is
+    // told nothing -- the message sits elsewhere in the document.
+    render(<AddHostFormFields {...baseProps} runtime="" runtimeError="Server runtime is required." />);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Server runtime is required.');
+
+    const group = screen.getByRole('group', { name: /server runtime/i });
+    expect(group).toHaveAttribute('aria-describedby', alert.id);
+    expect(alert.id).toBeTruthy();
   });
 });

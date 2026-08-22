@@ -1,4 +1,4 @@
-import React, { Fragment, useState, useEffect } from 'react';
+import React, { Fragment, useState, useEffect, useRef } from 'react';
 import { Dialog, DialogBackdrop, Transition, Listbox } from '@headlessui/react';
 import { X, RefreshCw, ChevronDown, Check, FileText, Terminal, AlertCircle } from 'lucide-react';
 import CodeMirrorEditor from '../CodeMirrorEditor';
@@ -6,6 +6,25 @@ import LogFilterControls from './LogFilterControls';
 import { getFilterDescription } from './logFilterOptions';
 import { minqlxLogLanguage } from '../../utils/minqlxLogLanguage';
 import { fetchInstanceMinqlxLogs, listInstanceMinqlxLogs } from '../../services/api';
+import { runtimeLogFilename } from '../../constants/runtimes';
+
+/**
+ * Groups the live (unrotated) log file first, then any rotated siblings
+ * ordered by ascending numeric suffix. Works for any runtime's log filename --
+ * the backend already scopes the file list to the instance's runtime and
+ * rejects anything else, so there is no filename to pattern-match here.
+ */
+function sortLogFiles(files) {
+    const rotationSuffix = (name) => {
+        const match = name.match(/\.(\d+)$/);
+        return match ? parseInt(match[1], 10) : null;
+    };
+    const live = files.filter((f) => rotationSuffix(f) === null);
+    const rotated = files
+        .filter((f) => rotationSuffix(f) !== null)
+        .sort((a, b) => rotationSuffix(a) - rotationSuffix(b));
+    return [...live, ...rotated];
+}
 
 /**
  * Modal for viewing QLDS instance MinQLX logs fetched from the remote server.
@@ -24,10 +43,20 @@ function ViewMinqlxLogsModal({ isOpen, onClose, instance }) {
     const [lineCount, setLineCount] = useState(500);
     const [timeRange, setTimeRange] = useState('1 hour ago');
 
-    // Rotated logs state
-    const [availableFiles, setAvailableFiles] = useState(['minqlx.log']);
-    const [selectedFile, setSelectedFile] = useState('minqlx.log');
+    // Rotated logs state. selectedFile starts null and is seeded from the
+    // instance's own runtime when the modal opens (see the effect below) --
+    // the file listing response is the source of truth once it arrives.
+    const [availableFiles, setAvailableFiles] = useState([]);
+    const [selectedFile, setSelectedFile] = useState(null);
     const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+
+    // Tracks the filename the log-content effect below has already fetched.
+    // Seeding selectedFile and firing its fetch happen in separate effects
+    // (see the open effect), so on the very first render of an open the fetch
+    // effect still closes over the pre-seed `null` and must not act on it --
+    // this dedupes that stale pass instead of sending a request for it, while
+    // still firing exactly once for the real seeded value once it commits.
+    const lastFetchedFileRef = useRef(null);
 
     const fetchLogs = async () => {
         if (!instance?.id) return;
@@ -51,39 +80,32 @@ function ViewMinqlxLogsModal({ isOpen, onClose, instance }) {
         }
     };
 
-    const fetchLogFiles = async () => {
+    // currentSelection is passed explicitly rather than read from the
+    // `selectedFile` state closure: this is called synchronously right after
+    // seeding that state in the effect below, before React has re-rendered,
+    // so the closure would otherwise still see the previous (stale) value and
+    // needlessly override an already-correct seed once the list resolves.
+    const fetchLogFiles = async (currentSelection) => {
         if (!instance?.id) return;
         setIsLoadingFiles(true);
         try {
             const data = await listInstanceMinqlxLogs(instance.id);
-            if (data.files && data.files.length > 0) {
-                const validFiles = data.files.filter(f => f === 'minqlx.log' || /^minqlx\.log\.\d+$/.test(f.trim()));
+            const files = Array.isArray(data.files) ? data.files : [];
+            if (files.length > 0) {
+                // The backend already scoped this list to the instance's
+                // runtime and validated every entry -- just order it.
+                const sortedFiles = sortLogFiles(files).slice(0, 11);
+                setAvailableFiles(sortedFiles);
 
-                const sortedFiles = validFiles.sort((a, b) => {
-                    const sa = a.trim();
-                    const sb = b.trim();
-                    if (sa === 'minqlx.log') return -1;
-                    if (sb === 'minqlx.log') return 1;
-
-                    const getNum = (s) => {
-                        const match = s.match(/minqlx\.log\.(\d+)$/);
-                        return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
-                    };
-
-                    return getNum(sa) - getNum(sb);
-                });
-
-                setAvailableFiles(sortedFiles.slice(0, 11));
-
-                if (!sortedFiles.slice(0, 11).includes(selectedFile)) {
+                if (!sortedFiles.includes(currentSelection)) {
                     setSelectedFile(sortedFiles[0]);
                 }
             } else {
-                setAvailableFiles(['minqlx.log']);
+                setAvailableFiles([]);
             }
         } catch (err) {
             console.error('Failed to list MinQLX logs:', err);
-            setAvailableFiles(['minqlx.log']);
+            setAvailableFiles([]);
         } finally {
             setIsLoadingFiles(false);
         }
@@ -93,21 +115,36 @@ function ViewMinqlxLogsModal({ isOpen, onClose, instance }) {
         if (isOpen && instance?.id) {
             setLogs('');
             setError(null);
-            fetchLogFiles();
+            // A fresh open (or a switch to a different instance without closing
+            // first) must always fetch at least once, even if the resolved
+            // filename happens to match whatever was last fetched.
+            lastFetchedFileRef.current = null;
+            // Seed the initial selection from the instance's own runtime so the
+            // fetch effect below asks for a filename that runtime accepts. The
+            // file listing response corrects this if it turns out to be wrong.
+            const seed = runtimeLogFilename(instance.host_runtime);
+            setSelectedFile(seed);
+            fetchLogFiles(seed);
         } else {
             setLogs('');
             setError(null);
-            setSelectedFile('minqlx.log');
-            setAvailableFiles(['minqlx.log']);
+            setSelectedFile(null);
+            setAvailableFiles([]);
             setFilterMode('lines');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, instance?.id]);
 
     useEffect(() => {
-        if (isOpen && instance?.id) {
-            fetchLogs();
-        }
+        // selectedFile is null on the render that seeds it (the seed itself is
+        // set in the effect above, in the same commit, so this effect's closure
+        // still sees the pre-seed value here) -- wait for the follow-up render
+        // where it actually reflects a filename. Once it does, fetch only if
+        // that filename hasn't already been fetched for this open.
+        if (!isOpen || !instance?.id || selectedFile === null) return;
+        if (lastFetchedFileRef.current === selectedFile) return;
+        lastFetchedFileRef.current = selectedFile;
+        fetchLogs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, instance?.id, selectedFile]);
 

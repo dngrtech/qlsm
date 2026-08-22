@@ -3,6 +3,8 @@ import FloatingListbox from '../common/FloatingListbox';
 import { providerOptions } from '../../utils/providerData';
 import { HOST_NAME_MAX_LENGTH, HOST_NAME_PATTERN } from '../../utils/resourceValidation';
 import { STANDALONE_TIMEZONES } from '../../utils/formatters';
+import { RUNTIME_OPTIONS, runtimeTooltipTail } from '../../constants/runtimes';
+import InfoTooltip from '../common/InfoTooltip';
 import SelfHostFields from './SelfHostFields';
 import StandaloneAuthSection from './StandaloneAuthSection';
 
@@ -49,6 +51,9 @@ function AddHostFormFields({
   onTestConnection,
   onSwitchToSelfHost,
   osInfo,
+  runtime,
+  onRuntimeChange,
+  runtimeError,
 }) {
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
@@ -92,6 +97,70 @@ function AddHostFormFields({
           return selectedOpt ? selectedOpt.name : 'Select Provider';
         }}
       />
+
+      {/* Runtime -- immutable once the host is created, so nothing is
+          pre-selected: the operator picks, QLSM never picks for them. */}
+      <div data-testid="runtime-picker">
+        <label className={labelClass}>Server Runtime</label>
+        <fieldset
+          className="mt-3 flex flex-wrap gap-x-6 gap-y-2"
+          aria-label="Server runtime"
+          aria-describedby={runtimeError ? 'runtime-error' : undefined}
+        >
+          {RUNTIME_OPTIONS.map((option) => (
+            <div key={option.id} className="inline-flex items-center gap-1.5">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-theme-secondary">
+                <input
+                  type="radio"
+                  name="host-runtime"
+                  value={option.id}
+                  checked={runtime === option.id}
+                  onChange={() => onRuntimeChange(option.id)}
+                  className="h-4 w-4"
+                  style={{ accentColor: 'var(--accent-primary)' }}
+                />
+                <span className="text-theme-primary">{option.name}</span>
+              </label>
+              <InfoTooltip
+                testId={`runtime-tooltip-${option.id}`}
+                text={(
+                  <span className="block space-y-1.5">
+                    <span className="block">{option.description}</span>
+                    <span className="block">{runtimeTooltipTail(option.id, provider)}</span>
+                    <a
+                      href={option.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block underline"
+                      style={{ color: 'var(--accent-info)' }}
+                    >
+                      {option.repoUrl.replace('https://', '')}
+                    </a>
+                  </span>
+                )}
+              />
+            </div>
+          ))}
+        </fieldset>
+        {runtimeError && (
+          <p
+            id="runtime-error"
+            role="alert"
+            className="mt-1.5 text-xs"
+            style={{ color: 'var(--accent-danger)' }}
+          >
+            {runtimeError}
+          </p>
+        )}
+        <p
+          data-testid="runtime-immutable-warning"
+          className="mt-1.5 text-xs"
+          style={{ color: 'var(--accent-warning, var(--text-muted))' }}
+        >
+          This cannot be changed after the host is created. Moving a host between
+          runtimes means saving a preset and deploying a new host.
+        </p>
+      </div>
 
       {/* Cloud provider fields */}
       {!isStandalone && !isSelf && (

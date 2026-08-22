@@ -1,10 +1,12 @@
 import apiClient from './api';
 
-export const createDraft = async ({ source, preset, host, instanceId }) => {
+export const createDraft = async ({ source, preset, host, instanceId, targetRuntime, acceptedReplacements }) => {
   const body = { source };
   if (preset) body.preset = preset;
   if (host) body.host = host;
   if (instanceId) body.instance_id = instanceId;
+  if (targetRuntime) body.target_runtime = targetRuntime;
+  if (acceptedReplacements?.length) body.accepted_replacements = acceptedReplacements;
   const response = await apiClient.post('/drafts/', body);
   return response.data.data;
 };

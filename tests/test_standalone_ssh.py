@@ -201,6 +201,7 @@ def test_detect_remote_os_maps_supported_release(mock_client_cls):
             0,
         ),
         (b"", 0),
+        (b"3.12.3\n", 0),
     )
     mock_client_cls.return_value = client
 
@@ -217,6 +218,7 @@ def test_detect_remote_os_maps_supported_release(mock_client_cls):
         "pretty_name": "Ubuntu 24.04.2 LTS",
         "os_type": "ubuntu",
         "qlsm_detected": False,
+        "python_version": "3.12.3",
     }
 
 
@@ -230,6 +232,7 @@ def test_detect_remote_os_marks_unsupported_release(mock_client_cls):
             0,
         ),
         (b"", 0),
+        (b"3.6.9\n", 0),
     )
     mock_client_cls.return_value = client
 
@@ -255,6 +258,7 @@ def test_detect_remote_os_marks_qlsm_when_image_running(mock_client_cls):
             0,
         ),
         (b"ghcr.io/dngrtech/qlsm:latest\nredis:7-alpine\n", 0),
+        (b"3.11.2\n", 0),
     )
     mock_client_cls.return_value = client
 
@@ -278,6 +282,7 @@ def test_detect_remote_os_marks_no_qlsm_when_no_matching_image(mock_client_cls):
             0,
         ),
         (b"nginx:latest\nredis:7-alpine\n", 0),
+        (b"3.11.2\n", 0),
     )
     mock_client_cls.return_value = client
 
@@ -306,6 +311,7 @@ def test_detect_remote_os_marks_no_qlsm_when_docker_unavailable(mock_client_cls)
             0,
         ),
         (b"dngrtech/qlsm:latest\n", 127),
+        (b"3.11.2\n", 0),
     )
     mock_client_cls.return_value = client
 
@@ -317,6 +323,38 @@ def test_detect_remote_os_marks_no_qlsm_when_docker_unavailable(mock_client_cls)
     )
 
     assert detected["qlsm_detected"] is False
+
+
+@patch("ui.standalone_ssh.paramiko.SSHClient")
+def test_detect_remote_os_reports_no_python_version_when_python3_is_absent(mock_client_cls):
+    """A host without python3 is a valid answer, not a connection failure.
+
+    It simply cannot run minqlxtended; OS detection must still succeed so the
+    caller can report *why* the runtime is unavailable rather than failing the
+    whole connection test.
+    """
+    client = _ssh_client_multi(
+        (
+            b'ID=debian\n'
+            b'VERSION_ID="12"\n'
+            b'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n',
+            0,
+        ),
+        (b"", 0),
+        (b"", 127),
+    )
+    mock_client_cls.return_value = client
+
+    detected = detect_remote_os(
+        host="203.0.113.15",
+        port=22,
+        username="root",
+        password="secret",
+    )
+
+    assert detected["python_version"] is None
+    assert detected["os_type"] == "debian"
+    assert detected["pretty_name"] == "Debian GNU/Linux 12 (bookworm)"
 
 
 @patch("ui.standalone_ssh.paramiko.SSHClient")

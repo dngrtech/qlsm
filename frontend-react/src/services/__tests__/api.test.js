@@ -25,6 +25,8 @@ vi.mock('axios', () => ({
 
 import {
   fetchInstanceHooks,
+  fetchInstanceMinqlxLogs,
+  getPresetById,
   getSelfHostDefaults,
   importPreset,
   resizeHost,
@@ -153,6 +155,52 @@ describe('instance hook API helpers', () => {
       system_hooks_active: [],
     });
     expect(mocks.get).toHaveBeenCalledWith('/instances/12/hooks');
+  });
+});
+
+describe('fetchInstanceMinqlxLogs', () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+  });
+
+  it('includes filename in the query string when one is given', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { logs: 'x' } } });
+
+    await fetchInstanceMinqlxLogs(3, { filename: 'minqlxtended.log.1' });
+
+    const url = mocks.get.mock.calls[0][0];
+    expect(url).toContain('filename=minqlxtended.log.1');
+  });
+
+  it('omits filename from the query string when none is given, letting the backend apply its own per-runtime default', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { logs: 'x' } } });
+
+    await fetchInstanceMinqlxLogs(3, {});
+
+    const url = mocks.get.mock.calls[0][0];
+    expect(url).not.toContain('filename');
+  });
+});
+
+describe('getPresetById targetRuntime', () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+  });
+
+  it('omits target_runtime when falsy', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { id: 'p1' } } });
+
+    await getPresetById('p1', { targetRuntime: undefined });
+
+    expect(mocks.get).toHaveBeenCalledWith('/presets/p1');
+  });
+
+  it('encodes target_runtime when present', async () => {
+    mocks.get.mockResolvedValueOnce({ data: { data: { id: 'p1' } } });
+
+    await getPresetById('p1', { targetRuntime: 'minqlxtended' });
+
+    expect(mocks.get).toHaveBeenCalledWith('/presets/p1?target_runtime=minqlxtended');
   });
 });
 
