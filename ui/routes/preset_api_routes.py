@@ -1137,7 +1137,12 @@ def create_preset_api():
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset_path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
-                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
+                shutil.copytree(
+                    draft_user_hooks,
+                    preset_user_hooks,
+                    dirs_exist_ok=True,
+                    ignore=_ignore_generated_script_cruft,
+                )
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(
@@ -1406,7 +1411,12 @@ def update_preset_api(preset_id):
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset.path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
-                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
+                shutil.copytree(
+                    draft_user_hooks,
+                    preset_user_hooks,
+                    dirs_exist_ok=True,
+                    ignore=_ignore_generated_script_cruft,
+                )
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(

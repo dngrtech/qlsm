@@ -1625,6 +1625,15 @@ def test_update_preset_from_draft_drops_backup_files(client, app):
     with open(os.path.join(draft_scripts, 'bakery.py'), 'w') as f:
         f.write('class bakery: pass')
 
+    # user-hooks travels the same draft->preset copy and must be filtered too,
+    # or the preset keeps a file its own export drops.
+    draft_hooks = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'user-hooks')
+    os.makedirs(draft_hooks, exist_ok=True)
+    with open(os.path.join(draft_hooks, 'myhook.so'), 'wb') as f:
+        f.write(b'\x7fELF')
+    with open(os.path.join(draft_hooks, 'myhook.so.bak'), 'wb') as f:
+        f.write(b'\x7fELF old')
+
     preset_id, preset_path = _create_preset_folder(app, 'draft-drops-backups')
 
     headers = auth_headers(app, DEFAULT_USER)
@@ -1638,3 +1647,7 @@ def test_update_preset_from_draft_drops_backup_files(client, app):
     assert not os.path.exists(os.path.join(preset_scripts, backup_name))
     # The filter must not swallow a legitimately named script.
     assert os.path.exists(os.path.join(preset_scripts, 'bakery.py'))
+
+    preset_hooks = os.path.join(preset_path, 'user-hooks')
+    assert os.path.exists(os.path.join(preset_hooks, 'myhook.so'))
+    assert not os.path.exists(os.path.join(preset_hooks, 'myhook.so.bak'))

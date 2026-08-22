@@ -274,6 +274,7 @@ def test_download_preset_excludes_backup_files(client, app, tmp_path):
         'old\n',
     )
     write_file(preset_dir / 'scripts' / 'ranked.py.bak', 'older\n')
+    write_file(preset_dir / 'scripts' / 'ranked.py.bak.1', 'oldest\n')
     write_file(preset_dir / 'scripts' / 'ranked.py.orig', 'pre-merge\n')
     write_file(preset_dir / 'server.cfg.bak', 'set sv_hostname "Old"\n')
     write_file(preset_dir / 'scripts' / 'bakery.py', 'class bakery: pass\n')
@@ -288,6 +289,7 @@ def test_download_preset_excludes_backup_files(client, app, tmp_path):
         names = set(archive.namelist())
         assert 'scripts/ranked.py.bak-pre-player-ip-connected-20260704-222233' not in names
         assert 'scripts/ranked.py.bak' not in names
+        assert 'scripts/ranked.py.bak.1' not in names
         assert 'scripts/ranked.py.orig' not in names
         assert 'server.cfg.bak' not in names
         assert 'scripts/bakery.py' in names
