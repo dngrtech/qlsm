@@ -551,7 +551,7 @@ class myFun(minqlxtended.Plugin):
                 pass
 
     # Monitors the chat messages of players to process the sound triggers
-    def handle_chat(self, player, msg, channel):
+    def handle_chat(self, player, msg, channel, recipient):
         self.scan_chat(player, msg, channel)
         return
 

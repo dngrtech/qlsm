@@ -115,31 +115,55 @@ class _Channel:
         return self.name
 
 
-# Handler arity per event, excluding `self`. From _events.py at the pinned commit.
-# The line number is the dispatch() that fixes the arity.
+# Handler arity per event, excluding `self`. GENERATED from every dispatcher class in
+# _events.py at the pinned commit, rather than a hand-picked subset -- the omissions were
+# doing damage. A missing event made add_hook() raise KeyError on a perfectly good hook,
+# and `chat` was recorded as 3 when the engine passes 4.
+#
+# The engine binds the dispatcher's parameter list positionally onto the handler
+# (_events.py:_check_handler_signature), so a DEFAULTED parameter still counts: chat's
+# `recipient=None` is optional at the dispatch call site and mandatory on the handler.
+# Recording it as optional is precisely what let a 3-argument handle_chat ship in
+# myFun.py and pass every test in this repo.
 EVENT_ARITIES = {
-    "console_print": 1,        # :406  (text)
-    "client_command": 2,       # :450  (player, cmd)
-    "server_command": 2,       # :486  (player, cmd)
-    "set_configstring": 2,     # :522  (index, value)
-    "chat": 3,                 # :557  (player, msg, channel) — recipient is optional
-    "player_connect": 2,       # :586  (player, is_bot)      — was 1 on minqlx
-    "player_loaded": 1,        # :610  (player)
-    "player_disconnect": 2,    # :618  (player, reason)
-    "player_spawn": 1,         # :626  (player)
-    "vote_ended": 4,           # :674  (votes, vote, args, passed)
-    "game_countdown": 0,       # :690  ()
-    "game_start": 0,           # :698  ()                     — was 1 on minqlx
-    "game_end": 1,             # :711  (aborted)              — was a stats dict
-    "round_countdown": 1,      # :719  (round_number)
-    "round_start": 1,          # :727  (round_number)
-    "round_end": 3,            # :738  (round_number, winning_team, time) — was 1
-    "team_switch": 3,          # :750  (player, old_team, new_team)
-    "team_switch_attempt": 4,  # :771  (player, old_team, new_team, target) — was 3
-    "map": 2,                  # :779  (mapname, factory)
-    "new_game": 0,             # :790  ()
-    "kill": 3,                 # :801  (victim, killer, mod)  — mod, not a stats dict
-    "death": 3,                # :812  (victim, killer, mod)  — mod, not a stats dict
+    "chat":                 4,   # :557  (player, msg, channel, recipient)  <- differs from minqlx
+    "client_command":       2,   # :450  (player, cmd)
+    "command":              3,   # :434  (caller, command, args)
+    "console_print":        1,   # :406  (text)
+    "cvar_changed":         3,   # :896  (name, old_value, new_value)  <- minqlxtended only
+    "damage":               5,   # :875  (target, attacker, damage, dflags, mod)  <- minqlxtended only
+    "death":                3,   # :812  (victim, killer, mod)  <- differs from minqlx
+    "demo_finished":        5,   # :970  (client_id, path, size, discarded, failed)  <- minqlxtended only
+    "frame":                0,   # :509  ()
+    "game_countdown":       0,   # :690  ()
+    "game_end":             1,   # :711  (aborted)  <- differs from minqlx
+    "game_start":           0,   # :698  ()  <- differs from minqlx
+    "item_pickup":          2,   # :960  (player, item_name)  <- minqlxtended only
+    "kamikaze_explode":     2,   # :947  (player, is_used_on_demand)
+    "kamikaze_use":         1,   # :939  (player)
+    "kill":                 3,   # :801  (victim, killer, mod)  <- differs from minqlx
+    "map":                  2,   # :779  (mapname, factory)
+    "new_game":             0,   # :790  ()
+    "objective":            3,   # :851  (player, kind, count)  <- minqlxtended only
+    "player_connect":       2,   # :586  (player, is_bot)  <- differs from minqlx
+    "player_disconnect":    2,   # :618  (player, reason)
+    "player_loaded":        1,   # :610  (player)
+    "player_spawn":         1,   # :626  (player)
+    "round_countdown":      1,   # :719  (round_number)
+    "round_end":            3,   # :738  (round_number, winning_team, time)  <- differs from minqlx
+    "round_start":          1,   # :727  (round_number)
+    "server_command":       2,   # :486  (player, cmd)
+    "set_configstring":     2,   # :522  (index, value)
+    "stats":                1,   # :635  (stats)
+    "team_switch":          3,   # :750  (player, old_team, new_team)
+    "team_switch_attempt":  4,   # :771  (player, old_team, new_team, target)  <- differs from minqlx
+    "unload":               1,   # :570  (plugin)
+    "userinfo":             3,   # :914  (player, changed, infostring)  <- differs from minqlx
+    "vote":                 2,   # :682  (player, yes)
+    "vote_called":          3,   # :647  (player, vote, args)
+    "vote_ended":           4,   # :674  (votes, vote, args, passed)
+    "vote_started":         3,   # :666  (caller, vote, args)
+    "weapon_fired":         2,   # :832  (player, weapon)  <- minqlxtended only
 }
 
 
@@ -286,23 +310,28 @@ class Plugin:
         self._loaded_plugins = dict(value)
 
     def add_hook(self, event, handler, priority=0):
+        """Refuse a handler the engine would refuse, and accept the ones it accepts.
+
+        The rule is _events.py:_check_handler_signature verbatim: attempt to bind
+        `arity` positional arguments onto the handler and let TypeError decide. The
+        previous rule here counted parameters WITHOUT defaults and demanded exact
+        equality, which disagreed with the engine in both directions -- it refused
+        `handle_chat(self, player, msg, channel, recipient=None)`, which binds fine,
+        and it accepted a handler with extra defaulted parameters the engine also
+        accepts, for the wrong reason. Binding is the whole rule; do not reintroduce
+        a count comparison.
+        """
         import inspect
         if event not in EVENT_ARITIES:
             raise KeyError(event)
-        params = [
-            p for name, p in inspect.signature(handler).parameters.items()
-            if name != "self"
-        ]
-        required = len([
-            p for p in params
-            if p.default is inspect.Parameter.empty
-            and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-        ])
-        if required != EVENT_ARITIES[event]:
+        try:
+            # `handler` is a bound method, so `self` is already accounted for.
+            inspect.signature(handler).bind(*([None] * EVENT_ARITIES[event]))
+        except TypeError:
             raise SignatureMismatch(
-                f"{event} dispatches {EVENT_ARITIES[event]} argument(s); "
-                f"handler {handler.__name__} takes {required}"
-            )
+                f"{event} dispatches {EVENT_ARITIES[event]} argument(s), which "
+                f"handler {handler.__name__}{inspect.signature(handler)} cannot accept"
+            ) from None
         self.hooks.append((event, handler, priority))
 
     def add_command(self, name, handler, permission=0, channels=None,
