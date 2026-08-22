@@ -51,7 +51,15 @@ PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
 EXPORT_FORMAT_VERSION = 1
 EXPORT_EXCLUDED_DIRS = {'__pycache__'}
 EXPORT_EXCLUDED_FILES = {'.DS_Store', '.gitkeep'}
-EXPORT_EXCLUDED_PATTERNS = ('*.pyc', '*.pyo', '*.swp', '*.tmp', '*~')
+# The trailing group are backup copies left by editors and tooling (foo.py.bak,
+# foo.py.bak-pre-x-<stamp>, foo.py.bak.1, foo.py.orig, foo.py.rej). A preset is a
+# curated artefact, so they are junk on every path, not just in archives: their
+# extensions aren't in the import validator's allowlist, so a preset holding one
+# exports to a ZIP QLSM itself rejects with "Unsupported script file".
+EXPORT_EXCLUDED_PATTERNS = (
+    '*.pyc', '*.pyo', '*.swp', '*.tmp', '*~',
+    '*.bak', '*.bak-*', '*.bak.*', '*.orig', '*.rej',
+)
 
 
 def _safe_export_filename(name):
@@ -63,7 +71,12 @@ def _safe_export_filename(name):
 
 
 def _should_skip_export_path(relative_path, is_dir=False):
-    """Return True for generated/editor junk that should not enter exports."""
+    """Return True for generated/editor junk that should not enter a preset.
+
+    One filter for every path -- export, import and draft save -- so a preset on
+    disk, the archive it exports to, and the archive that imports back are all the
+    same set of files.
+    """
     parts = relative_path.replace(os.sep, '/').split('/')
     if any(part in EXPORT_EXCLUDED_DIRS for part in parts):
         return True
@@ -76,7 +89,10 @@ def _should_skip_export_path(relative_path, is_dir=False):
 
 
 def _ignore_generated_script_cruft(directory, names):
-    """Return generated/editor junk to skip when saving draft scripts."""
+    """Return generated/editor junk to skip when copying a draft into a preset.
+
+    Used for both directories a draft contributes: scripts and user-hooks.
+    """
     ignored = []
     for name in names:
         path = os.path.join(directory, name)
@@ -1124,7 +1140,12 @@ def create_preset_api():
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset_path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
-                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
+                shutil.copytree(
+                    draft_user_hooks,
+                    preset_user_hooks,
+                    dirs_exist_ok=True,
+                    ignore=_ignore_generated_script_cruft,
+                )
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(
@@ -1393,7 +1414,12 @@ def update_preset_api(preset_id):
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset.path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
-                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
+                shutil.copytree(
+                    draft_user_hooks,
+                    preset_user_hooks,
+                    dirs_exist_ok=True,
+                    ignore=_ignore_generated_script_cruft,
+                )
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(
