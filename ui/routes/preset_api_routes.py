@@ -52,6 +52,12 @@ EXPORT_FORMAT_VERSION = 1
 EXPORT_EXCLUDED_DIRS = {'__pycache__'}
 EXPORT_EXCLUDED_FILES = {'.DS_Store', '.gitkeep'}
 EXPORT_EXCLUDED_PATTERNS = ('*.pyc', '*.pyo', '*.swp', '*.tmp', '*~')
+# Backup copies left by editors and tooling (foo.py.bak, foo.py.bak-pre-x-<stamp>,
+# foo.py.orig). Archives must drop them: their extensions aren't in the import
+# validator's allowlist, so exporting one produced a ZIP QLSM itself rejected with
+# "Unsupported script file". Only the archive filter uses these -- draft saves
+# rewrite the real scripts directory, where a user's backups have to survive.
+ARCHIVE_EXCLUDED_PATTERNS = ('*.bak', '*.bak-*', '*.bak.*', '*.orig', '*.rej')
 
 
 def _safe_export_filename(name):
@@ -62,8 +68,7 @@ def _safe_export_filename(name):
     return safe or 'preset'
 
 
-def _should_skip_export_path(relative_path, is_dir=False):
-    """Return True for generated/editor junk that should not enter exports."""
+def _matches_excluded_path(relative_path, is_dir, patterns):
     parts = relative_path.replace(os.sep, '/').split('/')
     if any(part in EXPORT_EXCLUDED_DIRS for part in parts):
         return True
@@ -72,15 +77,32 @@ def _should_skip_export_path(relative_path, is_dir=False):
         return name in EXPORT_EXCLUDED_DIRS
     if name in EXPORT_EXCLUDED_FILES:
         return True
-    return any(fnmatch.fnmatch(name, pattern) for pattern in EXPORT_EXCLUDED_PATTERNS)
+    return any(fnmatch.fnmatch(name, pattern) for pattern in patterns)
+
+
+def _should_skip_export_path(relative_path, is_dir=False):
+    """Return True for junk that should not enter a preset archive.
+
+    Shared by export and import so an archive QLSM writes is one QLSM accepts.
+    """
+    return _matches_excluded_path(
+        relative_path, is_dir, EXPORT_EXCLUDED_PATTERNS + ARCHIVE_EXCLUDED_PATTERNS
+    )
 
 
 def _ignore_generated_script_cruft(directory, names):
-    """Return generated/editor junk to skip when saving draft scripts."""
+    """Return generated/editor junk to skip when saving draft scripts.
+
+    Narrower than the archive filter on purpose: saving a preset replaces its
+    scripts directory outright, so backups the user keeps there must be copied
+    through rather than silently deleted.
+    """
     ignored = []
     for name in names:
         path = os.path.join(directory, name)
-        if _should_skip_export_path(name, is_dir=os.path.isdir(path)):
+        if _matches_excluded_path(
+            name, os.path.isdir(path), EXPORT_EXCLUDED_PATTERNS
+        ):
             ignored.append(name)
     return ignored
 

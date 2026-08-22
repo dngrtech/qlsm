@@ -1605,3 +1605,31 @@ def test_overwriting_a_preset_with_an_unfiltered_draft_is_allowed(client, app):
 
     assert response.status_code == 200
     assert os.path.exists(os.path.join(preset_path, 'scripts', 'essentials.py'))
+
+
+def test_update_preset_from_draft_keeps_user_backup_files(client, app):
+    """Backups a user keeps beside their scripts survive the draft round-trip.
+
+    Preset archives drop .bak files, but saving a preset rewrites the real
+    scripts directory -- filtering there would delete the user's own backups.
+    """
+    draft_id = str(uuid.uuid4())
+    draft_scripts = os.path.join(app.config['DRAFTS_BASE'], draft_id, 'scripts')
+    os.makedirs(draft_scripts, exist_ok=True)
+    backup_name = 'ranked.py.bak-pre-player-ip-connected-20260704-222233'
+    with open(os.path.join(draft_scripts, 'ranked.py'), 'w') as f:
+        f.write('print("ranked")')
+    with open(os.path.join(draft_scripts, backup_name), 'w') as f:
+        f.write('print("old ranked")')
+
+    preset_id, preset_path = _create_preset_folder(app, 'draft-keeps-backups')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.put(f'/api/presets/{preset_id}', headers=headers, json={
+        'draft_id': draft_id,
+    })
+
+    assert response.status_code == 200
+    preset_scripts = os.path.join(preset_path, 'scripts')
+    assert os.path.exists(os.path.join(preset_scripts, 'ranked.py'))
+    assert os.path.exists(os.path.join(preset_scripts, backup_name))
