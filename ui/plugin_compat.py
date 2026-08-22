@@ -133,14 +133,29 @@ _PATTERNS_BY_TARGET = {
 # has the same arity on both runtimes and is deliberately left out -- adding
 # it here could only produce false positives. Values are the argument count
 # excluding `self`.
+#
+# `chat` and `userinfo` were missing until a batch of ports went through this
+# scanner clean and then could not load. Both genuinely changed and neither
+# comes off the ZMQ stats feed, which is how they escaped the original sweep:
+# upstream's README counts the six stats-feed events, and that count was taken
+# as the whole list. `chat` matters most -- a large share of plugins hook it.
+#
+# `vote_started` and `vote_ended` look like they belong here and do NOT.
+# minqlx's dispatchers forward a different argument list than they accept:
+# VoteEndedDispatcher.dispatch(self, passed) calls super().dispatch(votes,
+# vote, args, passed) (minqlx _events.py:431-441), so HANDLERS already take 4
+# on both runtimes. Reading the `def dispatch` line alone says otherwise, and
+# adding these on that basis would flag correct handlers as broken.
 _EVENT_ARITY = {
     MINQLX: {
         'player_connect': 1, 'game_start': 1, 'game_end': 1,
         'round_end': 1, 'team_switch_attempt': 3, 'kill': 3, 'death': 3,
+        'chat': 3, 'userinfo': 2,
     },
     MINQLXTENDED: {
         'player_connect': 2, 'game_start': 0, 'game_end': 1,
         'round_end': 3, 'team_switch_attempt': 4, 'kill': 3, 'death': 3,
+        'chat': 4, 'userinfo': 3,
     },
 }
 

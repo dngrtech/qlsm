@@ -88,7 +88,36 @@ def replacement_scripts(runtime):
     return scripts
 
 
-def _strip_entry(path, verdict, reasons, replacements):
+def shipped_scripts(runtime):
+    """relpath -> text for EVERY .py the runtime's default builtin preset ships,
+    subdirectories included.
+
+    `replacement_scripts()` above is deliberately flat, because only a root-level file
+    can be offered as a replacement. This one is not: the draft filter restores a
+    subdirectory file the source overlay wrote over, and the report has to describe
+    that, so both need to see `discord_extensions/admin.py`.
+
+    draft_routes._target_default_preset_files() delegates here so the report and the
+    filter cannot disagree about which files the target ships -- they disagreeing is
+    the whole failure class this gate exists to eliminate.
+    """
+    preset = default_preset_name_for_runtime(runtime)
+    directory = os.path.join(BUILTIN_PRESETS_DIR, preset, 'scripts')
+    scripts = {}
+    for root, _dirs, filenames in os.walk(directory):
+        for name in filenames:
+            if not name.endswith('.py'):
+                continue
+            full_path = os.path.join(root, name)
+            try:
+                with open(full_path, 'r', encoding='utf-8') as handle:
+                    scripts[os.path.relpath(full_path, directory)] = handle.read()
+            except (OSError, ValueError):
+                continue
+    return scripts
+
+
+def _strip_entry(path, verdict, reasons, replacements, shipped=None):
     """One row of the operator-facing report.
 
     `replacement` is a filename in `replacements`, or None when the target
@@ -107,13 +136,20 @@ def _strip_entry(path, verdict, reasons, replacements):
     never handed a replacement.
     """
     if '/' in path or os.sep in path:
+        # A subdirectory file cannot be OFFERED a replacement, but since the draft
+        # filter restores one the target ships at this same path, saying only
+        # "stripped, nothing available" would describe a loss that does not happen.
+        # `auto_replaced` is how the dialog tells those two outcomes apart.
         return {'path': path, 'verdict': verdict, 'reasons': reasons,
-                'replacement': None}
+                'replacement': None,
+                'auto_replaced': path in (shipped or {})}
     return {
         'path': path,
         'verdict': verdict,
         'reasons': reasons,
         'replacement': path if path in replacements else None,
+        # Root-level files are never auto-restored; the operator ticks them or they go.
+        'auto_replaced': False,
     }
 
 
@@ -132,6 +168,7 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
 
     hashes = baseline_hashes(target)
     candidates = replacement_scripts(target)
+    shipped = shipped_scripts(target)
     scripts = response_data.get('scripts') or {}
 
     kept = {}
@@ -148,7 +185,7 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
         if verdict == VERDICT_COMPATIBLE:
             kept[path] = content
             continue
-        entry = _strip_entry(path, verdict, reasons, candidates)
+        entry = _strip_entry(path, verdict, reasons, candidates, shipped)
         stripped.append(entry)
         if entry['replacement']:
             offered[entry['replacement']] = candidates[entry['replacement']]

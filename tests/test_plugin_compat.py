@@ -141,6 +141,77 @@ def test_a_stale_player_connect_arity_is_incompatible_with_minqlxtended():
     assert any('player_connect' in r for r in reasons), reasons
 
 
+def test_a_stale_chat_arity_is_incompatible_with_minqlxtended():
+    """chat goes 3 -> 4 and is the most-hooked event in the wild.
+
+    Its fourth parameter is declared `recipient=None`, which reads as optional and is
+    not: _check_handler_signature binds the dispatcher's whole parameter list onto the
+    handler, defaults included. QLSM's own myFun.py port shipped a three-argument
+    handle_chat on the strength of that misreading, passed this scanner, and could not
+    load on a server.
+    """
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("chat", self.handle_chat)\n'
+        '    def handle_chat(self, player, msg, channel):\n'
+        '        pass\n'
+    )
+    reasons = scan_incompatibilities(source, MINQLXTENDED)
+    assert any('chat' in r for r in reasons), reasons
+
+
+def test_the_correct_chat_arity_is_not_flagged():
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("chat", self.handle_chat)\n'
+        '    def handle_chat(self, player, msg, channel, recipient):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
+def test_a_stale_userinfo_arity_is_incompatible_with_minqlxtended():
+    """userinfo goes 2 -> 3. Like chat, it has nothing to do with the ZMQ stats feed,
+    which is how both escaped the original sweep of changed signatures."""
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("userinfo", self.handle_userinfo)\n'
+        '    def handle_userinfo(self, player, changed):\n'
+        '        pass\n'
+    )
+    reasons = scan_incompatibilities(source, MINQLXTENDED)
+    assert any('userinfo' in r for r in reasons), reasons
+
+
+def test_vote_ended_is_not_treated_as_a_changed_signature():
+    """It looks like one and is not, in either direction.
+
+    minqlx's VoteEndedDispatcher.dispatch(self, passed) forwards
+    super().dispatch(votes, vote, args, passed) (_events.py:431-441), so handlers take
+    four arguments on BOTH runtimes. Adding vote_ended to _EVENT_ARITY on the strength
+    of its `def dispatch` line would flag every correct handler as stale -- which is
+    what happened to two of the ports in this preset before it was caught.
+    """
+    source = (
+        'import minqlxtended\n'
+        'class p(minqlxtended.Plugin):\n'
+        '    def __init__(self):\n'
+        '        self.add_hook("vote_ended", self.handle_vote_ended)\n'
+        '        self.add_hook("vote_started", self.handle_vote_started)\n'
+        '    def handle_vote_ended(self, votes, vote, args, passed):\n'
+        '        pass\n'
+        '    def handle_vote_started(self, caller, vote, args):\n'
+        '        pass\n'
+    )
+    assert scan_incompatibilities(source, MINQLXTENDED) == []
+
+
 def test_the_correct_player_connect_arity_is_not_flagged():
     source = (
         'import minqlxtended\n'

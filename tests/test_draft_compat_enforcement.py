@@ -15,22 +15,23 @@ MINQLX_DEFAULT = os.path.join('configs', 'presets', '_builtin', 'default', 'scri
 MINQLXTENDED_DEFAULT = os.path.join(
     'configs', 'presets', '_builtin', 'default-minqlxtended', 'scripts')
 
-# The nine files a minqlxtended-preset -> minqlx-host load used to delete
-# without ever naming them. They are shipped by the minqlx default preset and
-# absent from the minqlxtended one, so _seed_draft's overlay puts them in the
-# draft and the dialog -- computed from the SOURCE preset -- cannot list them.
-# They then miss the ql-assets hash allow-list (the shipped preset copies have
-# drifted from the vendored baseline), land `unknown`, and were deleted.
+# Files a minqlxtended-preset -> minqlx-host load can delete without ever naming
+# them. A file qualifies by being shipped in the minqlx default preset and absent
+# from the minqlxtended one: _seed_draft's overlay puts it in the draft, and the
+# dialog -- computed from the SOURCE preset -- cannot list it. It then misses the
+# ql-assets hash allow-list, lands `unknown`, and is deleted.
+#
+# This was nine files (commlink, iouonegirl, mybalance, mydiscordbot, the four
+# discord_extensions/ helpers and extras/textart). Porting those to minqlxtended
+# put them in BOTH default presets, which takes them out of this class entirely:
+# they now arrive from the SOURCE preset, so the dialog lists them and any
+# deletion is reported rather than silent.
+#
+# ServerStatus.py is what remains, and it cannot be closed the same way. It is
+# not a plugin -- it is an Oracle WebLogic admin script in Python 2 that reads
+# sys.argv[1:6] at import -- so there is no minqlxtended counterpart to ship.
 UNREPORTED_OVERLAY_DELETIONS = {
-    'commlink.py',
-    'iouonegirl.py',
-    'mybalance.py',
-    'mydiscordbot.py',
-    os.path.join('discord_extensions', 'admin.py'),
-    os.path.join('discord_extensions', 'qlstats.py'),
-    os.path.join('discord_extensions', 'status.py'),
-    os.path.join('discord_extensions', 'topic_updater.py'),
-    os.path.join('extras', 'textart.py'),
+    'ServerStatus.py',
 }
 
 MINQLX_PLUGIN = "import minqlx\n\n\nclass a(minqlx.Plugin):\n    RET = RET_STOP_ALL\n"
@@ -277,13 +278,22 @@ def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_pa
     exempt = {rel for rel, digest in _digests(MINQLXTENDED_DEFAULT).items()
               if rel in scripts and baseline_digest(scripts[rel]) == digest}
 
+    # A second class of legitimate survivor, for the same underlying reason. A
+    # SUBDIRECTORY file the target ships at this path is restored from the target's
+    # copy rather than deleted, because it can never be offered as a replacement --
+    # isEnableablePluginPath() rejects any path with a separator, so it reaches no
+    # dialog. Unlike `exempt` above, the source's content differs (that is why the
+    # filter reached it at all), so it has to be matched on path, not digest.
+    restored = {rel for rel in _pys(MINQLXTENDED_DEFAULT)
+                if (os.sep in rel or '/' in rel) and rel in scripts}
+
     draft = tmp_path / 'draft'
     with app.app_context():
         _seed_draft(str(draft), str(seeded_src), 'default',
                     target_runtime='minqlxtended', source_runtime='minqlx')
     on_disk = _pys(str(draft))
 
-    expected_on_disk = reported_kept | (reported_stripped & exempt)
+    expected_on_disk = reported_kept | (reported_stripped & (exempt | restored))
     assert on_disk == expected_on_disk, (
         'the draft on disk and the compatibility report disagree about what '
         'a real minqlx -> minqlxtended preset load keeps: '
@@ -319,8 +329,8 @@ def test_a_cross_runtime_load_keeps_the_target_runtimes_own_shipped_plugins(
     """
     source_files = _pys(MINQLXTENDED_DEFAULT)
     overlay_files = _pys(MINQLX_DEFAULT)
-    assert len(source_files) == 38 and len(overlay_files) == 53, (
-        f'expected the two shipped defaults to hold 38 and 53 .py files, found '
+    assert len(source_files) == 74 and len(overlay_files) == 53, (
+        f'expected the two shipped defaults to hold 74 and 53 .py files, found '
         f'{len(source_files)} and {len(overlay_files)} -- run pytest from the '
         f'repo root')
 
@@ -372,12 +382,14 @@ def test_a_cross_runtime_load_deletes_nothing_the_dialog_never_listed(
         f'ever appearing in the dialog: {sorted(deleted - shown)}')
 
 
-def test_the_nine_silently_deleted_plugins_survive(
+def test_the_silently_deleted_overlay_plugins_survive(
         app_with_builtin_presets, tmp_path):
     """Names it, so a regression reads as a regression and not as a set diff.
 
-    These nine were deleted from every cross-runtime load onto a minqlx host
-    and appeared in no dialog, no report and no log the operator sees.
+    These were deleted from every cross-runtime load onto a minqlx host and
+    appeared in no dialog, no report and no log the operator sees. The set was
+    nine files until the minqlxtended ports landed; see the note on
+    UNREPORTED_OVERLAY_DELETIONS for why only ServerStatus.py is left.
     """
     on_disk = _pys(str(_seed_the_cross_runtime_overlay(
         app_with_builtin_presets, tmp_path)))
@@ -399,3 +411,77 @@ def test_the_nine_silently_deleted_plugins_survive(
     assert UNREPORTED_OVERLAY_DELETIONS.isdisjoint(shown), (
         f'these are listed in the dialog after all, so this test is pinning '
         f'the wrong thing: {sorted(UNREPORTED_OVERLAY_DELETIONS & shown)}')
+
+
+# --- Subdirectory helpers the source overlay writes over -------------------------
+#
+# The gate deletes what the target cannot run, and offers the target's own version in
+# its place -- but only for root-level files. isEnableablePluginPath() rejects any path
+# with a separator, so a subdirectory file never reaches the dialog and never gets the
+# offer. That was fine while the minqlxtended preset shipped no subdirectories. Once it
+# shipped ported discord_extensions/ helpers, _seed_draft would lay them down, the
+# source overlay would write the minqlx originals over them, and the filter would delete
+# those -- leaving mydiscordbot.py beside an empty discord_extensions/ and failing at
+# load_extension(). These pin the restore that closes that, and its two boundaries.
+
+def _seed_over_shipped_helper(app, tmp_path, extra=None):
+    """A source preset whose subdirectory file collides with one the target ships."""
+    shipped_rel = os.path.join('discord_extensions', 'qlstats.py')
+    with open(os.path.join(MINQLXTENDED_DEFAULT, shipped_rel), 'r', encoding='utf-8') as handle:
+        shipped_text = handle.read()
+
+    source = tmp_path / 'src'
+    (source / 'discord_extensions').mkdir(parents=True)
+    (source / shipped_rel).write_text(MINQLX_PLUGIN)
+    for name, text in (extra or {}).items():
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    draft = tmp_path / 'draft'
+    with app.app_context():
+        _seed_draft(str(draft), str(source), 'default-minqlxtended',
+                    target_runtime='minqlxtended', source_runtime='minqlx')
+    return draft, shipped_rel, shipped_text
+
+
+def test_a_clobbered_subdirectory_helper_is_restored_not_deleted(
+        app_with_builtin_presets, tmp_path):
+    draft, shipped_rel, shipped_text = _seed_over_shipped_helper(
+        app_with_builtin_presets, tmp_path)
+
+    landed = draft / shipped_rel
+    assert landed.is_file(), (
+        f'{shipped_rel} was deleted; mydiscordbot.py cannot load without its helpers')
+    assert landed.read_text() == shipped_text, (
+        'the file on disk is not the target runtime\'s own copy -- a restore that '
+        'leaves the source\'s minqlx version behind is worse than the deletion was')
+
+
+def test_a_subdirectory_file_the_target_does_not_ship_is_still_deleted(
+        app_with_builtin_presets, tmp_path):
+    """The restore puts back what the seed put there. It does not invent a file.
+
+    Without this, "restore instead of delete" could quietly degrade into "keep
+    incompatible subdirectory files", which is the hole the gate exists to close.
+    """
+    orphan = os.path.join('discord_extensions', 'not_shipped_by_target.py')
+    draft, _rel, _text = _seed_over_shipped_helper(
+        app_with_builtin_presets, tmp_path, extra={orphan: MINQLX_PLUGIN})
+    assert not (draft / orphan).exists(), (
+        f'{orphan} has no counterpart in the target preset and must still be stripped')
+
+
+def test_the_restore_does_not_extend_to_root_level_files(
+        app_with_builtin_presets, tmp_path):
+    """A root-level collision still goes through the dialog, not around it.
+
+    Root files have a working path -- _strip_entry offers the target's version and the
+    operator accepts it. Auto-restoring them would swap a plugin under the operator
+    without asking, which is exactly what the replacement dialog exists to prevent.
+    """
+    draft, _rel, _text = _seed_over_shipped_helper(
+        app_with_builtin_presets, tmp_path, extra={'balance.py': MINQLX_PLUGIN})
+    assert not (draft / 'balance.py').exists(), (
+        'balance.py was restored without the operator accepting it; the restore must '
+        'stay scoped to subdirectory files, which have no dialog of their own')

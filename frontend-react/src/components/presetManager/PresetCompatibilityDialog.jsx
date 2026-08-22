@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
-import { AlertTriangle, FolderOpen } from 'lucide-react';
+import { AlertTriangle, FolderOpen, RefreshCw } from 'lucide-react';
 import { runtimeLabel } from '../../constants/runtimes';
 import { strippedWithReplacements } from '../../utils/presetCompatibility';
 
@@ -63,10 +63,12 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                 installed" would leave them to discover that on the next
                 screen. */}
             <p className="mt-2 text-sm text-theme-secondary">
-              This preset was saved from a {presetRuntime} host. The rest of the config loads as-is,
-              but the plugins below won&apos;t be installed on this instance. Each one either uses
-              an API that {targetRuntime} doesn&apos;t have, or can&apos;t be confirmed to run
-              there — the reason is shown for each. The instance still starts from
+              This preset was saved from a {presetRuntime} host. The rest of the config loads
+              as-is, but this preset&apos;s copy of each plugin below won&apos;t be installed:
+              each one either uses an API that {targetRuntime} doesn&apos;t have, or can&apos;t
+              be confirmed to run there — the reason is shown for each. Some can be swapped
+              for {targetRuntime}&apos;s own version, and helper modules are swapped
+              automatically; the rest are dropped. The instance still starts from
               {' '}{targetRuntime}&apos;s own standard plugins, so the plugin list you end up with
               is not simply this preset&apos;s minus what is listed here.
             </p>
@@ -75,13 +77,31 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
               {stripped.map((entry) => (
                 <li
                   key={entry.path}
-                  className="rounded-md border border-[var(--accent-warning)]/35 bg-[var(--accent-warning)]/8 px-3 py-2.5 text-xs"
+                  className={
+                    entry.auto_replaced
+                      ? 'rounded-md border border-theme/60 bg-theme-secondary/40 px-3 py-2.5 text-xs'
+                      : 'rounded-md border border-[var(--accent-warning)]/35 bg-[var(--accent-warning)]/8 px-3 py-2.5 text-xs'
+                  }
                 >
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--accent-warning)]" />
+                    {/* An auto-replaced helper is not a loss, and must not be dressed as
+                        one: the file is swapped for the target runtime's own copy of the
+                        same path, with no decision for the operator to make. Showing it
+                        under a warning triangle alongside genuinely unrecoverable files
+                        is what made the two look identical. */}
+                    {entry.auto_replaced ? (
+                      <RefreshCw className="mt-0.5 h-4 w-4 flex-shrink-0 text-theme-secondary" />
+                    ) : (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--accent-warning)]" />
+                    )}
                     <div className="min-w-0 flex-1 text-left">
                       <div className="text-sm font-semibold text-theme-primary">{entry.path}</div>
-                      {entry.verdict === 'unknown' ? (
+                      {entry.auto_replaced ? (
+                        <p className="mt-1 text-theme-secondary">
+                          Helper module. Replaced automatically with {targetRuntime}&apos;s own
+                          version of this file &mdash; nothing to choose, and nothing is lost.
+                        </p>
+                      ) : entry.verdict === 'unknown' ? (
                         <p className="mt-1 text-[var(--accent-warning)]">
                           Not part of the {targetRuntime} baseline; QLSM can&apos;t confirm this plugin will run.
                         </p>

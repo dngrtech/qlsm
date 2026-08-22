@@ -75,19 +75,40 @@ def test_a_stale_minqlx_signature_is_refused_at_registration(mxt):
         plugin.add_hook("game_start", plugin.handle_game_start)
 
 
-def test_chat_accepts_the_optional_recipient(mxt):
-    """_events.py:557 dispatches recipient=None, so both arities must register."""
+def test_chat_refuses_a_three_argument_handler(mxt):
+    """A defaulted dispatch parameter is still mandatory on the handler.
+
+    This test used to assert the opposite -- that `chat` accepts 3 arguments as well as
+    4, on the reasoning that _events.py:557 declares `recipient=None`. That reasoning
+    does not survive reading _check_handler_signature: the engine takes the dispatcher's
+    parameter NAMES (defaults included, `_handler_parameters` does not filter them) and
+    calls `signature.bind(*[None] * len(expected))` on the handler. Binding four
+    positionals onto a three-parameter handler raises TypeError, so the hook is refused
+    and the whole plugin fails to load.
+
+    The cost of getting this wrong was real: QLSM's own myFun.py port shipped a
+    three-argument handle_chat, passed every test here, and could not load on a server.
+    """
 
     class ChatPlugin(mxt.Plugin):
         def three(self, player, msg, channel):
             pass
 
-        def four(self, player, msg, channel, recipient=None):
+        def four(self, player, msg, channel, recipient):
+            pass
+
+        def four_defaulted(self, player, msg, channel, recipient=None):
             pass
 
     plugin = ChatPlugin()
-    plugin.add_hook("chat", plugin.three)
+    with pytest.raises(mxt.SignatureMismatch):
+        plugin.add_hook("chat", plugin.three)
+
+    # Both four-argument shapes bind, so the fix for a stale handler is to accept the
+    # argument, with or without a default -- not to give the parameter a default and
+    # hope the engine treats it as optional.
     plugin.add_hook("chat", plugin.four)
+    plugin.add_hook("chat", plugin.four_defaulted)
     assert len(plugin.hooks) == 2
 
 
