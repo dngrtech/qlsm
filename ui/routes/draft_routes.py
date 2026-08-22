@@ -145,8 +145,12 @@ def draft_filtered_runtime(draft_id):
     return value if is_valid_runtime(value) else None
 
 
-def _target_default_preset_digests(target_runtime):
-    """relpath -> baseline_digest for every .py the target runtime ships itself.
+def _target_default_preset_files(target_runtime):
+    """relpath -> file text for every .py the target runtime ships itself.
+
+    Text rather than a digest because this map now has two jobs: recognising a file as
+    the target's own (compare digests), and RESTORING one the source overlay wrote over
+    (write the text back). See the subdirectory branch in _apply_runtime_filter.
 
     `_seed_draft` copies the TARGET runtime's own builtin default preset in
     before overlaying the source preset, so most of what the filter then walks
@@ -172,7 +176,7 @@ def _target_default_preset_digests(target_runtime):
         default_preset_name_for_runtime(target_runtime),
         SCRIPTS_DIR,
     )
-    digests = {}
+    files = {}
     for root, _dirs, filenames in os.walk(directory):
         for filename in filenames:
             if not filename.lower().endswith('.py'):
@@ -183,8 +187,8 @@ def _target_default_preset_digests(target_runtime):
                     text = handle.read()
             except (OSError, ValueError):
                 continue
-            digests[os.path.relpath(full_path, directory)] = baseline_digest(text)
-    return digests
+            files[os.path.relpath(full_path, directory)] = text
+    return files
 
 
 def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, accepted_replacements):
@@ -202,8 +206,8 @@ def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, ac
     can silently disagree, which is the exact failure class this rework
     exists to eliminate.
 
-    Returns (relative paths removed, the runtime filtered for). The second
-    element is None when neither early return was taken -- this function's two
+    Returns (relative paths removed, relative paths restored, the runtime filtered
+    for). The third element is None when neither early return was taken -- this function's two
     guards are the only place that knows the difference between "filtered for
     minqlxtended" and "left alone", and re-deriving that condition at a second
     call site is how the two halves of this gate have already drifted apart
@@ -214,16 +218,19 @@ def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, ac
         # "the runtimes differ" is a guess, and this function's mistake costs
         # the operator files. Skipping keeps everything, which is the same
         # thing QLSM did before the gate existed.
-        return [], None
+        return [], [], None
     source = normalize_runtime(source_runtime)
     target = normalize_runtime(target_runtime)
     if source == target:
-        return [], None
+        return [], [], None
 
     hashes = baseline_hashes(target)
     candidates = replacement_scripts(target)
-    shipped_by_target = _target_default_preset_digests(target)
+    shipped_by_target = _target_default_preset_files(target)
+    shipped_digests = {rel: baseline_digest(text)
+                       for rel, text in shipped_by_target.items()}
     removed = []
+    restored = []
 
     for root, _dirs, filenames in os.walk(draft_scripts_path):
         for filename in filenames:
@@ -247,7 +254,7 @@ def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, ac
                 # be incompatible with anything, and removing it breaks
                 # imports for every sibling module that did survive.
                 continue
-            if shipped_by_target.get(rel_path) == baseline_digest(text):
+            if shipped_digests.get(rel_path) == baseline_digest(text):
                 # This file is byte-for-byte the one the TARGET runtime's own
                 # default preset ships at this path -- almost always because
                 # _seed_draft laid it down itself moments ago. Deleting the
@@ -259,6 +266,30 @@ def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, ac
             verdict, _reasons = classify(
                 text, target, baseline_sha256=hashes.get(filename))
             if verdict == VERDICT_COMPATIBLE:
+                continue
+            if (os.sep in rel_path or '/' in rel_path) and rel_path in shipped_by_target:
+                # A subdirectory file the TARGET runtime also ships at this exact path.
+                # _seed_draft laid the target's copy down and the source overlay wrote
+                # over it, so deleting now leaves nothing where the seed put something.
+                #
+                # Root-level files have a way out of that: _strip_entry offers the
+                # target's version and the operator ticks it. Subdirectory files never
+                # get the offer -- isEnableablePluginPath() rejects any path with a
+                # separator, so they cannot appear in the dialog at all -- which left
+                # mydiscordbot.py landing with an empty discord_extensions/ beside it
+                # and failing at load_extension().
+                #
+                # Restoring is not the same act as offering a replacement, and the
+                # reason _strip_entry declines to offer does not apply here: that
+                # concern is about relocating a subdirectory file into the plugin root,
+                # a path change. This writes the target's own file back to the path it
+                # already occupied, which is what the seed did before the overlay.
+                try:
+                    with open(full_path, 'w', encoding='utf-8') as handle:
+                        handle.write(shipped_by_target[rel_path])
+                    restored.append(rel_path)
+                except OSError:
+                    pass
                 continue
             try:
                 os.remove(full_path)
@@ -284,7 +315,7 @@ def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, ac
         except OSError:
             continue
 
-    return removed, target
+    return removed, restored, target
 
 
 def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRESET_NAME,
@@ -341,13 +372,21 @@ def _seed_draft(draft_scripts_path, source_path, default_preset_name=DEFAULT_PRE
     # calls separately would let an incompatible default overlay through.
     if not target_runtime:
         return None
-    removed, filtered_for = _apply_runtime_filter(
+    removed, restored, filtered_for = _apply_runtime_filter(
         draft_scripts_path, source_runtime, target_runtime,
         accepted_replacements)
     if removed:
         current_app.logger.info(
             f"Draft seeded for {target_runtime}: removed "
             f"{len(removed)} incompatible plugin(s): {', '.join(sorted(removed))}")
+    if restored:
+        # Logged separately from `removed` because it is a different outcome and the
+        # operator was shown neither: these never reach the dialog. Silence here would
+        # make an unexplained file swap look like the overlay never happened.
+        current_app.logger.info(
+            f"Draft seeded for {target_runtime}: restored "
+            f"{len(restored)} subdirectory helper(s) the source overlay wrote over: "
+            f"{', '.join(sorted(restored))}")
     return filtered_for
 
 
