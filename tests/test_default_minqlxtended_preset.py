@@ -130,12 +130,13 @@ def test_every_checked_plugin_ships_in_the_preset(checked_plugins):
 #: (ansible_instance_mgmt.py:27) and backfilled from the baseline, so an operator must
 #: never be able to untick it.
 #:
-#: reset_acc and suppress_join_msg are not in the minqlx default preset's scripts/
-#: either. The minqlxtended default mirrors the minqlx default's selection, so that an
-#: operator moving between runtimes is offered the same set. Both remain available:
-#: everything in the baseline lands in every instance's plugin directory regardless of
-#: preset, and a host that wants them can enable them by name.
-BASELINE_ONLY = {'serverchecker.py', 'reset_acc.py', 'suppress_join_msg.py'}
+#: reset_acc and suppress_join_msg used to sit here too, on the grounds that the minqlx
+#: default preset does not ship them either. They moved into the preset when the
+#: third-party ports below landed: `replacement_scripts()` (preset_compat.py:61) reads
+#: THIS directory and nothing else, so a plugin absent from it is a plugin the
+#: cross-runtime import dialog cannot offer as a replacement. Both were already ported
+#: in P3 and needed no work -- only somewhere to be seen from.
+BASELINE_ONLY = {'serverchecker.py'}
 
 
 #: Pickable plugins that are not in the vendored baseline.
@@ -143,7 +144,36 @@ BASELINE_ONLY = {'serverchecker.py', 'reset_acc.py', 'suppress_join_msg.py'}
 #: highfps lives in dngrtech/qlsm_plugins, not in ql-assets/data/. It ships only in the
 #: preset on both runtimes, exactly as its minqlx counterpart does, because it needs a
 #: native .so companion beside it and the baseline directory carries no binaries.
-PRESET_ONLY = {'highfps.py'}
+#:
+#: The rest are third-party plugins QLSM ported so the cross-runtime import dialog has
+#: something to offer for them. They are deliberately preset-only rather than vendored:
+#: the baseline is "upstream at the pinned commit, plus QLSM's own seven ports", every
+#: file in it lands in every instance's plugin directory regardless of preset, and
+#: neither is true of someone else's plugin that QLSM merely carries a port of.
+#:
+#: ServerStatus.py is absent on purpose and is not an oversight. It ships in the minqlx
+#: default preset but is not a plugin at all -- it is an Oracle WebLogic admin script
+#: (cmo.getServers(), ServerLifeCycleRuntimes) written in Python 2, which reads
+#: sys.argv[1:6] at import. There is nothing to port.
+PRESET_ONLY = {
+    'highfps.py',
+    # BarelyMiSSeD
+    'clanmembers.py', 'getmap.py', 'listmaps.py', 'mapLimiter.py', 'players_db.py',
+    'protect.py', 'restartserver.py', 'serverBDM.py', 'specall.py', 'voteban.py',
+    # ShiN0 (mydiscordbot's discord_extensions/ helpers are subdirectory files and so
+    # are not counted by this test, which lists the plugin root only)
+    'mydiscordbot.py',
+    # Mino
+    'commlink.py', 'commlink_secured.py', 'irc.py',
+    # iouonegirl
+    'intermission.py', 'iouonegirl.py', 'mybalance.py',
+    # mattiZed / Thomas Jones / cstewart90
+    'kills.py', 'onjoin.py', 'servers.py',
+    # unattributed
+    'block.py', 'kickban.py', 'linodefw.py', 'playerpings.py', 'uberstats.py',
+    # X76-preset plugins, ported at the operator's request
+    'improved_timer.py', 'protected_flag.py', 'ranked.py', 'spec_switch_guard.py',
+}
 
 
 def test_scripts_match_the_vendored_baseline():
@@ -218,11 +248,13 @@ def test_factories_directory_matches_the_minqlx_default():
     assert ours == theirs
 
 
-# The QLSM ports that are pickable from this preset. myFun, specqueue, player_info and
-# commands ship in the minqlx default preset's scripts/, so their ports ship here.
-# reset_acc and suppress_join_msg do not ship in the minqlx default preset, so they stay
-# baseline-only: present in every instance's plugin directory, not offered by the picker.
-PRESET_VISIBLE_PORTS = ['commands.py', 'myFun.py', 'player_info.py', 'specqueue.py']
+# The QLSM ports that are pickable from this preset, and so exist as a preset copy of a
+# baseline file. myFun, specqueue, player_info and commands ship in the minqlx default
+# preset's scripts/, so their ports ship here. reset_acc and suppress_join_msg joined
+# them when the preset became the source the import dialog offers replacements from; see
+# BASELINE_ONLY. Every name here is checked for drift against the baseline below.
+PRESET_VISIBLE_PORTS = ['commands.py', 'myFun.py', 'player_info.py', 'reset_acc.py',
+                        'specqueue.py', 'suppress_join_msg.py']
 
 
 def test_the_preset_ships_the_pickable_qlsm_ports():

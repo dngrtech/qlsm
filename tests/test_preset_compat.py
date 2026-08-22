@@ -118,13 +118,18 @@ def test_a_same_named_target_plugin_is_offered_as_a_replacement():
 
 
 def test_a_plugin_with_no_counterpart_is_offered_nothing():
-    """mybalance.py has no minqlxtended equivalent; inventing one would be a
-    silent swap of non-equivalent behaviour."""
-    response = {'scripts': {'mybalance.py': 'import minqlx\n'}, 'checked_plugins': []}
+    """A file the minqlxtended default preset does not ship gets no offer;
+    inventing one would be a silent swap of non-equivalent behaviour.
+
+    This used to use mybalance.py, which has since been ported and now IS
+    offered. ServerStatus.py replaces it because it can never gain a
+    counterpart: it is not a plugin at all, but an Oracle WebLogic admin
+    script in Python 2 that reads sys.argv[1:6] at import."""
+    response = {'scripts': {'ServerStatus.py': 'import minqlx\n'}, 'checked_plugins': []}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
     entry = result['compatibility']['stripped'][0]
     assert entry['replacement'] is None
-    assert 'mybalance.py' not in result['compatibility']['replacements']
+    assert 'ServerStatus.py' not in result['compatibility']['replacements']
 
 
 def test_a_subdirectory_helper_is_stripped_but_offered_no_replacement():

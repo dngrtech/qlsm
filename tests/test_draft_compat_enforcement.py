@@ -15,22 +15,23 @@ MINQLX_DEFAULT = os.path.join('configs', 'presets', '_builtin', 'default', 'scri
 MINQLXTENDED_DEFAULT = os.path.join(
     'configs', 'presets', '_builtin', 'default-minqlxtended', 'scripts')
 
-# The nine files a minqlxtended-preset -> minqlx-host load used to delete
-# without ever naming them. They are shipped by the minqlx default preset and
-# absent from the minqlxtended one, so _seed_draft's overlay puts them in the
-# draft and the dialog -- computed from the SOURCE preset -- cannot list them.
-# They then miss the ql-assets hash allow-list (the shipped preset copies have
-# drifted from the vendored baseline), land `unknown`, and were deleted.
+# Files a minqlxtended-preset -> minqlx-host load can delete without ever naming
+# them. A file qualifies by being shipped in the minqlx default preset and absent
+# from the minqlxtended one: _seed_draft's overlay puts it in the draft, and the
+# dialog -- computed from the SOURCE preset -- cannot list it. It then misses the
+# ql-assets hash allow-list, lands `unknown`, and is deleted.
+#
+# This was nine files (commlink, iouonegirl, mybalance, mydiscordbot, the four
+# discord_extensions/ helpers and extras/textart). Porting those to minqlxtended
+# put them in BOTH default presets, which takes them out of this class entirely:
+# they now arrive from the SOURCE preset, so the dialog lists them and any
+# deletion is reported rather than silent.
+#
+# ServerStatus.py is what remains, and it cannot be closed the same way. It is
+# not a plugin -- it is an Oracle WebLogic admin script in Python 2 that reads
+# sys.argv[1:6] at import -- so there is no minqlxtended counterpart to ship.
 UNREPORTED_OVERLAY_DELETIONS = {
-    'commlink.py',
-    'iouonegirl.py',
-    'mybalance.py',
-    'mydiscordbot.py',
-    os.path.join('discord_extensions', 'admin.py'),
-    os.path.join('discord_extensions', 'qlstats.py'),
-    os.path.join('discord_extensions', 'status.py'),
-    os.path.join('discord_extensions', 'topic_updater.py'),
-    os.path.join('extras', 'textart.py'),
+    'ServerStatus.py',
 }
 
 MINQLX_PLUGIN = "import minqlx\n\n\nclass a(minqlx.Plugin):\n    RET = RET_STOP_ALL\n"
@@ -319,8 +320,8 @@ def test_a_cross_runtime_load_keeps_the_target_runtimes_own_shipped_plugins(
     """
     source_files = _pys(MINQLXTENDED_DEFAULT)
     overlay_files = _pys(MINQLX_DEFAULT)
-    assert len(source_files) == 38 and len(overlay_files) == 53, (
-        f'expected the two shipped defaults to hold 38 and 53 .py files, found '
+    assert len(source_files) == 74 and len(overlay_files) == 53, (
+        f'expected the two shipped defaults to hold 74 and 53 .py files, found '
         f'{len(source_files)} and {len(overlay_files)} -- run pytest from the '
         f'repo root')
 
@@ -372,12 +373,14 @@ def test_a_cross_runtime_load_deletes_nothing_the_dialog_never_listed(
         f'ever appearing in the dialog: {sorted(deleted - shown)}')
 
 
-def test_the_nine_silently_deleted_plugins_survive(
+def test_the_silently_deleted_overlay_plugins_survive(
         app_with_builtin_presets, tmp_path):
     """Names it, so a regression reads as a regression and not as a set diff.
 
-    These nine were deleted from every cross-runtime load onto a minqlx host
-    and appeared in no dialog, no report and no log the operator sees.
+    These were deleted from every cross-runtime load onto a minqlx host and
+    appeared in no dialog, no report and no log the operator sees. The set was
+    nine files until the minqlxtended ports landed; see the note on
+    UNREPORTED_OVERLAY_DELETIONS for why only ServerStatus.py is left.
     """
     on_disk = _pys(str(_seed_the_cross_runtime_overlay(
         app_with_builtin_presets, tmp_path)))
@@ -399,3 +402,4 @@ def test_the_nine_silently_deleted_plugins_survive(
     assert UNREPORTED_OVERLAY_DELETIONS.isdisjoint(shown), (
         f'these are listed in the dialog after all, so this test is pinning '
         f'the wrong thing: {sorted(UNREPORTED_OVERLAY_DELETIONS & shown)}')
+
