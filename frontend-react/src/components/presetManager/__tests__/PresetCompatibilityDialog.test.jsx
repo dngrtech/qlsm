@@ -11,6 +11,13 @@ const compatibility = {
     { path: 'myFun.py', verdict: 'incompatible', reasons: ['line 3: imports the minqlx module'], replacement: 'myFun.py' },
     { path: 'mybalance.py', verdict: 'incompatible', reasons: ['line 1: references the minqlx module'], replacement: null },
     { path: 'custom.py', verdict: 'unknown', reasons: [], replacement: null },
+    {
+      path: 'discord_extensions/admin.py',
+      verdict: 'incompatible',
+      reasons: ['line 11: imports the minqlx module'],
+      replacement: null,
+      auto_replaced: true,
+    },
   ],
   replacements: { 'myFun.py': 'import minqlxtended\n' },
 };
@@ -78,6 +85,27 @@ describe('PresetCompatibilityDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalled();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  // A helper module the target ships at the same path is restored by the draft filter,
+  // so it must not be presented the way an unrecoverable file is. Before this, the two
+  // were indistinguishable in the dialog: same warning triangle, same "won't be
+  // installed" framing, no checkbox -- and operators reported the helpers as still
+  // showing up incompatible even though they were landing correctly on disk.
+  it('presents an auto-replaced helper as swapped, not as a loss', () => {
+    setup();
+    expect(screen.getByText(/Replaced automatically with minqlxtended/i)).toBeInTheDocument();
+  });
+
+  it('does not show the stripping reason for an auto-replaced helper', () => {
+    setup();
+    expect(screen.queryByText('line 11: imports the minqlx module')).not.toBeInTheDocument();
+  });
+
+  it('gives an auto-replaced helper no checkbox, since there is no choice to make', () => {
+    setup();
+    // One checkbox in the whole dialog: myFun.py, the only entry with a replacement.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
   });
 
   it('renders nothing when there is no compatibility block', () => {

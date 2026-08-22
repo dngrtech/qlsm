@@ -211,3 +211,53 @@ def test_checked_plugins_as_an_int_falls_back_to_empty_instead_of_raising():
     response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 42}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
     assert result['checked_plugins'] == []
+
+
+def test_a_subdirectory_helper_the_target_ships_is_reported_auto_replaced():
+    """The report has to describe the restore, or it describes a loss that never happens.
+
+    _apply_runtime_filter puts the target's own copy back when the source overlay writes
+    over a subdirectory file it also ships. Without a marker, that file appears in
+    `stripped` with `replacement: None`, which the dialog renders identically to a file
+    that is genuinely gone -- the two were indistinguishable, and operators reported the
+    discord_extensions/ helpers as "still incompatible" while they were landing fine.
+    """
+    path = os.path.join('discord_extensions', 'admin.py')
+    response = {'scripts': {path: 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['path'] == path
+    assert entry['auto_replaced'] is True
+    # Still no offer: a subdirectory file cannot be ticked, it is simply restored.
+    assert entry['replacement'] is None
+
+
+def test_a_subdirectory_helper_the_target_does_not_ship_is_a_real_loss():
+    """The marker must distinguish, not blanket every subdirectory file."""
+    path = os.path.join('discord_extensions', 'not_shipped_by_target.py')
+    response = {'scripts': {path: 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['auto_replaced'] is False
+    assert entry['replacement'] is None
+
+
+def test_a_root_level_file_is_never_auto_replaced():
+    """Root files go through the dialog. Auto-swapping one would change a plugin under
+    the operator without asking, which is what the checkbox exists to prevent."""
+    response = {'scripts': {'balance.py': 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['auto_replaced'] is False
+    assert entry['replacement'] == 'balance.py'
+
+
+def test_the_report_and_the_filter_read_the_same_shipped_files():
+    """draft_routes delegates to shipped_scripts() precisely so these cannot diverge.
+
+    They are the two halves of one promise -- what the operator is shown and what lands
+    on disk -- and this gate has already been rewritten twice over them drifting apart.
+    """
+    from ui.preset_compat import shipped_scripts
+    from ui.routes.draft_routes import _target_default_preset_files
+    assert shipped_scripts(MINQLXTENDED) == _target_default_preset_files(MINQLXTENDED)

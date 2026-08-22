@@ -17,7 +17,7 @@ from ui import db
 from ui.database import get_host_by_name, get_preset_by_name
 from ui.models import BinaryMetadata
 from ui.plugin_compat import VERDICT_COMPATIBLE, baseline_digest, classify
-from ui.preset_compat import baseline_hashes, replacement_scripts
+from ui.preset_compat import baseline_hashes, replacement_scripts, shipped_scripts
 from ui.preset_support import (
     BUILTIN_PRESETS_DIR,
     DEFAULT_PRESET_NAME,
@@ -148,47 +148,12 @@ def draft_filtered_runtime(draft_id):
 def _target_default_preset_files(target_runtime):
     """relpath -> file text for every .py the target runtime ships itself.
 
-    Text rather than a digest because this map now has two jobs: recognising a file as
-    the target's own (compare digests), and RESTORING one the source overlay wrote over
-    (write the text back). See the subdirectory branch in _apply_runtime_filter.
-
-    `_seed_draft` copies the TARGET runtime's own builtin default preset in
-    before overlaying the source preset, so most of what the filter then walks
-    is the target's own shipped baseline rather than anything the operator
-    chose. 13 of those files have drifted from the ql-assets manifest, so they
-    miss the hash allow-list, fall through to the scanner, land `unknown` and
-    get deleted -- and the dialog cannot even list them, because it is computed
-    from the SOURCE preset's files. A file that IS the target's own shipped
-    baseline is never something the target cannot run.
-
-    Keyed by relative path rather than by basename: extras/textart.py and a
-    root-level textart.py are different files, and this map exists to prove a
-    file IS the shipped one, not that it happens to share a name with it.
-
-    Resolved through BUILTIN_PRESETS_DIR, the same way replacement_scripts()
-    a few lines down resolves the very same directory, rather than through
-    resolve_preset_subdir(): the DB-backed lookup answers with a path that does
-    not exist whenever the builtin preset rows are absent, and a silently empty
-    map here would put the over-strip straight back.
+    Delegates to preset_compat.shipped_scripts() so the compatibility REPORT and this
+    FILTER read the same directory the same way. They are the two halves of one
+    promise -- what the operator is shown, and what lands on disk -- and this gate has
+    already been rewritten twice over them drifting apart.
     """
-    directory = os.path.join(
-        BUILTIN_PRESETS_DIR,
-        default_preset_name_for_runtime(target_runtime),
-        SCRIPTS_DIR,
-    )
-    files = {}
-    for root, _dirs, filenames in os.walk(directory):
-        for filename in filenames:
-            if not filename.lower().endswith('.py'):
-                continue
-            full_path = os.path.join(root, filename)
-            try:
-                with open(full_path, 'r', encoding='utf-8') as handle:
-                    text = handle.read()
-            except (OSError, ValueError):
-                continue
-            files[os.path.relpath(full_path, directory)] = text
-    return files
+    return shipped_scripts(target_runtime)
 
 
 def _apply_runtime_filter(draft_scripts_path, source_runtime, target_runtime, accepted_replacements):
