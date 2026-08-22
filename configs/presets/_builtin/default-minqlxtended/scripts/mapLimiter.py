@@ -66,7 +66,11 @@ class mapLimiter(minqlxtended.Plugin):
             essentials = minqlxtended.Plugin._loaded_plugins['essentials']
             remove_commands = set(['maps'])
             for cmd in essentials.commands.copy():
-                if remove_commands.intersection(cmd.name):
+# cmd.name is the primary name (a str) on minqlxtended; cmd.names is the full
+                # alias list minqlx's cmd.name used to be. Intersecting a set against the str
+                # iterates its characters and never matches, so this guard silently stopped
+                # firing. remove_command() still takes the primary name, so only this changes.
+                if remove_commands.intersection(cmd.names):
                     essentials.remove_command(cmd.name, cmd.handler)
         except Exception as e:
             pass

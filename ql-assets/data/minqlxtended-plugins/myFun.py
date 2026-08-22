@@ -405,7 +405,11 @@ class myFun(minqlxtended.Plugin):
         for script, handler in loaded_scripts.items():
             try:
                 for cmd in handler.commands:
-                    if {"sound"}.intersection(cmd.name):
+# cmd.name is the primary name (a str) on minqlxtended; cmd.names is the full
+                    # alias list minqlx's cmd.name used to be. Intersecting a set against the str
+                    # iterates its characters and never matches, so this guard silently stopped
+                    # firing. remove_command() still takes the primary name, so only this changes.
+                    if {"sound"}.intersection(cmd.names):
                         handler.remove_command(cmd.name, cmd.handler)
                         minqlxtended.console_print("^1myFun: Removing command ^7{} ^1used in ^7{} ^1plugin"
                                              .format(cmd.name, script))

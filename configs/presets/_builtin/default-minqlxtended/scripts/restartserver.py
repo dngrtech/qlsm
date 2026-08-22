@@ -124,7 +124,11 @@ class restartserver(minqlxtended.Plugin):
                     continue
                 try:
                     for cmd in loaded_scripts[script].commands.copy():
-                        if command.intersection(cmd.name):
+# cmd.name is the primary name (a str) on minqlxtended; cmd.names is the full
+                        # alias list minqlx's cmd.name used to be. Intersecting a set against the str
+                        # iterates its characters and never matches, so this guard silently stopped
+                        # firing. remove_command() still takes the primary name, so only this changes.
+                        if command.intersection(cmd.names):
                             loaded_scripts[script].remove_command(cmd.name, cmd.handler)
                 except:
                     continue
