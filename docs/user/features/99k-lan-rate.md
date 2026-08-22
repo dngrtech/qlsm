@@ -24,7 +24,7 @@ On small servers (2–4 players, low-intensity gametypes) there is effectively n
 
 ## minqlxtended Hosts
 
-On hosts running the **minqlxtended** runtime, QLSM runs every instance at 99k LAN rate and does not offer 25k. The toggle shows as on and cannot be changed — in the Deploy New Instance form, the instance Actions menu, the instance details panel and the Edit Config modal — and the Rate column reads **99k** for those instances. This is a QLSM product decision for that runtime, so there is nothing to turn on or off.
+On hosts running the **minqlxtended** runtime, QLSM runs every instance at 99k LAN rate and does not offer 25k.
 
 Hosts running the standard **minqlx** runtime are unaffected: the toggle stays yours to set, per instance, exactly as described below.
 
@@ -60,8 +60,6 @@ The hook binary lives on each instance host at `/home/ql/qlds-<port>/system-hook
 ## Presets
 
 Saving an instance's config as a [preset](../presets/overview.md) also records whether 99k LAN Rate was enabled at the time. Loading that preset applies the same toggle state — subject to the target host supporting it; if it doesn't, the preset's saved value is ignored and the toggle stays as it was. Presets saved before this feature existed don't have a recorded LAN rate preference, so loading one leaves the current toggle untouched.
-
-A preset saved from a minqlxtended instance records whatever the instance's own setting was, not the fixed-on state QLSM runs it at. That way loading it onto a minqlx host doesn't switch 99k on there without you asking.
 
 ## Related Pages
 
