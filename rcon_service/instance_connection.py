@@ -184,7 +184,6 @@ class InstanceConnection:
         if self._stats_connection:
             await self._stats_connection.disconnect()
             self._stats_connection = None
-        self._stats_subscription = None
         
         # Cancel receive task
         if self._recv_task and not self._recv_task.done():

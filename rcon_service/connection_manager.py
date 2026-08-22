@@ -12,14 +12,11 @@ from typing import Callable, Dict, Optional, Tuple
 import zmq.asyncio
 
 from .instance_connection import InstanceConnection
-from .stats_connection import password_fingerprint
 
 log = logging.getLogger(__name__)
 
 # Type alias for connection key (host_id, instance_id)
 ConnectionKey = Tuple[int, int]
-# Type alias for a physical stats endpoint (ip, stats_port)
-StatsTarget = Tuple[str, int]
 
 
 class ConnectionManager:
@@ -46,26 +43,15 @@ class ConnectionManager:
             on_stats: Callback for stats events (host_id, instance_id, event_dict)
         """
         self._connections: Dict[ConnectionKey, InstanceConnection] = {}
-        # Which connection currently owns each physical stats endpoint. Keyed by
-        # endpoint rather than by instance so a redeploy that hands the same
-        # ip:port to a new instance_id can evict the record it replaced.
-        self._stats_targets: Dict[StatsTarget, ConnectionKey] = {}
         self._on_message = on_message
         self._on_status_change = on_status_change
         self._on_stats = on_stats
         self._lock = asyncio.Lock()
-        self._stats_lock = asyncio.Lock()
         self._zmq_context = zmq.asyncio.Context()
     
     def _get_key(self, host_id: int, instance_id: int) -> ConnectionKey:
         """Generate connection key from host and instance IDs."""
         return (host_id, instance_id)
-    
-    def _release_stats_targets(self, key: ConnectionKey) -> None:
-        """Drop every stats endpoint currently owned by this connection."""
-        for target, owner in list(self._stats_targets.items()):
-            if owner == key:
-                del self._stats_targets[target]
     
     def get_connection(self, host_id: int, instance_id: int) -> Optional[InstanceConnection]:
         """Get an existing connection.
@@ -178,7 +164,6 @@ class ConnectionManager:
         
         async with self._lock:
             conn = self._connections.pop(key, None)
-            self._release_stats_targets(key)
             if conn:
                 await conn.disconnect()
                 log.debug(f"Disconnected from {host_id}:{instance_id}")
@@ -207,8 +192,6 @@ class ConnectionManager:
                 if key[0] == host_id
             ]
             conns_to_remove = [self._connections.pop(key) for key in keys_to_remove]
-            for key in keys_to_remove:
-                self._release_stats_targets(key)
             
         # Disconnect outside the lock to prevent blocking concurrent tasks
         for key, conn in zip(keys_to_remove, conns_to_remove):
@@ -220,7 +203,6 @@ class ConnectionManager:
         async with self._lock:
             conns = list(self._connections.items())
             self._connections.clear()
-            self._stats_targets.clear()
 
         # Disconnect outside the lock
         for key, conn in conns:
@@ -272,14 +254,6 @@ class ConnectionManager:
     ) -> None:
         """Subscribe to stats events for an instance.
         
-        A physical stats endpoint accepts one password at a time, so only one
-        connection may hold it. Recreating an instance mints a new instance_id
-        while the game port -- and therefore the ZMQ stats port -- stays the
-        same, so a leftover record for the old id would keep retrying the PLAIN
-        handshake with its old password. QLDS then logs a stream of denials
-        interleaved with the accepted ones, which reads like a firewall or a
-        port problem rather than two subscribers fighting over one socket.
-        
         Args:
             host_id: Host database ID
             instance_id: Instance database ID
@@ -287,36 +261,12 @@ class ConnectionManager:
             stats_port: ZMQ stats port
             stats_password: Stats socket password
         """
-        key = self._get_key(host_id, instance_id)
         conn = self.get_connection(host_id, instance_id)
-        if not conn:
-            log.warning(f"Cannot subscribe stats: {host_id}:{instance_id} not connected")
-            return
-        
-        target: StatsTarget = (ip, stats_port)
-        
-        async with self._stats_lock:
-            owner = self._stats_targets.get(target)
-            if owner is not None and owner != key:
-                log.warning(
-                    f"[{host_id}:{instance_id}] Stats target {ip}:{stats_port} is already "
-                    f"held by {owner[0]}:{owner[1]} - dropping that subscription so only "
-                    "one set of credentials reaches the endpoint"
-                )
-                stale = self._connections.get(owner)
-                if stale:
-                    await stale.unsubscribe_stats()
-                self._stats_targets.pop(target, None)
-            
-            # Releasing first covers the instance moving to a different endpoint.
-            self._release_stats_targets(key)
+        if conn:
             await conn.subscribe_stats(ip, stats_port, stats_password)
-            self._stats_targets[target] = key
-        
-        log.info(
-            f"[{host_id}:{instance_id}] Subscribed to stats {ip}:{stats_port} "
-            f"fp={password_fingerprint(stats_password)}"
-        )
+            log.debug(f"Subscribed to stats for {host_id}:{instance_id}")
+        else:
+            log.warning(f"Cannot subscribe stats: {host_id}:{instance_id} not connected")
     
     async def unsubscribe_stats(self, host_id: int, instance_id: int) -> None:
         """Unsubscribe from stats events for an instance.
@@ -325,13 +275,10 @@ class ConnectionManager:
             host_id: Host database ID
             instance_id: Instance database ID
         """
-        key = self._get_key(host_id, instance_id)
         conn = self.get_connection(host_id, instance_id)
-        async with self._stats_lock:
-            self._release_stats_targets(key)
-            if conn:
-                await conn.unsubscribe_stats()
-                log.debug(f"Unsubscribed from stats for {host_id}:{instance_id}")
+        if conn:
+            await conn.unsubscribe_stats()
+            log.debug(f"Unsubscribed from stats for {host_id}:{instance_id}")
     
     def get_all_connections(self) -> Dict[ConnectionKey, InstanceConnection]:
         """Get all active connections.

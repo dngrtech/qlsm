@@ -1,6 +1,7 @@
 import asyncio
 
 from rcon_service.instance_connection import InstanceConnection
+from rcon_service.stats_connection import password_fingerprint
 
 
 class FakeStatsConnection:
@@ -51,3 +52,17 @@ def test_subscribe_stats_keeps_identical_subscription(monkeypatch):
 
     assert len(FakeStatsConnection.instances) == 1
     assert FakeStatsConnection.instances[0].disconnect_calls == 0
+
+
+def test_password_fingerprint_identifies_without_disclosing():
+    """Credential mismatches are reconciled from logs, so the logs must not
+    carry the secret."""
+    secret = 'not-a-real-stats-password'
+
+    fingerprint = password_fingerprint(secret)
+
+    assert fingerprint == password_fingerprint(secret)
+    assert fingerprint != password_fingerprint(secret + 'x')
+    assert secret not in fingerprint
+    assert password_fingerprint(None) == 'none'
+    assert password_fingerprint('') == 'none'
