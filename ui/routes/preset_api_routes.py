@@ -51,7 +51,7 @@ PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
 EXPORT_FORMAT_VERSION = 1
 EXPORT_EXCLUDED_DIRS = {'__pycache__'}
 EXPORT_EXCLUDED_FILES = {'.DS_Store', '.gitkeep'}
-# The trailing five are backup copies left by editors and tooling (foo.py.bak,
+# The trailing group are backup copies left by editors and tooling (foo.py.bak,
 # foo.py.bak-pre-x-<stamp>, foo.py.bak.1, foo.py.orig, foo.py.rej). A preset is a
 # curated artefact, so they are junk on every path, not just in archives: their
 # extensions aren't in the import validator's allowlist, so a preset holding one
@@ -89,7 +89,10 @@ def _should_skip_export_path(relative_path, is_dir=False):
 
 
 def _ignore_generated_script_cruft(directory, names):
-    """Return generated/editor junk to skip when saving draft scripts."""
+    """Return generated/editor junk to skip when copying a draft into a preset.
+
+    Used for both directories a draft contributes: scripts and user-hooks.
+    """
     ignored = []
     for name in names:
         path = os.path.join(directory, name)

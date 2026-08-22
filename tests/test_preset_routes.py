@@ -1651,3 +1651,43 @@ def test_update_preset_from_draft_drops_backup_files(client, app):
     preset_hooks = os.path.join(preset_path, 'user-hooks')
     assert os.path.exists(os.path.join(preset_hooks, 'myhook.so'))
     assert not os.path.exists(os.path.join(preset_hooks, 'myhook.so.bak'))
+
+
+def test_create_preset_from_draft_drops_backup_files(client, app):
+    """The create route copies drafts through its own call site -- cover it too.
+
+    create_preset_api and update_preset_api each carry their own near-identical
+    draft->preset copy, so a fix applied to one of them is not proof about the
+    other. This repo has been bitten by exactly that shape before.
+    """
+    draft_id = str(uuid.uuid4())
+    draft_base = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    draft_scripts = os.path.join(draft_base, 'scripts')
+    draft_hooks = os.path.join(draft_base, 'user-hooks')
+    os.makedirs(draft_scripts, exist_ok=True)
+    os.makedirs(draft_hooks, exist_ok=True)
+    backup_name = 'ranked.py.bak-pre-player-ip-connected-20260704-222233'
+    with open(os.path.join(draft_scripts, 'ranked.py'), 'w') as f:
+        f.write('print("ranked")')
+    with open(os.path.join(draft_scripts, backup_name), 'w') as f:
+        f.write('print("old ranked")')
+    with open(os.path.join(draft_hooks, 'myhook.so'), 'wb') as f:
+        f.write(b'\x7fELF')
+    with open(os.path.join(draft_hooks, 'myhook.so.bak'), 'wb') as f:
+        f.write(b'\x7fELF old')
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/presets/', headers=headers, json={
+        'name': 'create-drops-backups',
+        'description': 'created from a draft holding backups',
+        'draft_id': draft_id,
+    })
+
+    assert response.status_code == 201
+    preset_path = os.path.join('configs', 'presets', 'create-drops-backups')
+    assert os.path.exists(os.path.join(preset_path, 'scripts', 'ranked.py'))
+    assert not os.path.exists(os.path.join(preset_path, 'scripts', backup_name))
+    assert os.path.exists(os.path.join(preset_path, 'user-hooks', 'myhook.so'))
+    assert not os.path.exists(
+        os.path.join(preset_path, 'user-hooks', 'myhook.so.bak')
+    )
