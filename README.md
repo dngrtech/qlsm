@@ -1,4 +1,4 @@
-<img src="docs/user/images/qlsm-logo.svg" width="48" height="48" align="left" alt="QLSM logo">
+<img src="docs/user/images/qlsm-logo.png" width="48" height="48" align="left" alt="QLSM logo">
 
 # QLSM — Quake Live Server Management
 
