@@ -1,6 +1,9 @@
-<img src="docs/user/images/qlsm-logo.png" width="48" height="48" align="left" alt="QLSM logo">
-
-# QLSM — Quake Live Server Management
+<table>
+<tr>
+<td><img src="docs/user/images/qlsm-logo.png" width="56" height="56" alt="QLSM logo"></td>
+<td><h1>QLSM — Quake Live Server Management</h1></td>
+</tr>
+</table>
 
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
