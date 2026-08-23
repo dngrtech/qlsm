@@ -55,6 +55,8 @@ if [[ -n "$source_worktree" && "$source_worktree" != "$script_dir" ]]; then
         ln -s "$source_worktree/CLAUDE.md" CLAUDE.md
     elif [[ -e CLAUDE.md ]]; then
         log "CLAUDE.md already exists."
+    else
+        warn "No CLAUDE.md found in this worktree or $source_worktree."
     fi
 
     if [[ ! -e .claude && -d "$source_worktree/.claude" ]]; then
