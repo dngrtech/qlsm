@@ -54,13 +54,13 @@ def test_every_declared_binary_exists(manifest):
         assert os.path.isfile(os.path.join(PRESET_DIR, key)), key
 
 
-#: sha256 of highfps_hook.so as built in dngrtech/qlsm_plugins at `462e3e5`.
+#: sha256 of highfps_hook.so as built in dngrtech/qlsm_plugins at `342da45`.
 #:
 #: The hook detours SV_ClientThink inside qzeroded and knows nothing about either
 #: Python runtime, so there is one build and both runtimes should ship it. Pinned by
 #: hash *as well as* compared against the minqlx copy below, so that rebuilding both at
 #: once still has to be a deliberate act that updates this line.
-HIGHFPS_HOOK_SHA256 = '8f73853c34042c94220f7c3dd04f32c36f75b68f41346afaf865377cb573e435'
+HIGHFPS_HOOK_SHA256 = 'b83da1d4c28f980db6425a12bbacff9fee6cccfd617b22b731655b2bc3539d12'
 
 
 def test_the_hook_binary_is_the_current_qlsm_plugins_build():
