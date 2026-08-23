@@ -1,3 +1,5 @@
+<img src="docs/user/images/qlsm-logo.svg" width="48" height="48" align="left" alt="QLSM logo">
+
 # QLSM — Quake Live Server Management
 
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
