@@ -1,5 +1,9 @@
 # <img src="docs/user/images/qlsm-logo.png" width="50" height="100" align="top" alt="QLSM logo"> Quake Live Server Management
 
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/eGdk5Me9S)
+[![Version](https://img.shields.io/badge/version-1.27.3-blue)](VERSION)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
+
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
 ![QLSM demo — Servers page, editing an instance's config, plugins, factories, and hooks](docs/user/videos/edit-instance-config-demo.webp)
