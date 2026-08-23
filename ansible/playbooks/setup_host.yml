@@ -40,7 +40,7 @@
 
     minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
     minqlx_shared_dir: "/home/ql/minqlx-shared"
-    minqlxtended_git_version: "1e2f307bb695f955d9ff819fac562af0ac79f559"
+    minqlxtended_git_version: "97fbe6715a4802545aa7eca741d11e2486a306a4"
     minqlxtended_shared_dir: "/home/ql/minqlxtended-shared"
 
     runtime_shared_dir: "{{ minqlxtended_shared_dir if runtime == 'minqlxtended' else minqlx_shared_dir }}"

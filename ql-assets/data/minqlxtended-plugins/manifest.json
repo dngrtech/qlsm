@@ -106,7 +106,7 @@
     },
     "reset_acc.py": {
       "origin": "qlsm",
-      "sha256": "f5e62422b1bf60079cbf281ed2663a1d4bd7d3ffb857b53a49c07b845f2c298d"
+      "sha256": "1af867d66956c41b905d1c25a10599e6290345bd8284639ee4583f0c2634e6b2"
     },
     "scores.py": {
       "origin": "upstream",

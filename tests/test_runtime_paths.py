@@ -78,7 +78,7 @@ def test_minqlxtended_paths_match_the_p0_spike():
     assert paths["launch_script"] == "run_server_x64_minqlxtended.sh"
     assert paths["log_filename"] == "minqlxtended.log"
     assert paths["git_repo"] == "https://github.com/tjone270/minqlxtended.git"
-    assert paths["git_version"] == "1e2f307bb695f955d9ff819fac562af0ac79f559"
+    assert paths["git_version"] == "97fbe6715a4802545aa7eca741d11e2486a306a4"
     assert paths["os_name"] == "Ubuntu 24.04 LTS x64"
     assert paths["os_family"] == "ubuntu"
     assert paths["os_type"] == "ubuntu"

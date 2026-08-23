@@ -55,12 +55,14 @@ def test_gameclient_int_fields_are_writable(mxt):
     assert mxt.GameClient(3).expanded_stats.num_kills == 7
 
 
-def test_per_weapon_arrays_reject_writes(mxt):
-    """python_objects.c:1156 — QLX_SETTER_WEAPONS is NULL, so WEAPONS fields are
-    snapshots. A port that tries to zero them must fail here, not on a live server."""
+def test_per_weapon_arrays_accept_writes(mxt):
+    """WEAPONS-kind fields gained a real setter in minqlxtended v1.0.2, so a port
+    that zeroes them via `expanded_stats.shots_fired = minqlxtended.NO_AMMO` must
+    succeed here, matching the live engine."""
     mxt.GameClient.reset_all()
-    with pytest.raises(AttributeError):
-        mxt.GameClient(1).expanded_stats.shots_fired = (0,) * 16
+    client = mxt.GameClient(1)
+    client.expanded_stats.shots_fired = mxt.NO_AMMO
+    assert client.expanded_stats.shots_fired == mxt.NO_AMMO
 
 
 def test_a_stale_minqlx_signature_is_refused_at_registration(mxt):

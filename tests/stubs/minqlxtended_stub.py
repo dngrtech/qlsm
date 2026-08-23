@@ -1,6 +1,6 @@
 """A fake `minqlxtended` module, enough to import and exercise a ported plugin.
 
-Mirrors the pinned engine at 1e2f307: StrEnum team/state/gametype, a Plugin base
+Mirrors the pinned engine at 97fbe671 (v1.0.2): StrEnum team/state/gametype, a Plugin base
 with add_hook/get_cvar/players/db/logger, and a pass-through @thread decorator.
 Event arities are taken from _events.py so a handler with a stale signature
 raises here exactly as the engine would raise at plugin load.
@@ -184,27 +184,24 @@ class SignatureMismatch(Exception):
     """What the engine raises at registration for a bad handler signature."""
 
 
+NO_AMMO = tuple([0] * 15)
+
+
 class _ExpandedStats:
     """GameClient(n).expanded_stats — engine_fields.h:467.
 
-    num_kills / num_deaths are INT fields with setters. shots_fired / shots_hit are
-    WEAPONS fields, and python_objects.c:1156 defines QLX_SETTER_WEAPONS as NULL, so
-    they are snapshots with no write path. Assigning raises here as it does there.
+    All fields are ordinary writable attributes on minqlxtended v1.0.2+: WEAPONS-kind
+    fields (shots_fired, shots_hit, num_weapon_kills, num_weapon_deaths, damage_dealt,
+    damage_taken) gained a real setter there, same as the INT fields (num_kills,
+    num_deaths) always had.
     """
 
-    _READ_ONLY = ("shots_fired", "shots_hit", "num_weapon_kills", "num_weapon_deaths",
-                  "damage_dealt", "damage_taken")
-
     def __init__(self):
-        object.__setattr__(self, "num_kills", 0)
-        object.__setattr__(self, "num_deaths", 0)
-        for name in self._READ_ONLY:
-            object.__setattr__(self, name, tuple([0] * 16))
-
-    def __setattr__(self, name, value):
-        if name in self._READ_ONLY:
-            raise AttributeError(f"attribute '{name}' of 'ExpandedStats' is not writable")
-        object.__setattr__(self, name, value)
+        self.num_kills = 0
+        self.num_deaths = 0
+        for name in ("shots_fired", "shots_hit", "num_weapon_kills", "num_weapon_deaths",
+                     "damage_dealt", "damage_taken"):
+            setattr(self, name, NO_AMMO)
 
 
 class GameClient:
@@ -436,6 +433,7 @@ def install_stub():
     module.delay = delay
     module.parse_infostring = parse_infostring
     module.GameClient = GameClient
+    module.NO_AMMO = NO_AMMO
     module.SignatureMismatch = SignatureMismatch
     module.NonexistentGameError = NonexistentGameError
     module.NonexistentPlayerError = NonexistentPlayerError

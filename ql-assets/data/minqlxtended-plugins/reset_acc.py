@@ -7,12 +7,11 @@ deaths, and score so the next Tab press shows only that engagement.
 
 On minqlxtended this needs no engine patch: gclient_t is exposed as writable
 memory (engine_fields.h:536), so the reset is ordinary attribute assignment.
-
-One limit, inherited from the engine rather than chosen here: the per-weapon
-shotsFired/shotsHit arrays behind the end-of-match weapon breakdown are
-WEAPONS fields, and python_objects.c:1156 defines their setter as NULL. They
-are snapshots with no write path. So the aggregate accuracy the scoreboard
-shows resets; the per-weapon breakdown does not.
+Since minqlxtended v1.0.2 that includes the per-weapon shotsFired/shotsHit
+arrays behind the end-of-match weapon breakdown: WEAPONS-kind fields gained a
+real setter, so `expanded_stats.shots_fired = minqlxtended.NO_AMMO` zeroes
+them the same way. Requires v1.0.2 or later; QLSM's minqlxtended hosts are
+provisioned at that pin or newer.
 
 Commands:
   !resetstats          - Reset accuracy, K/D, and score to 0
@@ -33,11 +32,14 @@ DB_KEY = "minqlx:players:{}:reset_acc:{}"
 
 
 def _zero_accuracy(client_id):
-    """Zero the aggregate accuracy counters for a client.
+    """Zero the aggregate accuracy counters for a client, and the per-weapon
+    shots_fired/shots_hit behind the end-of-match breakdown.
 
     Replaces minqlx.reset_player_accuracy() from
-    ql-assets/patches/minqlx-reset-accuracy.patch, which wrote the same two
-    fields in C. That patch does not exist on this runtime and is not needed.
+    ql-assets/patches/minqlx-reset-accuracy.patch, which wrote the same
+    fields in C. That patch does not exist on this runtime and is not
+    needed: every field here is ordinary writable memory on minqlxtended
+    v1.0.2+.
 
     Returns False when the client id has no gclient_t behind it — the same
     answer the patch gave for `!g_entities[client_id].client`.
@@ -49,16 +51,17 @@ def _zero_accuracy(client_id):
 
     client.accuracy_shots = 0
     client.accuracy_hits = 0
+    client.expanded_stats.shots_fired = minqlxtended.NO_AMMO
+    client.expanded_stats.shots_hit = minqlxtended.NO_AMMO
+
     return True
 
 
 def _zero_stats(client_id):
     """Zero accuracy, round counters, and kills/deaths for a client.
 
-    Replaces minqlx.reset_player_stats(). The C patch also zeroed
-    expandedStats.shotsFired[16] and shotsHit[16]; those are WEAPONS fields
-    with no setter (python_objects.c:1156), so the per-weapon breakdown
-    survives a reset on this runtime.
+    Replaces minqlx.reset_player_stats(). _zero_accuracy() already covers
+    the per-weapon shotsFired/shotsHit arrays the C patch used to zero here.
     """
     if not _zero_accuracy(client_id):
         return False

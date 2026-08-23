@@ -1,9 +1,10 @@
 """reset_acc's C patch becomes pure Python on minqlxtended.
 
 The engine exposes gclient_t as writable memory (engine_fields.h:536), so the three
-patched functions QLSM added to minqlx are replaced by attribute writes. One thing the
-patch did cannot be reproduced: the per-weapon shotsFired/shotsHit arrays are WEAPONS
-fields, and python_objects.c:1156 gives WEAPONS no setter. See the P3 plan, Finding 5.
+patched functions QLSM added to minqlx are replaced by attribute writes. That now
+includes the per-weapon shotsFired/shotsHit arrays: WEAPONS-kind fields gained a real
+setter in minqlxtended v1.0.2, so `expanded_stats.shots_fired = minqlxtended.NO_AMMO`
+resets those too. See the P3 plan, Finding 5.
 """
 import importlib.util
 import inspect
@@ -77,6 +78,8 @@ def _dirty(client_id):
     client.round_hits = 5
     client.expanded_stats.num_kills = 9
     client.expanded_stats.num_deaths = 3
+    client.expanded_stats.shots_fired = tuple([7] * 15)
+    client.expanded_stats.shots_hit = tuple([3] * 15)
     return client
 
 
@@ -107,6 +110,8 @@ def test_zero_stats_clears_accuracy_kills_and_deaths(module):
     assert client.round_hits == 0
     assert client.expanded_stats.num_kills == 0
     assert client.expanded_stats.num_deaths == 0
+    assert client.expanded_stats.shots_fired == (0,) * 15
+    assert client.expanded_stats.shots_hit == (0,) * 15
 
 
 def test_zero_accuracy_leaves_kills_and_deaths_alone(module):
@@ -116,6 +121,8 @@ def test_zero_accuracy_leaves_kills_and_deaths_alone(module):
     assert client.accuracy_hits == 0
     assert client.expanded_stats.num_kills == 9
     assert client.expanded_stats.num_deaths == 3
+    assert client.expanded_stats.shots_fired == (0,) * 15
+    assert client.expanded_stats.shots_hit == (0,) * 15
 
 
 def test_zero_stats_does_not_try_to_write_the_per_weapon_arrays(module):
