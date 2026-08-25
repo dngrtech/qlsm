@@ -56,8 +56,8 @@ def _write_draft_source(draft_id, source):
     try:
         with open(os.path.join(_get_draft_base_path(draft_id), _SOURCE_MARKER_NAME), 'w') as f:
             f.write(source)
-    except OSError:
-        pass
+    except OSError as e:
+        current_app.logger.warning(f"Failed to write .source for draft {draft_id}: {e}")
 
 
 def _get_draft_source(draft_id):
