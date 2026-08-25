@@ -9,7 +9,7 @@
 ![QLSM demo — Servers page, editing an instance's config, plugins, factories, and hooks](docs/user/videos/edit-instance-config-demo.webp)
 
 Features:
-- Three deployment modes (Debian 12 and Ubuntu 22 are tested, Debian 12 is recommended):
+- Three deployment modes:
   * QLSM self-deployment: run QLDS instances on the same machine as QLSM
   * Standalone remote server
   * VULTR cloud provisioning via Terraform
