@@ -47,9 +47,6 @@ Everything runs over SSH via Ansible.
 Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers. The frontend is a Vite/Tailwind SPA served behind Caddy.
 
 ## Requirements
-
-Debian 12 recommended (Ubuntu is also supported):
-
 - **Docker** — [install guide](https://docs.docker.com/engine/install/debian/)
 - **Docker Compose** (usually included with Docker)
 - A user with `sudo` access
