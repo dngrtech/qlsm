@@ -48,6 +48,49 @@ def _get_draft_base_path(draft_id):
     return os.path.join(_get_drafts_base(), draft_id)
 
 
+_SOURCE_MARKER_NAME = '.source'
+
+
+def _write_draft_source(draft_id, source):
+    """Record how a draft was seeded ('preset' or 'instance') for later reads."""
+    try:
+        with open(os.path.join(_get_draft_base_path(draft_id), _SOURCE_MARKER_NAME), 'w') as f:
+            f.write(source)
+    except OSError:
+        pass
+
+
+def _get_draft_source(draft_id):
+    """Return the draft's seed source ('preset'/'instance'), or None if unknown."""
+    try:
+        with open(os.path.join(_get_draft_base_path(draft_id), _SOURCE_MARKER_NAME)) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def _merge_draft_user_hooks_into_instance(draft_user_hooks_path, instance_user_hooks_dir):
+    """Copy hook files introduced by a preset-sourced draft into a live instance
+    user-hooks/ directory, without overwriting files that already exist there.
+
+    The instance's user-hooks/ directory is the live, authoritative copy —
+    the Hooks tab's replace/delete/rename actions write to it directly. A
+    draft only needs to contribute files the instance doesn't already have
+    (e.g. new hooks brought in by a loaded preset); anything already present
+    must win, or a stale draft snapshot would silently undo those edits.
+    """
+    if not os.path.isdir(draft_user_hooks_path):
+        return
+    os.makedirs(instance_user_hooks_dir, exist_ok=True)
+    for name in os.listdir(draft_user_hooks_path):
+        dest = os.path.join(instance_user_hooks_dir, name)
+        if os.path.exists(dest):
+            continue
+        src = os.path.join(draft_user_hooks_path, name)
+        if os.path.isfile(src):
+            shutil.copy2(src, dest)
+
+
 def _validate_draft_id(draft_id):
     """Validate that a draft_id is a valid UUID4."""
     try:
@@ -292,6 +335,7 @@ def create_draft():
         current_app.logger.error(f"Failed to create draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to create draft workspace"}}), 500
 
+    _write_draft_source(draft_id, data.get('source'))
     current_app.logger.info(f"Created draft {draft_id} from {source_path}")
     return jsonify({"data": {"draft_id": draft_id}}), 201
 
@@ -741,8 +785,8 @@ def commit_draft(draft_id):
         inst_user_hooks = os.path.join(
             os.path.dirname(target_path), USER_HOOKS_DIR
         )
-        if os.path.isdir(draft_user_hooks_path):
-            shutil.copytree(draft_user_hooks_path, inst_user_hooks, dirs_exist_ok=True)
+        if _get_draft_source(draft_id) == 'preset':
+            _merge_draft_user_hooks_into_instance(draft_user_hooks_path, inst_user_hooks)
 
         instance = db.session.get(QLInstance, int(data["instance_id"]))
         if instance and instance.ld_preload_hooks:

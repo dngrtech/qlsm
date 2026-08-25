@@ -1220,7 +1220,8 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
             os.makedirs(instance_user_hooks_dir, exist_ok=True)  # rsync source must exist (spec §5.4)
             if draft_id:
                 from ui.routes.draft_routes import (
-                    _get_draft_base_path, _get_draft_scripts_path, _get_draft_user_hooks_path,
+                    _get_draft_base_path, _get_draft_scripts_path, _get_draft_source,
+                    _get_draft_user_hooks_path, _merge_draft_user_hooks_into_instance,
                 )
 
                 instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
@@ -1230,9 +1231,14 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                         shutil.rmtree(instance_scripts_dir)
                     shutil.copytree(draft_scripts, instance_scripts_dir)
 
-                draft_user_hooks = _get_draft_user_hooks_path(draft_id)
-                if os.path.exists(draft_user_hooks):
-                    shutil.copytree(draft_user_hooks, instance_user_hooks_dir, dirs_exist_ok=True)
+                # Only a preset-sourced draft can legitimately introduce new hook
+                # binaries here — a plain instance-sourced draft is just a stale
+                # snapshot of user-hooks/ taken when the modal opened, and blindly
+                # copying it back would silently undo any replace/delete done via
+                # the Hooks tab's live per-file API in the same edit session.
+                if _get_draft_source(draft_id) == 'preset':
+                    draft_user_hooks = _get_draft_user_hooks_path(draft_id)
+                    _merge_draft_user_hooks_into_instance(draft_user_hooks, instance_user_hooks_dir)
 
                 shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
 
