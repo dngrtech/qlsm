@@ -1843,6 +1843,110 @@ describe('AddInstanceForm draft lifecycle', () => {
       expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
     });
 
+    it('shows a not-applied notice and closes the preset manager when the compatibility dialog is cancelled', async () => {
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlxtended',
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [
+            { path: 'essentials.py', verdict: 'incompatible', reasons: ['uses a minqlxtended-only API'], replacement: null },
+          ],
+          replacements: {},
+        },
+      });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+
+      await waitFor(() => expect(screen.getByText(/was not applied/i)).toBeInTheDocument());
+      expect(screen.getByText(/was not applied/i).textContent).toMatch(/my-preset/);
+      expect(screen.queryByTestId('preset-manager')).not.toBeInTheDocument();
+      expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
+    });
+
+    it('records the target runtime on the loaded preset, not the preset\'s own source runtime', async () => {
+      // Regression: loadedPreset.runtime used to be set from presetData.runtime
+      // (the preset's declared source runtime, e.g. minqlx), which is never
+      // equal to the host it was just loaded onto after a cross-runtime load.
+      // handleHostChange compares loadedPreset.runtime against the current
+      // host's runtime to decide whether to clear the preset -- storing the
+      // source runtime instead of the target makes that comparison always
+      // "mismatched" and silently wipes a correctly-applied preset's plugin
+      // selection on the very next host reselection.
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlx',
+        checked_plugins: ['ban.py'],
+        compatibility: {
+          preset_runtime: 'minqlx',
+          target_runtime: 'minqlxtended',
+          stripped: [],
+          replacements: {},
+        },
+      });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <AddInstanceForm
+          initialData={{
+            hosts: [{ id: 1, name: 'mqx-host', runtime: 'minqlxtended' }],
+            presets: [{ id: 1, name: 'my-preset', is_builtin: false }],
+            defaultConfigContents: {
+              'server.cfg': '',
+              'mappool.txt': '',
+              'access.txt': '',
+              'workshop.txt': '',
+            },
+            // A recognizable, non-empty default seed so a reseed-to-default
+            // is distinguishable from "no reseed happened" -- an empty
+            // default seed would make both outcomes look like [].
+            defaultSeedsByRuntime: {
+              minqlx: { checkedPlugins: ['balance.py'], availableHooks: [], enabledHooks: [] },
+              minqlxtended: { checkedPlugins: ['default_plugin.py'], availableHooks: [], enabledHooks: [] },
+            },
+          }}
+          initialHostId={1}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={vi.fn()}
+        />
+      );
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+
+      // Re-selecting the SAME host (same runtime, "minqlxtended") must not
+      // clear the just-loaded preset. The mocked InstanceBasicInfoForm (this
+      // test file, ~line 176-191) renders a "Select Host 1" button wired to
+      // onHostChange('1') regardless of current selection -- clicking it here
+      // re-fires handleHostChange with hostId '1' while already on host 1,
+      // which is exactly the "no-op reselect" scenario the bug affects.
+      fireEvent.click(screen.getByRole('button', { name: /select host 1/i }));
+
+      await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
+      expect(screen.queryByText(/no longer matches this host/i)).not.toBeInTheDocument();
+
+      // Prove it's not just the banner that survived: the operator's actual
+      // loaded selection ('ban', from the preset) must still be what gets
+      // submitted, not silently reseeded back to the runtime's default
+      // ('default_plugin') by the no-op reselect.
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].checked_plugins).toEqual(['ban']);
+    });
+
     it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
       // stripped: [] is a real response shape -- every plugin scanned clean --
       // and it must not surface a dialog with nothing in it.

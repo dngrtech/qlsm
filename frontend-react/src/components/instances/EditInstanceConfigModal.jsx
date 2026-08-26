@@ -611,8 +611,13 @@ function EditInstanceConfigModal({
   }, [applyPresetData, pendingPreset]);
 
   const handleCancelPresetCompatibility = useCallback(() => {
+    const cancelledName = pendingPreset?.data?.name;
     setPendingPreset(null);
-  }, []);
+    setIsPresetManagerOpen(false);
+    if (cancelledName) {
+      showError(`Preset "${cancelledName}" was not applied — its plugin compatibility was not confirmed.`);
+    }
+  }, [pendingPreset, showError]);
 
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
     setIsSavingPreset(true);

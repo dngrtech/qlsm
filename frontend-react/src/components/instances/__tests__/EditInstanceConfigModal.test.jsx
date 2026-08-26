@@ -1403,6 +1403,36 @@ describe('EditInstanceConfigModal preset saving', () => {
       expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetB).toEqual([]);
     });
 
+    it('shows an error notification and closes the preset manager when the compatibility dialog is cancelled', async () => {
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        configs: {},
+        factories: {},
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [
+            { path: 'essentials.py', verdict: 'incompatible', reasons: ['uses a minqlxtended-only API'], replacement: null },
+          ],
+          replacements: {},
+        },
+      });
+      renderModal();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+
+      const cancelButtons = screen.getAllByRole('button', { name: /^cancel$/i });
+      fireEvent.click(cancelButtons[cancelButtons.length - 1]);
+
+      await waitFor(() => expect(mocks.showError).toHaveBeenCalledWith(
+        expect.stringMatching(/my-preset.*not applied/i)
+      ));
+      expect(screen.queryByTestId('preset-manager')).not.toBeInTheDocument();
+    });
+
     it('leaves the active preset\'s accepted replacements intact when a subsequent load is cancelled', async () => {
       // Regression, round 2: an earlier fix cleared acceptedReplacements
       // speculatively at the start of every load, before it was known whether
