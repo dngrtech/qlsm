@@ -176,12 +176,23 @@ function AddInstanceForm({
   const [presets, setPresets] = useState(initialData.presets || []);
 
   // Loaded preset tracking
-  const [loadedPreset, setLoadedPreset] = useState(null); // { id, name, description, runtime } or null
+  // { id, name, description, runtime, sourceRuntime } or null.
+  // `runtime` is the TARGET runtime the preset was applied against (the
+  // currently/last selected host's runtime at load time) -- handleHostChange
+  // compares this against the newly selected host's runtime to decide
+  // whether the loaded preset is stale. `sourceRuntime` is the preset's own
+  // declared runtime, i.e. where it was originally saved from -- used by
+  // presetRuntimeStripWarning to describe that provenance. These two values
+  // differ whenever a preset is loaded cross-runtime; conflating them was
+  // the root cause of a prior bug where reselecting a host silently wiped
+  // the operator's plugin selection.
+  const [loadedPreset, setLoadedPreset] = useState(null);
   const [isPresetModified, setIsPresetModified] = useState(false);
   const [isUpdatingPreset, setIsUpdatingPreset] = useState(false);
-  // Set when a host switch invalidates the loaded preset (runtime mismatch);
-  // explains the auto-clear so it isn't silent. Cleared on dismiss or on the
-  // next successful preset load.
+  // Set when a host switch invalidates the loaded preset (runtime mismatch)
+  // or when the operator cancels the preset compatibility dialog; explains
+  // the auto-clear so it isn't silent. Cleared on dismiss or on the next
+  // successful preset load.
   const [presetClearedNotice, setPresetClearedNotice] = useState(null);
 
   // Scripts tab state
@@ -383,7 +394,12 @@ function AddInstanceForm({
       if (runtimeLabel(carriedPreset.runtime) !== newRuntime) {
         setPresetClearedNotice(
           `The loaded preset "${carriedPreset.name}" no longer matches this host and was cleared — reload it here to apply it. `
-          + presetRuntimeStripWarning(carriedPreset, newHostRecord)
+          // presetRuntimeStripWarning reads `.runtime` expecting the preset's
+          // original source runtime (it says "Saved from a ... host") -- pass
+          // sourceRuntime through as runtime rather than carriedPreset itself,
+          // whose `.runtime` field tracks the target runtime it was applied
+          // against, not where it was saved from.
+          + presetRuntimeStripWarning({ ...carriedPreset, runtime: carriedPreset.sourceRuntime }, newHostRecord)
         );
         setLoadedPreset(null);
         loadedPresetConfigRef.current = null;
@@ -730,13 +746,23 @@ function AddInstanceForm({
         // valid. Storing the source runtime here made that comparison
         // mismatch on every subsequent host reselection, even a no-op
         // reselection of the same host, silently wiping the plugin
-        // selection this function just set.
+        // selection this function just set. The preset's true source
+        // runtime is preserved separately below as `sourceRuntime`.
         runtime: selectedHostShape.runtime,
+        // The preset's own declared source runtime, kept for consumers
+        // (e.g. presetRuntimeStripWarning) that need to describe where the
+        // preset was originally saved from, as opposed to `runtime` above
+        // which tracks the host it's currently applied against.
+        sourceRuntime: presetData.runtime,
       });
       setPresetClearedNotice(null);
-      // The preset's plugin/hook selection is now the seed, so the seeded
-      // runtime is the preset's (see seededRuntimeRef above).
-      seededRuntimeRef.current = runtimeLabel(presetData.runtime);
+      // The preset's plugin/hook selection is now the seed, and that seed
+      // was built for the host it was just applied against -- so the
+      // seeded runtime must be the target runtime (selectedHostShape.runtime),
+      // matching `loadedPreset.runtime` above, not the preset's own source
+      // runtime (see the comment on that field for why the distinction
+      // matters).
+      seededRuntimeRef.current = runtimeLabel(selectedHostShape.runtime);
       // Reseed draft workspace with the loaded preset's scripts. acceptedPaths
       // defaults to [] (a plain default, not a speculative clear elsewhere) so
       // a no-dialog load carries nothing forward, and both state updates land
@@ -1185,7 +1211,8 @@ function AddInstanceForm({
         />
       </div>
       <div className="flex flex-col flex-grow min-h-0 mb-2">
-        {/* Shown when a host switch invalidated the loaded preset */}
+        {/* Shown when a host switch invalidated the loaded preset, or when
+            the operator cancelled the preset compatibility dialog */}
         {presetClearedNotice && (
           <div role="status" className="alert-warning mb-3 flex items-start gap-2 text-sm flex-shrink-0">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--accent-warning)' }} />

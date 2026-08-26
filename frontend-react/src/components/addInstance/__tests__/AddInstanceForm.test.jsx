@@ -1892,6 +1892,7 @@ describe('AddInstanceForm draft lifecycle', () => {
           replacements: {},
         },
       });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
       render(
         <AddInstanceForm
           initialData={{
@@ -1903,9 +1904,16 @@ describe('AddInstanceForm draft lifecycle', () => {
               'access.txt': '',
               'workshop.txt': '',
             },
+            // A recognizable, non-empty default seed so a reseed-to-default
+            // is distinguishable from "no reseed happened" -- an empty
+            // default seed would make both outcomes look like [].
+            defaultSeedsByRuntime: {
+              minqlx: { checkedPlugins: ['balance.py'], availableHooks: [], enabledHooks: [] },
+              minqlxtended: { checkedPlugins: ['default_plugin.py'], availableHooks: [], enabledHooks: [] },
+            },
           }}
           initialHostId={1}
-          onSubmit={vi.fn()}
+          onSubmit={onSubmit}
           onCancel={vi.fn()}
           isLoadingSubmit={false}
           formError={null}
@@ -1919,9 +1927,9 @@ describe('AddInstanceForm draft lifecycle', () => {
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
       await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
 
-      // Re-selecting the SAME host (same runtime, "minqlx") must not clear the
-      // just-loaded preset. The mocked InstanceBasicInfoForm (this test file,
-      // ~line 176-191) renders a "Select Host 1" button wired to
+      // Re-selecting the SAME host (same runtime, "minqlxtended") must not
+      // clear the just-loaded preset. The mocked InstanceBasicInfoForm (this
+      // test file, ~line 176-191) renders a "Select Host 1" button wired to
       // onHostChange('1') regardless of current selection -- clicking it here
       // re-fires handleHostChange with hostId '1' while already on host 1,
       // which is exactly the "no-op reselect" scenario the bug affects.
@@ -1929,6 +1937,14 @@ describe('AddInstanceForm draft lifecycle', () => {
 
       await waitFor(() => expect(screen.getByText('Editing preset:')).toBeInTheDocument());
       expect(screen.queryByText(/no longer matches this host/i)).not.toBeInTheDocument();
+
+      // Prove it's not just the banner that survived: the operator's actual
+      // loaded selection ('ban', from the preset) must still be what gets
+      // submitted, not silently reseeded back to the runtime's default
+      // ('default_plugin') by the no-op reselect.
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].checked_plugins).toEqual(['ban']);
     });
 
     it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
