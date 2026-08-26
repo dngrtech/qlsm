@@ -1843,6 +1843,35 @@ describe('AddInstanceForm draft lifecycle', () => {
       expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
     });
 
+    it('shows a not-applied notice and closes the preset manager when the compatibility dialog is cancelled', async () => {
+      mocks.getPresetById.mockResolvedValue({
+        name: 'my-preset',
+        runtime: 'minqlxtended',
+        compatibility: {
+          preset_runtime: 'minqlxtended',
+          target_runtime: 'minqlx',
+          stripped: [
+            { path: 'essentials.py', verdict: 'incompatible', reasons: ['uses a minqlxtended-only API'], replacement: null },
+          ],
+          replacements: {},
+        },
+      });
+      renderOnHost();
+
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+
+      await waitFor(() => expect(screen.getByText(/was not applied/i)).toBeInTheDocument());
+      expect(screen.getByText(/was not applied/i).textContent).toMatch(/my-preset/);
+      expect(screen.queryByTestId('preset-manager')).not.toBeInTheDocument();
+      expect(screen.queryByText('Editing preset:')).not.toBeInTheDocument();
+    });
+
     it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
       // stripped: [] is a real response shape -- every plugin scanned clean --
       // and it must not surface a dialog with nothing in it.

@@ -820,8 +820,15 @@ function AddInstanceForm({
   }, [applyPresetData, pendingPreset]);
 
   const handleCancelPresetCompatibility = useCallback(() => {
+    const cancelledName = pendingPreset?.data?.name;
     setPendingPreset(null);
-  }, []);
+    setIsPresetManagerOpen(false);
+    if (cancelledName) {
+      setPresetClearedNotice(
+        `The preset "${cancelledName}" was not applied — its plugin compatibility was not confirmed.`
+      );
+    }
+  }, [pendingPreset]);
 
   // Handle saving current config as a preset
   const handleSavePreset = useCallback(async ({ name, description, runtime }) => {
