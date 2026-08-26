@@ -722,7 +722,16 @@ function AddInstanceForm({
         name: presetData.name,
         description: presetData.description || '',
         is_builtin: !!presetData.is_builtin,
-        runtime: presetData.runtime,
+        // The runtime the preset was actually applied against, not the
+        // preset's own declared source runtime -- a cross-runtime load's
+        // source and target runtimes differ by definition, and
+        // handleHostChange compares this field against the currently
+        // selected host's runtime to decide whether the preset is still
+        // valid. Storing the source runtime here made that comparison
+        // mismatch on every subsequent host reselection, even a no-op
+        // reselection of the same host, silently wiping the plugin
+        // selection this function just set.
+        runtime: selectedHostShape.runtime,
       });
       setPresetClearedNotice(null);
       // The preset's plugin/hook selection is now the seed, so the seeded
@@ -788,7 +797,7 @@ function AddInstanceForm({
     } finally {
       setIsLoadingPreset(false);
     }
-  }, [checkedPlugins, lanRateEnabled, lanRateSupported, resetConfigs, resetFactories, syncConfigState]);
+  }, [checkedPlugins, lanRateEnabled, lanRateSupported, resetConfigs, resetFactories, syncConfigState, selectedHostShape.runtime]);
 
   const handleLoadPreset = useCallback(async (presetId) => {
     setIsLoadingPreset(true);
