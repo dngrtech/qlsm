@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.28.1` | 2026-08-26 | [#196](https://github.com/dngrtech/qlsm/pull/196) | Pin pnpm to v10 in the Docker build so the image builds reproducibly. |
 | `v1.28.0` | 2026-08-26 | [#193](https://github.com/dngrtech/qlsm/pull/193) | Add **minqlxtended** as a server runtime you can choose when creating a host, alongside minqlx. Pick it in the Add Host form, where each runtime carries a requirement note and a link to its upstream repo. minqlxtended hosts provision on Ubuntu 24.04 with their own vendored plugin baseline; loading a preset built for the other runtime strips the plugins that cannot run and offers replacements. minqlx remains the default and existing minqlx hosts are unaffected. |
 | `v1.27.4` | 2026-08-24 | [#195](https://github.com/dngrtech/qlsm/pull/195) | Fix Hooks tab replace/delete being silently reverted by Save Configuration. |
 | `v1.27.3` | 2026-08-21 | [#191](https://github.com/dngrtech/qlsm/pull/191) | Bug fixes and improvements. |
