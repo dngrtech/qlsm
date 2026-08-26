@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 import pytest
 from ui import create_app, db
@@ -43,6 +44,33 @@ def app(tmp_path):
             os.unlink(path)
 
 @pytest.fixture
+def app_with_builtin_presets(app):
+    """`app`, plus the builtin preset rows `flask sync-builtin-presets` creates.
+
+    The plain `app` fixture stops at db.create_all(), so ConfigPreset is empty
+    and get_preset_by_name('default') answers None for every test in the repo.
+    resolve_preset_subdir() then resolves the builtin defaults to
+    configs/presets/<name>/scripts -- a path that does not exist, because
+    builtins live under configs/presets/_builtin/. The consequence is that
+    _seed_draft()'s "copy the runtime-matched default preset in first, then
+    overlay the source" branch is DEAD under `app`, while production always
+    takes it. Every draft test therefore exercises "copy source, filter it",
+    and production exercises "copy target default, overlay source, filter
+    both" -- a different file set, which is where the over-strip of the
+    target's own shipped plugins lived unseen.
+
+    Deliberately a separate fixture rather than a change to `app`: ~1500 tests
+    depend on `app` starting from an empty database, and several assert on
+    preset rows they create themselves.
+    """
+    from ui.builtin_presets import sync_builtin_presets
+    with app.app_context():
+        sync_builtin_presets()
+        db.session.commit()
+    yield app
+
+
+@pytest.fixture
 def client(app):
     """A test client for the app."""
     return app.test_client()
@@ -57,3 +85,29 @@ def app_context(app):
     """An application context for the app."""
     with app.app_context() as ctx:
         yield ctx
+
+
+@pytest.fixture(autouse=True)
+def _reset_minqlxtended_stub_state():
+    """Clear the minqlxtended stub's shared state between tests.
+
+    GameClient caches one live-memory view per client id, the way the engine hands
+    back the same gclient_t for the same slot. That cache is process-wide, so without
+    this a test reading GameClient(2).accuracy_shots sees whatever an earlier test
+    wrote there. Autouse rather than opt-in: the tests that would be misled are the
+    ones that never thought to ask.
+
+    No-op unless the stub has been installed, so it costs nothing for the rest of the
+    suite.
+    """
+    yield
+    stub = sys.modules.get('minqlxtended')
+    if stub is not None and getattr(stub, '_qlsm_stub', False):
+        stub.GameClient.reset_all()
+        stub.cvars.clear()
+        stub.configstrings.clear()
+        stub.console_lines.clear()
+        stub.console_commands.clear()
+        stub.logged_exceptions.clear()
+        stub.Plugin.game = None
+        stub.Plugin.db = None

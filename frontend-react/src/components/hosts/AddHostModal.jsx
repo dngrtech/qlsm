@@ -30,6 +30,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
   const [provider, setProvider] = useState('self');
+  // No default: the runtime is immutable once the host exists, so the operator
+  // picks it explicitly or the form does not submit.
+  const [runtime, setRuntime] = useState('');
+  const [runtimeError, setRuntimeError] = useState(null);
   const [selfHostExists, setSelfHostExists] = useState(false);
   const [providerOptionsReady, setProviderOptionsReady] = useState(false);
   const [selectedContinent, setSelectedContinent] = useState('');
@@ -135,6 +139,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setName('');
     setNameError(null);
     setProvider(selfHostExists ? 'standalone' : 'self');
+    setRuntime('');
+    setRuntimeError(null);
     setSelectedContinent('');
     setRegion('');
     setMachineSize('');
@@ -246,6 +252,15 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     }
     setNameError(null);
 
+    if (!runtime) {
+      // Belongs to the field, not the modal's generic error slot at the bottom
+      // of the form: the radios sit near the top, and an unassociated message
+      // announces nothing to a screen reader landing on them.
+      setRuntimeError('Server runtime is required.');
+      return;
+    }
+    setRuntimeError(null);
+
     if (provider === 'standalone') {
       if (!ipAddress || !ipAddress.trim()) {
         setError('IP address is required for standalone hosts.');
@@ -298,6 +313,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
             ? { ssh_password: sshPassword }
             : { ssh_key: sshKey }),
           timezone,
+          runtime,
         };
       } else if (provider === 'self') {
         hostData = {
@@ -306,6 +322,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           ip_address: ipAddress.trim(),
           timezone,
           ssh_user: sshUser.trim(),
+          runtime,
         };
       } else {
         hostData = {
@@ -314,6 +331,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           region,
           machine_size: machineSize,
           timezone: getTimezoneForRegion(region),
+          runtime,
         };
       }
 
@@ -437,6 +455,12 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onTestConnection={handleTestConnection}
                         onSwitchToSelfHost={handleSwitchToSelfHost}
                         osInfo={selfHostOsInfo}
+                        runtime={runtime}
+                        runtimeError={runtimeError}
+                        onRuntimeChange={(value) => {
+                          setRuntime(value);
+                          setRuntimeError(null);
+                        }}
                       />
                     ) : (
                       <div className="text-sm text-theme-muted">Loading host options...</div>

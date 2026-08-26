@@ -260,3 +260,36 @@ def test_download_builtin_preset_returns_403(client, app, tmp_path):
 
     assert response.status_code == 403
     assert response.get_json()['error']['message'] == 'Cannot download a built-in preset.'
+
+
+def test_download_preset_excludes_backup_files(client, app, tmp_path):
+    """Backups sitting in a preset must stay out of the export archive.
+
+    The import validator only accepts known script extensions, so exporting a
+    stray .bak would produce an archive QLSM itself refuses to import.
+    """
+    preset_id, preset_dir = create_preset(app, tmp_path, name='backup-cruft')
+    write_file(
+        preset_dir / 'scripts' / 'ranked.py.bak-pre-player-ip-connected-20260704-222233',
+        'old\n',
+    )
+    write_file(preset_dir / 'scripts' / 'ranked.py.bak', 'older\n')
+    write_file(preset_dir / 'scripts' / 'ranked.py.bak.1', 'oldest\n')
+    write_file(preset_dir / 'scripts' / 'ranked.py.orig', 'pre-merge\n')
+    write_file(preset_dir / 'server.cfg.bak', 'set sv_hostname "Old"\n')
+    write_file(preset_dir / 'scripts' / 'bakery.py', 'class bakery: pass\n')
+
+    response = client.get(
+        f'/api/presets/{preset_id}/download',
+        headers=auth_headers(app),
+    )
+
+    assert response.status_code == 200
+    with read_zip(response) as archive:
+        names = set(archive.namelist())
+        assert 'scripts/ranked.py.bak-pre-player-ip-connected-20260704-222233' not in names
+        assert 'scripts/ranked.py.bak' not in names
+        assert 'scripts/ranked.py.bak.1' not in names
+        assert 'scripts/ranked.py.orig' not in names
+        assert 'server.cfg.bak' not in names
+        assert 'scripts/bakery.py' in names

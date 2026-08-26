@@ -11,6 +11,13 @@
     # lan_rate_enabled: passed from task logic
     # qlds_args: passed from task logic
 
+    # Supplied by ui.runtime.runtime_extravars(). Defaults keep manual runs on
+    # minqlx, matching every host that exists today.
+    runtime: "minqlx"
+    runtime_plugins_dirname: "minqlx-plugins"
+    runtime_shared_dir: "/home/ql/minqlx-shared"
+    launch_script: "run_server_x64_minqlx.sh"
+
   tasks:
   #######################################################################
   # 1. Re-render systemd service file with updated qlds_args

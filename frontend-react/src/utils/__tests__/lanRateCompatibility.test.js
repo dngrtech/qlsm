@@ -1,5 +1,6 @@
 import {
   canEnableLanRate,
+  isLanRateForcedOn,
   isLanRateSupported,
   getLanRateUnsupportedMessage,
 } from '../lanRateCompatibility';
@@ -65,5 +66,34 @@ describe('getLanRateUnsupportedMessage', () => {
     const msg = getLanRateUnsupportedMessage({ os_type: 'ubuntu', lan_rate_uses_hook: false });
     expect(msg).toMatch(/Re-run Host Setup/);
     expect(msg).toMatch(/host actions menu/);
+  });
+});
+
+// Mirrors the minqlxtended block in tests/test_lan_rate_policy.py. QLSM runs
+// these hosts at 99k and does not offer 25k there, so every surface must render
+// the toggle on and locked to match the cvar the backend emits.
+describe('minqlxtended hosts (99k fixed on by QLSM)', () => {
+  const host = { os_type: 'ubuntu', lan_rate_uses_hook: true, runtime: 'minqlxtended' };
+
+  it('reports 99k LAN rate as fixed on', () => {
+    expect(isLanRateForcedOn(host)).toBe(true);
+  });
+
+  it('still counts as supported so nothing offers to fix it', () => {
+    expect(isLanRateSupported(host)).toBe(true);
+    expect(canEnableLanRate({ host, currentEnabled: false })).toBe(true);
+  });
+
+  it('explains the QLSM policy rather than an engine behaviour', () => {
+    const msg = getLanRateUnsupportedMessage(host);
+    expect(msg).toMatch(/QLSM runs minqlxtended hosts at 99k LAN rate/);
+    expect(msg).toMatch(/does not offer 25k/);
+  });
+
+  it('leaves minqlx hosts alone', () => {
+    expect(isLanRateForcedOn({ ...host, runtime: 'minqlx' })).toBe(false);
+    expect(isLanRateForcedOn({ ...host, runtime: undefined })).toBe(false);
+    expect(isLanRateForcedOn(null)).toBe(false);
+    expect(getLanRateUnsupportedMessage({ ...host, runtime: 'minqlx' })).toBe('');
   });
 });

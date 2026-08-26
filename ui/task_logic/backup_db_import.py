@@ -11,6 +11,7 @@ from ui.models import (
     ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
     InstanceStatus, QLFilterStatus, QLInstance, User,
 )
+from ui.runtime import normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
 
 _REQUIRED_KEYS = ('hosts', 'instances', 'users', 'presets', 'api_keys', 'app_settings', 'binary_metadata')
@@ -22,6 +23,32 @@ class BackupImportError(ValueError):
 
 def _parse_dt(value):
     return datetime.datetime.fromisoformat(value) if value else None
+
+
+def _host_from_row(row):
+    """Build a Host from a backup row.
+
+    Optional columns use row.get(name, default) so a backup taken by an older
+    QLSM restores cleanly -- a backup with no 'runtime' key lands every host on
+    minqlx, which is correct.
+    """
+    return Host(
+        id=row['id'], name=row['name'], ip_address=row.get('ip_address'),
+        region=row.get('region'), machine_size=row.get('machine_size'),
+        provider=row['provider'], workspace_name=row.get('workspace_name'),
+        ssh_user=row.get('ssh_user'), ssh_key_path=row.get('ssh_key_path'),
+        ssh_port=row.get('ssh_port', 22), os_type=row.get('os_type'),
+        is_standalone=row.get('is_standalone', False), timezone=row.get('timezone'),
+        cpu_count=row.get('cpu_count'),
+        redis_unix_socket=row.get('redis_unix_socket', False),
+        lan_rate_uses_hook=row.get('lan_rate_uses_hook', False),
+        firewall_pool_v2=row.get('firewall_pool_v2', False),
+        runtime=normalize_runtime(row.get('runtime')),
+        status=HostStatus(row['status']) if row.get('status') else HostStatus.UNKNOWN,
+        qlfilter_status=QLFilterStatus(row['qlfilter_status']) if row.get('qlfilter_status') else QLFilterStatus.UNKNOWN,
+        auto_restart_schedule=row.get('auto_restart_schedule'), logs=row.get('logs'),
+        last_updated=_parse_dt(row.get('last_updated')), created_at=_parse_dt(row.get('created_at')),
+    )
 
 
 def replace_database(data):
@@ -43,22 +70,7 @@ def replace_database(data):
     db.session.flush()
 
     for row in data['hosts']:
-        db.session.add(Host(
-            id=row['id'], name=row['name'], ip_address=row.get('ip_address'),
-            region=row.get('region'), machine_size=row.get('machine_size'),
-            provider=row['provider'], workspace_name=row.get('workspace_name'),
-            ssh_user=row.get('ssh_user'), ssh_key_path=row.get('ssh_key_path'),
-            ssh_port=row.get('ssh_port', 22), os_type=row.get('os_type'),
-            is_standalone=row.get('is_standalone', False), timezone=row.get('timezone'),
-            cpu_count=row.get('cpu_count'),
-            redis_unix_socket=row.get('redis_unix_socket', False),
-            lan_rate_uses_hook=row.get('lan_rate_uses_hook', False),
-            firewall_pool_v2=row.get('firewall_pool_v2', False),
-            status=HostStatus(row['status']) if row.get('status') else HostStatus.UNKNOWN,
-            qlfilter_status=QLFilterStatus(row['qlfilter_status']) if row.get('qlfilter_status') else QLFilterStatus.UNKNOWN,
-            auto_restart_schedule=row.get('auto_restart_schedule'), logs=row.get('logs'),
-            last_updated=_parse_dt(row.get('last_updated')), created_at=_parse_dt(row.get('created_at')),
-        ))
+        db.session.add(_host_from_row(row))
     db.session.flush()
 
     for row in data['instances']:
@@ -86,6 +98,7 @@ def replace_database(data):
         db.session.add(ConfigPreset(
             id=row['id'], name=row['name'], description=row.get('description'),
             path=row['path'], is_builtin=row.get('is_builtin', False),
+            runtime=normalize_runtime(row.get('runtime')),
             last_updated=_parse_dt(row.get('last_updated')), created_at=_parse_dt(row.get('created_at')),
         ))
 

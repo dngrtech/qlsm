@@ -20,6 +20,7 @@ function PresetManagerModal({
   onClose,
   initialTab = 'load',
   zIndexClass = 'z-[60]',
+  host = null,
   presets = [],
   isLoading = false,
   onLoadPreset,
@@ -68,6 +69,7 @@ function PresetManagerModal({
   }, [isOpen, initialTab]);
 
   const selectedPreset = presets.find((p) => p.id === selectedId) || (importedPresetPreview?.id === selectedId ? importedPresetPreview : null);
+  const canLoadSelected = selectedId != null && !isLoadingPreset;
 
   const handleDownload = async (preset) => {
     setDownloadingId(preset.id);
@@ -215,6 +217,7 @@ function PresetManagerModal({
                       />
                       <PresetLoadTab
                         presets={presets}
+                        host={host}
                         isLoading={isLoading}
                         selectedId={selectedId}
                         onSelect={setSelectedId}
@@ -239,7 +242,7 @@ function PresetManagerModal({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        disabled={selectedId == null || isLoadingPreset}
+                        disabled={!canLoadSelected}
                         onClick={() => setShowLoadConfirm(true)}
                       >
                         {isLoadingPreset
@@ -252,6 +255,7 @@ function PresetManagerModal({
                   <>
                     <PresetSaveTab
                       key={`${isOpen ? 'open' : 'closed'}-${initialOverwriteName || 'new'}`}
+                      host={host}
                       presets={presets}
                       initialOverwriteName={initialOverwriteName}
                       onSavePreset={onSavePreset}

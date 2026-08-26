@@ -375,6 +375,27 @@ def test_build_qlds_args_pairs_sv_servertype_with_lan_force_rate(test_app):
         assert '+set sv_serverType 1' not in disabled
 
 
+def test_build_qlds_args_sv_servertype_follows_forced_99k_on_minqlxtended(test_app):
+    """A forced-99k host gets sv_serverType 1 even with the column set False.
+
+    This is the branch-specific half. QLSM fixes 99k on for every minqlxtended
+    host (lan_rate_forced_on), and instance.lan_rate_enabled keeps whatever the
+    column happened to store -- often False. Deriving sv_serverType from the
+    raw column instead of effective_lan_rate() would hand every minqlxtended
+    instance sv_serverType 2 alongside sv_lanForceRate 1: exactly the broken
+    pairing this fix exists to eliminate, and with no toggle to escape it.
+    """
+    with test_app.app_context():
+        forced = _make_instance_for_args(
+            lan_rate_enabled=False,
+            host=SimpleNamespace(provider='standalone', runtime='minqlxtended'))
+        result = _build_qlds_args_string(forced)
+
+        assert '+set sv_serverType 1' in result
+        assert '+set sv_lanForceRate 1' in result
+        assert '+set sv_serverType 2' not in result
+
+
 # Pure unit tests for _extract_pip_warning (no mocks required)
 from ui.task_logic.ansible_instance_mgmt import _extract_pip_warning
 

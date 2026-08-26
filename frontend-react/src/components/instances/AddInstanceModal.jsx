@@ -5,8 +5,24 @@ import AddInstanceForm from '../addInstance/AddInstanceForm';
 import { getHosts, getPresets, getPresetById, getDefaultConfigFile, createInstance } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import ConfirmationModal from '../ConfirmationModal';
+import { RUNTIME_OPTIONS, defaultPresetNameForRuntime } from '../../constants/runtimes';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt', 'factory.factories'];
+
+// Last-resort seed for minqlx when the preset API errors. There is no
+// minqlxtended equivalent on purpose: guessing a plugin list from memory is
+// how files that cannot load get shipped.
+const MINQLX_FALLBACK_PLUGINS = [
+  'balance.py', 'ban.py', 'clan.py', 'essentials.py', 'log.py',
+  'motd.py', 'names.py', 'permission.py', 'plugin_manager.py',
+  'silence.py', 'workshop.py',
+];
+
+const emptySeed = () => ({ checkedPlugins: [], availableHooks: [], enabledHooks: [] });
+
+function emptySeedsByRuntime() {
+  return RUNTIME_OPTIONS.reduce((acc, { id }) => ({ ...acc, [id]: emptySeed() }), {});
+}
 
 function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
   const [loadingInitialData, setLoadingInitialData] = useState(false);
@@ -15,9 +31,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
     hosts: [],
     presets: [],
     defaultConfigContents: CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: '' }), {}),
-    defaultCheckedPlugins: [],
-    defaultAvailableHooks: [],
-    defaultEnabledHooks: [],
+    defaultSeedsByRuntime: emptySeedsByRuntime(),
   });
   const [isLoadingSubmit, setIsLoadingSubmit] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -50,39 +64,39 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
         }
       }
 
-      let defaultCheckedPlugins = [];
-      let defaultAvailableHooks = [];
-      let defaultEnabledHooks = [];
-      const defaultPreset = (presetsData || []).find(p => p.is_builtin && p.name === 'default');
-      if (defaultPreset) {
+      // Seeds are per-runtime: minqlx plugins do not run on minqlxtended, so
+      // the form must never hand a minqlxtended host the minqlx defaults.
+      const defaultSeedsByRuntime = emptySeedsByRuntime();
+
+      await Promise.all(RUNTIME_OPTIONS.map(async ({ id: runtime }) => {
+        const presetName = defaultPresetNameForRuntime(runtime);
+        const preset = (presetsData || []).find(p => p.is_builtin && p.name === presetName);
+        if (!preset) return;
         try {
-          const detail = await getPresetById(defaultPreset.id);
-          if (Array.isArray(detail?.checked_plugins)) {
-            defaultCheckedPlugins = detail.checked_plugins;
-          }
-          if (Array.isArray(detail?.user_hooks)) {
-            defaultAvailableHooks = detail.user_hooks;
-          }
-          if (Array.isArray(detail?.enabled_hooks)) {
-            defaultEnabledHooks = detail.enabled_hooks;
-          }
+          const detail = await getPresetById(preset.id);
+          defaultSeedsByRuntime[runtime] = {
+            checkedPlugins: Array.isArray(detail?.checked_plugins) ? detail.checked_plugins : [],
+            availableHooks: Array.isArray(detail?.user_hooks) ? detail.user_hooks : [],
+            enabledHooks: Array.isArray(detail?.enabled_hooks) ? detail.enabled_hooks : [],
+          };
         } catch (presetErr) {
-          console.error('Failed to fetch default preset details (checked_plugins / hooks):', presetErr);
-          defaultCheckedPlugins = [
-            'balance.py', 'ban.py', 'clan.py', 'essentials.py', 'log.py',
-            'motd.py', 'names.py', 'permission.py', 'plugin_manager.py',
-            'silence.py', 'workshop.py',
-          ];
+          console.error(`Failed to fetch ${presetName} preset details (checked_plugins / hooks):`, presetErr);
+          // Only minqlx has a safe hardcoded fallback.
+          if (runtime === 'minqlx') {
+            defaultSeedsByRuntime.minqlx = {
+              checkedPlugins: MINQLX_FALLBACK_PLUGINS,
+              availableHooks: [],
+              enabledHooks: [],
+            };
+          }
         }
-      }
+      }));
 
       setFetchedInitialData({
         hosts: hostsData || [],
         presets: presetsData || [],
         defaultConfigContents,
-        defaultCheckedPlugins,
-        defaultAvailableHooks,
-        defaultEnabledHooks,
+        defaultSeedsByRuntime,
       });
     } catch (error) {
       console.error('Failed to load initial data for AddInstanceModal:', error);
@@ -91,7 +105,7 @@ function AddInstanceModal({ isOpen, onClose, onInstanceAdded, initialHostId }) {
         hosts: [],
         presets: [],
         defaultConfigContents: CONFIG_FILES.reduce((acc, fileName) => ({ ...acc, [fileName]: `// Error loading ${fileName}` }), {}),
-        defaultCheckedPlugins: [],
+        defaultSeedsByRuntime: emptySeedsByRuntime(),
       });
     } finally {
       setLoadingInitialData(false);

@@ -1,6 +1,6 @@
 ---
 # Shared task: install minqlx plugin Python dependencies.
-# Requires: qlds_dir (e.g. /home/ql/qlds-27960)
+# Requires: qlds_dir (e.g. /home/ql/qlds-27960), runtime_plugins_dirname
 # Failure is non-blocking — a QLSM_PIP_WARN sentinel is emitted so callers can log it.
 #
 # NOTE: pip runs as root (inherited become: yes from the importing playbook). This is
@@ -15,14 +15,14 @@
   changed_when: false
   failed_when: false
 
-- name: Check if requirements.txt exists in minqlx-plugins
+- name: Check if requirements.txt exists in the runtime plugins directory
   ansible.builtin.stat:
-    path: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
+    path: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/requirements.txt"
   register: minqlx_req_stat_result
 
 - name: Install plugin Python deps from requirements.txt
   ansible.builtin.pip:
-    requirements: "{{ qlds_dir }}/minqlx-plugins/requirements.txt"
+    requirements: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/requirements.txt"
     executable: pip3
     extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
   when: minqlx_req_stat_result.stat.exists and (pip3_version_output.rc | default(1)) == 0

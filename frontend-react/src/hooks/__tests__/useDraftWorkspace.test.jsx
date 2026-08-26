@@ -111,6 +111,47 @@ describe('useDraftWorkspace', () => {
     ]));
   });
 
+  it('passes accepted replacement names through unchanged, spaces included', async () => {
+    // The list used to round-trip through join(' ')/split(' '), which turns
+    // 'my plugin.py' into two names -- and if one of those fragments is itself
+    // a candidate, the backend honours an accept the operator never made.
+    mocks.createDraft.mockResolvedValue({ draft_id: 'draft-1' });
+    mocks.getDraftTree.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useDraftWorkspace({
+      source: 'preset',
+      preset: 'default',
+      active: true,
+      targetRuntime: 'minqlxtended',
+      acceptedReplacements: ['my plugin.py', 'balance.py'],
+    }));
+
+    await waitFor(() => expect(result.current.draftId).toBe('draft-1'));
+    expect(mocks.createDraft).toHaveBeenCalledWith(expect.objectContaining({
+      acceptedReplacements: ['balance.py', 'my plugin.py'],
+    }));
+  });
+
+  it('does not re-seed when the accepted list is rebuilt with the same contents', async () => {
+    // acceptedKey is the seeding effect's dependency; if it stopped being
+    // stable across identical lists the draft would be recreated on every
+    // render, which is what the join() it replaced was there to prevent.
+    mocks.createDraft.mockResolvedValue({ draft_id: 'draft-1' });
+    mocks.getDraftTree.mockResolvedValue([]);
+
+    const { result, rerender } = renderHook(
+      ({ accepted }) => useDraftWorkspace({
+        source: 'preset', preset: 'default', active: true,
+        acceptedReplacements: accepted,
+      }),
+      { initialProps: { accepted: ['b.py', 'a.py'] } }
+    );
+
+    await waitFor(() => expect(result.current.draftId).toBe('draft-1'));
+    rerender({ accepted: ['a.py', 'b.py'] });
+    await waitFor(() => expect(mocks.createDraft).toHaveBeenCalledTimes(1));
+  });
+
   it('downloads a raw draft file without marking the workspace dirty', async () => {
     const blob = new Blob([new Uint8Array([0, 255, 128])]);
     mocks.createDraft.mockResolvedValue({ draft_id: 'draft-1' });

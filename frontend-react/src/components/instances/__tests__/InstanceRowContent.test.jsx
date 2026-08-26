@@ -49,4 +49,19 @@ describe('InstanceRowContent', () => {
 
     expect(props.onOpenDetails).toHaveBeenCalledWith(1);
   });
+
+  it('reads 25k on a minqlx host with the toggle off', () => {
+    renderRow({ inst: { lan_rate_enabled: false, host_runtime: 'minqlx' } });
+
+    expect(screen.getByText('25k')).toBeInTheDocument();
+  });
+
+  it('reads 99k on a minqlxtended host even with the stored flag off', () => {
+    // QLSM runs these hosts at 99k, so the Rate column must not read 25k while
+    // the details modal reads Enabled for the same instance.
+    renderRow({ inst: { lan_rate_enabled: false, host_runtime: 'minqlxtended' } });
+
+    expect(screen.getByText('99k')).toBeInTheDocument();
+    expect(screen.queryByText('25k')).not.toBeInTheDocument();
+  });
 });

@@ -12,6 +12,7 @@ from ui import db
 from ui.database import get_preset, get_preset_by_name
 from ui.models import BinaryMetadata, ConfigPreset
 from ui.preset_support import PRESETS_DIR, validate_user_preset_name
+from ui.runtime import normalize_runtime
 from ui.routes.preset_api_routes import (
     _read_preset_checked_factories,
     _read_preset_checked_plugins,
@@ -127,7 +128,7 @@ def _replace_binary_metadata(preset_name, entries):
 def _preset_response(preset):
     data = preset.to_dict()
     data.update(_read_preset_configs(preset.path))
-    data['scripts'] = _read_preset_scripts(preset.path)
+    data['scripts'] = _read_preset_scripts(preset.path, preset.runtime)
     data['factories'] = _read_preset_factories(preset.path)
     data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
     data['checked_factories'] = _read_preset_checked_factories(preset.path)
@@ -185,6 +186,7 @@ def import_preset_api():
         return error_response
 
     description = bundle['manifest']['preset'].get('description') or ''
+    imported_runtime = normalize_runtime(bundle['manifest']['preset'].get('runtime'))
 
     os.makedirs(PRESETS_DIR, exist_ok=True)
     if mode == 'create':
@@ -213,12 +215,14 @@ def import_preset_api():
             preset = existing
             preset.description = description
             preset.path = target_path
+            preset.runtime = imported_runtime
             preset.last_updated = datetime.datetime.utcnow()
         else:
             target_path = os.path.join(PRESETS_DIR, name)
             os.rename(staging_dir, target_path)
             moved_staging = True
-            preset = ConfigPreset(name=name, description=description, path=target_path)
+            preset = ConfigPreset(name=name, description=description, path=target_path,
+                                  runtime=imported_runtime)
             db.session.add(preset)
             db.session.flush()
 

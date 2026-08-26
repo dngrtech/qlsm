@@ -1,0 +1,261 @@
+{
+  "files": {
+    "ServerStatus.py": {
+      "origin": "upstream",
+      "sha256": "7e20cf30a6ce2e5a831f50335135f016766982048a36a0b9c0186f9d68e05973"
+    },
+    "__init__.py": {
+      "origin": "upstream",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "aliases.py": {
+      "origin": "upstream",
+      "sha256": "a83015d76902abd835d4332a0c6a44d84b42af96aec1f5618e53c389a80cb667"
+    },
+    "autokick.py": {
+      "origin": "upstream",
+      "sha256": "4cef0ae872996e70c38bc9a5fc6e7590cc1c677787c8c6eea7c0150d90000e4e"
+    },
+    "balance.py": {
+      "origin": "upstream",
+      "sha256": "f0c163a5329dc860a8ffb9908e0d1ae4e2dbf82178939f657e462727fdb3106b"
+    },
+    "ban.py": {
+      "origin": "upstream",
+      "sha256": "d36bc41c351b9e28f554e0ec30ffe664aae79706ff7cb02bdf868bd4b5d7f1e1"
+    },
+    "block.py": {
+      "origin": "upstream",
+      "sha256": "2ae5e8e31a86bf636420da59cf2d48b8ca203c39b4f3a2802ae3dc96b94ecbdc"
+    },
+    "branding.py": {
+      "origin": "upstream",
+      "sha256": "8fec11652e15d7d9826367a041dd23a1ca240cc56fc3f187f16d660bcc14359a"
+    },
+    "check_game_time.py": {
+      "origin": "upstream",
+      "sha256": "d6567643696db622107c04853a4eb2403439ba0bff628bc0403a9b2c4d57d2b8"
+    },
+    "clan.py": {
+      "origin": "upstream",
+      "sha256": "9f1850f4fec9e9a02ac09776e9c99d7bffabef1ab97f9ac14ed919bbb8457903"
+    },
+    "clanmembers.py": {
+      "origin": "upstream",
+      "sha256": "91c42756268f5ee564a5bd193d9f993d4970ee64c65e2618655d7a17d4e5f306"
+    },
+    "commands.py": {
+      "origin": "qlsm",
+      "sha256": "62f65a7d07638d5c41e92d41c042f00bc17022f1b9d1a01b8b42643455400bd4"
+    },
+    "commlink.py": {
+      "origin": "upstream",
+      "sha256": "933a69b67e88dee4341631c4635b61d38b673d120f7a542c7ec6fba4a3cdbb52"
+    },
+    "commlink_secured.py": {
+      "origin": "upstream",
+      "sha256": "eba25415313147b070aecc981916155d6e8fbc4c4e6bf897f4c9a36f41bf11f7"
+    },
+    "custom_votes.py": {
+      "origin": "upstream",
+      "sha256": "7d4395d7cf19a916ee9f2e42098815bad1501c20407d7dfe109d5371c7a165da"
+    },
+    "custom_votesplus.py": {
+      "origin": "upstream",
+      "sha256": "c1de84e628c7bdf63f9d1c4996ea0de726a06affb57cd0131046d03fce484ee4"
+    },
+    "docs.py": {
+      "origin": "upstream",
+      "sha256": "2047b7a50bbeac42dff480aa161565ec20a7c4c8e9a3e03be200204dafc403e1"
+    },
+    "draw.py": {
+      "origin": "upstream",
+      "sha256": "7dbdefef884ed5aa88fda630d5f2a0dab1391a512ab7140ec75eec5df95ff168"
+    },
+    "essentials.py": {
+      "origin": "upstream",
+      "sha256": "14aa4de6e07373077d3b95560d13409c8c738cc45a2dbda20388593b73218116"
+    },
+    "factoryvote.py": {
+      "origin": "upstream",
+      "sha256": "bea00f82399bcdf0f60f1ad10a5c751d6bad04f72d87d2a94178f9f867f7b1db"
+    },
+    "fun.py": {
+      "origin": "upstream",
+      "sha256": "10548725caf7b0b9ff5fb70f76fb0de5215a4219842e6e90d6082d8f71cb28aa"
+    },
+    "getmap.py": {
+      "origin": "upstream",
+      "sha256": "071db622acb19485c5c1553c1eefc0dcd2ffa23549cc2587eb713dfd06c7376b"
+    },
+    "intermission.py": {
+      "origin": "upstream",
+      "sha256": "a8f02ebf6778874e1f7a7e7af1bf864ee14398be106c8971ea460cb838105507"
+    },
+    "iouonegirl.py": {
+      "origin": "upstream",
+      "sha256": "c63c900aaa8dfd5aad318eccb97114697c0d7f241081208ee929f5ea76a89a16"
+    },
+    "irc.py": {
+      "origin": "upstream",
+      "sha256": "dd621ab85d8ddeafaf6da4bfa3ea8bc3363a0eaf49ce0c2f2527aa7298f867fd"
+    },
+    "kickban.py": {
+      "origin": "upstream",
+      "sha256": "d61459f1984f10829df564c2ba2943427eb118ea2ace803c4bd608e78447e6e8"
+    },
+    "kills.py": {
+      "origin": "upstream",
+      "sha256": "219516eac90f654b896816813f4eb6d3a3b2098ccd197bb82b5954e03a0d9eb5"
+    },
+    "lastmaps.py": {
+      "origin": "upstream",
+      "sha256": "3c25fb1445230e4cc1aea4e7c4eb61151348c674d4df0f8c393d87840e73d6b5"
+    },
+    "linodefw.py": {
+      "origin": "upstream",
+      "sha256": "c38f8ee93400892268847b9d8beb29b6fe5fc1da24bf4bb8c58f8b577238f148"
+    },
+    "listmaps.py": {
+      "origin": "upstream",
+      "sha256": "7d1c69bef5b12057a7b3615a673d8366fc77b2d054108d35ed79b6ff00ad6207"
+    },
+    "log.py": {
+      "origin": "upstream",
+      "sha256": "97384b0e6fc88c5beb3e22b34b075bb5e1845a32e6e3fb8b3a4a2dbe808919f2"
+    },
+    "mapLimiter.py": {
+      "origin": "upstream",
+      "sha256": "cd6ef17de3474bf7e82d9508420f39539b9d11121b6ef50b8774d1ea609044e8"
+    },
+    "motd.py": {
+      "origin": "upstream",
+      "sha256": "5ddd6a60a432da805d2e23074777eb60d82a189cc4b9117fddc15518695e4593"
+    },
+    "myFun.py": {
+      "origin": "qlsm",
+      "sha256": "bdd66d6e313e4c1c520fde2f33000ac3247587dc770707df8d8add19034272c2"
+    },
+    "mybalance.py": {
+      "origin": "upstream",
+      "sha256": "bffa8fbf1e37e03506c5940e36c9dfa7a1c0e725832f21d151875d4674df8cbd"
+    },
+    "mydiscordbot.py": {
+      "origin": "upstream",
+      "sha256": "3623cf00f5cb8044109232278d2b75e378c861363a56d373dd9ef55d9dc3ba5c"
+    },
+    "names.py": {
+      "origin": "upstream",
+      "sha256": "662587a0649953c588b18e08eca598f903681ca51ce11c186de722fcb40a6412"
+    },
+    "namesplus.py": {
+      "origin": "upstream",
+      "sha256": "f766356cf28c9a09d6b41954824979129084bd435ddfcae30b1c8fbca33ef55d"
+    },
+    "onjoin.py": {
+      "origin": "upstream",
+      "sha256": "d26356fbfb6dbf9a8b515c64eed6e06f5a8c91959b128c6683e9c6c03496e842"
+    },
+    "permission.py": {
+      "origin": "upstream",
+      "sha256": "2d0f9a1f1e82cd24973ac37e319d618562be8ae82b33e079a82f20c6b846ea43"
+    },
+    "player_info.py": {
+      "origin": "qlsm",
+      "sha256": "73b5c3417d87cf58863d40adfb140ef3c87c14f3681350537cee95295a99c2e0"
+    },
+    "playerpings.py": {
+      "origin": "upstream",
+      "sha256": "15a327220e005fc6e9a696bd57486ef832da017492abffdc824d6a838b3fa9ca"
+    },
+    "players_db.py": {
+      "origin": "upstream",
+      "sha256": "3c7a02931dd23db81c55563a8767876c8f0a0694e5a63d2fed92a283cbf3d503"
+    },
+    "plugin_manager.py": {
+      "origin": "upstream",
+      "sha256": "1595d21845138f13f81371cd66f92e2809277d9ae15ad4d61612f7c9039f94f4"
+    },
+    "protect.py": {
+      "origin": "upstream",
+      "sha256": "69eb01f55c79ff8aa4225056dd2cf123b907e1c6263c1d3155611759ebc49602"
+    },
+    "queue.py": {
+      "origin": "upstream",
+      "sha256": "2398f7d5a73ebddcc752537a6d55b999ce6621eb16f40aeff440c77ac707841b"
+    },
+    "raw.py": {
+      "origin": "upstream",
+      "sha256": "9f545b7c24e19bd7dcbcc7427c04c3e237714f4ba9846866556470abe1c89c01"
+    },
+    "reset_acc.py": {
+      "origin": "qlsm",
+      "sha256": "3dc3b7b3dff90477f4daa47c67e71368d513c28dd3cc394a990b8486228458df"
+    },
+    "restartserver.py": {
+      "origin": "upstream",
+      "sha256": "19f560eb104d3cd19e4878c34817eaf5a82c5f44865fbbe1d9771b09636b980c"
+    },
+    "serverBDM.py": {
+      "origin": "upstream",
+      "sha256": "331c72eeee69e7d6f5e8289ceb0e53dcf2de5c7b05bef6819878f19cab83cf9d"
+    },
+    "serverchecker.py": {
+      "origin": "qlsm",
+      "sha256": "9117922f19fffdbd5468d706bca6c63e6f6a8244dd25034db3e904e1c18fa7ec"
+    },
+    "servers.py": {
+      "origin": "upstream",
+      "sha256": "d6fa343ebea8924421f402aa01b946c3e4369a61f3241ec7235d68626bc7677c"
+    },
+    "silence.py": {
+      "origin": "upstream",
+      "sha256": "0d47992f7cd75c4c22ff2e842450278364102b6ee17d69ece8f27c5da281b25e"
+    },
+    "solorace.py": {
+      "origin": "upstream",
+      "sha256": "0280e58377bc8cbd784ff039850441a810ea7e65f3a77d33f898ff0f1b41a40b"
+    },
+    "specall.py": {
+      "origin": "upstream",
+      "sha256": "b160fcf87b4e99e8aa09801fc6f3972da4d3066b658280bb2952c5e9471cd2c7"
+    },
+    "specqueue.py": {
+      "origin": "qlsm",
+      "sha256": "5747ca99b4fec5463cc087f50edb01374c3dcddbccc16214da6554d8efc5e0d5"
+    },
+    "suppress_join_msg.py": {
+      "origin": "qlsm",
+      "sha256": "8dcae52def8fc9b3eff0efbd4874d92949ebb60141894518a31a963519183f8d"
+    },
+    "sv_fps.py": {
+      "origin": "upstream",
+      "sha256": "194081fb7b975402fdd33b1d29b7dba6df814eb8b541428019974e766142e48a"
+    },
+    "team_ak.py": {
+      "origin": "upstream",
+      "sha256": "7c3170edf58ee6adf26b488f1be522963fba5f4a00c050a34227e5c194e68f49"
+    },
+    "test_time.py": {
+      "origin": "upstream",
+      "sha256": "847f286404c73ac1e2c43735263b5222fc498b2ee239abf0d27b5092ce15f82c"
+    },
+    "uberstats.py": {
+      "origin": "upstream",
+      "sha256": "f9f8aa348b17f711a2622eaf14ead2cf326c161371371a9ad9fc773a53d09c37"
+    },
+    "voteban.py": {
+      "origin": "upstream",
+      "sha256": "f401c02328369759b1dbbd721ec24e92d827c3090e11da5a4930f15b9eacdf6a"
+    },
+    "workshop.py": {
+      "origin": "upstream",
+      "sha256": "297876e1c191c64189bbc8ab94488e1fc96d292e4239a52a58ec22d91f6f13ad"
+    }
+  },
+  "upstream": {
+    "commit": "vendored -- QLSM has carried this baseline since before the minqlxtended work; no single upstream commit pins it",
+    "repo": "https://github.com/MinoMino/minqlx-plugins",
+    "version": "n/a"
+  }
+}

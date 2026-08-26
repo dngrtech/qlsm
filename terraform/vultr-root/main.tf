@@ -41,6 +41,18 @@ variable "instance_tags" {
   default     = [] # Optional, provide a default if desired
 }
 
+variable "os_name" {
+  description = "Exact Vultr OS name to install, e.g. 'Debian 12 x64 (bookworm)' or 'Ubuntu 24.04 LTS x64'."
+  type        = string
+  default     = "Debian 12 x64 (bookworm)"
+}
+
+variable "os_family" {
+  description = "Vultr OS family filter matching os_name ('debian' or 'ubuntu')."
+  type        = string
+  default     = "debian"
+}
+
 # -----------------------------------------------------------------------------
 # SSH Key Management
 # -----------------------------------------------------------------------------
@@ -71,15 +83,17 @@ resource "local_file" "private_key_pem" {
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------
-# Look up the OS ID for Debian 12 x64 dynamically
-data "vultr_os" "debian12" {
+# Look up the OS ID for the runtime's target image dynamically. QLSM always
+# passes os_name/os_family derived from Host.runtime; the defaults exist only
+# for manual terraform runs.
+data "vultr_os" "selected" {
   filter {
     name   = "name"
-    values = ["Debian 12 x64 (bookworm)"] # Exact name from Vultr API
+    values = [var.os_name]
   }
   filter {
     name   = "family"
-    values = ["debian"]
+    values = [var.os_family]
   }
   filter {
     name   = "arch"
@@ -97,7 +111,7 @@ module "vultr_host_instance" {
   # --- Required Variables ---
   region      = var.vultr_region
   plan        = var.vultr_plan
-  os_id       = data.vultr_os.debian12.id # Use the dynamically found OS ID
+  os_id       = data.vultr_os.selected.id # Use the dynamically found OS ID
   ssh_key_ids = [vultr_ssh_key.instance_ssh_key.id] # Use the dynamically created SSH key ID
 
   # --- Optional Variables ---

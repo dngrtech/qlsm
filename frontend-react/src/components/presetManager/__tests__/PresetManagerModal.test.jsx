@@ -72,6 +72,32 @@ describe('PresetManagerModal', () => {
     expect(onLoadPreset).toHaveBeenCalledWith(1);
   });
 
+  it('enables Load Selected for a preset that mismatches the host runtime -- the backend strips, it does not block', () => {
+    render(
+      <PresetManagerModal
+        {...base}
+        presets={[{ id: 1, name: 'duel-cfg', description: 'd', is_builtin: false, runtime: 'minqlx' }]}
+        host={{ runtime: 'minqlxtended' }}
+        initialTab="load"
+      />
+    );
+    fireEvent.click(screen.getByText('load-row'));
+    expect(screen.getByRole('button', { name: /load selected/i })).not.toBeDisabled();
+  });
+
+  it('enables Load Selected for a matching preset when a host is set', () => {
+    render(
+      <PresetManagerModal
+        {...base}
+        presets={[{ id: 1, name: 'duel-cfg', description: 'd', is_builtin: false, runtime: 'minqlx' }]}
+        host={{ runtime: 'minqlx' }}
+        initialTab="load"
+      />
+    );
+    fireEvent.click(screen.getByText('load-row'));
+    expect(screen.getByRole('button', { name: /load selected/i })).not.toBeDisabled();
+  });
+
   it('surfaces an inline error and keeps the row when deletePreset rejects', async () => {
     mocks.deletePreset.mockRejectedValueOnce({ error: { message: 'server boom' } });
     const onPresetDeleted = vi.fn();

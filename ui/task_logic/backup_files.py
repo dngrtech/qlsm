@@ -12,6 +12,7 @@ SSH_KEYS_DIR = os.path.join('terraform', 'ssh-keys')
 TERRAFORM_STATE_DIR = os.path.join('terraform', 'vultr-root', 'terraform.tfstate.d')
 CONFIGS_DIR = 'configs'
 MINQLX_PLUGINS_DIR = os.path.join('ql-assets', 'data', 'minqlx-plugins')
+MINQLXTENDED_PLUGINS_DIR = os.path.join('ql-assets', 'data', 'minqlxtended-plugins')
 SYSTEM_HOOKS_DIR = os.path.join('ql-assets', 'data', 'system-hooks')
 RESTORE_PATH_PREFIX = '.qlsm-restore-'
 
@@ -39,6 +40,7 @@ def backup_file_trees():
         ('configs', CONFIGS_DIR, lambda name: name == 'presets'),
         ('presets', PRESETS_DIR, lambda name: name == os.path.basename(BUILTIN_PRESETS_DIR)),
         ('plugins/minqlx-plugins', MINQLX_PLUGINS_DIR, None),
+        ('plugins/minqlxtended-plugins', MINQLXTENDED_PLUGINS_DIR, None),
         ('plugins/system-hooks', SYSTEM_HOOKS_DIR, None),
     ]
 

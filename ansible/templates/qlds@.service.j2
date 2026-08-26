@@ -14,7 +14,7 @@ Environment=LD_PRELOAD={{ ld_preload_paths }}
 {% endif %}
 # The ExecStart line will include the script and the dynamic arguments passed from Ansible
 # Wrap the entire command in quotes to handle spaces/quotes in qlds_args
-ExecStart=/home/ql/qlds-%i/run_server_x64_minqlx.sh {{ qlds_args | default('') }} 
+ExecStart=/home/ql/qlds-%i/{{ launch_script | default('run_server_x64_minqlx.sh') }} {{ qlds_args | default('') }} 
 Restart=on-failure
 RestartSec=5
 # qzeroded/minqlx does not exit cleanly on SIGTERM. Treat fast hard-kill

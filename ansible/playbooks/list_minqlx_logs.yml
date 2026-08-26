@@ -7,6 +7,7 @@
   vars:
     game_port: "{{ port }}"
     log_dir: "/home/ql/qlds-{{ game_port }}"
+    log_filename: "{{ filename | default('minqlx.log') }}"
 
   tasks:
     - name: Initialize MinQLX log file list
@@ -21,7 +22,7 @@
     - name: Find MinQLX log files
       ansible.builtin.find:
         paths: "{{ log_dir }}"
-        patterns: "minqlx.log*"
+        patterns: "{{ log_filename }}*"
         file_type: file
         recurse: false
       register: minqlx_log_find
@@ -33,7 +34,7 @@
           {{ (minqlx_log_find.files | default([])
               | map(attribute='path')
               | map('basename')
-              | select('match', '^minqlx\\.log(\\.\\d+)?$')
+              | select('match', '^' ~ (log_filename | regex_escape) ~ '(\\.\\d+)?$')
               | list) }}
       when: log_dir_stat.stat.exists and log_dir_stat.stat.isdir
 

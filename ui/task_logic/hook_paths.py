@@ -3,19 +3,23 @@ plus the matching host runtime subdirectory.
 
 A user hook may live in two places during the cutover:
   * configs/<host>/<id>/user-hooks/  -> /home/ql/qlds-<port>/user-hooks/
-  * configs/<host>/<id>/scripts/     -> /home/ql/qlds-<port>/minqlx-plugins/  (legacy)
+  * configs/<host>/<id>/scripts/     -> /home/ql/qlds-<port>/<runtime plugins dir>/  (legacy)
 """
 import os
+
+from ui.runtime import DEFAULT_RUNTIME, runtime_paths
 
 
 CONFIGS_BASE = "configs"
 
 
-def resolve_user_hook(configs_base, host_name, instance_id, filename):
+def resolve_user_hook(configs_base, host_name, instance_id, filename,
+                      runtime=DEFAULT_RUNTIME):
     inst_dir = os.path.join(configs_base, host_name, str(instance_id))
+    legacy_subdir = runtime_paths(runtime)['plugins_dirname']
     candidates = (
         (os.path.join(inst_dir, "user-hooks", filename), "user-hooks"),
-        (os.path.join(inst_dir, "scripts", filename), "minqlx-plugins"),
+        (os.path.join(inst_dir, "scripts", filename), legacy_subdir),
     )
     for source, host_subdir in candidates:
         if os.path.isfile(source):

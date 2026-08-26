@@ -3,6 +3,7 @@ import enum
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
+from ui.runtime import DEFAULT_RUNTIME, normalize_runtime
 
 class HostStatus(enum.Enum):
     """Enum for Host status."""
@@ -60,6 +61,11 @@ class Host(db.Model):
     redis_unix_socket = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     lan_rate_uses_hook = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = LD_PRELOAD hook mechanism; False = legacy iptables/sysctl path
     firewall_pool_v2 = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = firewall rendered with the current game/RCON port pool; False = narrower legacy allow-list
+    # Which minqlx runtime this host builds and runs. Chosen at creation and
+    # immutable thereafter -- migrating a live host is destructive, and a locked
+    # column can never drift from what is actually installed on the box.
+    runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
+                        server_default=DEFAULT_RUNTIME)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True) # New field for QLFilter
     auto_restart_schedule = db.Column(db.String(100), nullable=True) # Cron expression for auto-restart
@@ -97,6 +103,7 @@ class Host(db.Model):
             'redis_unix_socket': bool(self.redis_unix_socket),
             'lan_rate_uses_hook': bool(self.lan_rate_uses_hook),
             'firewall_pool_v2': bool(self.firewall_pool_v2),
+            'runtime': normalize_runtime(self.runtime),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,
@@ -160,6 +167,7 @@ class QLInstance(db.Model):
             'host_ip_address': self.host.ip_address if self.host else None, # Include host IP address
             'host_os_type': self.host.os_type if self.host else None,
             'host_lan_rate_uses_hook': bool(self.host.lan_rate_uses_hook) if self.host else False,
+            'host_runtime': normalize_runtime(self.host.runtime) if self.host else DEFAULT_RUNTIME,
             'port': self.port,
             'hostname': self.hostname, # Added hostname
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode
@@ -228,6 +236,11 @@ class ConfigPreset(db.Model):
     description = db.Column(db.Text, nullable=True)
     path = db.Column(db.String(255), nullable=False)  # Filesystem path to preset folder
     is_builtin = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    # The runtime of the instance this preset was saved from. Presets are not
+    # portable across runtimes -- plugins written for one do not run on the
+    # other -- so this is provenance the load path checks before applying.
+    runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
+                        server_default=DEFAULT_RUNTIME)
     last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -242,6 +255,7 @@ class ConfigPreset(db.Model):
             'description': self.description,
             'path': self.path,
             'is_builtin': self.is_builtin,
+            'runtime': normalize_runtime(self.runtime),
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

@@ -11,14 +11,17 @@ from flask_jwt_extended import jwt_required
 from ui import db
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
 from ui.models import BinaryMetadata
+from ui.preset_compat import apply_compatibility
 from ui.preset_support import (
     PRESETS_DIR,
+    default_preset_name_for_runtime,
     is_internal_preset_name,
     resolve_preset_subdir,
     validate_user_preset_name,
 )
 from ui.routes.draft_routes import ELF_MAGIC, MAX_BINARY_FILE_SIZE
 from ui.font_files import FONT_EXTENSIONS, validate_font_content
+from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, normalize_runtime
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
     MAX_CONFIG_FOLDER_DEPTH,
@@ -48,7 +51,15 @@ PROTECTED_CONFIG_FILES = set(CONFIG_FILE_MAP.keys())
 EXPORT_FORMAT_VERSION = 1
 EXPORT_EXCLUDED_DIRS = {'__pycache__'}
 EXPORT_EXCLUDED_FILES = {'.DS_Store', '.gitkeep'}
-EXPORT_EXCLUDED_PATTERNS = ('*.pyc', '*.pyo', '*.swp', '*.tmp', '*~')
+# The trailing group are backup copies left by editors and tooling (foo.py.bak,
+# foo.py.bak-pre-x-<stamp>, foo.py.bak.1, foo.py.orig, foo.py.rej). A preset is a
+# curated artefact, so they are junk on every path, not just in archives: their
+# extensions aren't in the import validator's allowlist, so a preset holding one
+# exports to a ZIP QLSM itself rejects with "Unsupported script file".
+EXPORT_EXCLUDED_PATTERNS = (
+    '*.pyc', '*.pyo', '*.swp', '*.tmp', '*~',
+    '*.bak', '*.bak-*', '*.bak.*', '*.orig', '*.rej',
+)
 
 
 def _safe_export_filename(name):
@@ -60,7 +71,12 @@ def _safe_export_filename(name):
 
 
 def _should_skip_export_path(relative_path, is_dir=False):
-    """Return True for generated/editor junk that should not enter exports."""
+    """Return True for generated/editor junk that should not enter a preset.
+
+    One filter for every path -- export, import and draft save -- so a preset on
+    disk, the archive it exports to, and the archive that imports back are all the
+    same set of files.
+    """
     parts = relative_path.replace(os.sep, '/').split('/')
     if any(part in EXPORT_EXCLUDED_DIRS for part in parts):
         return True
@@ -73,7 +89,10 @@ def _should_skip_export_path(relative_path, is_dir=False):
 
 
 def _ignore_generated_script_cruft(directory, names):
-    """Return generated/editor junk to skip when saving draft scripts."""
+    """Return generated/editor junk to skip when copying a draft into a preset.
+
+    Used for both directories a draft contributes: scripts and user-hooks.
+    """
     ignored = []
     for name in names:
         path = os.path.join(directory, name)
@@ -103,6 +122,7 @@ def _preset_export_manifest(preset, binary_metadata_count):
             'name': preset.name,
             'description': preset.description,
             'is_builtin': bool(preset.is_builtin),
+            'runtime': normalize_runtime(preset.runtime),
             'created_at': preset.created_at.isoformat() if preset.created_at else None,
             'last_updated': preset.last_updated.isoformat() if preset.last_updated else None,
         },
@@ -480,6 +500,45 @@ def _validate_lan_rate_enabled_payload(data):
     return None
 
 
+def _validate_preset_runtime(data):
+    """Validate the optional 'runtime' field of a preset creation payload.
+
+    Returns (runtime, None) or (None, message). The frontend sends the runtime
+    of the host the preset was saved from; an absent value means minqlx.
+    """
+    value = data.get('runtime')
+    if value is None:
+        return DEFAULT_RUNTIME, None
+    if not isinstance(value, str) or not value.strip():
+        return None, "Preset runtime must be a non-empty string."
+    if not is_valid_runtime(value):
+        return None, f"Invalid preset runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
+    return value.strip().lower(), None
+
+
+def _validate_preset_runtime_update(data):
+    """Validate the optional 'runtime' field of a preset update payload.
+
+    Unlike _validate_preset_runtime (create), an absent value must NOT default
+    to DEFAULT_RUNTIME here: update_preset_api also serves plain rename/
+    description edits from the preset manager, which carry no originating
+    host and no 'runtime' key at all. Defaulting an absent value would
+    silently re-stamp an existing minqlxtended preset back to minqlx on a
+    same-name save or description tweak. Returns (runtime, None) when
+    'runtime' is present and valid, (None, None) when it's absent (caller
+    must check 'runtime' in data before applying), or (None, message) on an
+    invalid value.
+    """
+    if 'runtime' not in data:
+        return None, None
+    value = data['runtime']
+    if not isinstance(value, str) or not value.strip():
+        return None, "Preset runtime must be a non-empty string."
+    if not is_valid_runtime(value):
+        return None, f"Invalid preset runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
+    return value.strip().lower(), None
+
+
 def _validation_error_response(error):
     return jsonify({"error": {"message": str(error)}}), 400
 
@@ -530,12 +589,18 @@ def _read_script_file(filepath):
         return f.read()
 
 
-def _read_preset_scripts(preset_path):
+def _read_preset_scripts(preset_path, runtime=None):
     """Read all plugin scripts from a preset's scripts/ folder.
 
-    For non-default presets that have their own scripts folder, the default
-    preset's scripts are merged in first so they are not lost. Preset-specific
-    files take priority over defaults with the same relative path.
+    For non-default presets that have their own scripts folder, the builtin
+    default preset's scripts are merged in first so they are not lost.
+    Preset-specific files take priority over defaults with the same relative
+    path.
+
+    `runtime` is the preset's own runtime: the default to merge is the builtin
+    for that runtime, because plugins are not interchangeable between the two.
+    Omitting it means minqlx, which is what every caller predating the runtime
+    column meant.
     """
     scripts = {}
     scripts_dir = os.path.join(preset_path, 'scripts')
@@ -546,8 +611,9 @@ def _read_preset_scripts(preset_path):
     # only needs to store its customisations (new or overridden files).
     # Use the basename of preset_path (the preset name) rather than a
     # CWD-dependent os.path.abspath comparison for robustness.
-    default_scripts_dir = resolve_preset_subdir('default', 'scripts')
-    if os.path.basename(preset_path) != 'default' and os.path.exists(default_scripts_dir):
+    default_preset_name = default_preset_name_for_runtime(runtime)
+    default_scripts_dir = resolve_preset_subdir(default_preset_name, 'scripts')
+    if os.path.basename(preset_path) != default_preset_name and os.path.exists(default_scripts_dir):
         for root, _, files in os.walk(default_scripts_dir):
             for filename in files:
                 if filename.lower().endswith(SCRIPT_READ_EXTENSIONS):
@@ -1027,6 +1093,10 @@ def create_preset_api():
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
 
+    runtime, runtime_error = _validate_preset_runtime(data)
+    if runtime_error:
+        return jsonify({"error": {"message": runtime_error}}), 400
+
     description = data.get('description', '')
     preset_path = os.path.join(PRESETS_DIR, name)
 
@@ -1070,7 +1140,12 @@ def create_preset_api():
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset_path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
-                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
+                shutil.copytree(
+                    draft_user_hooks,
+                    preset_user_hooks,
+                    dirs_exist_ok=True,
+                    ignore=_ignore_generated_script_cruft,
+                )
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(
@@ -1098,7 +1173,8 @@ def create_preset_api():
         preset_data = {
             'name': name,
             'description': description,
-            'path': preset_path
+            'path': preset_path,
+            'runtime': runtime,
         }
         new_preset = create_preset(**preset_data)
         current_app.logger.info(f"ConfigPreset '{new_preset.name}' created with ID {new_preset.id} at {preset_path}")
@@ -1114,7 +1190,7 @@ def create_preset_api():
         # Return preset data with config content and scripts for immediate use
         response_data = new_preset.to_dict()
         response_data.update(_read_preset_configs(preset_path))
-        response_data['scripts'] = _read_preset_scripts(preset_path)
+        response_data['scripts'] = _read_preset_scripts(preset_path, new_preset.runtime)
         response_data['factories'] = _read_preset_factories(preset_path)
         response_data['checked_plugins'] = _read_preset_checked_plugins(preset_path)
         response_data['checked_factories'] = _read_preset_checked_factories(preset_path)
@@ -1163,13 +1239,22 @@ def get_preset_api(preset_id):
     # Build response with metadata, config content, and scripts
     response_data = preset.to_dict()
     response_data.update(_read_preset_configs(preset.path))
-    response_data['scripts'] = _read_preset_scripts(preset.path)
+    response_data['scripts'] = _read_preset_scripts(preset.path, preset.runtime)
     response_data['factories'] = _read_preset_factories(preset.path)
     response_data['checked_plugins'] = _read_preset_checked_plugins(preset.path)
     response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
     response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset.path)
     response_data['lan_rate_enabled'] = _read_preset_lan_rate_enabled(preset.path)
     response_data['user_hooks'] = _read_preset_user_hooks(preset)
+
+    # Optional: classify this preset's plugins against the runtime of the host
+    # it is about to be loaded onto. Absent, or equal to the preset's own
+    # runtime, and the response is exactly what it has always been.
+    target_runtime = request.args.get('target_runtime')
+    if target_runtime is not None and not is_valid_runtime(target_runtime):
+        return jsonify({"error": {"message": "Invalid target_runtime."}}), 400
+    response_data = apply_compatibility(
+        response_data, preset.runtime, target_runtime)
 
     return jsonify({"data": response_data})
 
@@ -1254,6 +1339,11 @@ def update_preset_api(preset_id):
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
 
+    runtime_provided = 'runtime' in data
+    runtime, runtime_error = _validate_preset_runtime_update(data)
+    if runtime_error:
+        return jsonify({"error": {"message": runtime_error}}), 400
+
     # Check for name change
     if name_provided and new_name != original_preset_name:
         is_valid, error, reason = validate_user_preset_name(
@@ -1267,12 +1357,30 @@ def update_preset_api(preset_id):
     if draft_id:
         from ui.routes.draft_routes import (
             _validate_draft_id, _draft_exists,
-            _get_draft_scripts_path
+            _get_draft_scripts_path, draft_filtered_runtime
         )
         if not _validate_draft_id(draft_id):
             return jsonify({"error": {"message": "Invalid draft_id"}}), 400
         if not _draft_exists(draft_id):
             return jsonify({"error": {"message": "Draft not found"}}), 400
+        # A draft that went through the compatibility gate holds the TARGET
+        # host's plugin set, not this preset's: incompatible files deleted,
+        # the target runtime's own defaults overlaid, accepted replacements
+        # swapped in. The block below rmtree's the preset's scripts and
+        # copytree's that draft in, while preset.runtime keeps saying what it
+        # said before -- so the row would claim one runtime and the files on
+        # disk would be the other's. Refuse rather than warn: a wrong preset
+        # is discovered much later, on a different host, by someone who was
+        # not here. "Save as new preset" is the operator's way out.
+        filtered_for = draft_filtered_runtime(draft_id)
+        preset_runtime = normalize_runtime(preset.runtime)
+        if filtered_for and normalize_runtime(filtered_for) != preset_runtime:
+            return jsonify({"error": {"message": (
+                f"This draft was filtered to run on {filtered_for}, but preset "
+                f"'{preset.name}' is a {preset_runtime} preset. Saving it back "
+                f"would leave the preset labelled {preset_runtime} while it "
+                f"holds {filtered_for} plugins. Save it as a new preset instead."
+            )}}), 400
 
     has_config_updates = 'configs' in data or any(
         key in data for key in API_TO_FILE_MAP.keys()
@@ -1306,7 +1414,12 @@ def update_preset_api(preset_id):
             draft_user_hooks = _get_draft_user_hooks_path(draft_id)
             preset_user_hooks = os.path.join(preset.path, 'user-hooks')
             if os.path.isdir(draft_user_hooks):
-                shutil.copytree(draft_user_hooks, preset_user_hooks, dirs_exist_ok=True)
+                shutil.copytree(
+                    draft_user_hooks,
+                    preset_user_hooks,
+                    dirs_exist_ok=True,
+                    ignore=_ignore_generated_script_cruft,
+                )
             # Don't delete the draft — the form continues using it after preset save
         elif 'scripts' in data:
             _write_preset_scripts(
@@ -1347,6 +1460,8 @@ def update_preset_api(preset_id):
             update_data['description'] = data['description']
         if 'path' in data:
             update_data['path'] = data['path']
+        if runtime_provided:
+            update_data['runtime'] = runtime
 
         if update_data:
             updated_preset = update_preset(preset_id, **update_data)
@@ -1373,7 +1488,7 @@ def update_preset_api(preset_id):
 
             response_data = updated_preset.to_dict()
             response_data.update(_read_preset_configs(updated_preset.path))
-            response_data['scripts'] = _read_preset_scripts(updated_preset.path)
+            response_data['scripts'] = _read_preset_scripts(updated_preset.path, updated_preset.runtime)
             response_data['factories'] = _read_preset_factories(updated_preset.path)
             response_data['checked_plugins'] = _read_preset_checked_plugins(updated_preset.path)
             response_data['checked_factories'] = _read_preset_checked_factories(updated_preset.path)

@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import PresetLoadTab from '../PresetLoadTab';
 
@@ -75,5 +76,93 @@ describe('PresetLoadTab', () => {
   it('shows empty state when no presets', () => {
     render(<PresetLoadTab presets={[]} isLoading={false} selectedId={null} {...noop} />);
     expect(screen.getByText(/no presets available/i)).toBeInTheDocument();
+  });
+
+  it('allows selecting a preset from the other runtime and shows the strip warning', async () => {
+    const onSelect = vi.fn();
+    render(
+      <PresetLoadTab
+        presets={[{ id: 1, name: 'minqlx-preset', runtime: 'minqlx', description: 'd' }]}
+        host={{ runtime: 'minqlxtended' }}
+        onSelect={onSelect}
+        onRequestDelete={vi.fn()}
+        onRequestRename={vi.fn()}
+        onDownload={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByText('minqlx-preset'));
+    expect(onSelect).toHaveBeenCalledWith(1);
+    expect(screen.getByText(/not interchangeable/i)).toBeInTheDocument();
+  });
+
+  it('shows the runtime badge on a matching row too', () => {
+    render(
+      <PresetLoadTab
+        presets={[{ id: 6, name: 'match-preset', runtime: 'minqlxtended', description: 'd' }]}
+        host={{ runtime: 'minqlxtended' }}
+        onSelect={vi.fn()}
+        onRequestDelete={vi.fn()}
+        onRequestRename={vi.fn()}
+        onDownload={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('minqlxtended')).toBeInTheDocument();
+  });
+
+  it('still allows a matching preset', async () => {
+    const onSelect = vi.fn();
+    render(
+      <PresetLoadTab
+        presets={[{ id: 2, name: 'tended-preset', runtime: 'minqlxtended', description: 'd' }]}
+        host={{ runtime: 'minqlxtended' }}
+        onSelect={onSelect}
+        onRequestDelete={vi.fn()}
+        onRequestRename={vi.fn()}
+        onDownload={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByText('tended-preset'));
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it('is invisible when a minqlx preset meets a minqlx host: selectable, no mismatch message', async () => {
+    const onSelect = vi.fn();
+    render(
+      <PresetLoadTab
+        presets={[{ id: 4, name: 'minqlx-preset', runtime: 'minqlx', description: 'Comp duel' }]}
+        host={{ runtime: 'minqlx' }}
+        onSelect={onSelect}
+        onRequestDelete={vi.fn()}
+        onRequestRename={vi.fn()}
+        onDownload={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/not interchangeable/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Comp duel')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('minqlx-preset'));
+    expect(onSelect).toHaveBeenCalledWith(4);
+  });
+
+  it('is invisible when a legacy preset with no runtime meets a legacy host with no runtime', async () => {
+    const onSelect = vi.fn();
+    render(
+      <PresetLoadTab
+        presets={[{ id: 5, name: 'legacy-preset', description: 'Legacy cfg' }]}
+        host={{}}
+        onSelect={onSelect}
+        onRequestDelete={vi.fn()}
+        onRequestRename={vi.fn()}
+        onDownload={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/not interchangeable/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Legacy cfg')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('legacy-preset'));
+    expect(onSelect).toHaveBeenCalledWith(5);
   });
 });

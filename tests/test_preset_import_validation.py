@@ -328,3 +328,30 @@ def test_does_not_unwrap_when_manifest_already_at_root():
     raw = build_zip(extra={'notes/readme.txt': 'note\n'})
     bundle = parse_import_archive(raw)
     assert bundle['configs']['notes/readme.txt'] == 'note\n'
+
+
+def test_skips_backup_files_left_beside_scripts():
+    """A stray editor/tooling backup must not fail the whole import."""
+    raw = build_zip(extra={
+        'scripts/ranked.py': 'class ranked: pass\n',
+        'scripts/ranked.py.bak-pre-player-ip-connected-20260704-222233': 'old\n',
+        'scripts/ranked.py.bak': 'older\n',
+        'scripts/ranked.py.bak.1': 'oldest\n',
+        'scripts/ranked.py.orig': 'pre-merge\n',
+        'scripts/ranked.py.rej': 'rejected hunk\n',
+        'server.cfg.bak': 'set sv_hostname "Old"\n',
+    })
+    bundle = parse_import_archive(raw)
+    assert set(bundle['scripts']) == {'ranked.py'}
+    assert 'server.cfg.bak' not in bundle['configs']
+
+
+def test_keeps_scripts_whose_name_merely_contains_bak():
+    """The backup filter must not swallow legitimately named files."""
+    raw = build_zip(extra={
+        'scripts/bakery.py': 'class bakery: pass\n',
+        'notes/bakery.txt': 'not a backup\n',
+    })
+    bundle = parse_import_archive(raw)
+    assert 'bakery.py' in bundle['scripts']
+    assert 'notes/bakery.txt' in bundle['configs']
