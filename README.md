@@ -1,11 +1,15 @@
-# QLSM — Quake Live Server Management
+# <img src="docs/user/images/qlsm-logo.png" width="50" height="100" align="top" alt="QLSM logo"> Quake Live Server Management
+
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/eGdk5Me9S)
+[![Version](https://img.shields.io/badge/version-1.28.0-blue)](VERSION)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
 
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
 ![QLSM demo — Servers page, editing an instance's config, plugins, factories, and hooks](docs/user/videos/edit-instance-config-demo.webp)
 
 Features:
-- Three deployment modes (Debian 12 and Ubuntu 22 are tested, Debian 12 is recommended):
+- Three deployment modes:
   * QLSM self-deployment: run QLDS instances on the same machine as QLSM
   * Standalone remote server
   * VULTR cloud provisioning via Terraform
@@ -43,9 +47,6 @@ Everything runs over SSH via Ansible.
 Flask + React + SQLite + Redis + Ansible. Background jobs run through RQ workers. The frontend is a Vite/Tailwind SPA served behind Caddy.
 
 ## Requirements
-
-Debian 12 recommended (Ubuntu is also supported):
-
 - **Docker** — [install guide](https://docs.docker.com/engine/install/debian/)
 - **Docker Compose** (usually included with Docker)
 - A user with `sudo` access

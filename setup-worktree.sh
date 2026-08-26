@@ -49,6 +49,22 @@ if [[ -n "$source_worktree" && "$source_worktree" != "$script_dir" ]]; then
         mkdir -p configs
         cp -an "$source_worktree/configs/." configs/
     fi
+
+    if [[ ! -e CLAUDE.md && -f "$source_worktree/CLAUDE.md" ]]; then
+        log "Linking CLAUDE.md -> $source_worktree/CLAUDE.md"
+        ln -s "$source_worktree/CLAUDE.md" CLAUDE.md
+    elif [[ -e CLAUDE.md ]]; then
+        log "CLAUDE.md already exists."
+    else
+        warn "No CLAUDE.md found in this worktree or $source_worktree."
+    fi
+
+    if [[ ! -e .claude && -d "$source_worktree/.claude" ]]; then
+        log "Linking .claude -> $source_worktree/.claude"
+        ln -s "$source_worktree/.claude" .claude
+    elif [[ -e .claude ]]; then
+        log ".claude already exists."
+    fi
 else
     [[ -f .env ]] && log ".env already exists." || warn "No .env found."
 fi

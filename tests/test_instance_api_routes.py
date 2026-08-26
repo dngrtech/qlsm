@@ -523,6 +523,8 @@ def test_update_config_from_draft_copies_user_hooks(
     os.makedirs(hooks_dir, exist_ok=True)
     with open(os.path.join(hooks_dir, 'my_hook.so'), 'wb') as f:
         f.write(b'\x7fELF' + b'\x00' * 16)
+    with open(os.path.join(draft_dir, '.source'), 'w') as f:
+        f.write('preset')
 
     payload = {
         'configs': _full_configs(),
@@ -570,6 +572,8 @@ def test_update_config_enabled_hooks_replaces_existing_selection(
     os.makedirs(hooks_dir, exist_ok=True)
     with open(os.path.join(hooks_dir, 'preset_hook.so'), 'wb') as f:
         f.write(b'\x7fELF' + b'\x00' * 16)
+    with open(os.path.join(draft_dir, '.source'), 'w') as f:
+        f.write('preset')
 
     payload = {
         'configs': _full_configs(),
@@ -590,6 +594,111 @@ def test_update_config_enabled_hooks_replaces_existing_selection(
     with app.app_context():
         updated = db.session.get(QLInstance, instance.id)
         assert updated.ld_preload_hooks == 'preset_hook.so'
+
+
+def test_update_config_keeps_live_hook_replace_over_stale_instance_draft(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    """
+    GIVEN a plugin-editing draft was created from the instance's own hooks when
+          the Edit Config modal opened (source='instance', not a preset), and the
+          operator then used the Hooks tab's Replace action to overwrite a hook's
+          binary directly on disk (bypassing the draft)
+    WHEN PUT /api/instances/<id>/config is called with that stale draft_id
+    THEN the live replacement is kept — the stale draft snapshot must not be
+         copied back over it (regression: replace icon appeared to do nothing)
+    """
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+
+    instance_hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    instance_hooks_dir.mkdir(parents=True)
+
+    draft_id = str(uuid.uuid4())
+    draft_dir = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    os.makedirs(os.path.join(draft_dir, 'scripts'), exist_ok=True)
+    hooks_dir = os.path.join(draft_dir, 'user-hooks')
+    os.makedirs(hooks_dir, exist_ok=True)
+    # Draft snapshot holds the OLD binary content (seeded when the modal opened).
+    with open(os.path.join(hooks_dir, 'my_hook.so'), 'wb') as f:
+        f.write(b'\x7fELF' + b'\x00OLD')
+    with open(os.path.join(draft_dir, '.source'), 'w') as f:
+        f.write('instance')
+
+    # The Hooks tab's live Replace action already overwrote the instance's copy.
+    (instance_hooks_dir / 'my_hook.so').write_bytes(b'\x7fELF' + b'\x00NEW')
+
+    payload = {
+        'configs': _full_configs(),
+        'draft_id': draft_id,
+        'enabled_hooks': ['my_hook.so'],
+        'restart': False,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    assert (instance_hooks_dir / 'my_hook.so').read_bytes() == b'\x7fELF' + b'\x00NEW', (
+        "Save Configuration must not revert a hook replaced live via the Hooks tab"
+    )
+
+
+def test_update_config_keeps_live_hook_delete_over_stale_instance_draft(
+    client, app, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    """
+    GIVEN a plugin-editing draft was created from the instance's own hooks when
+          the Edit Config modal opened (source='instance', not a preset), and the
+          operator then used the Hooks tab's Delete action to remove a hook file
+          directly on disk (bypassing the draft)
+    WHEN PUT /api/instances/<id>/config is called with that stale draft_id
+    THEN the deleted hook stays deleted — it must not be resurrected from the
+         stale draft snapshot (regression: deleted hook file reappeared on disk)
+    """
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+
+    instance_hooks_dir = tmp_path / 'configs' / host.name / str(instance.id) / 'user-hooks'
+    instance_hooks_dir.mkdir(parents=True)
+
+    draft_id = str(uuid.uuid4())
+    draft_dir = os.path.join(app.config['DRAFTS_BASE'], draft_id)
+    os.makedirs(os.path.join(draft_dir, 'scripts'), exist_ok=True)
+    hooks_dir = os.path.join(draft_dir, 'user-hooks')
+    os.makedirs(hooks_dir, exist_ok=True)
+    with open(os.path.join(hooks_dir, 'deleted_hook.so'), 'wb') as f:
+        f.write(b'\x7fELF' + b'\x00' * 16)
+    with open(os.path.join(draft_dir, '.source'), 'w') as f:
+        f.write('instance')
+
+    # The Hooks tab's live Delete action already removed the instance's copy —
+    # the draft still holds the pre-delete snapshot.
+
+    payload = {
+        'configs': _full_configs(),
+        'draft_id': draft_id,
+        'enabled_hooks': [],
+        'restart': False,
+    }
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json=payload,
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    assert not (instance_hooks_dir / 'deleted_hook.so').exists(), (
+        "Save Configuration must not resurrect a hook deleted live via the Hooks tab"
+    )
 
 
 def test_update_config_enabled_hooks_without_draft_filters_to_existing_files(
