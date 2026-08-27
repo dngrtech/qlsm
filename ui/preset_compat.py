@@ -117,6 +117,22 @@ def shipped_scripts(runtime):
     return scripts
 
 
+def is_root_plugin_path(path):
+    """Is this a plugin in its own right, rather than a helper under a subfolder?
+
+    The one place this rule lives. It governs three separate decisions -- whether
+    a replacement may be offered, whether the source manifest (keyed by bare
+    filename) may be consulted, and whether a file counts as coming from the
+    source catalog -- and those three drifting apart is precisely the failure
+    class this gate has already been rewritten over.
+
+    `os.sep` is redundant with '/' on Linux and is kept for the platforms where
+    it is not; `_read_preset_scripts` builds these keys with os.path.relpath, so
+    on Windows they would arrive backslash-separated.
+    """
+    return '/' not in path and os.sep not in path
+
+
 def _strip_entry(path, verdict, reasons, replacements, shipped=None):
     """One row of the operator-facing report.
 
@@ -135,7 +151,7 @@ def _strip_entry(path, verdict, reasons, replacements, shipped=None):
     Subdirectory files are still stripped and still reported; they are just
     never handed a replacement.
     """
-    if '/' in path or os.sep in path:
+    if not is_root_plugin_path(path):
         # A subdirectory file cannot be OFFERED a replacement, but since the draft
         # filter restores one the target ships at this same path, saying only
         # "stripped, nothing available" would describe a loss that does not happen.
@@ -147,6 +163,10 @@ def _strip_entry(path, verdict, reasons, replacements, shipped=None):
         'path': path,
         'verdict': verdict,
         'reasons': reasons,
+        # A replacement is ALWAYS this same path -- never a differently-named
+        # plugin. apply_compatibility relies on that when it writes the target's
+        # content back under `path`; offering `x.py` in place of `y.py` here
+        # would silently store x's content as y.
         'replacement': path if path in replacements else None,
         # Root-level files are never auto-restored; the operator ticks them or they go.
         'auto_replaced': False,
@@ -203,7 +223,7 @@ def is_untouched_source_file(path, content, catalog_digests, source_hashes):
     digest = baseline_digest(content)
     if catalog_digests.get(path) == digest:
         return True
-    if '/' in path or os.sep in path:
+    if not is_root_plugin_path(path):
         return False
     return source_hashes.get(path) == digest
 
@@ -296,9 +316,9 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
         # same reason `pristine` is: the manifest carries stock plugins the
         # default preset does not offer, and calling one of those the operator's
         # own work is simply wrong.
-        entry['from_catalog'] = (path in source_catalog
-                                 or (path in source_hashes
-                                     and '/' not in path and os.sep not in path))
+        entry['from_catalog'] = (
+            path in source_catalog
+            or (path in source_hashes and is_root_plugin_path(path)))
         pristine = is_untouched_source_file(
             path, content, source_catalog, source_hashes)
         if entry['replacement']:

@@ -535,3 +535,15 @@ def test_a_plugin_of_the_operators_own_is_not_called_a_standard_one():
     response = {'scripts': {'x76admin.py': 'import minqlx\n'}, 'checked_plugins': ['x76admin.py']}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
     assert result['compatibility']['stripped'][0]['from_catalog'] is False
+
+
+def test_root_plugin_path_governs_every_decision_from_one_place():
+    """Three decisions read this rule -- whether a replacement may be offered,
+    whether the bare-filename manifest may be consulted, and whether a file
+    counts as coming from the source catalog. They lived as three separate
+    inline copies of the same condition; keeping them in sync by hand is how the
+    two halves of this gate have already drifted apart twice."""
+    from ui.preset_compat import is_root_plugin_path
+    assert is_root_plugin_path('balance.py') is True
+    assert is_root_plugin_path(os.path.join('extras', 'balance.py')) is False
+    assert is_root_plugin_path('discord_extensions/admin.py') is False
