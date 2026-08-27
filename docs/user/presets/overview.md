@@ -57,7 +57,9 @@ Only plugins in the top level of the Plugins tab can be checked. Files inside su
 have no checkbox — they are helper modules that a top-level plugin imports, and minqlx
 cannot load them by name — expand a subfolder and hover the info icon beside the folder
 name for the explanation. `__init__.py` has no checkbox either; it marks a package rather
-than being a plugin, and shows its own icon.
+than being a plugin, and shows its own icon. `iouonegirl.py` is likewise uncheckable: it
+is the shared base module that `mybalance.py`, `protect.py`, `voteban.py` and several
+other plugins import, so it must stay on disk but is never loaded on its own.
 
 Presets saved before this rule existed may have had subfolder plugins ticked. Those
 entries are dropped when the preset loads, and a notice on the Plugins tab tells you how

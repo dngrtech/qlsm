@@ -7,14 +7,25 @@
 // package marker. Both used to render a checkbox that silently did nothing.
 import { basename } from './fileManagerUtils';
 
+// Root-level .py files that are libraries, not plugins. iouonegirl.py is an
+// abstract base class (its own header says "DO NOT MANUALLY LOAD THIS ABSTRACT
+// PLUGIN") that mybalance.py, protect.py, voteban.py and five others import; it
+// has to stay in the preset's scripts/ for those imports to resolve, so it
+// can't be excluded the way serverchecker.py is (kept out of the preset
+// entirely and injected at deploy time as a system plugin). Excluding it here
+// instead keeps the file on disk while removing its checkbox.
+export const ABSTRACT_PLUGIN_MODULES = new Set(['iouonegirl.py']);
+
 export const PLUGIN_HINT_TEXT = {
   subfolder: "Plugins in subfolders can't be enabled directly. Import them from a plugin in the root folder instead.",
   'package-marker': "__init__.py marks a package and can't be enabled as a plugin.",
+  'abstract-module': "This file is a shared library imported by other plugins, not a plugin itself. Loading it directly does nothing.",
 };
 
 export function isEnableablePluginPath(path = '') {
   if (!path.endsWith('.py')) return false;
   if (path.includes('/')) return false;
+  if (ABSTRACT_PLUGIN_MODULES.has(path)) return false;
   return path !== '__init__.py';
 }
 
@@ -24,6 +35,7 @@ export function isEnableablePluginPath(path = '') {
 export function getPluginHintReason(path = '') {
   if (!path.endsWith('.py')) return null;
   if (path.includes('/')) return null;
+  if (ABSTRACT_PLUGIN_MODULES.has(path)) return 'abstract-module';
   return path === '__init__.py' ? 'package-marker' : null;
 }
 

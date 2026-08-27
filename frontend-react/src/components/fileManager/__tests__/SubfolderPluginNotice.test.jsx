@@ -26,7 +26,7 @@ describe('SubfolderPluginNotice', () => {
   it('explains why subfolder plugins are not enabled', () => {
     render(<SubfolderPluginNotice count={2} onDismiss={vi.fn()} />);
     expect(screen.getByRole('status')).toHaveTextContent(
-      /referenced by plugins in the root folder, not enabled on their own/,
+      /libraries referenced by plugins in the root folder, not plugins enabled on their own/,
     );
   });
 

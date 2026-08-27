@@ -28,6 +28,10 @@ describe('isEnableablePluginPath', () => {
     expect(isEnableablePluginPath('plugins.txt')).toBe(false);
     expect(isEnableablePluginPath('ql_netfix.so')).toBe(false);
   });
+
+  it('rejects iouonegirl.py — an abstract base other plugins import', () => {
+    expect(isEnableablePluginPath('iouonegirl.py')).toBe(false);
+  });
 });
 
 describe('getPluginHintReason', () => {
@@ -48,9 +52,14 @@ describe('getPluginHintReason', () => {
     expect(getPluginHintReason('notes.txt')).toBeNull();
   });
 
+  it('returns abstract-module for iouonegirl.py', () => {
+    expect(getPluginHintReason('iouonegirl.py')).toBe('abstract-module');
+  });
+
   it('maps every reason to hint copy', () => {
     expect(PLUGIN_HINT_TEXT.subfolder).toMatch(/subfolders can't be enabled directly/);
     expect(PLUGIN_HINT_TEXT['package-marker']).toMatch(/marks a package/);
+    expect(PLUGIN_HINT_TEXT['abstract-module']).toMatch(/shared library imported by other plugins/);
   });
 });
 
