@@ -6,14 +6,14 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.28.4` | 2026-08-27 | [#199](https://github.com/dngrtech/qlsm/pull/199) | Loading a preset saved for the other server runtime no longer asks about every plugin it carries, and no longer changes which plugins are enabled. Standard plugins the preset never modified are swapped for your runtime's own version automatically, keeping the preset's enabled/disabled selection exactly as saved; only plugins whose copy in the preset differs from the standard one, or that your runtime has no version of, are listed for you to decide on. A preset saved from an unmodified server now loads with no dialog at all. |
-| `v1.28.3` | 2026-08-27 | [#198](https://github.com/dngrtech/qlsm/pull/198) | Fix confirming a cross-runtime preset compatibility dialog silently enabling the entire default plugin catalog instead of your actual selection. |
-| `v1.28.2` | 2026-08-26 | [#197](https://github.com/dngrtech/qlsm/pull/197) | Fix cancelling a cross-runtime preset compatibility dialog silently discarding your plugin selection instead of leaving it untouched. |
+| `v1.28.4` | 2026-08-27 | [#199](https://github.com/dngrtech/qlsm/pull/199) | Bug fixes and improvements. |
+| `v1.28.3` | 2026-08-27 | [#198](https://github.com/dngrtech/qlsm/pull/198) | Bug fixes and improvements. |
+| `v1.28.2` | 2026-08-26 | [#197](https://github.com/dngrtech/qlsm/pull/197) | Bug fixes and improvements. |
 | `v1.28.1` | 2026-08-26 | [#196](https://github.com/dngrtech/qlsm/pull/196) | Pin pnpm to v10 in the Docker build so the image builds reproducibly. |
-| `v1.28.0` | 2026-08-26 | [#193](https://github.com/dngrtech/qlsm/pull/193) | Add **minqlxtended** as a server runtime you can choose when creating a host, alongside minqlx. Pick it in the Add Host form, where each runtime carries a requirement note and a link to its upstream repo. minqlxtended hosts provision on Ubuntu 24.04 with their own vendored plugin baseline; loading a preset built for the other runtime strips the plugins that cannot run and offers replacements. minqlx remains the default and existing minqlx hosts are unaffected. |
-| `v1.27.4` | 2026-08-24 | [#195](https://github.com/dngrtech/qlsm/pull/195) | Fix Hooks tab replace/delete being silently reverted by Save Configuration. |
+| `v1.28.0` | 2026-08-26 | [#193](https://github.com/dngrtech/qlsm/pull/193) | Add **minqlxtended** as a server runtime available for selection when creating a host.  |
+| `v1.27.4` | 2026-08-24 | [#195](https://github.com/dngrtech/qlsm/pull/195) | Bug fixes and improvements. |
 | `v1.27.3` | 2026-08-21 | [#191](https://github.com/dngrtech/qlsm/pull/191) | Bug fixes and improvements. |
-| `v1.27.2` | 2026-08-20 | [#187](https://github.com/dngrtech/qlsm/pull/187) | Restored `sv_serverType` to the qlds startup arguments — `1` when 99k LAN rate is enabled, `2` when it is off. [#100](https://github.com/dngrtech/qlsm/pull/100) removed it in `v1.10.8` on the premise that the `force_rate.so` hook made it unnecessary; the hook forces the rate to 99999 either way, but the cvar affects more than the rate, and 99k servers running without it played noticeably worse. Real client IPs in `rcon status` are unaffected — that display was never caused by this cvar; it came from stale NAT rules, fixed separately in `v1.26.2`. Note one behaviour change: a 99k instance whose hook fails to load will now reject players with "Server is for LAN clients only" instead of quietly running at 25000, making a hook failure visible rather than silent. |
+| `v1.27.2` | 2026-08-20 | [#187](https://github.com/dngrtech/qlsm/pull/187) | Bug fixes and improvements. |
 | `v1.27.1` | 2026-08-20 | [#185](https://github.com/dngrtech/qlsm/pull/185) | Fix the RCON command field not taking keyboard focus in the console modal. |
 | `v1.27.0` | 2026-08-17 | [#179](https://github.com/dngrtech/qlsm/pull/179) | Set ZMQ stats and RCON passwords manually when creating an instance. |
 | `v1.26.4` | 2026-08-14 | [#178](https://github.com/dngrtech/qlsm/pull/178) | Bug fixes and improvements. |
