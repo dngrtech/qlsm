@@ -117,6 +117,25 @@ def test_a_same_named_target_plugin_is_offered_as_a_replacement():
     assert 'import minqlxtended' in result['compatibility']['replacements']['myFun.py']
 
 
+def test_a_checked_plugin_is_reported_as_originally_checked():
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}, 'checked_plugins': ['myFun.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['originally_checked'] is True
+
+
+def test_an_unchecked_plugin_is_not_reported_as_originally_checked():
+    """_read_preset_scripts() seeds the scripts dict from the entire default
+    catalog before overlaying the preset's own files, so a file can appear
+    here without ever having been part of the operator's actual selection.
+    Reporting it is fine (the operator can see it and opt in); defaulting it
+    to pre-accepted on the frontend is the bug this flag exists to prevent."""
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['originally_checked'] is False
+
+
 def test_a_plugin_with_no_counterpart_is_offered_nothing():
     """A file the minqlxtended default preset does not ship gets no offer;
     inventing one would be a silent swap of non-equivalent behaviour.
@@ -197,20 +216,38 @@ def test_apply_compatibility_completes_when_a_replacement_candidate_is_unreadabl
     assert result['checked_plugins'] == []
 
 
-def test_checked_plugins_as_a_string_falls_back_to_empty_instead_of_exploding():
+def test_checked_plugins_as_a_string_falls_back_to_none_instead_of_exploding():
     """A hand-edited checked_plugins.json can hold anything. On the matched-
     runtime path a bad value passes through harmlessly; this gate must not
     turn that into silent corruption (a string iterates into characters) just
-    because the runtimes now differ."""
+    because the runtimes now differ. It also must not read a malformed value
+    as "the operator explicitly selected nothing" -- None (not []) tells the
+    frontend to fall back to its own legacy-preset defaults."""
     response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 'nope'}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
-    assert result['checked_plugins'] == []
+    assert result['checked_plugins'] is None
 
 
-def test_checked_plugins_as_an_int_falls_back_to_empty_instead_of_raising():
+def test_checked_plugins_as_an_int_falls_back_to_none_instead_of_raising():
     response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 42}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
-    assert result['checked_plugins'] == []
+    assert result['checked_plugins'] is None
+
+
+def test_a_missing_checked_plugins_stays_none_instead_of_becoming_an_empty_selection():
+    """A preset with no checked_plugins.json at all (pre-dates this feature)
+    reads as None, same as the matched-runtime path. Coercing it to []
+    here would look identical to "the operator deliberately checked
+    nothing", so the frontend's `checked_plugins != null` legacy branch
+    (keep whatever is currently checked) would never fire, and a legacy
+    preset would silently load onto a new instance with zero plugins."""
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['checked_plugins'] is None
+    # The entry is still reported and still not pre-accepted, since nothing
+    # was ever checked for it -- None only changes what happens to the whole
+    # instance's plugin selection, not per-entry defaulting.
+    assert result['compatibility']['stripped'][0]['originally_checked'] is False
 
 
 def test_a_subdirectory_helper_the_target_ships_is_reported_auto_replaced():

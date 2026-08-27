@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.28.3` | 2026-08-27 | [#198](https://github.com/dngrtech/qlsm/pull/198) | Fix confirming a cross-runtime preset compatibility dialog silently enabling the entire default plugin catalog instead of your actual selection. |
 | `v1.28.2` | 2026-08-26 | [#197](https://github.com/dngrtech/qlsm/pull/197) | Fix cancelling a cross-runtime preset compatibility dialog silently discarding your plugin selection instead of leaving it untouched. |
 | `v1.28.1` | 2026-08-26 | [#196](https://github.com/dngrtech/qlsm/pull/196) | Pin pnpm to v10 in the Docker build so the image builds reproducibly. |
 | `v1.28.0` | 2026-08-26 | [#193](https://github.com/dngrtech/qlsm/pull/193) | Add **minqlxtended** as a server runtime you can choose when creating a host, alongside minqlx. Pick it in the Add Host form, where each runtime carries a requirement note and a link to its upstream repo. minqlxtended hosts provision on Ubuntu 24.04 with their own vendored plugin baseline; loading a preset built for the other runtime strips the plugins that cannot run and offers replacements. minqlx remains the default and existing minqlx hosts are unaffected. |
