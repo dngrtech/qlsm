@@ -14,10 +14,12 @@ export function strippedWithReplacements(presetData) {
 }
 
 // Which of those the dialog should start pre-accepted. `stripped` reports
-// every file the target's default catalog and the preset's own scripts
-// folder have between them -- most were never part of what the operator
-// actually had enabled (see ui/preset_compat.py's apply_compatibility for
-// why). Defaulting every offered replacement to checked would silently
+// every file the preset's own scripts folder has, which itself is seeded
+// from the ENTIRE default catalog of the preset's own (source) runtime
+// before the preset's actual files are overlaid on top -- most entries were
+// never part of what the operator actually had enabled (see
+// ui/preset_compat.py's apply_compatibility for why). Defaulting every
+// offered replacement to checked would silently
 // re-enable the runtime's entire default plugin set on confirm regardless
 // of the preset's real selection, so only a plugin the backend flagged
 // `originally_checked` starts ticked -- everything else stays an opt-in

@@ -22,7 +22,7 @@ A preset remembers which [Server Runtime](../getting-started/add-host.md#server-
 
 You can load a preset saved from the other runtime. Your server config, map pool, access list, workshop items, and factory selections all come across intact. Plugins are the exception: minqlx and minqlxtended plugins aren't interchangeable — they're written against different APIs — so plugins from the other runtime are left out when the preset's plugins are copied across. You'll see the full list first, with a reason for each, and can swap in the matching plugin for your runtime where one exists.
 
-Picking a mismatched preset shows a short warning under its name, and loading it opens a dialog listing every affected plugin before anything changes. Where the same plugin exists for your runtime, QLSM offers it as a replacement and you choose whether to take it — replacements are checked by default. Plugins with no equivalent are listed with the reason they were dropped, and nothing is applied until you confirm.
+Picking a mismatched preset shows a short warning under its name, and loading it opens a dialog listing every affected plugin before anything changes. Where the same plugin exists for your runtime, QLSM offers it as a replacement and you choose whether to take it — a replacement is pre-checked only for a plugin your preset actually had enabled, so you can tell at a glance what carries over versus what you'd be opting into. Plugins with no equivalent are listed with the reason they were dropped, and nothing is applied until you confirm.
 
 ## Built-in Presets
 

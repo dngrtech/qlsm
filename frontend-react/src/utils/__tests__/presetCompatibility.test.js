@@ -78,10 +78,11 @@ describe('defaultAcceptedReplacementPaths', () => {
   });
 
   it('excludes a replaceable entry that was not originally checked', () => {
-    // Regression: the target's default catalog gets merged into the scripts
-    // dict the compat gate scans, so most stripped entries were never part
-    // of the operator's actual selection -- only a plugin the backend marks
-    // originally_checked should default to accepted.
+    // Regression: the preset's own scripts dict is seeded from its source
+    // runtime's entire default catalog before the compat gate scans it, so
+    // most stripped entries were never part of the operator's actual
+    // selection -- only a plugin the backend marks originally_checked
+    // should default to accepted.
     const data = {
       ...presetData,
       compatibility: {

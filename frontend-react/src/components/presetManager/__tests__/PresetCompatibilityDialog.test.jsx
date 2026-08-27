@@ -56,7 +56,7 @@ describe('PresetCompatibilityDialog', () => {
 
   it('shows the reason a plugin was stripped', () => {
     setup();
-    expect(screen.getAllByText(/imports the minqlx module/).length).toBeGreaterThan(0);
+    expect(screen.getByText('line 3: imports the minqlx module')).toBeInTheDocument();
   });
 
   it('explains an unknown verdict rather than leaving it blank', () => {
@@ -75,15 +75,14 @@ describe('PresetCompatibilityDialog', () => {
   it('defaults a replacement to accepted only when the plugin was originally checked', () => {
     // Regression: every replaceable entry used to default to accepted
     // regardless of whether the operator had ever enabled it, because most
-    // entries here exist only from the target's default catalog being
-    // merged into the preset's scripts for compatibility scanning -- not
-    // from the operator's actual selection. Confirming with those old
-    // defaults silently re-enabled the runtime's entire default plugin set.
+    // entries here exist only because the preset's own scripts dict is
+    // seeded from its source runtime's entire default catalog for
+    // compatibility scanning -- not from the operator's actual selection.
+    // Confirming with those old defaults silently re-enabled the runtime's
+    // entire default plugin set.
     setup();
-    const myFunCheckbox = screen.getByText('myFun.py').closest('li').querySelector('input[type="checkbox"]');
-    const commandsCheckbox = screen.getByText('commands.py').closest('li').querySelector('input[type="checkbox"]');
-    expect(myFunCheckbox).toBeChecked();
-    expect(commandsCheckbox).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /myFun\.py/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /commands\.py/ })).not.toBeChecked();
   });
 
   it('confirms with only the originally-checked accepted replacement paths', async () => {
@@ -94,16 +93,14 @@ describe('PresetCompatibilityDialog', () => {
 
   it('lets the operator opt into a replacement that was not originally checked', async () => {
     const { onConfirm } = setup();
-    const commandsCheckbox = screen.getByText('commands.py').closest('li').querySelector('input[type="checkbox"]');
-    await userEvent.click(commandsCheckbox);
+    await userEvent.click(screen.getByRole('checkbox', { name: /commands\.py/ }));
     await userEvent.click(screen.getByRole('button', { name: /load preset/i }));
     expect(onConfirm.mock.calls[0][0].sort()).toEqual(['commands.py', 'myFun.py']);
   });
 
   it('confirms with nothing when the originally-checked replacement is unticked', async () => {
     const { onConfirm } = setup();
-    const myFunCheckbox = screen.getByText('myFun.py').closest('li').querySelector('input[type="checkbox"]');
-    await userEvent.click(myFunCheckbox);
+    await userEvent.click(screen.getByRole('checkbox', { name: /myFun\.py/ }));
     await userEvent.click(screen.getByRole('button', { name: /load preset/i }));
     expect(onConfirm).toHaveBeenCalledWith([]);
   });

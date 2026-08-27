@@ -216,20 +216,38 @@ def test_apply_compatibility_completes_when_a_replacement_candidate_is_unreadabl
     assert result['checked_plugins'] == []
 
 
-def test_checked_plugins_as_a_string_falls_back_to_empty_instead_of_exploding():
+def test_checked_plugins_as_a_string_falls_back_to_none_instead_of_exploding():
     """A hand-edited checked_plugins.json can hold anything. On the matched-
     runtime path a bad value passes through harmlessly; this gate must not
     turn that into silent corruption (a string iterates into characters) just
-    because the runtimes now differ."""
+    because the runtimes now differ. It also must not read a malformed value
+    as "the operator explicitly selected nothing" -- None (not []) tells the
+    frontend to fall back to its own legacy-preset defaults."""
     response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 'nope'}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
-    assert result['checked_plugins'] == []
+    assert result['checked_plugins'] is None
 
 
-def test_checked_plugins_as_an_int_falls_back_to_empty_instead_of_raising():
+def test_checked_plugins_as_an_int_falls_back_to_none_instead_of_raising():
     response = {'scripts': {'mine.py': 'import minqlx\n'}, 'checked_plugins': 42}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
-    assert result['checked_plugins'] == []
+    assert result['checked_plugins'] is None
+
+
+def test_a_missing_checked_plugins_stays_none_instead_of_becoming_an_empty_selection():
+    """A preset with no checked_plugins.json at all (pre-dates this feature)
+    reads as None, same as the matched-runtime path. Coercing it to []
+    here would look identical to "the operator deliberately checked
+    nothing", so the frontend's `checked_plugins != null` legacy branch
+    (keep whatever is currently checked) would never fire, and a legacy
+    preset would silently load onto a new instance with zero plugins."""
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['checked_plugins'] is None
+    # The entry is still reported and still not pre-accepted, since nothing
+    # was ever checked for it -- None only changes what happens to the whole
+    # instance's plugin selection, not per-entry defaulting.
+    assert result['compatibility']['stripped'][0]['originally_checked'] is False
 
 
 def test_a_subdirectory_helper_the_target_ships_is_reported_auto_replaced():

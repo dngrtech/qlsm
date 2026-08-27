@@ -67,8 +67,9 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
               as-is, but this preset&apos;s copy of each plugin below won&apos;t be installed:
               each one either uses an API that {targetRuntime} doesn&apos;t have, or can&apos;t
               be confirmed to run there — the reason is shown for each. Some can be swapped
-              for {targetRuntime}&apos;s own version, and helper modules are swapped
-              automatically; the rest are dropped. The instance still starts from
+              for {targetRuntime}&apos;s own version — pre-selected only for the plugins you
+              actually had enabled, so tick any other you&apos;d also like to carry over — and
+              helper modules are swapped automatically; the rest are dropped. The instance still starts from
               {' '}{targetRuntime}&apos;s own standard plugins, so the plugin list you end up with
               is not simply this preset&apos;s minus what is listed here.
             </p>
@@ -116,6 +117,7 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                         <label className="mt-2 flex items-center gap-2 text-theme-primary">
                           <input
                             type="checkbox"
+                            aria-label={`Use the ${targetRuntime} replacement for ${entry.path} instead`}
                             checked={acceptedPaths.has(entry.path)}
                             onChange={() => toggleAccepted(entry.path)}
                           />

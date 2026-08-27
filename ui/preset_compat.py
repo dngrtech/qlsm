@@ -172,13 +172,15 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     scripts = response_data.get('scripts') or {}
 
     checked_plugins = response_data.get('checked_plugins')
-    if not isinstance(checked_plugins, list):
-        # A hand-edited checked_plugins.json is read by _read_preset_checked_
-        # plugins() with a bare json.load() and no type guard, so a string or
-        # int can reach here on the matched-runtime path today and pass
-        # through harmlessly. This gate must not turn that into a crash
-        # (str iterates into characters; int raises TypeError) just because
-        # the runtimes now differ.
+    # A preset with no checked_plugins.json at all (pre-dates this feature) is
+    # None here, same as a hand-edited file holding a bare string or int (read
+    # by _read_preset_checked_plugins() with no type guard). Neither means
+    # "the operator explicitly selected nothing" -- both must fall through to
+    # the frontend's own "preset pre-dates this feature -- keep current
+    # defaults" branch (`presetData.checked_plugins != null`), which an empty
+    # list would defeat by looking like a genuine, deliberate empty selection.
+    had_selection = isinstance(checked_plugins, list)
+    if not had_selection:
         checked_plugins = []
     checked_set = set(checked_plugins)
 
@@ -199,14 +201,16 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
         entry = _strip_entry(path, verdict, reasons, candidates, shipped)
         # _read_preset_scripts() seeds this dict from the *entire* default
         # builtin catalog before overlaying the preset's own files, so most
-        # entries here were never part of the operator's actual selection --
-        # only reachable via this preset at all if the operator ticks the
-        # replacement checkbox themselves. Reporting them is still useful
-        # (the operator can see what's available), but only a plugin that
-        # was genuinely checked should come back pre-accepted -- otherwise
-        # confirming this dialog with its own defaults silently re-enables
-        # the runtime's entire default plugin set regardless of what the
-        # preset's operator actually chose.
+        # entries here were never part of the operator's actual selection.
+        # The file itself is always on disk regardless -- the draft seed lays
+        # the target's own default scripts down independently of this gate --
+        # so declining a replacement here loses nothing; it only leaves the
+        # plugin unchecked. Reporting every entry is still useful (the
+        # operator can see what's available and opt in), but only a plugin
+        # that was genuinely checked should come back pre-accepted --
+        # otherwise confirming this dialog with its own defaults silently
+        # re-enables the runtime's entire default plugin set regardless of
+        # what the preset's operator actually chose.
         entry['originally_checked'] = path in checked_set
         stripped.append(entry)
         if entry['replacement']:
@@ -226,7 +230,10 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     # Kept because it is part of the GET /presets/<id> response contract and
     # removing it is a separate change; do not mistake it for the gate.
     result['scripts'] = kept
-    result['checked_plugins'] = checked
+    # None (not []) when the preset never recorded a selection at all, so the
+    # frontend's `checked_plugins != null` legacy branch still fires instead
+    # of reading this as "the operator deliberately picked nothing."
+    result['checked_plugins'] = checked if had_selection else None
     result['compatibility'] = {
         'preset_runtime': preset,
         'target_runtime': target,

@@ -913,13 +913,17 @@ When `target_runtime` differs from the preset's `runtime`, `scripts` contains on
       "path": "balance.py",
       "verdict": "incompatible",
       "reasons": ["line 1: imports the minqlx module"],
-      "replacement": "balance.py"
+      "replacement": "balance.py",
+      "auto_replaced": false,
+      "originally_checked": true
     },
     {
       "path": "discord_extensions/admin.py",
       "verdict": "incompatible",
       "reasons": ["line 11: imports the minqlx module"],
-      "replacement": null
+      "replacement": null,
+      "auto_replaced": true,
+      "originally_checked": false
     }
   ],
   "replacements": {
@@ -930,7 +934,11 @@ When `target_runtime` differs from the preset's `runtime`, `scripts` contains on
 
 Every `.py` file is classified, including files inside the preset's plugin subfolders (`discord_extensions/`, `extras/`) — those are stripped and reported by their full relative path, as the example above shows. `.so` hook binaries, `.txt` files, and fonts are always kept as-is. `stripped` lists every removed plugin file, sorted by path. `verdict` is `"incompatible"` when a specific reason was found, or `"unknown"` when nothing conclusive was found and the file was removed rather than assumed safe (`reasons` is `[]` in that case).
 
-`replacement` is only ever the entry's **own** filename, offered when the target runtime ships a plugin by that exact name, and `null` otherwise. A replacement is never a differently-named plugin: `mybalance.py` is not offered `balance.py`, because they are not the same plugin. Only root-level files are ever offered one — a file inside a plugin subfolder always reports `replacement: null`, since swapping in the target's root-level `balance.py` for a stripped `extras/balance.py` would relocate the file as well as replace it. `replacements` maps each offered filename to its file content, so the caller can apply it without a second request.
+`replacement` is only ever the entry's **own** filename, offered when the target runtime ships a plugin by that exact name, and `null` otherwise. A replacement is never a differently-named plugin: `mybalance.py` is not offered `balance.py`, because they are not the same plugin. Only root-level files are ever offered one — a file inside a plugin subfolder always reports `replacement: null`, since swapping in the target's root-level `balance.py` for a stripped `extras/balance.py` would relocate the file as well as replace it. `auto_replaced` is `true` only for a subfolder helper the target runtime ships at the same relative path — it is restored automatically with no choice to make, unlike a root-level `replacement`, which the caller opts into. `replacements` maps each offered filename to its file content, so the caller can apply it without a second request.
+
+`originally_checked` is `true` only when `path` was in the preset's own `checked_plugins` selection before this gate ran — not merely present in `scripts`. `scripts` is seeded from the preset's source runtime's entire default plugin catalog before the preset's own files are overlaid, so most `stripped` entries were never part of what the operator actually had enabled; they are reported for visibility only. A client building a confirmation UI (as the Preset Manager's compatibility dialog does) should pre-select a `replacement` only where `originally_checked` is `true` — defaulting every offered replacement to accepted regardless of this flag re-enables the target runtime's entire default plugin set on confirm, not the preset's actual selection.
+
+`checked_plugins` itself can be `null` here too (see the legacy-preset note above) — a preset that never recorded a selection stays `null` through this gate rather than becoming `[]`, so a `null` here still means "keep whatever is currently selected," not "the preset selected nothing."
 
 ### Preset Name Validation
 - Pattern: `^[a-zA-Z0-9_-]+$` (letters, numbers, hyphens, underscores)
