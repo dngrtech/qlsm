@@ -31,6 +31,7 @@ Simply put the plugin in the 'minqlx-plugins' folder, !load the plugin, and set 
     qlx_countdownMessage                 - When the countdown begins, this text will appear mid-screen. (like the qlx_loadedMessage does)
     qlx_endOfGameMessage                 - When the game finishes, it'll put the text in this cvar in the text box on the left.
 
+    qlx_brandingMapCredit                - Show the map's baked-in author credit before your brand fields. Default: 0
     qlx_brandingPrependMapName           - This cvar will put the map name before your qlx_serverBrandName.                     Default: 0
     qlx_brandingAppendGameType           - Will add the game type after your qlx_serverBrandName.                               Default: 0
     qlx_rainbowBrandName                 - Make the entire map name (qlx_serverBrandName) appear in rainbow colouring.          Default: 0
@@ -52,6 +53,7 @@ class branding(minqlxtended.Plugin):
     _qlx_loadedMessage = minqlxtended.setting("qlx_loadedMessage", "")
     _qlx_countdownMessage = minqlxtended.setting("qlx_countdownMessage", "")
     _qlx_endOfGameMessage = minqlxtended.setting("qlx_endOfGameMessage", "")
+    _qlx_brandingMapCredit = minqlxtended.setting("qlx_brandingMapCredit", False)
     _qlx_brandingPrependMapName = minqlxtended.setting("qlx_brandingPrependMapName", False)
     _qlx_brandingAppendGameType = minqlxtended.setting("qlx_brandingAppendGameType", False)
     _qlx_rainbowBrandName = minqlxtended.setting("qlx_rainbowBrandName", False)
@@ -82,11 +84,19 @@ class branding(minqlxtended.Plugin):
         elif self._qlx_serverBrandName:
             message = self._qlx_serverBrandName
 
+        # When qlx_brandingMapCredit is 1, the map's baked-in author credit
+        # is prepended to your brand text (original behaviour). When 0
+        # (default), the map credit is dropped and only your brand text is
+        # shown.
+        show_map_credit = self._qlx_brandingMapCredit
+
         if self._qlx_serverBrandTopField:
-            author = f"{(game.map_subtitle1 + ' - ') if game.map_subtitle1 else ''}{self._qlx_serverBrandTopField}"
+            subtitle1 = game.map_subtitle1 if show_map_credit else ""
+            author = f"{(subtitle1 + ' - ') if subtitle1 else ''}{self._qlx_serverBrandTopField}"
 
         if self._qlx_serverBrandBottomField:
-            author2 = f"{(game.map_subtitle2 + ' - ') if game.map_subtitle2 else ''}{self._qlx_serverBrandBottomField}"
+            subtitle2 = game.map_subtitle2 if show_map_credit else ""
+            author2 = f"{(subtitle2 + ' - ') if subtitle2 else ''}{self._qlx_serverBrandBottomField}"
 
         if self._qlx_rainbowBrandName:
             # Thanks Mino for this bit!
