@@ -1,33 +1,65 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import PresetCompatibilityDialog from '../PresetCompatibilityDialog';
 
+// Only actionable strips reach this dialog now. Untouched stock plugins are
+// swapped for the target runtime's own copy by the backend and are absent from
+// `stripped` entirely, so no fixture here represents one.
 const compatibility = {
   preset_runtime: 'minqlx',
   target_runtime: 'minqlxtended',
   stripped: [
-    { path: 'myFun.py', verdict: 'incompatible', reasons: ['line 3: imports the minqlx module'], replacement: 'myFun.py', originally_checked: true },
+    {
+      path: 'myFun.py',
+      verdict: 'incompatible',
+      reasons: ['line 3: imports the minqlx module'],
+      replacement: 'myFun.py',
+      kind: 'replaceable',
+      from_catalog: false,
+      originally_checked: true,
+    },
     {
       path: 'commands.py',
       verdict: 'incompatible',
       reasons: ['line 1: imports the minqlx module'],
       replacement: 'commands.py',
+      kind: 'replaceable',
+      from_catalog: true,
       originally_checked: false,
     },
-    { path: 'mybalance.py', verdict: 'incompatible', reasons: ['line 1: references the minqlx module'], replacement: null, originally_checked: false },
-    { path: 'custom.py', verdict: 'unknown', reasons: [], replacement: null, originally_checked: false },
+    {
+      path: 'mybalance.py',
+      verdict: 'incompatible',
+      reasons: ['line 1: references the minqlx module'],
+      replacement: null,
+      kind: 'unavailable',
+      from_catalog: false,
+      originally_checked: true,
+    },
+    {
+      path: 'custom.py',
+      verdict: 'unknown',
+      reasons: [],
+      replacement: null,
+      kind: 'unavailable',
+      from_catalog: false,
+      originally_checked: false,
+    },
     {
       path: 'discord_extensions/admin.py',
       verdict: 'incompatible',
       reasons: ['line 11: imports the minqlx module'],
       replacement: null,
       auto_replaced: true,
+      kind: 'helper',
+      from_catalog: true,
       originally_checked: false,
     },
   ],
   replacements: { 'myFun.py': 'import minqlxtended\n', 'commands.py': 'import minqlxtended\n' },
+  auto_accepted: ['motd.py'],
 };
 
 const setup = (overrides = {}) => {
@@ -37,21 +69,26 @@ const setup = (overrides = {}) => {
 };
 
 describe('PresetCompatibilityDialog', () => {
-  it('lists every stripped plugin', () => {
+  it('lists every reported plugin', () => {
     setup();
     ['myFun.py', 'mybalance.py', 'custom.py'].forEach((name) => {
       expect(screen.getByText(name)).toBeInTheDocument();
     });
   });
 
-  it('says the instance still gets the target runtime\'s own plugins', () => {
-    // The dialog lists what this preset loses, not what the instance ends up
-    // with: a cross-runtime load seeds the target runtime's default plugins
-    // underneath the preset, so plugins appear that were never listed here.
+  it('says untouched standard plugins were swapped automatically', () => {
+    // The operator has to know why this list is short -- that the plugins
+    // absent from it were handled, not forgotten.
     setup();
-    expect(screen.getByText(/starts from/)).toBeInTheDocument();
-    expect(screen.getByText(/not simply this preset's minus what is listed here/))
+    expect(screen.getByText(/swapped for.*own version of the same plugin automatically/is))
       .toBeInTheDocument();
+  });
+
+  it('promises the preset\'s own plugin selection is preserved', () => {
+    // The bug this dialog caused: confirming it enabled the target runtime's
+    // entire default catalog. The copy now states the guarantee outright.
+    setup();
+    expect(screen.getByText(/enabled exactly as this preset had them/i)).toBeInTheDocument();
   });
 
   it('shows the reason a plugin was stripped', () => {
@@ -65,6 +102,55 @@ describe('PresetCompatibilityDialog', () => {
     expect(screen.getByText(/not part of the .* baseline/i)).toBeInTheDocument();
   });
 
+  // Scoped to the row rather than the whole dialog: several entries carry each
+  // of these sentences, and a document-wide match would pass on the wrong one.
+  const rowFor = (path) => within(screen.getByText(path).closest('li'));
+
+  it('says a standard plugin\'s copy differs without claiming who changed it', () => {
+    // A preset saved before the plugin was last updated carries an older copy
+    // of QLSM's own file. That hashes exactly like an operator edit and is not
+    // one -- verified on a real preset, whose kills.py was simply the previous
+    // release. Asserting the absence of "modified" is the point of the test.
+    setup();
+    const row = rowFor('commands.py');
+    expect(row.getByText(/this preset's copy differs/)).toBeInTheDocument();
+    expect(row.getByText(/saved before the plugin was last updated/)).toBeInTheDocument();
+    expect(row.queryByText(/this preset modified/)).not.toBeInTheDocument();
+  });
+
+  it('distinguishes a plugin of the operator\'s own from a modified standard one', () => {
+    setup();
+    expect(rowFor('custom.py').getByText(/Not a standard minqlx plugin/))
+      .toBeInTheDocument();
+  });
+
+  it('never says the operator modified a plugin they wrote themselves', () => {
+    // myFun.py here is from_catalog: false -- the operator's own file. Saying
+    // "this preset's changes to it are lost" claims their plugin is an edited
+    // copy of minqlxtended's, which is a false statement about their own work
+    // and read as nonsense next to "not a standard plugin".
+    setup();
+    expect(rowFor('myFun.py').queryByText(/modified/i)).not.toBeInTheDocument();
+    expect(rowFor('myFun.py').queryByText(/changes to it/i)).not.toBeInTheDocument();
+  });
+
+  it('notes the name collision when the target ships a plugin of the same name', () => {
+    setup();
+    expect(rowFor('myFun.py').getByText(/ships a plugin under this same name/))
+      .toBeInTheDocument();
+  });
+
+  it('warns that an unavailable plugin the preset had enabled gets switched off', () => {
+    setup();
+    expect(rowFor('mybalance.py').getByText(/no version of it.*switched off/is))
+      .toBeInTheDocument();
+  });
+
+  it('does not threaten to switch off an unavailable plugin the preset had disabled', () => {
+    setup();
+    expect(rowFor('custom.py').queryByText(/switched off/i)).not.toBeInTheDocument();
+  });
+
   it('offers a replacement checkbox only where one exists', () => {
     setup();
     // myFun.py and commands.py both have a replacement offered; mybalance.py,
@@ -72,35 +158,39 @@ describe('PresetCompatibilityDialog', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   });
 
-  it('defaults a replacement to accepted only when the plugin was originally checked', () => {
-    // Regression: every replaceable entry used to default to accepted
-    // regardless of whether the operator had ever enabled it, because most
-    // entries here exist only because the preset's own scripts dict is
-    // seeded from its source runtime's entire default catalog for
-    // compatibility scanning -- not from the operator's actual selection.
-    // Confirming with those old defaults silently re-enabled the runtime's
-    // entire default plugin set.
+  it('defaults every offered replacement to accepted', () => {
+    // Declining loses the file outright -- the preset's copy cannot run on the
+    // target either way -- so taking the working version is the better
+    // default. This is only safe because a tick no longer enables the plugin:
+    // enablement comes from the preset's own selection (see mergeReplacements).
     setup();
     expect(screen.getByRole('checkbox', { name: /myFun\.py/ })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /commands\.py/ })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /commands\.py/ })).toBeChecked();
   });
 
-  it('confirms with only the originally-checked accepted replacement paths', async () => {
-    const { onConfirm } = setup();
-    await userEvent.click(screen.getByRole('button', { name: /load preset/i }));
-    expect(onConfirm).toHaveBeenCalledWith(['myFun.py']);
+  it('says plainly that accepting a replacement discards the preset\'s file', () => {
+    setup();
+    expect(screen.getAllByText(/version of the file is not carried over/i).length)
+      .toBeGreaterThan(0);
   });
 
-  it('lets the operator opt into a replacement that was not originally checked', async () => {
+  it('confirms with the accepted replacement paths', async () => {
     const { onConfirm } = setup();
-    await userEvent.click(screen.getByRole('checkbox', { name: /commands\.py/ }));
     await userEvent.click(screen.getByRole('button', { name: /load preset/i }));
     expect(onConfirm.mock.calls[0][0].sort()).toEqual(['commands.py', 'myFun.py']);
   });
 
-  it('confirms with nothing when the originally-checked replacement is unticked', async () => {
+  it('lets the operator decline a replacement', async () => {
+    const { onConfirm } = setup();
+    await userEvent.click(screen.getByRole('checkbox', { name: /commands\.py/ }));
+    await userEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    expect(onConfirm).toHaveBeenCalledWith(['myFun.py']);
+  });
+
+  it('confirms with nothing when every replacement is declined', async () => {
     const { onConfirm } = setup();
     await userEvent.click(screen.getByRole('checkbox', { name: /myFun\.py/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /commands\.py/ }));
     await userEvent.click(screen.getByRole('button', { name: /load preset/i }));
     expect(onConfirm).toHaveBeenCalledWith([]);
   });

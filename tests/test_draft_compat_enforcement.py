@@ -289,8 +289,14 @@ def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_pa
 
     draft = tmp_path / 'draft'
     with app.app_context():
+        # The report's auto-accepted list travels to the draft on every
+        # cross-runtime load -- combineAcceptedPaths() sends it whether or not
+        # a dialog opens. Seeding without it models a flow production does not
+        # have, and would leave every silently-swapped stock plugin deleted
+        # with nothing written back in its place.
         _seed_draft(str(draft), str(seeded_src), 'default',
-                    target_runtime='minqlxtended', source_runtime='minqlx')
+                    target_runtime='minqlxtended', source_runtime='minqlx',
+                    accepted_replacements=report['compatibility']['auto_accepted'])
     on_disk = _pys(str(draft))
 
     expected_on_disk = reported_kept | (reported_stripped & (exempt | restored))
@@ -301,7 +307,7 @@ def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_pa
         f'report-only={expected_on_disk - on_disk}')
 
 
-def _seed_the_cross_runtime_overlay(app, tmp_path):
+def _seed_the_cross_runtime_overlay(app, tmp_path, accepted_replacements=None):
     """A minqlxtended preset loaded onto a minqlx host, the production way.
 
     'default' is not a test convenience: create_draft passes the TARGET
@@ -313,7 +319,8 @@ def _seed_the_cross_runtime_overlay(app, tmp_path):
     draft = tmp_path / 'draft'
     with app.app_context():
         _seed_draft(str(draft), os.path.abspath(MINQLXTENDED_DEFAULT), 'default',
-                    target_runtime='minqlx', source_runtime='minqlxtended')
+                    target_runtime='minqlx', source_runtime='minqlxtended',
+                    accepted_replacements=accepted_replacements)
     return draft
 
 
@@ -371,12 +378,24 @@ def test_a_cross_runtime_load_deletes_nothing_the_dialog_never_listed(
         'minqlxtended', 'minqlx')
     shown = {entry['path'] for entry in report['compatibility']['stripped']}
     assert shown, 'the dialog must list something, or this test cannot fail'
+    # A stock plugin the preset never touched is swapped for the target's own
+    # copy of the same file and deliberately NOT shown -- there is no decision
+    # in it, and listing all ~48 of them is what made the dialog unreadable.
+    # It is still not a silent loss: the file is written back in the same pass
+    # that deletes the source's version, which is what this list carries.
+    swapped = set(report['compatibility']['auto_accepted'])
+    assert swapped, (
+        'the fixture must exercise automatic swapping, or the invariant below '
+        'is being checked against the old report-everything behaviour')
 
     on_disk = _pys(str(_seed_the_cross_runtime_overlay(
-        app_with_builtin_presets, tmp_path)))
+        app_with_builtin_presets, tmp_path, accepted_replacements=sorted(swapped))))
     deleted = (source_files | overlay_files) - on_disk
     assert deleted, (
         'the fixture must actually strip something, or a disabled filter passes')
+    assert not (swapped & deleted), (
+        f'{len(swapped & deleted)} automatically swapped file(s) were deleted '
+        f'instead of replaced: {sorted(swapped & deleted)}')
     assert deleted <= shown, (
         f'{len(deleted - shown)} file(s) were deleted from the draft without '
         f'ever appearing in the dialog: {sorted(deleted - shown)}')

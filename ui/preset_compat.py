@@ -10,7 +10,7 @@ load is byte-identical to what QLSM returned before this gate existed.
 import json
 import os
 
-from ui.plugin_compat import VERDICT_COMPATIBLE, classify
+from ui.plugin_compat import VERDICT_COMPATIBLE, baseline_digest, classify
 from ui.preset_support import BUILTIN_PRESETS_DIR, default_preset_name_for_runtime
 from ui.runtime import normalize_runtime, runtime_paths
 
@@ -117,6 +117,22 @@ def shipped_scripts(runtime):
     return scripts
 
 
+def is_root_plugin_path(path):
+    """Is this a plugin in its own right, rather than a helper under a subfolder?
+
+    The one place this rule lives. It governs three separate decisions -- whether
+    a replacement may be offered, whether the source manifest (keyed by bare
+    filename) may be consulted, and whether a file counts as coming from the
+    source catalog -- and those three drifting apart is precisely the failure
+    class this gate has already been rewritten over.
+
+    `os.sep` is redundant with '/' on Linux and is kept for the platforms where
+    it is not; `_read_preset_scripts` builds these keys with os.path.relpath, so
+    on Windows they would arrive backslash-separated.
+    """
+    return '/' not in path and os.sep not in path
+
+
 def _strip_entry(path, verdict, reasons, replacements, shipped=None):
     """One row of the operator-facing report.
 
@@ -135,7 +151,7 @@ def _strip_entry(path, verdict, reasons, replacements, shipped=None):
     Subdirectory files are still stripped and still reported; they are just
     never handed a replacement.
     """
-    if '/' in path or os.sep in path:
+    if not is_root_plugin_path(path):
         # A subdirectory file cannot be OFFERED a replacement, but since the draft
         # filter restores one the target ships at this same path, saying only
         # "stripped, nothing available" would describe a loss that does not happen.
@@ -147,17 +163,104 @@ def _strip_entry(path, verdict, reasons, replacements, shipped=None):
         'path': path,
         'verdict': verdict,
         'reasons': reasons,
+        # A replacement is ALWAYS this same path -- never a differently-named
+        # plugin. apply_compatibility relies on that when it writes the target's
+        # content back under `path`; offering `x.py` in place of `y.py` here
+        # would silently store x's content as y.
         'replacement': path if path in replacements else None,
         # Root-level files are never auto-restored; the operator ticks them or they go.
         'auto_replaced': False,
     }
 
 
+def source_catalog_digests(runtime):
+    """relpath -> sha256 for every .py the SOURCE runtime's default preset ships.
+
+    Half of the allow-list for "the operator never wrote this file" -- see
+    `is_untouched_source_file`. A preset's `scripts` map is not just the preset's
+    own files: _read_preset_scripts() lays the whole default builtin catalog of
+    the preset's runtime down first and overlays the preset's files on top, so a
+    plain minqlx preset arrives carrying all 48 stock minqlx plugins verbatim.
+    Every one of those is stripped against minqlxtended, and reporting them made
+    the dialog a 48-row wall of files the operator never chose, edited, or even
+    knew were in the preset.
+
+    Compared by CONTENT, not by name, for the same reason _apply_runtime_filter
+    compares the target's shipped files by content: a preset that overwrote
+    `motd.py` with something of its own must not be waved through as untouched
+    just because a file by that name exists in the catalog.
+    """
+    return {rel: baseline_digest(text)
+            for rel, text in shipped_scripts(runtime).items()}
+
+
+def is_untouched_source_file(path, content, catalog_digests, source_hashes):
+    """Is this file one the operator never wrote, in either sense the repo has?
+
+    TWO allow-lists, because the source runtime ships more plugins than its
+    default preset offers and neither list alone is the right one:
+
+    `catalog_digests` is the default preset -- what _read_preset_scripts() seeds
+    a preset's `scripts` map from, and therefore where the bulk of the noise
+    comes from.
+
+    `source_hashes` is the runtime's baseline manifest, which is BROADER (63
+    files against the default preset's 53) and, for a handful of files, holds
+    DIFFERENT content: QLSM's own minqlx default preset ships a customised
+    `motd.py`, while the manifest records upstream's. Checking only the default
+    preset therefore got both cases wrong in the same load -- stock plugins the
+    default preset simply does not carry (`reset_acc.py`,
+    `suppress_join_msg.py`) were reported as the operator's own, and a preset
+    holding upstream's untouched `motd.py` was reported as having modified it,
+    when the modification is QLSM's.
+
+    The manifest is keyed by bare filename, so it is consulted for root-level
+    files only: a subdirectory helper that happens to share a basename with a
+    root plugin is a different file and must not borrow its hash.
+    """
+    if not isinstance(content, str):
+        return False
+    digest = baseline_digest(content)
+    if catalog_digests.get(path) == digest:
+        return True
+    if not is_root_plugin_path(path):
+        return False
+    return source_hashes.get(path) == digest
+
+
+def _report_kind(entry):
+    """Which of the three things the dialog has to say about a reported strip.
+
+    `replaceable` -- a same-named file exists on the target and the operator
+    chooses whether to take it; taking it discards whatever this preset held at
+    that path. `helper` -- a subdirectory module the target ships at the same
+    path, restored with no choice offered (see _strip_entry). `unavailable` --
+    the target has nothing by this name, so the file goes and any tick with it.
+    """
+    if entry['replacement']:
+        return 'replaceable'
+    if entry['auto_replaced']:
+        return 'helper'
+    return 'unavailable'
+
+
 def apply_compatibility(response_data, preset_runtime, target_runtime):
-    """Strip what cannot run on `target_runtime` and report what was stripped.
+    """Strip what cannot run on `target_runtime` and report what needs a decision.
 
     Returns `response_data` itself -- not a copy -- when there is nothing to do,
     so a same-runtime load is provably unchanged.
+
+    Only ACTIONABLE strips are reported. A stock plugin the operator never edited
+    is swapped for the target runtime's own copy of the same file with no prompt
+    (`auto_accepted`), because there is nothing to decide: the operator did not
+    write that file, so nothing of theirs is lost. What reaches the dialog is the
+    two cases where something genuinely is at stake -- a file the operator's
+    preset customised (accepting the swap discards those edits) and a file the
+    target runtime has no counterpart for at all (it goes away).
+
+    Enablement is NOT decided here or in the dialog. A plugin comes back checked
+    if and only if the preset had it checked and its file survives; accepting a
+    replacement carries the file over at the selection state the preset recorded.
     """
     if target_runtime is None:
         return response_data
@@ -169,6 +272,12 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     hashes = baseline_hashes(target)
     candidates = replacement_scripts(target)
     shipped = shipped_scripts(target)
+    # Empty when the source runtime's builtin preset or manifest is missing:
+    # every file then reads as customised and lands in the dialog, which is the
+    # old behaviour -- noisy, but never silently drops something the operator
+    # wrote. See is_untouched_source_file for why it takes both.
+    source_catalog = source_catalog_digests(preset)
+    source_hashes = baseline_hashes(preset)
     scripts = response_data.get('scripts') or {}
 
     checked_plugins = response_data.get('checked_plugins')
@@ -187,6 +296,7 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     kept = {}
     stripped = []
     offered = {}
+    auto_accepted = []
     for path, content in scripts.items():
         # Only Python is classified. .so hooks LD_PRELOAD into qzeroded and know
         # nothing about either runtime; .txt and fonts are data.
@@ -199,24 +309,50 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
             kept[path] = content
             continue
         entry = _strip_entry(path, verdict, reasons, candidates, shipped)
-        # _read_preset_scripts() seeds this dict from the *entire* default
-        # builtin catalog before overlaying the preset's own files, so most
-        # entries here were never part of the operator's actual selection.
-        # The file itself is always on disk regardless -- the draft seed lays
-        # the target's own default scripts down independently of this gate --
-        # so declining a replacement here loses nothing; it only leaves the
-        # plugin unchecked. Reporting every entry is still useful (the
-        # operator can see what's available and opt in), but only a plugin
-        # that was genuinely checked should come back pre-accepted --
-        # otherwise confirming this dialog with its own defaults silently
-        # re-enables the runtime's entire default plugin set regardless of
-        # what the preset's operator actually chose.
         entry['originally_checked'] = path in checked_set
-        stripped.append(entry)
+        # `from_catalog` separates "you edited a stock plugin" from "this is a
+        # file of your own" -- the same strip, but the operator needs to be told
+        # about them in different words. Read against both allow-lists for the
+        # same reason `pristine` is: the manifest carries stock plugins the
+        # default preset does not offer, and calling one of those the operator's
+        # own work is simply wrong.
+        entry['from_catalog'] = (
+            path in source_catalog
+            or (path in source_hashes and is_root_plugin_path(path)))
+        pristine = is_untouched_source_file(
+            path, content, source_catalog, source_hashes)
         if entry['replacement']:
             offered[entry['replacement']] = candidates[entry['replacement']]
 
+        if pristine and entry['replacement']:
+            # Untouched stock plugin, and the target ships its own version of the
+            # same file: swap it in and say nothing. Accepting is not the same as
+            # enabling -- `checked` below is untouched either way, so this cannot
+            # turn the target's default catalog on behind the operator's back.
+            auto_accepted.append(entry['replacement'])
+            kept[path] = candidates[entry['replacement']]
+            continue
+        if pristine and entry['auto_replaced']:
+            # Same, for a helper module under a subdirectory. The draft filter
+            # restores these itself (see _apply_runtime_filter); no offer is
+            # made because a subdirectory file can never be a checkable plugin.
+            kept[path] = shipped[path]
+            continue
+        if pristine and not entry['originally_checked']:
+            # A stock plugin with no counterpart on the target, that the preset
+            # did not have enabled. It came from the catalog seed rather than
+            # from anything the operator did, so its loss is not news.
+            continue
+        # What is left genuinely needs the operator: their own edits are about to
+        # be discarded, or a plugin they had enabled is about to disappear.
+        entry['kind'] = _report_kind(entry)
+        stripped.append(entry)
+
     stripped_paths = {entry['path'] for entry in stripped}
+    # Only a REPORTED strip can cost a plugin its tick. An auto-swapped one keeps
+    # exactly the selection state the preset recorded, which is the whole point:
+    # loading a minqlx preset onto minqlxtended must reproduce that preset's
+    # plugin selection, not the target runtime's default one.
     checked = [path for path in checked_plugins if path not in stripped_paths]
 
     result = dict(response_data)
@@ -239,5 +375,12 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
         'target_runtime': target,
         'stripped': sorted(stripped, key=lambda entry: entry['path']),
         'replacements': offered,
+        # Replacements applied without asking. The frontend must pass these to
+        # the draft alongside whatever the operator ticked, on BOTH paths --
+        # including the one where `stripped` is empty and no dialog opens at
+        # all -- or _apply_runtime_filter deletes the source file and writes
+        # nothing back, and the plugin list comes up missing the target
+        # runtime's own standard plugins.
+        'auto_accepted': sorted(set(auto_accepted)),
     }
     return result
