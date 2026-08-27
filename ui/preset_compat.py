@@ -171,6 +171,17 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     shipped = shipped_scripts(target)
     scripts = response_data.get('scripts') or {}
 
+    checked_plugins = response_data.get('checked_plugins')
+    if not isinstance(checked_plugins, list):
+        # A hand-edited checked_plugins.json is read by _read_preset_checked_
+        # plugins() with a bare json.load() and no type guard, so a string or
+        # int can reach here on the matched-runtime path today and pass
+        # through harmlessly. This gate must not turn that into a crash
+        # (str iterates into characters; int raises TypeError) just because
+        # the runtimes now differ.
+        checked_plugins = []
+    checked_set = set(checked_plugins)
+
     kept = {}
     stripped = []
     offered = {}
@@ -186,20 +197,22 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
             kept[path] = content
             continue
         entry = _strip_entry(path, verdict, reasons, candidates, shipped)
+        # _read_preset_scripts() seeds this dict from the *entire* default
+        # builtin catalog before overlaying the preset's own files, so most
+        # entries here were never part of the operator's actual selection --
+        # only reachable via this preset at all if the operator ticks the
+        # replacement checkbox themselves. Reporting them is still useful
+        # (the operator can see what's available), but only a plugin that
+        # was genuinely checked should come back pre-accepted -- otherwise
+        # confirming this dialog with its own defaults silently re-enables
+        # the runtime's entire default plugin set regardless of what the
+        # preset's operator actually chose.
+        entry['originally_checked'] = path in checked_set
         stripped.append(entry)
         if entry['replacement']:
             offered[entry['replacement']] = candidates[entry['replacement']]
 
     stripped_paths = {entry['path'] for entry in stripped}
-    checked_plugins = response_data.get('checked_plugins')
-    if not isinstance(checked_plugins, list):
-        # A hand-edited checked_plugins.json is read by _read_preset_checked_
-        # plugins() with a bare json.load() and no type guard, so a string or
-        # int can reach here on the matched-runtime path today and pass
-        # through harmlessly. This gate must not turn that into a crash
-        # (str iterates into characters; int raises TypeError) just because
-        # the runtimes now differ.
-        checked_plugins = []
     checked = [path for path in checked_plugins if path not in stripped_paths]
 
     result = dict(response_data)

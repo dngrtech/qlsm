@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeReplacements, strippedWithReplacements } from '../presetCompatibility';
+import { defaultAcceptedReplacementPaths, mergeReplacements, strippedWithReplacements } from '../presetCompatibility';
 
 const presetData = {
   name: 'duel',
@@ -9,8 +9,8 @@ const presetData = {
     preset_runtime: 'minqlx',
     target_runtime: 'minqlxtended',
     stripped: [
-      { path: 'myFun.py', verdict: 'incompatible', reasons: ['line 1: x'], replacement: 'myFun.py' },
-      { path: 'mybalance.py', verdict: 'incompatible', reasons: ['line 1: y'], replacement: null },
+      { path: 'myFun.py', verdict: 'incompatible', reasons: ['line 1: x'], replacement: 'myFun.py', originally_checked: true },
+      { path: 'mybalance.py', verdict: 'incompatible', reasons: ['line 1: y'], replacement: null, originally_checked: false },
     ],
     replacements: { 'myFun.py': 'import minqlxtended\n' },
   },
@@ -69,5 +69,33 @@ describe('strippedWithReplacements', () => {
 
   it('is empty when there is no compatibility block', () => {
     expect(strippedWithReplacements({})).toEqual([]);
+  });
+});
+
+describe('defaultAcceptedReplacementPaths', () => {
+  it('includes a replaceable entry that was originally checked', () => {
+    expect(defaultAcceptedReplacementPaths(presetData)).toEqual(['myFun.py']);
+  });
+
+  it('excludes a replaceable entry that was not originally checked', () => {
+    // Regression: the target's default catalog gets merged into the scripts
+    // dict the compat gate scans, so most stripped entries were never part
+    // of the operator's actual selection -- only a plugin the backend marks
+    // originally_checked should default to accepted.
+    const data = {
+      ...presetData,
+      compatibility: {
+        ...presetData.compatibility,
+        stripped: [
+          { path: 'commands.py', verdict: 'incompatible', reasons: ['line 1: x'], replacement: 'commands.py', originally_checked: false },
+        ],
+        replacements: { 'commands.py': 'import minqlxtended\n' },
+      },
+    };
+    expect(defaultAcceptedReplacementPaths(data)).toEqual([]);
+  });
+
+  it('is empty when there is no compatibility block', () => {
+    expect(defaultAcceptedReplacementPaths({})).toEqual([]);
   });
 });

@@ -13,6 +13,21 @@ export function strippedWithReplacements(presetData) {
   return (compat.stripped || []).filter((entry) => entry.replacement);
 }
 
+// Which of those the dialog should start pre-accepted. `stripped` reports
+// every file the target's default catalog and the preset's own scripts
+// folder have between them -- most were never part of what the operator
+// actually had enabled (see ui/preset_compat.py's apply_compatibility for
+// why). Defaulting every offered replacement to checked would silently
+// re-enable the runtime's entire default plugin set on confirm regardless
+// of the preset's real selection, so only a plugin the backend flagged
+// `originally_checked` starts ticked -- everything else stays an opt-in
+// the operator ticks themselves.
+export function defaultAcceptedReplacementPaths(presetData) {
+  return strippedWithReplacements(presetData)
+    .filter((entry) => entry.originally_checked)
+    .map((entry) => entry.path);
+}
+
 export function mergeReplacements(presetData, acceptedPaths = []) {
   const compat = compatOf(presetData);
   if (!compat) return presetData;

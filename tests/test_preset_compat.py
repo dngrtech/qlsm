@@ -117,6 +117,25 @@ def test_a_same_named_target_plugin_is_offered_as_a_replacement():
     assert 'import minqlxtended' in result['compatibility']['replacements']['myFun.py']
 
 
+def test_a_checked_plugin_is_reported_as_originally_checked():
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}, 'checked_plugins': ['myFun.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['originally_checked'] is True
+
+
+def test_an_unchecked_plugin_is_not_reported_as_originally_checked():
+    """_read_preset_scripts() seeds the scripts dict from the entire default
+    catalog before overlaying the preset's own files, so a file can appear
+    here without ever having been part of the operator's actual selection.
+    Reporting it is fine (the operator can see it and opt in); defaulting it
+    to pre-accepted on the frontend is the bug this flag exists to prevent."""
+    response = {'scripts': {'myFun.py': 'import minqlx\n'}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['originally_checked'] is False
+
+
 def test_a_plugin_with_no_counterpart_is_offered_nothing():
     """A file the minqlxtended default preset does not ship gets no offer;
     inventing one would be a silent swap of non-equivalent behaviour.

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { AlertTriangle, FolderOpen, RefreshCw } from 'lucide-react';
 import { runtimeLabel } from '../../constants/runtimes';
-import { strippedWithReplacements } from '../../utils/presetCompatibility';
+import { defaultAcceptedReplacementPaths } from '../../utils/presetCompatibility';
 
 // The operator-facing half of the compat gate: the backend has already
 // decided what gets stripped and what can be swapped in instead; this dialog
@@ -11,15 +11,15 @@ import { strippedWithReplacements } from '../../utils/presetCompatibility';
 
 function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm }) {
   const stripped = compatibility?.stripped || [];
-  const replaceablePaths = useMemo(
-    () => strippedWithReplacements({ compatibility }).map((entry) => entry.path),
+  const defaultAcceptedPaths = useMemo(
+    () => defaultAcceptedReplacementPaths({ compatibility }),
     [compatibility]
   );
-  const [acceptedPaths, setAcceptedPaths] = useState(() => new Set(replaceablePaths));
+  const [acceptedPaths, setAcceptedPaths] = useState(() => new Set(defaultAcceptedPaths));
 
   useEffect(() => {
-    if (isOpen) setAcceptedPaths(new Set(replaceablePaths));
-    // Only reset when the dialog (re)opens -- not on every replaceablePaths
+    if (isOpen) setAcceptedPaths(new Set(defaultAcceptedPaths));
+    // Only reset when the dialog (re)opens -- not on every defaultAcceptedPaths
     // identity change, so a mid-session tick/untick isn't clobbered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
