@@ -71,10 +71,10 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
               This preset was saved from a {presetRuntime} host. Its config, and every standard
               plugin it carried unmodified, load as usual — those are swapped for
               {' '}{targetRuntime}&apos;s own version of the same plugin automatically, and keep the
-              enabled/disabled state this preset saved. Only the files below need your decision,
-              because this preset&apos;s own copy of each one can&apos;t run on {targetRuntime}.
-              Whatever you choose here, plugins are enabled exactly as this preset had them —
-              nothing is switched on that wasn&apos;t.
+              enabled/disabled state this preset saved. Listed below is only what that leaves:
+              files whose copy in this preset can&apos;t run on {targetRuntime} and isn&apos;t the
+              standard one, so QLSM won&apos;t decide for you. Whatever you choose here, plugins are
+              enabled exactly as this preset had them — nothing is switched on that wasn&apos;t.
             </p>
 
             <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
@@ -101,15 +101,20 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                     <div className="min-w-0 flex-1 text-left">
                       <div className="text-sm font-semibold text-theme-primary">{entry.path}</div>
                       {/* Why this file is here at all, in the operator's terms.
-                          `from_catalog` is the difference between "you edited a
-                          standard plugin" and "this is a plugin of your own" --
-                          the same strip, but not the same news. Only the lead-in
-                          differs: for a plugin of the operator's own we cannot
-                          claim their file is a modified version of the target's,
-                          so nothing here says "modified" or "your changes". */}
+                          `from_catalog` is the difference between "a standard
+                          plugin whose copy here differs" and "a plugin of your
+                          own" -- the same strip, but not the same news.
+                          Deliberately does NOT say the operator modified
+                          anything: a preset saved before the plugin was last
+                          updated carries an older copy of QLSM's own file, which
+                          hashes exactly like an edit and is not one. Claiming
+                          authorship of a change we cannot attribute is a false
+                          statement about the operator's own work. */}
                       <p className="mt-1 text-theme-secondary">
                         {entry.from_catalog
-                          ? `A standard ${presetRuntime} plugin that this preset modified.`
+                          ? `A standard ${presetRuntime} plugin, but this preset's copy differs `
+                            + 'from the standard one — either edited, or saved before the plugin '
+                            + 'was last updated.'
                           : `Not a standard ${presetRuntime} plugin — this one was added to the preset.`}
                         {entry.kind === 'unavailable'
                           && ` ${targetRuntime} has no version of it, so it won't be installed`

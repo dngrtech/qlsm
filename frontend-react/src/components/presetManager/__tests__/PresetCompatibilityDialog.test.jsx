@@ -106,10 +106,16 @@ describe('PresetCompatibilityDialog', () => {
   // of these sentences, and a document-wide match would pass on the wrong one.
   const rowFor = (path) => within(screen.getByText(path).closest('li'));
 
-  it('calls a modified standard plugin what it is', () => {
+  it('says a standard plugin\'s copy differs without claiming who changed it', () => {
+    // A preset saved before the plugin was last updated carries an older copy
+    // of QLSM's own file. That hashes exactly like an operator edit and is not
+    // one -- verified on a real preset, whose kills.py was simply the previous
+    // release. Asserting the absence of "modified" is the point of the test.
     setup();
-    expect(rowFor('commands.py').getByText(/A standard minqlx plugin that this preset modified\./))
-      .toBeInTheDocument();
+    const row = rowFor('commands.py');
+    expect(row.getByText(/this preset's copy differs/)).toBeInTheDocument();
+    expect(row.getByText(/saved before the plugin was last updated/)).toBeInTheDocument();
+    expect(row.queryByText(/this preset modified/)).not.toBeInTheDocument();
   });
 
   it('distinguishes a plugin of the operator\'s own from a modified standard one', () => {

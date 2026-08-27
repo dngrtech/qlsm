@@ -28,7 +28,7 @@ You can load a preset saved from the other runtime. Your server config, map pool
 
 Picking a mismatched preset shows a short warning under its name. If anything genuinely needs your decision, loading it opens a dialog before anything changes — and it lists only those, not every plugin in the preset:
 
-- **A standard plugin your preset modified.** Your runtime has its own version of the same plugin, pre-selected to be used instead. Taking it means your changes to that file don't carry over; clearing the tick drops the plugin entirely, since your edited copy can't run on this runtime either way.
+- **A standard plugin whose copy in the preset differs from the standard one** — either because you edited it, or because the preset was saved before that plugin was last updated. QLSM can't tell those apart, so it doesn't guess. Your runtime's own version of the plugin is pre-selected to be used instead; taking it means the preset's copy of that file doesn't carry over, and clearing the tick drops the plugin entirely, since the preset's copy can't run on this runtime either way.
 - **A plugin with no equivalent on your runtime** — usually a custom plugin of your own, occasionally a standard plugin the other runtime doesn't have. It can't be installed, and it's listed with the reason. If the preset had it enabled, you're told it's being switched off.
 
 Nothing is applied until you confirm.

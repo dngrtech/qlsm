@@ -962,7 +962,7 @@ Every `.py` file is classified, including files inside the preset's plugin subfo
 | `helper` | A subfolder module the target ships at the same path. Restored automatically; no choice is offered, but the preset's version of it is not carried over. |
 | `unavailable` | The target has nothing by this name. The file goes, and so does any selection of it. |
 
-`from_catalog` is `true` when the source runtime's default preset ships a file at this path — the difference between "the operator modified a standard plugin" and "this is a plugin of their own". Both are the same strip; they are not the same thing to tell an operator.
+`from_catalog` is `true` when the source runtime ships a plugin at this path — the difference between "a standard plugin whose copy in this preset differs" and "a plugin of the operator's own". Both are the same strip; they are not the same thing to tell an operator. Note what `from_catalog: true` does **not** assert: that the operator edited the file. A preset saved before that plugin was last updated carries an older copy of QLSM's own file, which hashes exactly like an edit and is not one — clients must not word this as "you modified it".
 
 `originally_checked` is `true` only when `path` was in the preset's own `checked_plugins` selection before this gate ran — not merely present in `scripts`.
 
