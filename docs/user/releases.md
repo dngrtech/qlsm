@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.28.4` | 2026-08-27 | [#199](https://github.com/dngrtech/qlsm/pull/199) | Loading a preset saved for the other server runtime no longer asks about every plugin it carries, and no longer changes which plugins are enabled. Standard plugins the preset never modified are swapped for your runtime's own version automatically, keeping the preset's enabled/disabled selection exactly as saved; only plugins whose copy in the preset differs from the standard one, or that your runtime has no version of, are listed for you to decide on. A preset saved from an unmodified server now loads with no dialog at all. |
 | `v1.28.3` | 2026-08-27 | [#198](https://github.com/dngrtech/qlsm/pull/198) | Fix confirming a cross-runtime preset compatibility dialog silently enabling the entire default plugin catalog instead of your actual selection. |
 | `v1.28.2` | 2026-08-26 | [#197](https://github.com/dngrtech/qlsm/pull/197) | Fix cancelling a cross-runtime preset compatibility dialog silently discarding your plugin selection instead of leaving it untouched. |
 | `v1.28.1` | 2026-08-26 | [#196](https://github.com/dngrtech/qlsm/pull/196) | Pin pnpm to v10 in the Docker build so the image builds reproducibly. |
