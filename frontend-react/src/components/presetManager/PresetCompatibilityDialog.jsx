@@ -2,17 +2,24 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { AlertTriangle, FolderOpen, RefreshCw } from 'lucide-react';
 import { runtimeLabel } from '../../constants/runtimes';
-import { defaultAcceptedReplacementPaths } from '../../utils/presetCompatibility';
+import { strippedWithReplacements } from '../../utils/presetCompatibility';
 
-// The operator-facing half of the compat gate: the backend has already
-// decided what gets stripped and what can be swapped in instead; this dialog
-// just shows the list and lets the operator opt out of individual
-// replacements before the load actually happens.
+// The operator-facing half of the compat gate. The backend has already swapped
+// every untouched stock plugin for the target runtime's own copy without asking
+// -- those never appear here. What is listed is only what is genuinely at
+// stake: files this preset customised, and files the target has no version of.
+//
+// Ticking a row means "take the target runtime's file". It does NOT mean
+// "enable this plugin" -- the preset's own selection decides that.
 
 function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm }) {
   const stripped = compatibility?.stripped || [];
+  // Replacing a customised file loses the edits, but declining loses the file
+  // outright -- the preset's copy cannot run on the target either way. Taking
+  // the working version is the better default, and it is safe to default now
+  // that a tick no longer switches the plugin on.
   const defaultAcceptedPaths = useMemo(
-    () => defaultAcceptedReplacementPaths({ compatibility }),
+    () => strippedWithReplacements({ compatibility }).map((entry) => entry.path),
     [compatibility]
   );
   const [acceptedPaths, setAcceptedPaths] = useState(() => new Set(defaultAcceptedPaths));
@@ -55,23 +62,19 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
             <Dialog.Title as="h3" className="font-display text-lg font-semibold tracking-wide text-theme-primary">
               Some plugins won&apos;t carry over
             </Dialog.Title>
-            {/* The list below is what this preset LOSES. It is not the whole
-                story of what the instance ends up with: a cross-runtime load
-                seeds the target runtime's own default plugins first and lays
-                the preset over them, so the operator will meet plugins that
-                this preset never contained. Saying only "these won't be
-                installed" would leave them to discover that on the next
-                screen. */}
+            {/* Only actionable strips reach this list. Every standard plugin
+                the preset carried unmodified has already been swapped for
+                {targetRuntime}'s own copy of the same file, silently, keeping
+                whatever enabled/disabled state the preset recorded for it --
+                so this list is short by design. */}
             <p className="mt-2 text-sm text-theme-secondary">
-              This preset was saved from a {presetRuntime} host. The rest of the config loads
-              as-is, but this preset&apos;s copy of each plugin below won&apos;t be installed:
-              each one either uses an API that {targetRuntime} doesn&apos;t have, or can&apos;t
-              be confirmed to run there — the reason is shown for each. Some can be swapped
-              for {targetRuntime}&apos;s own version — pre-selected only for the plugins you
-              actually had enabled, so tick any other you&apos;d also like to carry over — and
-              helper modules are swapped automatically; the rest are dropped. The instance still starts from
-              {' '}{targetRuntime}&apos;s own standard plugins, so the plugin list you end up with
-              is not simply this preset&apos;s minus what is listed here.
+              This preset was saved from a {presetRuntime} host. Its config, and every standard
+              plugin it carried unmodified, load as usual — those are swapped for
+              {' '}{targetRuntime}&apos;s own version of the same plugin automatically, and keep the
+              enabled/disabled state this preset saved. Only the files below need your decision,
+              because this preset&apos;s own copy of each one can&apos;t run on {targetRuntime}.
+              Whatever you choose here, plugins are enabled exactly as this preset had them —
+              nothing is switched on that wasn&apos;t.
             </p>
 
             <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
@@ -97,10 +100,23 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                     )}
                     <div className="min-w-0 flex-1 text-left">
                       <div className="text-sm font-semibold text-theme-primary">{entry.path}</div>
+                      {/* Why this file is here at all, in the operator's terms.
+                          `from_catalog` is the difference between "you edited a
+                          standard plugin" and "this is a plugin of your own" --
+                          the same strip, but not the same news. */}
+                      <p className="mt-1 text-theme-secondary">
+                        {entry.from_catalog
+                          ? `A standard ${presetRuntime} plugin that this preset modified.`
+                          : `A custom plugin, not part of the standard ${presetRuntime} set.`}
+                        {entry.kind === 'unavailable'
+                          && ` ${targetRuntime} has no version of it, so it won't be installed`
+                             + `${entry.originally_checked ? ' and will be switched off' : ''}.`}
+                      </p>
                       {entry.auto_replaced ? (
                         <p className="mt-1 text-theme-secondary">
                           Helper module. Replaced automatically with {targetRuntime}&apos;s own
-                          version of this file &mdash; nothing to choose, and nothing is lost.
+                          version of this file &mdash; nothing to choose, but any changes this
+                          preset made to it are not carried over.
                         </p>
                       ) : entry.verdict === 'unknown' ? (
                         <p className="mt-1 text-[var(--accent-warning)]">
@@ -114,14 +130,19 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                         </ul>
                       )}
                       {entry.replacement && (
-                        <label className="mt-2 flex items-center gap-2 text-theme-primary">
+                        <label className="mt-2 flex items-start gap-2 text-theme-primary">
                           <input
                             type="checkbox"
-                            aria-label={`Use the ${targetRuntime} replacement for ${entry.path} instead`}
+                            className="mt-0.5"
+                            aria-label={`Use the ${targetRuntime} version of ${entry.path} instead`}
                             checked={acceptedPaths.has(entry.path)}
                             onChange={() => toggleAccepted(entry.path)}
                           />
-                          <span>Use the {targetRuntime} replacement instead</span>
+                          <span>
+                            Use {targetRuntime}&apos;s own {entry.path} instead &mdash; this
+                            preset&apos;s changes to it are lost. Untick and the plugin is dropped
+                            entirely.
+                          </span>
                         </label>
                       )}
                     </div>

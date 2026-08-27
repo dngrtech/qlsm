@@ -20,9 +20,18 @@ A preset is a reusable bundle of config files, plugin selections, and factory fi
 
 A preset remembers which [Server Runtime](../getting-started/add-host.md#server-runtime) — minqlx or minqlxtended — it was saved from. On the **Load Preset** tab, every preset row shows that runtime as a small badge, so you can see at a glance whether it matches your current host.
 
-You can load a preset saved from the other runtime. Your server config, map pool, access list, workshop items, and factory selections all come across intact. Plugins are the exception: minqlx and minqlxtended plugins aren't interchangeable — they're written against different APIs — so plugins from the other runtime are left out when the preset's plugins are copied across. You'll see the full list first, with a reason for each, and can swap in the matching plugin for your runtime where one exists.
+You can load a preset saved from the other runtime. Your server config, map pool, access list, workshop items, and factory selections all come across intact. Plugins need translating: minqlx and minqlxtended plugins aren't interchangeable — they're written against different APIs — so a preset's copy of a plugin can't be installed on the other runtime as-is.
 
-Picking a mismatched preset shows a short warning under its name, and loading it opens a dialog listing every affected plugin before anything changes. Where the same plugin exists for your runtime, QLSM offers it as a replacement and you choose whether to take it — a replacement is pre-checked only for a plugin your preset actually had enabled, so you can tell at a glance what carries over versus what you'd be opting into. Plugins with no equivalent are listed with the reason they were dropped, and nothing is applied until you confirm.
+**Standard plugins you never edited are handled for you.** QLSM swaps each one for your runtime's own version of the same plugin, silently, and keeps it enabled or disabled exactly as the preset had it. Nothing is asked and nothing is lost, so most cross-runtime loads just work — a preset saved from a stock minqlx server loads onto a minqlxtended host with no dialog at all.
+
+**Your plugin selection is never changed.** Whatever you decide below, plugins end up enabled exactly as the preset had them. A cross-runtime load will not switch on plugins the preset had switched off.
+
+Picking a mismatched preset shows a short warning under its name. If anything genuinely needs your decision, loading it opens a dialog before anything changes — and it lists only those, not every plugin in the preset:
+
+- **A standard plugin your preset modified.** Your runtime has its own version of the same plugin, pre-selected to be used instead. Taking it means your changes to that file don't carry over; clearing the tick drops the plugin entirely, since your edited copy can't run on this runtime either way.
+- **A plugin with no equivalent on your runtime** — usually a custom plugin of your own, occasionally a standard plugin the other runtime doesn't have. It can't be installed, and it's listed with the reason. If the preset had it enabled, you're told it's being switched off.
+
+Nothing is applied until you confirm.
 
 ## Built-in Presets
 

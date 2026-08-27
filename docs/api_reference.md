@@ -902,7 +902,7 @@ For legacy presets, `checked_plugins`, `checked_factories`, or `enabled_hooks` m
 
 `GET /api/presets/{preset_id}` accepts an optional `target_runtime` query parameter (`?target_runtime=minqlxtended`) naming the runtime the preset is about to be loaded onto. `400 Bad Request` if present and not one of `"minqlx"` / `"minqlxtended"`. Omitting it, or passing the same value as the preset's own `runtime`, returns the response exactly as documented above — `scripts` and `checked_plugins` are the preset's stored contents, and there is no `compatibility` key.
 
-When `target_runtime` differs from the preset's `runtime`, `scripts` contains only the plugin files kept for the target runtime, `checked_plugins` drops any that were removed, and the response gains a `compatibility` block:
+When `target_runtime` differs from the preset's `runtime`, `scripts` contains only the plugin files kept for the target runtime, `checked_plugins` drops any that were removed *and reported*, and the response gains a `compatibility` block:
 
 ```json
 "compatibility": {
@@ -915,6 +915,8 @@ When `target_runtime` differs from the preset's `runtime`, `scripts` contains on
       "reasons": ["line 1: imports the minqlx module"],
       "replacement": "balance.py",
       "auto_replaced": false,
+      "kind": "replaceable",
+      "from_catalog": true,
       "originally_checked": true
     },
     {
@@ -923,20 +925,48 @@ When `target_runtime` differs from the preset's `runtime`, `scripts` contains on
       "reasons": ["line 11: imports the minqlx module"],
       "replacement": null,
       "auto_replaced": true,
+      "kind": "helper",
+      "from_catalog": true,
       "originally_checked": false
     }
   ],
   "replacements": {
     "balance.py": "... file contents ..."
-  }
+  },
+  "auto_accepted": ["motd.py", "essentials.py"]
 }
 ```
 
-Every `.py` file is classified, including files inside the preset's plugin subfolders (`discord_extensions/`, `extras/`) — those are stripped and reported by their full relative path, as the example above shows. `.so` hook binaries, `.txt` files, and fonts are always kept as-is. `stripped` lists every removed plugin file, sorted by path. `verdict` is `"incompatible"` when a specific reason was found, or `"unknown"` when nothing conclusive was found and the file was removed rather than assumed safe (`reasons` is `[]` in that case).
+Every `.py` file is classified, including files inside the preset's plugin subfolders (`discord_extensions/`, `extras/`) — those are stripped and reported by their full relative path, as the example above shows. `.so` hook binaries, `.txt` files, and fonts are always kept as-is. `verdict` is `"incompatible"` when a specific reason was found, or `"unknown"` when nothing conclusive was found and the file was removed rather than assumed safe (`reasons` is `[]` in that case).
+
+#### What `stripped` does and does not list
+
+`stripped` is **not** every removed file — it is only the removals a caller has a decision to make about, sorted by path. `scripts` is seeded from the preset's source runtime's entire default plugin catalog before the preset's own files are overlaid, so a plain minqlx preset arrives carrying all 48 stock minqlx plugins verbatim, every one of which is stripped against minqlxtended. Reporting all of them made the list unusable and, when a client pre-accepted them, re-enabled the whole catalog. Two classes are therefore handled without reporting:
+
+- A **file identical to the one the source runtime's default preset ships** (compared by content, not by name) for which the target ships a same-named file: swapped for the target's copy, listed in `auto_accepted`, absent from `stripped`. The operator did not write that file, so nothing of theirs is lost.
+- The same kind of untouched stock file with **no counterpart on the target**, which the preset did not have enabled: dropped silently. It came from the catalog seed, not from anything the operator did.
+
+`auto_accepted` lists the filenames swapped this way. **Clients must forward it to `POST /api/drafts` as `accepted_replacements`** — on both paths, including when `stripped` is empty and no confirmation UI opens. The draft filter deletes the source file and only writes back what it is handed, so omitting this list leaves the instance missing the target runtime's own standard plugins.
+
+#### Per-entry fields
 
 `replacement` is only ever the entry's **own** filename, offered when the target runtime ships a plugin by that exact name, and `null` otherwise. A replacement is never a differently-named plugin: `mybalance.py` is not offered `balance.py`, because they are not the same plugin. Only root-level files are ever offered one — a file inside a plugin subfolder always reports `replacement: null`, since swapping in the target's root-level `balance.py` for a stripped `extras/balance.py` would relocate the file as well as replace it. `auto_replaced` is `true` only for a subfolder helper the target runtime ships at the same relative path — it is restored automatically with no choice to make, unlike a root-level `replacement`, which the caller opts into. `replacements` maps each offered filename to its file content, so the caller can apply it without a second request.
 
-`originally_checked` is `true` only when `path` was in the preset's own `checked_plugins` selection before this gate ran — not merely present in `scripts`. `scripts` is seeded from the preset's source runtime's entire default plugin catalog before the preset's own files are overlaid, so most `stripped` entries were never part of what the operator actually had enabled; they are reported for visibility only. A client building a confirmation UI (as the Preset Manager's compatibility dialog does) should pre-select a `replacement` only where `originally_checked` is `true` — defaulting every offered replacement to accepted regardless of this flag re-enables the target runtime's entire default plugin set on confirm, not the preset's actual selection.
+`kind` names why the entry needs the operator, and is one of:
+
+| `kind` | Meaning |
+|---|---|
+| `replaceable` | The target ships a same-named file. Accepting discards whatever this preset held at that path; declining drops the plugin entirely. |
+| `helper` | A subfolder module the target ships at the same path. Restored automatically; no choice is offered, but the preset's version of it is not carried over. |
+| `unavailable` | The target has nothing by this name. The file goes, and so does any selection of it. |
+
+`from_catalog` is `true` when the source runtime's default preset ships a file at this path — the difference between "the operator modified a standard plugin" and "this is a plugin of their own". Both are the same strip; they are not the same thing to tell an operator.
+
+`originally_checked` is `true` only when `path` was in the preset's own `checked_plugins` selection before this gate ran — not merely present in `scripts`.
+
+#### Acceptance is not enablement
+
+Accepting a replacement carries the **file** over. It does not enable the plugin. A plugin comes back in `checked_plugins` if and only if the preset had it checked and its file survives, so a cross-runtime load reproduces the preset's own plugin selection rather than the target runtime's default one. A client that adds every accepted path to `checked_plugins` re-enables the target runtime's entire default catalog, which is the failure this design exists to prevent. Only a reported entry can cost a plugin its selection — auto-swapped plugins keep theirs, already resolved in `checked_plugins`.
 
 `checked_plugins` itself can be `null` here too (see the legacy-preset note above) — a preset that never recorded a selection stays `null` through this gate rather than becoming `[]`, so a `null` here still means "keep whatever is currently selected," not "the preset selected nothing."
 

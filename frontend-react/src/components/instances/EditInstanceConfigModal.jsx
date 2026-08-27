@@ -9,7 +9,7 @@ import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
 import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
-import { mergeReplacements } from '../../utils/presetCompatibility';
+import { combineAcceptedPaths, mergeReplacements } from '../../utils/presetCompatibility';
 import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
 import { partitionCheckedPaths, resolveRootPluginPaths, toQlxPluginNames } from '../fileManager/pluginSelection';
@@ -592,16 +592,23 @@ function EditInstanceConfigModal({
         setPendingPreset({ id: presetId, data: presetData });
         return;
       }
-      await applyPresetData(presetId, presetData);
+      // No decision left for the operator, but a cross-runtime load still has
+      // replacements the backend applied on its own -- every standard plugin
+      // this preset carried unmodified. They have to travel to the draft here
+      // too, or the filter deletes those files and writes nothing back.
+      const auto = combineAcceptedPaths(presetData);
+      await applyPresetData(presetId, mergeReplacements(presetData, auto), auto);
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
   }, [applyPresetData, hostRuntime]);
 
-  const handleConfirmPresetCompatibility = useCallback(async (acceptedPaths) => {
+  const handleConfirmPresetCompatibility = useCallback(async (tickedPaths) => {
     if (!pendingPreset) return;
     const { id, data } = pendingPreset;
     setPendingPreset(null);
+    // What the operator ticked, plus what was swapped without asking.
+    const acceptedPaths = combineAcceptedPaths(data, tickedPaths);
     // applyPresetData sets both draftPreset and acceptedReplacements together
     // (see its own body) -- the accepted list is an argument to "apply this
     // preset", not ambient state some other codepath clears speculatively. A
