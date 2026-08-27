@@ -445,3 +445,93 @@ def test_a_preset_that_recorded_no_selection_still_records_none():
     response = {'scripts': dict(shipped_scripts(MINQLX))}
     result = apply_compatibility(response, MINQLX, MINQLXTENDED)
     assert result['checked_plugins'] is None
+
+
+# --- "Untouched" means untouched by EITHER allow-list ------------------------
+#
+# The source runtime ships more plugins than its default preset offers, and for
+# a few files the two disagree on content. Checking only the default preset got
+# both halves wrong on the same real preset: stock plugins the default preset
+# does not carry were reported as the operator's own work, and a preset holding
+# upstream's untouched motd.py was reported as having modified it -- when the
+# modification is QLSM's own default preset.
+
+
+def _manifest_stock(name, runtime=MINQLX):
+    """A file byte-identical to what `runtime`'s baseline MANIFEST records,
+    which is not always what its default preset ships."""
+    from ui.preset_compat import ASSETS_DIR
+    from ui.runtime import runtime_paths
+    directory = os.path.join(ASSETS_DIR, runtime_paths(runtime)['asset_plugins_dir'])
+    with open(os.path.join(directory, name), 'r', encoding='utf-8') as handle:
+        return handle.read()
+
+
+def test_the_two_source_allow_lists_actually_differ():
+    """Guards the premise. If the manifest and the default preset ever held the
+    same files with the same content, every test below would pass vacuously."""
+    from ui.preset_compat import baseline_hashes, shipped_scripts
+    manifest = baseline_hashes(MINQLX)
+    catalog = shipped_scripts(MINQLX)
+    assert set(manifest) - set(catalog), 'manifest must carry files the default preset does not'
+    from ui.plugin_compat import baseline_digest
+    disagree = {name for name, digest in manifest.items()
+                if name in catalog and baseline_digest(catalog[name]) != digest}
+    assert disagree, 'the two lists must disagree on some file\'s content'
+
+
+def test_a_stock_plugin_absent_from_the_default_preset_is_not_called_the_operators():
+    """reset_acc.py and suppress_join_msg.py are in the minqlx manifest but not
+    in QLSM's minqlx default preset. Reporting them made a real preset's dialog
+    claim the operator had written stock upstream plugins."""
+    content = _manifest_stock('reset_acc.py')
+    response = {'scripts': {'reset_acc.py': content}, 'checked_plugins': ['reset_acc.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['compatibility']['stripped'] == []
+    assert 'reset_acc.py' in result['compatibility']['auto_accepted']
+    assert result['checked_plugins'] == ['reset_acc.py']
+
+
+def test_a_preset_holding_upstreams_file_is_not_accused_of_modifying_it():
+    """QLSM's minqlx default preset ships a customised motd.py; the manifest
+    records upstream's. A preset carrying upstream's untouched copy differs from
+    the default preset and used to be reported as 'this preset modified it' --
+    exactly backwards, since the modification is QLSM's."""
+    content = _manifest_stock('motd.py')
+    from ui.plugin_compat import baseline_digest
+    from ui.preset_compat import shipped_scripts
+    assert baseline_digest(shipped_scripts(MINQLX)['motd.py']) != baseline_digest(content), (
+        'this test is only meaningful while the default preset and the manifest '
+        'disagree about motd.py')
+    response = {'scripts': {'motd.py': content}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['compatibility']['stripped'] == []
+
+
+def test_a_genuinely_edited_plugin_is_still_reported():
+    """The widened allow-list must not swallow real edits."""
+    content = _manifest_stock('motd.py') + '\n# my edit\n'
+    response = {'scripts': {'motd.py': content}, 'checked_plugins': ['motd.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    entry = result['compatibility']['stripped'][0]
+    assert entry['path'] == 'motd.py'
+    assert entry['kind'] == 'replaceable'
+    assert entry['from_catalog'] is True
+
+
+def test_a_subdirectory_file_cannot_borrow_a_root_plugins_manifest_hash():
+    """The manifest is keyed by bare filename. `extras/motd.py` is not `motd.py`,
+    and must not read as untouched because a root plugin by that name matches."""
+    path = os.path.join('extras', 'motd.py')
+    response = {'scripts': {path: _manifest_stock('motd.py')}, 'checked_plugins': []}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert [entry['path'] for entry in result['compatibility']['stripped']] == [path]
+
+
+def test_a_plugin_of_the_operators_own_is_not_called_a_standard_one():
+    """from_catalog drives the dialog's wording: claiming the operator modified
+    a standard plugin when they wrote the file themselves is a false statement
+    about their own work."""
+    response = {'scripts': {'x76admin.py': 'import minqlx\n'}, 'checked_plugins': ['x76admin.py']}
+    result = apply_compatibility(response, MINQLX, MINQLXTENDED)
+    assert result['compatibility']['stripped'][0]['from_catalog'] is False

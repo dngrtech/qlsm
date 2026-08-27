@@ -112,9 +112,25 @@ describe('PresetCompatibilityDialog', () => {
       .toBeInTheDocument();
   });
 
-  it('distinguishes a custom plugin from a modified standard one', () => {
+  it('distinguishes a plugin of the operator\'s own from a modified standard one', () => {
     setup();
-    expect(rowFor('custom.py').getByText(/A custom plugin, not part of the standard minqlx set\./))
+    expect(rowFor('custom.py').getByText(/Not a standard minqlx plugin/))
+      .toBeInTheDocument();
+  });
+
+  it('never says the operator modified a plugin they wrote themselves', () => {
+    // myFun.py here is from_catalog: false -- the operator's own file. Saying
+    // "this preset's changes to it are lost" claims their plugin is an edited
+    // copy of minqlxtended's, which is a false statement about their own work
+    // and read as nonsense next to "not a standard plugin".
+    setup();
+    expect(rowFor('myFun.py').queryByText(/modified/i)).not.toBeInTheDocument();
+    expect(rowFor('myFun.py').queryByText(/changes to it/i)).not.toBeInTheDocument();
+  });
+
+  it('notes the name collision when the target ships a plugin of the same name', () => {
+    setup();
+    expect(rowFor('myFun.py').getByText(/ships a plugin under this same name/))
       .toBeInTheDocument();
   });
 
@@ -146,9 +162,10 @@ describe('PresetCompatibilityDialog', () => {
     expect(screen.getByRole('checkbox', { name: /commands\.py/ })).toBeChecked();
   });
 
-  it('says plainly that accepting a replacement discards the preset\'s changes', () => {
+  it('says plainly that accepting a replacement discards the preset\'s file', () => {
     setup();
-    expect(screen.getAllByText(/changes to it are lost/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/version of the file is not carried over/i).length)
+      .toBeGreaterThan(0);
   });
 
   it('confirms with the accepted replacement paths', async () => {

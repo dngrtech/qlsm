@@ -103,14 +103,19 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                       {/* Why this file is here at all, in the operator's terms.
                           `from_catalog` is the difference between "you edited a
                           standard plugin" and "this is a plugin of your own" --
-                          the same strip, but not the same news. */}
+                          the same strip, but not the same news. Only the lead-in
+                          differs: for a plugin of the operator's own we cannot
+                          claim their file is a modified version of the target's,
+                          so nothing here says "modified" or "your changes". */}
                       <p className="mt-1 text-theme-secondary">
                         {entry.from_catalog
                           ? `A standard ${presetRuntime} plugin that this preset modified.`
-                          : `A custom plugin, not part of the standard ${presetRuntime} set.`}
+                          : `Not a standard ${presetRuntime} plugin — this one was added to the preset.`}
                         {entry.kind === 'unavailable'
                           && ` ${targetRuntime} has no version of it, so it won't be installed`
                              + `${entry.originally_checked ? ' and will be switched off' : ''}.`}
+                        {entry.kind === 'replaceable' && !entry.from_catalog
+                          && ` ${targetRuntime} ships a plugin under this same name.`}
                       </p>
                       {entry.auto_replaced ? (
                         <p className="mt-1 text-theme-secondary">
@@ -138,10 +143,14 @@ function PresetCompatibilityDialog({ isOpen, compatibility, onCancel, onConfirm 
                             checked={acceptedPaths.has(entry.path)}
                             onChange={() => toggleAccepted(entry.path)}
                           />
+                          {/* "this preset's version is not carried over" holds for
+                              both a modified standard plugin and a plugin of the
+                              operator's own. "your changes are lost" only held for
+                              the first, and read as nonsense on the second. */}
                           <span>
                             Use {targetRuntime}&apos;s own {entry.path} instead &mdash; this
-                            preset&apos;s changes to it are lost. Untick and the plugin is dropped
-                            entirely.
+                            preset&apos;s version of the file is not carried over. Untick and the
+                            plugin is dropped entirely.
                           </span>
                         </label>
                       )}

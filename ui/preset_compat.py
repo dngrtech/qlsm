@@ -156,21 +156,56 @@ def _strip_entry(path, verdict, reasons, replacements, shipped=None):
 def source_catalog_digests(runtime):
     """relpath -> sha256 for every .py the SOURCE runtime's default preset ships.
 
-    This is the allow-list for "the operator never touched this file". A preset's
-    `scripts` map is not just the preset's own files: _read_preset_scripts() lays
-    the whole default builtin catalog of the preset's runtime down first and
-    overlays the preset's files on top, so a plain minqlx preset arrives carrying
-    all 48 stock minqlx plugins verbatim. Every one of those is stripped against
-    minqlxtended, and reporting them made the dialog a 48-row wall of files the
-    operator never chose, edited, or even knew were in the preset.
+    Half of the allow-list for "the operator never wrote this file" -- see
+    `is_untouched_source_file`. A preset's `scripts` map is not just the preset's
+    own files: _read_preset_scripts() lays the whole default builtin catalog of
+    the preset's runtime down first and overlays the preset's files on top, so a
+    plain minqlx preset arrives carrying all 48 stock minqlx plugins verbatim.
+    Every one of those is stripped against minqlxtended, and reporting them made
+    the dialog a 48-row wall of files the operator never chose, edited, or even
+    knew were in the preset.
 
     Compared by CONTENT, not by name, for the same reason _apply_runtime_filter
     compares the target's shipped files by content: a preset that overwrote
-    `motd.py` with something of its own must not be waved through as pristine
+    `motd.py` with something of its own must not be waved through as untouched
     just because a file by that name exists in the catalog.
     """
     return {rel: baseline_digest(text)
             for rel, text in shipped_scripts(runtime).items()}
+
+
+def is_untouched_source_file(path, content, catalog_digests, source_hashes):
+    """Is this file one the operator never wrote, in either sense the repo has?
+
+    TWO allow-lists, because the source runtime ships more plugins than its
+    default preset offers and neither list alone is the right one:
+
+    `catalog_digests` is the default preset -- what _read_preset_scripts() seeds
+    a preset's `scripts` map from, and therefore where the bulk of the noise
+    comes from.
+
+    `source_hashes` is the runtime's baseline manifest, which is BROADER (63
+    files against the default preset's 53) and, for a handful of files, holds
+    DIFFERENT content: QLSM's own minqlx default preset ships a customised
+    `motd.py`, while the manifest records upstream's. Checking only the default
+    preset therefore got both cases wrong in the same load -- stock plugins the
+    default preset simply does not carry (`reset_acc.py`,
+    `suppress_join_msg.py`) were reported as the operator's own, and a preset
+    holding upstream's untouched `motd.py` was reported as having modified it,
+    when the modification is QLSM's.
+
+    The manifest is keyed by bare filename, so it is consulted for root-level
+    files only: a subdirectory helper that happens to share a basename with a
+    root plugin is a different file and must not borrow its hash.
+    """
+    if not isinstance(content, str):
+        return False
+    digest = baseline_digest(content)
+    if catalog_digests.get(path) == digest:
+        return True
+    if '/' in path or os.sep in path:
+        return False
+    return source_hashes.get(path) == digest
 
 
 def _report_kind(entry):
@@ -217,10 +252,12 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
     hashes = baseline_hashes(target)
     candidates = replacement_scripts(target)
     shipped = shipped_scripts(target)
-    # Empty when the source runtime's builtin preset is missing: every file then
-    # reads as customised and lands in the dialog, which is the old behaviour --
-    # noisy, but never silently drops something the operator wrote.
+    # Empty when the source runtime's builtin preset or manifest is missing:
+    # every file then reads as customised and lands in the dialog, which is the
+    # old behaviour -- noisy, but never silently drops something the operator
+    # wrote. See is_untouched_source_file for why it takes both.
     source_catalog = source_catalog_digests(preset)
+    source_hashes = baseline_hashes(preset)
     scripts = response_data.get('scripts') or {}
 
     checked_plugins = response_data.get('checked_plugins')
@@ -255,10 +292,15 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
         entry['originally_checked'] = path in checked_set
         # `from_catalog` separates "you edited a stock plugin" from "this is a
         # file of your own" -- the same strip, but the operator needs to be told
-        # about them in different words.
-        entry['from_catalog'] = path in source_catalog
-        pristine = (isinstance(content, str)
-                    and source_catalog.get(path) == baseline_digest(content))
+        # about them in different words. Read against both allow-lists for the
+        # same reason `pristine` is: the manifest carries stock plugins the
+        # default preset does not offer, and calling one of those the operator's
+        # own work is simply wrong.
+        entry['from_catalog'] = (path in source_catalog
+                                 or (path in source_hashes
+                                     and '/' not in path and os.sep not in path))
+        pristine = is_untouched_source_file(
+            path, content, source_catalog, source_hashes)
         if entry['replacement']:
             offered[entry['replacement']] = candidates[entry['replacement']]
 
