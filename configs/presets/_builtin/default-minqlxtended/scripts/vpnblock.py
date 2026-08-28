@@ -215,6 +215,21 @@ class vpnblock(minqlxtended.Plugin):
         while len(self._announced_blocked_players) > MAX_ANNOUNCED:
             self._announced_lookup.discard(self._announced_blocked_players.pop(0))
 
+    def _msg_next_frame(self, text):
+        """Emit a message from a worker thread.
+
+        self.msg() is an engine call and must happen on the game thread. _update_cache
+        runs under @minqlxtended.thread, so every message it produces -- the success
+        line on each load and ~12h refresh, and all three error paths -- has to be
+        queued into a frame rather than issued directly. The string is built on the
+        worker; only the emit crosses over.
+        """
+        @minqlxtended.next_frame
+        def emit():
+            self.msg(text)
+
+        emit()
+
     @minqlxtended.thread
     def _update_cache(self):
         if self._fetching:
@@ -225,7 +240,7 @@ class vpnblock(minqlxtended.Plugin):
             try:
                 req = requests.get(VPN_IP_BLOCKS_URL, timeout=FETCH_TIMEOUT, headers=headers)
             except requests.RequestException as e:
-                self.msg(f"vpnblock: ^1Error^7 fetching the latest VPN network blocks: {e}")
+                self._msg_next_frame(f"vpnblock: ^1Error^7 fetching the latest VPN network blocks: {e}")
                 return
 
             if req.status_code == 304:
@@ -233,12 +248,12 @@ class vpnblock(minqlxtended.Plugin):
                 return
 
             if not req.ok:
-                self.msg(f"vpnblock: Got ^1{req.status_code} ({req.reason})^7 when fetching the latest VPN network blocks.")
+                self._msg_next_frame(f"vpnblock: Got ^1{req.status_code} ({req.reason})^7 when fetching the latest VPN network blocks.")
                 return
 
             blocks = _build_intervals(req.text.split())
             if not blocks[0]:
-                self.msg("vpnblock: ^1The fetched VPN network block list was empty or unparseable.^7")
+                self._msg_next_frame("vpnblock: ^1The fetched VPN network block list was empty or unparseable.^7")
                 return
 
             # Single rebind, so a connect handler mid-lookup sees either the whole
@@ -247,7 +262,7 @@ class vpnblock(minqlxtended.Plugin):
             self._etag = req.headers.get("ETag")
             self._last_fetch = time.time()
             starts, _ends, source_count = blocks
-            self.msg(f"vpnblock: Found ^6{source_count:,}^7 VPN network blocks "
+            self._msg_next_frame(f"vpnblock: Found ^6{source_count:,}^7 VPN network blocks "
                      f"(^6{len(starts):,}^7 merged ranges) to deny connections from.")
         finally:
             self._fetching = False

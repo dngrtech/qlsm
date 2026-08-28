@@ -103,7 +103,18 @@ class ban(minqlxtended.Plugin):
         score = time.time() + td.total_seconds()
         expires = datetime.datetime.fromtimestamp(score).strftime(TIME_FORMAT)
         base_key = f"{PLAYER_KEY.format(ident)}:bans"
-        ban_id = self.db.zcard(base_key)
+        # INCR, not zcard: the old count-then-write read the id outside the pipeline, so
+        # two admins banning the same player at once both read the same count and the
+        # second zadd/hset overwrote the first -- one ban silently lost while both
+        # commands reported success. INCR hands out each id exactly once.
+        #
+        # SETNX seeds the counter from the existing ban count, so a player banned before
+        # this change keeps their ids instead of the counter restarting at 0 and
+        # overwriting ban 0. It only fires when the key is absent, so it costs one
+        # no-op round trip per ban thereafter.
+        next_id_key = f"{base_key}:next_id"
+        self.db.setnx(next_id_key, self.db.zcard(base_key))
+        ban_id = self.db.incr(next_id_key) - 1
         db = self.db.pipeline()
         db.zadd(base_key, {ban_id: score})
         ban = {

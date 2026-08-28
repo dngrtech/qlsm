@@ -34,6 +34,36 @@ ships exactly those four.
 > player to spectator on every pass. `tests/test_default_minqlxtended_preset.py` pins
 > the minqlxtended preset copies to the baseline so this cannot recur here.
 
+## Locally patched upstream files
+
+Eight files here started as upstream and now carry QLSM patches. They keep
+`"origin": "upstream"` — that field records **lineage**, not whether the bytes still
+match, and `tests/test_minqlxtended_plugin_baseline.py` asserts all 33 upstream
+filenames are marked that way. So the manifest cannot tell you which files diverge, and
+this table is the only record. **Keep it current when patching another one.**
+
+Every patch below is re-applied by hand when re-vendoring: pull upstream's new copy,
+diff it against ours, and reapply. None of them is large.
+
+| File | Local change |
+|---|---|
+| `branding.py` | `qlx_brandingMapCredit` defaults to `0` instead of upstream's `1`. |
+| `aliases.py` | `cmd_setnoaliases` returns `Return.STOP_ALL` on a failed identifier resolve, matching `cmd_alias`, instead of a bare `return`. |
+| `balance.py` | Four fixes: bounded roster re-fetch (`MAX_REFETCH`); server-wide cooldown on the four commands that hit the ratings API (`COMMAND_COOLDOWN`); `self.game` None-guards on the nine sites that read `type_short`/`state`; per-player re-resolve in `execute_suggestion`'s delayed stat restore. |
+| `ban.py` | Ban ids come from an atomic `INCR` (seeded via `SETNX` from the existing count) rather than a `zcard` read outside the pipeline. |
+| `dictionary.py` | Per-player `DEFINE_COOLDOWN` before `!define` forks its HTTP worker. |
+| `infectedmm.py` | The delayed warmup callback re-checks gametype and `_loaded` before adding the mastermind bot. |
+| `leaverban.py` | `handle_game_start` filters bots out of `players_start`, matching the rest of the file. |
+| `vpnblock.py` | `_update_cache`'s four messages go through `_msg_next_frame` instead of calling `self.msg()` from the worker thread. |
+
+All but `branding.py` came from the review recorded in
+`docs/findings/2026-08-27-minqlxtended-upstream-plugin-review.md`. The other 25 upstream
+files are byte-identical to the pinned commit.
+
+> The copies in `configs/presets/_builtin/default-minqlxtended/scripts/` must be updated
+> alongside these. `test_preset_scripts_match_the_baseline_ports` only pins the six QLSM
+> ports, so drift in an upstream file's preset copy is not caught by any test.
+
 ## Re-vendoring against a newer upstream
 
     git clone https://github.com/tjone270/minqlxtended-plugins.git

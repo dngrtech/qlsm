@@ -63,6 +63,12 @@ class infectedmm(minqlxtended.Plugin):
 
         @minqlxtended.delay(self.get_cvar("g_warmupDelay", int) / 2)
         def f(self):
+            # Half a warmup can pass before this fires: g_rrInfected may have been
+            # toggled off, or the plugin unloaded, in the meantime. Re-check rather than
+            # spawning a mastermind bot for a game this plugin no longer owns.
+            if (not self.is_infected_mastermind_gametype) or (not self._loaded):
+                return
+
             if not self.infected_mastermind_bot:
                 self.add_infected_mastermind_bot(spec=True)
             elif (self.infected_mastermind_bot.team != minqlxtended.Team.SPECTATOR) and (self.game.state == minqlxtended.GameState.WARMUP):
