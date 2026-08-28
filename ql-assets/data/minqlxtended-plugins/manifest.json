@@ -10,7 +10,7 @@
     },
     "ban.py": {
       "origin": "upstream",
-      "sha256": "873562d0af7b2aad6b59909e404cd3ab50d7efcc7bf105c6294541765b48bccb"
+      "sha256": "9330bfcd1f73791b248e5bc15c287ac5e8d5f60e9a1f0bc6d92941b3f1f6052c"
     },
     "branding.py": {
       "origin": "upstream",
@@ -46,7 +46,7 @@
     },
     "infectedmm.py": {
       "origin": "upstream",
-      "sha256": "efefd29f833324340d7c153523f6085395735119cbea46d012362df6411d3bd8"
+      "sha256": "7cb91f5667fcc242710863a9f38434405dbaf31fffd0f7196c4b422461f3b9f4"
     },
     "lan.py": {
       "origin": "upstream",
@@ -86,7 +86,7 @@
     },
     "player_info.py": {
       "origin": "qlsm",
-      "sha256": "6faabd4794a0153430eb78aae8025fa5b21fa8cafed64930a7686852787bbf4d"
+      "sha256": "965352dc4b88f31b8673f2cde5b4e62881cd838680194871f104023bf9e9e378"
     },
     "plugin_manager.py": {
       "origin": "upstream",

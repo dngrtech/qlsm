@@ -22,6 +22,26 @@ PLAYER_KEY = "minqlx:players:{}"
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
+def allocate_ban_id(db, base_key):
+    """Hand out the next id for a ban under *base_key*, atomically.
+
+    EVERY plugin that writes this ban format must allocate through this function.
+    A zcard-derived id is not safe on two counts: two writers can read the same count
+    and the second silently overwrites the first, and a count also reuses an id after
+    an expiry or an !unban. INCR hands out each id exactly once.
+
+    SETNX seeds the counter from the ban count that is already there, so bans written
+    before this existed keep their ids rather than being overwritten from 0. It only
+    fires while the key is absent.
+
+    Kept identical in ban.py, player_info.py and kickban.py. Changing one without the
+    others reintroduces the collision this exists to prevent -- they share the key.
+    """
+    next_id_key = base_key + ":next_id"
+    db.setnx(next_id_key, db.zcard(base_key))
+    return db.incr(next_id_key) - 1
+
+
 class kickban(minqlxtended.Plugin):
     def __init__(self):
         super().__init__()
@@ -155,12 +175,7 @@ class kickban(minqlxtended.Plugin):
         expires_str = expires.strftime(TIME_FORMAT)
 
         base_key = self._bans_key(steam_id)
-        # ban_id is derived from zcard — known limitation shared with ban.py:
-        # if old bans have been removed (expired or !unban), zcard may return an
-        # ID that was used before, overwriting the old hash. This matches ban.py's
-        # own ID generation and is acceptable given the low frequency of re-banning
-        # the same player. A future improvement could use an INCR-based counter.
-        ban_id = self.db.zcard(base_key)
+        ban_id = allocate_ban_id(self.db, base_key)
 
         pipe = self.db.pipeline()
         pipe.zadd(base_key, {ban_id: time.time() + duration * 60})

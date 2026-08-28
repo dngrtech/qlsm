@@ -31,6 +31,26 @@ LENGTH_REGEX = re.compile(r"(?P<number>[0-9]+) (?P<scale>seconds?|minutes?|hours
 TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 PLAYER_KEY = "minqlx:players:{}"
 
+
+def allocate_ban_id(db, base_key):
+    """Hand out the next id for a ban under *base_key*, atomically.
+
+    EVERY plugin that writes this ban format must allocate through this function.
+    A zcard-derived id is not safe on two counts: two writers can read the same count
+    and the second silently overwrites the first, and a count also reuses an id after
+    an expiry or an !unban. INCR hands out each id exactly once.
+
+    SETNX seeds the counter from the ban count that is already there, so bans written
+    before this existed keep their ids rather than being overwritten from 0. It only
+    fires while the key is absent.
+
+    Kept identical in ban.py, player_info.py and kickban.py. Changing one without the
+    others reintroduces the collision this exists to prevent -- they share the key.
+    """
+    next_id_key = base_key + ":next_id"
+    db.setnx(next_id_key, db.zcard(base_key))
+    return db.incr(next_id_key) - 1
+
 # Scale name -> how to turn a count of them into a timedelta.
 _SCALES = {
     "second": lambda n: datetime.timedelta(seconds=n),
@@ -103,18 +123,7 @@ class ban(minqlxtended.Plugin):
         score = time.time() + td.total_seconds()
         expires = datetime.datetime.fromtimestamp(score).strftime(TIME_FORMAT)
         base_key = f"{PLAYER_KEY.format(ident)}:bans"
-        # INCR, not zcard: the old count-then-write read the id outside the pipeline, so
-        # two admins banning the same player at once both read the same count and the
-        # second zadd/hset overwrote the first -- one ban silently lost while both
-        # commands reported success. INCR hands out each id exactly once.
-        #
-        # SETNX seeds the counter from the existing ban count, so a player banned before
-        # this change keeps their ids instead of the counter restarting at 0 and
-        # overwriting ban 0. It only fires when the key is absent, so it costs one
-        # no-op round trip per ban thereafter.
-        next_id_key = f"{base_key}:next_id"
-        self.db.setnx(next_id_key, self.db.zcard(base_key))
-        ban_id = self.db.incr(next_id_key) - 1
+        ban_id = allocate_ban_id(self.db, base_key)
         db = self.db.pipeline()
         db.zadd(base_key, {ban_id: score})
         ban = {

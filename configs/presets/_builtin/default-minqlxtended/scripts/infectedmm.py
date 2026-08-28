@@ -63,10 +63,18 @@ class infectedmm(minqlxtended.Plugin):
 
         @minqlxtended.delay(self.get_cvar("g_warmupDelay", int) / 2)
         def f(self):
-            # Half a warmup can pass before this fires: g_rrInfected may have been
-            # toggled off, or the plugin unloaded, in the meantime. Re-check rather than
-            # spawning a mastermind bot for a game this plugin no longer owns.
-            if (not self.is_infected_mastermind_gametype) or (not self._loaded):
+            # Half a warmup can pass before this fires, and two things can have changed
+            # in that window: g_rrInfected toggled off, or this plugin unloaded or
+            # reloaded. @minqlxtended.delay does not cancel a pending timer and the
+            # closure keeps the instance alive, so it fires either way.
+            #
+            # _loaded cannot answer the second question -- only _remove_hooks clears it
+            # and nothing calls that on unload -- so ask the engine which plugins are
+            # actually registered. Comparing identity rather than membership also covers
+            # a reload, where a fresh instance has replaced this one.
+            if not self.is_infected_mastermind_gametype:
+                return
+            if self.plugins.get(self.__class__.__name__) is not self:
                 return
 
             if not self.infected_mastermind_bot:
