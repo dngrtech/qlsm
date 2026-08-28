@@ -6,7 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.28.5` | 2026-08-27 | [#200](https://github.com/dngrtech/qlsm/pull/200) | Fix 10 defects in the bundled minqlxtended plugins: `vpnblock` messaged the server from a background thread; `balance` could re-fetch ratings in a loop, had no rate limit on `!elo`/`!ratings`/`!teams`/`!balance`, errored on those commands during a map change, and could lose a player's score after an agreed switch; `!define` had no rate limit; `leaverban` counted bots as players; `infectedmm` could add its bot after the game type changed; two admins banning the same player at once could lose one ban; `!setnoaliases` did not stop on an unknown player. |
+| `v1.28.5` | 2026-08-27 | [#200](https://github.com/dngrtech/qlsm/pull/200) | Bug fixes and improvements. |
 | `v1.28.4` | 2026-08-27 | [#199](https://github.com/dngrtech/qlsm/pull/199) | Bug fixes and improvements. |
 | `v1.28.3` | 2026-08-27 | [#198](https://github.com/dngrtech/qlsm/pull/198) | Bug fixes and improvements. |
 | `v1.28.2` | 2026-08-26 | [#197](https://github.com/dngrtech/qlsm/pull/197) | Bug fixes and improvements. |
