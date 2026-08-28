@@ -16,7 +16,7 @@ Simply put the plugin in the 'minqlx-plugins' folder, !load the plugin, and set 
     qlx_countdownMessage                 - When the countdown begins, this text will appear mid-screen. (like the qlx_loadedMessage does)
     qlx_endOfGameMessage                 - When the game finishes, it'll put the text in this cvar in the text box on the left.
     
-    qlx_brandingMapCredit                - Show the map's baked-in author credit (e.g. "Till Merker") before your brand fields. Default: 0
+    qlx_brandingMapCredit                - Show the map's baked-in author credit before your brand fields. Default: 0
     qlx_brandingPrependMapName           - This cvar will put the map name before your qlx_serverBrandName.                     Default: 0
     qlx_brandingAppendGameType           - Will add the game type after your qlx_serverBrandName.                               Default: 0
     qlx_rainbowBrandName                 - Make the entire map name (qlx_serverBrandName) appear in rainbow colouring.          Default: 0
@@ -59,10 +59,9 @@ class branding(minqlx.Plugin):
         else:
             minqlx.set_configstring(3, topBranding)
 
-        # When qlx_brandingMapCredit is 1, the map's baked-in author credit
-        # (e.g. "Till Merker") is prepended to your brand text (original
-        # behaviour). When 0 (default), the map credit is dropped and only
-        # your brand text is shown.
+        # When qlx_brandingMapCredit is 1, the map's baked-in author credit is
+        # prepended to your brand text (original behaviour). When 0 (default),
+        # the map credit is dropped and only your brand text is shown.
         showMapCredit = self.get_cvar("qlx_brandingMapCredit", bool)
 
         if self.get_cvar("qlx_serverBrandTopField") != None:

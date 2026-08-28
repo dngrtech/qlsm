@@ -30,7 +30,7 @@
     },
     "branding.py": {
       "origin": "upstream",
-      "sha256": "8fec11652e15d7d9826367a041dd23a1ca240cc56fc3f187f16d660bcc14359a"
+      "sha256": "67566feccfaa545e3a8bd86a8f55664393cb8b9a058fc41b53e60f4e43ceb3b7"
     },
     "check_game_time.py": {
       "origin": "upstream",
