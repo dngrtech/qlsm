@@ -98,7 +98,7 @@ class aliases(minqlxtended.Plugin):
 
         resolved = self.resolve_identifier(msg[1], channel)
         if resolved is None:
-            return
+            return minqlxtended.Return.STOP_ALL
         ident, _name, target_player = resolved
 
         if target_player:

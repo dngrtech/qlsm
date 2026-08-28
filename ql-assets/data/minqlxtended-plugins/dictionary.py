@@ -20,6 +20,7 @@
 
 import minqlxtended
 import requests
+import time
 import urllib.parse
 import re
 from textwrap import shorten
@@ -27,7 +28,17 @@ from textwrap import shorten
 # api docs: https://github.com/zdict/zdict/wiki/Urban-dictionary-API-documentation
 DICT_API_URL = "https://api.urbandictionary.com/v0/define?term={}"
 
+# Seconds a player must wait between lookups. The command is permission=0 and every
+# invocation forks an OS thread that makes an outbound request, so without a gate one
+# player holding down !define forks unbounded concurrent threads at a third-party API.
+DEFINE_COOLDOWN = 5
+
 class dictionary(minqlxtended.Plugin):
+    def __init__(self):
+        super().__init__()
+        # steam_id -> time.time() of that player's last accepted lookup.
+        self._last_lookup = {}
+
     @minqlxtended.command("define", usage="<term>")
     def cmd_define_term(self, player, msg, channel):
         """ Provides the Urban Dictionary definition for the term provided. """
@@ -35,6 +46,20 @@ class dictionary(minqlxtended.Plugin):
         # Thread, so a Return.USAGE computed inside one is thrown away.
         if len(msg) < 2:
             return minqlxtended.Return.USAGE
+
+        if player is not None:
+            now = time.time()
+            # Drop entries that have aged out, so the map stays bounded by the number of
+            # players who used the command within the last cooldown window.
+            self._last_lookup = {sid: seen for sid, seen in self._last_lookup.items()
+                                 if (now - seen) < DEFINE_COOLDOWN}
+
+            remaining = DEFINE_COOLDOWN - (now - self._last_lookup.get(player.steam_id, 0))
+            if remaining > 0:
+                player.tell(f"^6Definition^7: ^3wait {remaining:.0f}s before looking up another term.^7")
+                return minqlxtended.Return.STOP_ALL
+
+            self._last_lookup[player.steam_id] = now
 
         self._lookup_term(" ".join(msg[1:]), channel)
 

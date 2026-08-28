@@ -72,6 +72,26 @@ def zadd_compat(db, key, member, score):
         return db.zadd(key, score, member)
 
 
+def allocate_ban_id(db, base_key):
+    """Hand out the next id for a ban under *base_key*, atomically.
+
+    EVERY plugin that writes this ban format must allocate through this function.
+    A zcard-derived id is not safe on two counts: two writers can read the same count
+    and the second silently overwrites the first, and a count also reuses an id after
+    an expiry or an !unban. INCR hands out each id exactly once.
+
+    SETNX seeds the counter from the ban count that is already there, so bans written
+    before this existed keep their ids rather than being overwritten from 0. It only
+    fires while the key is absent.
+
+    Kept identical in ban.py, player_info.py and kickban.py. Changing one without the
+    others reintroduces the collision this exists to prevent -- they share the key.
+    """
+    next_id_key = base_key + ":next_id"
+    db.setnx(next_id_key, db.zcard(base_key))
+    return db.incr(next_id_key) - 1
+
+
 class player_info(minqlxtended.Plugin):
     def __init__(self):
         super().__init__()
@@ -395,7 +415,7 @@ class player_info(minqlxtended.Plugin):
             now = datetime.datetime.now().strftime(TIME_FORMAT)
             expires = (datetime.datetime.now() + td).strftime(TIME_FORMAT)
             base_key = PLAYER_KEY.format(player.steam_id) + ":bans"
-            ban_id = self.db.zcard(base_key)
+            ban_id = allocate_ban_id(self.db, base_key)
             db = self.db.pipeline()
             zadd_compat(db, base_key, ban_id, time.time() + td.total_seconds())
             ban = {"expires": expires, "reason": "deactivated account", "issued": now, "issued_by": "player_info"}

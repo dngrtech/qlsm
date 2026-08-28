@@ -144,7 +144,11 @@ class leaverban(minqlxtended.Plugin):
     @minqlxtended.delay(1)
     def handle_game_start(self):
         teams = self.teams()
-        self.players_start = teams["red"] + teams["blue"]
+        # Bots are excluded everywhere else that touches leave tracking (see
+        # handle_team_switch and queue_player_leave). Without the same filter here a bot
+        # present at game_start rides into the games_completed loop every game, growing a
+        # bogus Redis counter that no games_left ever balances.
+        self.players_start = [p for p in teams["red"] + teams["blue"] if not p.is_bot]
 
     @minqlxtended.hook("game_end")
     def handle_game_end(self, aborted):

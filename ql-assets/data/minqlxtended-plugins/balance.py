@@ -32,6 +32,16 @@ _session = requests.Session()
 
 RATING_KEY = "minqlx:players:{0}:ratings:{1}"  # 0 == steam_id, 1 == short gametype.
 MAX_ATTEMPTS = 3
+
+# How many times a roster callback may re-request ratings because the teams changed
+# mid-fetch before it gives up and answers with the data it already has.
+MAX_REFETCH = 1
+
+# Seconds between accepted invocations of the rating commands that fan out into an
+# external API call (!elo, !ratings, !teams, !balance). Server-wide, not per player:
+# the fetch these trigger is shared, so the flood to protect against is several
+# players asking at once, not one player asking repeatedly.
+COMMAND_COOLDOWN = 5
 CACHE_EXPIRE = 60 * 10  # 10 minutes TTL.
 DEFAULT_RATING = 1500
 UNTRACKED_RATING = 9999
@@ -73,6 +83,45 @@ class balance(minqlxtended.Plugin):
         self.suggested_agree = [False, False]
         self.in_countdown = False
         self.suggestion_was_user_initiated = False
+        # callback name -> consecutive roster-mismatch re-fetches. See _refetch_allowed.
+        self._refetch_counts = {}
+        # command name -> time.time() of the last accepted invocation. See _on_cooldown.
+        self._command_cooldowns = {}
+
+    def _refetch_allowed(self, key):
+        """Whether a ratings callback may re-request after the roster moved mid-fetch.
+
+        The three roster callbacks run under @minqlxtended.next_frame, and each one
+        re-calls add_request when someone joined or left during the fetch -- starting a
+        fresh thread and HTTP round trip from inside the game frame. On a churny server
+        (a shuffle landing mid-fetch) that can chase its own tail indefinitely. Allow a
+        single retry, then fall through and answer with what we have; self.rating()
+        already degrades a missing entry to the default.
+        """
+        count = self._refetch_counts.get(key, 0)
+        if count >= MAX_REFETCH:
+            self._refetch_counts.pop(key, None)
+            return False
+        self._refetch_counts[key] = count + 1
+        return True
+
+    def _on_cooldown(self, key, player):
+        """Whether *key* was invoked within COMMAND_COOLDOWN, telling the player if so.
+
+        !elo/!ratings/!teams/!balance each fan out into an external API call, and
+        add_request only skips the fetch when every requested player is already cached.
+        Straight after handle_new_game clears self.ratings on warmup, several players
+        typing these within the same second all miss the cache and each spawn their own
+        thread against the same endpoint.
+        """
+        now = time.time()
+        remaining = COMMAND_COOLDOWN - (now - self._command_cooldowns.get(key, 0))
+        if remaining > 0:
+            if player is not None:
+                player.tell(f"^7Ratings are being fetched. Try again in ^3{remaining:.0f}s^7.")
+            return True
+        self._command_cooldowns[key] = now
+        return False
 
     @property
     def _api_url(self):
@@ -392,10 +441,17 @@ class balance(minqlxtended.Plugin):
                 player.tell(f"Invalid gametype. Supported gametypes: {', '.join(EXT_SUPPORTED_GAMETYPES)}")
                 return minqlxtended.Return.STOP_ALL
         else:
-            gt = self.game.type_short
+            game = self.game
+            if game is None:
+                player.tell("^7The map is changing. Try again in a moment.")
+                return minqlxtended.Return.STOP_ALL
+            gt = game.type_short
             if gt not in EXT_SUPPORTED_GAMETYPES:
                 player.tell("This game mode is not supported by the balance plugin.")
                 return minqlxtended.Return.STOP_ALL
+
+        if self._on_cooldown("getrating", player):
+            return minqlxtended.Return.STOP_ALL
 
         self.add_request({sid: gt}, self.callback_getrating, channel, gt)
 
@@ -426,7 +482,11 @@ class balance(minqlxtended.Plugin):
             player.tell("Invalid rating.")
             return minqlxtended.Return.STOP_ALL
 
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            player.tell("^7The map is changing. Try again in a moment.")
+            return minqlxtended.Return.STOP_ALL
+        gt = game.type_short
         self.db[RATING_KEY.format(sid, gt)] = rating
         if self._qlx_balanceLocalExpires:
             self.db.expire(RATING_KEY.format(sid, gt), self._qlx_balanceLocalExpires)
@@ -451,7 +511,11 @@ class balance(minqlxtended.Plugin):
             return minqlxtended.Return.STOP_ALL
         sid, name, _ = resolved
 
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            player.tell("^7The map is changing. Try again in a moment.")
+            return minqlxtended.Return.STOP_ALL
+        gt = game.type_short
 
         try:
             del self.db[RATING_KEY.format(sid, gt)]
@@ -469,7 +533,11 @@ class balance(minqlxtended.Plugin):
     @minqlxtended.command("balance", permission=1, client_cmd_perm=1)
     def cmd_balance(self, player, msg, channel):
         """Balance the teams according to player ratings, by distributing players evenly. Requires that the total number of players should be an even number."""
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            player.tell("^7The map is changing. Try again in a moment.")
+            return minqlxtended.Return.STOP_ALL
+        gt = game.type_short
         if gt not in SUPPORTED_GAMETYPES:
             player.tell("This game mode is not supported by the balance plugin.")
             return minqlxtended.Return.STOP_ALL
@@ -480,19 +548,28 @@ class balance(minqlxtended.Plugin):
             return minqlxtended.Return.STOP_ALL
 
         players = dict([(p.steam_id, gt) for p in teams["red"] + teams["blue"]])
+        if self._on_cooldown("balance", player):
+            return minqlxtended.Return.STOP_ALL
+
         self.add_request(players, self.callback_balance, minqlxtended.CHAT_CHANNEL)
 
     def callback_balance(self, players, channel):
         # We check if people joined while we were requesting ratings and get them if someone did.
         teams = self.teams()
         current = teams["red"] + teams["blue"]
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            return  # mid map change; nothing to answer about
+        gt = game.type_short
 
         for p in current:
             if p.steam_id not in players:
+                if not self._refetch_allowed("balance"):
+                    break
                 d = dict([(p.steam_id, gt) for p in current])
                 self.add_request(d, self.callback_balance, channel)
                 return
+        self._refetch_counts.pop("balance", None)
 
         # Start out by evening out the number of players on each team.
         diff = len(teams["red"]) - len(teams["blue"])
@@ -538,7 +615,11 @@ class balance(minqlxtended.Plugin):
     @minqlxtended.command(("teams", "teens"))
     def cmd_teams(self, player, msg, channel):
         """Displays the current rating difference between teams."""
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            player.tell("^7The map is changing. Try again in a moment.")
+            return minqlxtended.Return.STOP_ALL
+        gt = game.type_short
         if gt not in SUPPORTED_GAMETYPES:
             player.tell("This game mode is not supported by the balance plugin.")
             return minqlxtended.Return.STOP_ALL
@@ -549,21 +630,30 @@ class balance(minqlxtended.Plugin):
             return minqlxtended.Return.STOP_ALL
 
         teams = dict([(p.steam_id, gt) for p in teams["red"] + teams["blue"]])
+        if self._on_cooldown("teams", player):
+            return minqlxtended.Return.STOP_ALL
+
         self.add_request(teams, self.callback_teams, channel, True)
 
     def callback_teams(self, players, channel, user_initiated):
         # We check if people joined while we were requesting ratings and get them if someone did.
         teams = self.teams()
         current = teams["red"] + teams["blue"]
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            return  # mid map change; nothing to answer about
+        gt = game.type_short
 
         for p in current:
             if p.steam_id not in players:
+                if not self._refetch_allowed("teams"):
+                    break
                 d = dict([(p.steam_id, gt) for p in current])
                 # callback_teams requires user_initiated, so pass it on; someone joining a
                 # team mid-fetch lands here.
                 self.add_request(d, self.callback_teams, channel, user_initiated)
                 return
+        self._refetch_counts.pop("teams", None)
 
         switch = self.suggest_switch(teams, gt)
 
@@ -634,8 +724,12 @@ class balance(minqlxtended.Plugin):
                 self.suggested_agree[1] = True
 
             if all(self.suggested_agree):
+                game = self.game
+                if game is None:
+                    return  # mid map change; the pending switch is moot
+
                 # If the game's in progress and we're not in the round countdown, wait for next round.
-                if self.game.state == minqlxtended.GameState.IN_PROGRESS and not self.in_countdown:
+                if game.state == minqlxtended.GameState.IN_PROGRESS and not self.in_countdown:
                     self.msg("The switch will be executed at the start of next round.")
                     return
 
@@ -645,12 +739,19 @@ class balance(minqlxtended.Plugin):
     @minqlxtended.command(("ratings", "elos", "selo", "egos"))
     def cmd_ratings(self, player, msg, channel):
         """List the ratings for each player, grouped by teams."""
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            player.tell("^7The map is changing. Try again in a moment.")
+            return minqlxtended.Return.STOP_ALL
+        gt = game.type_short
         if gt not in EXT_SUPPORTED_GAMETYPES:
             player.tell("This game mode is not supported by the balance plugin.")
             return minqlxtended.Return.STOP_ALL
 
         players = dict([(p.steam_id, gt) for p in self.players()])
+        if self._on_cooldown("ratings", player):
+            return minqlxtended.Return.STOP_ALL
+
         self.add_request(players, self.callback_ratings, player.channel)
         return minqlxtended.Return.STOP_ALL
 
@@ -658,13 +759,19 @@ class balance(minqlxtended.Plugin):
         # We check if people joined while we were requesting ratings and get them if someone did.
         teams = self.teams()
         current = self.players()
-        gt = self.game.type_short
+        game = self.game
+        if game is None:
+            return  # mid map change; nothing to answer about
+        gt = game.type_short
 
         for p in current:
             if p.steam_id not in players:
+                if not self._refetch_allowed("ratings"):
+                    break
                 d = dict([(p.steam_id, gt) for p in current])
                 self.add_request(d, self.callback_ratings, channel)
                 return
+        self._refetch_counts.pop("ratings", None)
 
         if teams["free"]:
             free_sorted = sorted(teams["free"], key=lambda x: self.rating(x.steam_id, gt), reverse=True)
@@ -766,8 +873,16 @@ class balance(minqlxtended.Plugin):
 
             @minqlxtended.delay(1)
             def f(p1, p2, p1stats, p2stats, p1score, p2score):
-                p1.stats, p1.score = p1stats, p1score
-                p2.stats, p2.score = p2stats, p2score
+                # A full second passes before this runs, so either player may have
+                # disconnected (and their slot possibly been reused). Restore each one
+                # independently: sharing one unguarded block meant p1 vanishing threw
+                # before p2 -- still connected -- ever got their score back.
+                for player, stats, score in ((p1, p1stats, p1score), (p2, p2stats, p2score)):
+                    try:
+                        player.update()
+                    except minqlxtended.NonexistentPlayerError:
+                        continue
+                    player.stats, player.score = stats, score
 
             f(p1, p2, p1stats, p2stats, p1score, p2score)
 

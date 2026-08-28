@@ -2,19 +2,19 @@
   "files": {
     "aliases.py": {
       "origin": "upstream",
-      "sha256": "c8d768912411e881830368aa1730cc8be1775a4b59eba63bb7a89cae82c5cb3c"
+      "sha256": "c78c2c049ac52b2a690a37f1736a933f8bea2bce2e162d0d315d26f76e033d9a"
     },
     "balance.py": {
       "origin": "upstream",
-      "sha256": "38e2e0f0bd0dafd6b305da6ff6d3e6b7f092c93e26a36a15f00d0d68efef1258"
+      "sha256": "ccd9338f1055ca98083f2bf88afd2908209700f8506fc749c17c9e2eac60efae"
     },
     "ban.py": {
       "origin": "upstream",
-      "sha256": "60f9cd7467a9476c2761bac69ce4054dbb837725db48763ce57ba2fadb6db6aa"
+      "sha256": "9330bfcd1f73791b248e5bc15c287ac5e8d5f60e9a1f0bc6d92941b3f1f6052c"
     },
     "branding.py": {
       "origin": "upstream",
-      "sha256": "6f73a1b3842d284e64bf1aa6e54a77c29b064a2f09658b0c946820d5caa1c871"
+      "sha256": "ed3190c6e3421f20c1a5b21305076297197d1eafa9bce75fd8aaade8028345b6"
     },
     "clan.py": {
       "origin": "upstream",
@@ -30,7 +30,7 @@
     },
     "dictionary.py": {
       "origin": "upstream",
-      "sha256": "dca18b04e54de22b2a422814c0aad02d2ae5749bbdf05cf1f9342f0f434b650e"
+      "sha256": "55cf909eb0d037a574baa4aa73883b9b9f8376729fabbb044f682f9162818c3f"
     },
     "docs.py": {
       "origin": "upstream",
@@ -46,7 +46,7 @@
     },
     "infectedmm.py": {
       "origin": "upstream",
-      "sha256": "844812c4df4ced37fc743af23646bf6018acdb9cba08542b7a39a615a4c59d8d"
+      "sha256": "7cb91f5667fcc242710863a9f38434405dbaf31fffd0f7196c4b422461f3b9f4"
     },
     "lan.py": {
       "origin": "upstream",
@@ -58,7 +58,7 @@
     },
     "leaverban.py": {
       "origin": "upstream",
-      "sha256": "8e7f0fb4c2dd9972faa4d8b2aba4bcfdd543f02e3a3072afeece2f73dd7dbed9"
+      "sha256": "b3f7ef4f4316a8e3c0dfd80b3966a8a7a543ef7f704c4b2ca4a585d345530b87"
     },
     "log.py": {
       "origin": "upstream",
@@ -86,7 +86,7 @@
     },
     "player_info.py": {
       "origin": "qlsm",
-      "sha256": "6faabd4794a0153430eb78aae8025fa5b21fa8cafed64930a7686852787bbf4d"
+      "sha256": "965352dc4b88f31b8673f2cde5b4e62881cd838680194871f104023bf9e9e378"
     },
     "plugin_manager.py": {
       "origin": "upstream",
@@ -154,7 +154,7 @@
     },
     "vpnblock.py": {
       "origin": "upstream",
-      "sha256": "710f20893b115fdd274fa56314201a5c3398bab1f6ffad47276cc57616862a9a"
+      "sha256": "0d822fc95a6423e26ec38a95bd090288ece717fde8341b286db33c1e3a4f5505"
     },
     "workshop.py": {
       "origin": "upstream",
