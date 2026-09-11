@@ -64,6 +64,8 @@ class Host(db.Model):
     # Which minqlx runtime this host builds and runs. Chosen at creation and
     # immutable thereafter -- migrating a live host is destructive, and a locked
     # column can never drift from what is actually installed on the box.
+    # See ui/runtime.py for the valid values, including the qlhub-patched
+    # minqlxtended-patched variant.
     runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
                         server_default=DEFAULT_RUNTIME)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
