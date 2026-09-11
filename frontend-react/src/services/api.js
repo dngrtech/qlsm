@@ -167,6 +167,26 @@ export const updateWorkshopItem = async (hostId, data) => {
   }
 };
 
+export const checkPluginUpdates = async (hostId) => {
+  try {
+    const response = await apiClient.get(`/hosts/${hostId}/plugin-updates`);
+    return response.data; // { "data": { common_pool_changes, common_pool_error, instances } }
+  } catch (error) {
+    console.error(`Failed to check plugin updates for host ${hostId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to check plugin updates for host ${hostId}`);
+  }
+};
+
+export const applyPluginUpdates = async (hostId, data) => {
+  try {
+    const response = await apiClient.post(`/hosts/${hostId}/plugin-updates/apply`, data);
+    return response.data; // Assuming API returns { "message": "..." }
+  } catch (error) {
+    console.error(`Failed to apply plugin updates for host ${hostId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to apply plugin updates for host ${hostId}`);
+  }
+};
+
 export const configureAutoRestart = async (hostId, schedule) => {
   try {
     const response = await apiClient.post(`/hosts/${hostId}/auto-restart`, { schedule });

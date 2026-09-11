@@ -692,33 +692,7 @@
   #######################################################################
   # 6. Sync Common Assets & Install Core Dependencies
   #######################################################################
-    - name: Get pip3 version
-      command: pip3 --version
-      register: pip3_version_output
-      changed_when: false
-
-    - name: Check if the runtime's plugin requirements.txt is available on controller
-      stat:
-        path: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
-      delegate_to: localhost
-      become: no
-      register: minqlx_reqs_stat
-
-    - name: Stage runtime requirements file on host
-      copy:
-        src: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
-        dest: "/root/minqlx-requirements.txt"
-        owner: root
-        group: root
-        mode: '0644'
-      when: minqlx_reqs_stat.stat.exists
-
-    - name: Install core Python dependencies for minqlx
-      pip:
-        requirements: "/root/minqlx-requirements.txt"
-        executable: pip3
-        extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
-      when: minqlx_reqs_stat.stat.exists
+    - ansible.builtin.import_tasks: tasks/sync_common_plugins.yml
 
   #######################################################################
   # 6a. Configure Redis Unix Socket
@@ -770,13 +744,6 @@
       register: local_steamapps_stat
       become: no
 
-    - name: Check if the runtime's local plugins directory exists
-      stat:
-        path: "../../ql-assets/data/{{ runtime_plugins_dirname }}"
-      delegate_to: localhost
-      register: local_minqlx_plugins_stat
-      become: no
-
     - name: Check if local scripts directory exists
       stat:
         path: "../../ql-assets/data/scripts"
@@ -784,15 +751,8 @@
       register: local_scripts_stat
       become: no
 
-    - name: Sync common plugins for the host runtime
-      synchronize:
-        src: "../../ql-assets/data/{{ runtime_plugins_dirname }}/"
-        dest: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}/"
-        private_key: "{{ ansible_ssh_private_key_file }}"
-        archive: yes
-        recursive: yes
-        delete: yes
-      when: local_minqlx_plugins_stat.stat.exists and local_minqlx_plugins_stat.stat.isdir
+    # minqlx-plugins pool sync + its core pip deps live in
+    # tasks/sync_common_plugins.yml, imported above in section 6.
 
     - name: Sync steamapps (workshop items) if present locally
       synchronize:

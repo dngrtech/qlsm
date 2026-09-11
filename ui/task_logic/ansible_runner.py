@@ -203,3 +203,73 @@ def _run_host_ansible_playbook(host, playbook_name, extravars=None, capture_outp
         error_msg = f"Error running host ansible-playbook with Popen: {e}"
         log.exception(error_msg)
         return False, "", str(e)
+
+
+def run_host_ansible_adhoc(host, module_args, module='shell', become_user=None, timeout=30, connect_timeout=15):
+    """Runs a single ad-hoc ansible module against a host (no playbook) and
+    returns (success, stdout, stderr). Used for read-only checks (e.g. hashing
+    a remote directory for "Check for Updates") where a full playbook run
+    would be overkill. Runs synchronously inside a web request, so a hung
+    SSH connection must not be able to block it forever — bounded by
+    `timeout` seconds overall, mirroring the pattern in host_routes.py's
+    connection test (a 15s `--timeout` SSH-connect budget under a 30s
+    subprocess.run(..., timeout=...) + TimeoutExpired). Keeping the two
+    distinct means a slow connect still surfaces ansible's own UNREACHABLE
+    message instead of always hitting the generic "Timed out" fallback.
+    """
+    if not host:
+        return False, "", "Internal Error: Host object not provided"
+
+    if not host.ip_address or not host.ssh_key_path or not host.ssh_user:
+        return False, "", "Host details missing (IP, SSH key, or user)."
+
+    inventory_path = os.path.abspath('ansible/inventory/')
+
+    env = os.environ.copy()
+    env['ANSIBLE_PIPELINING'] = 'True'
+    env['ANSIBLE_REMOTE_TMP'] = '/tmp'
+    env['ANSIBLE_BECOME_FLAGS'] = '-H -S -n'
+    env['ANSIBLE_ALLOW_WORLD_READABLE_TMPFILES'] = 'True'
+
+    cmd = [
+        'ansible', host.name,
+        '-i', inventory_path,
+        '-u', host.ssh_user,
+        '--private-key', os.path.abspath(host.ssh_key_path),
+        '-m', module,
+        '-a', module_args,
+        '--become',
+        '--timeout', str(connect_timeout),
+    ]
+    if become_user:
+        cmd.extend(['--become-user', become_user])
+
+    try:
+        log.info(f"Executing ansible ad-hoc for host {host.name}: -m {module} -a {module_args!r}")
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        try:
+            stdout_content, stderr_content = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            log.warning(f"Ansible ad-hoc for host {host.name} timed out after {timeout}s")
+            return False, "", f"Timed out after {timeout}s"
+        rc = process.wait()
+
+        # Ad-hoc output isn't structured JSON by default: a leading
+        # "<host> | SUCCESS | rc=0 >>" (or CHANGED/FAILED) header line, then
+        # the module's own stdout. Strip the header so callers get clean
+        # module output to parse (e.g. sha256sum lines).
+        lines = stdout_content.splitlines()
+        if lines and '>>' in lines[0]:
+            body = '\n'.join(lines[1:])
+        else:
+            body = stdout_content
+
+        success = rc == 0 and ' | FAILED' not in (lines[0] if lines else '') and 'UNREACHABLE' not in (lines[0] if lines else '')
+        return success, body, stderr_content
+
+    except Exception as e:
+        error_msg = f"Error running ansible ad-hoc with Popen: {e}"
+        log.exception(error_msg)
+        return False, "", str(e)

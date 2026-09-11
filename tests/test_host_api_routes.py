@@ -1503,6 +1503,114 @@ def test_force_update_workshop_invalid_restart_instances(client, app):
     assert 'list of integers' in response.get_json()['error']['message']
 
 
+# --- GET /api/hosts/<id>/plugin-updates ---
+
+@patch('ui.routes.host_routes.check_host_updates')
+def test_check_plugin_updates_success(mock_check, client, app):
+    """Returns the diff payload for an active host."""
+    with app.app_context():
+        host = create_host(name='plugins-check-host', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+
+    mock_check.return_value = {
+        "host_id": host_id,
+        "common_pool_changes": [{"name": "serverchecker.py", "change": "modified"}],
+        "common_pool_error": None,
+        "instances": [],
+    }
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/hosts/{host_id}/plugin-updates', headers=headers)
+    assert response.status_code == 200
+    data = response.get_json()['data']
+    assert data['common_pool_changes'] == [{"name": "serverchecker.py", "change": "modified"}]
+    mock_check.assert_called_once()
+
+
+def test_check_plugin_updates_host_not_found(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get('/api/hosts/99999/plugin-updates', headers=headers)
+    assert response.status_code == 404
+
+
+def test_check_plugin_updates_host_not_active(client, app):
+    with app.app_context():
+        host = create_host(name='plugins-check-notactive', provider='vultr', status=HostStatus.ERROR)
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.get(f'/api/hosts/{host_id}/plugin-updates', headers=headers)
+    assert response.status_code == 400
+
+
+# --- POST /api/hosts/<id>/plugin-updates/apply ---
+
+@patch('ui.routes.host_routes.enqueue_task')
+@patch('ui.routes.host_routes.acquire_lock', return_value=True)
+def test_apply_plugin_updates_success(mock_lock, mock_enqueue, client, app):
+    """Queues the apply task with the operator's selection."""
+    with app.app_context():
+        host = create_host(name='plugins-apply-host', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post(f'/api/hosts/{host_id}/plugin-updates/apply', headers=headers, json={
+        'update_common_pool': True,
+        'instances': {'1': ['match_restore.py']},
+        'restart_instances': [1],
+    })
+    assert response.status_code == 202
+    assert 'process initiated' in response.get_json()['message']
+    mock_enqueue.assert_called_once()
+    args = mock_enqueue.call_args[0]
+    assert args[1] == host_id
+    assert args[2] is True
+    assert args[3] == {1: ['match_restore.py']}
+    assert args[4] == [1]
+
+
+def test_apply_plugin_updates_host_not_found(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post('/api/hosts/99999/plugin-updates/apply', headers=headers, json={'update_common_pool': True})
+    assert response.status_code == 404
+
+
+def test_apply_plugin_updates_host_not_active(client, app):
+    with app.app_context():
+        host = create_host(name='plugins-apply-notactive', provider='vultr', status=HostStatus.ERROR)
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post(f'/api/hosts/{host_id}/plugin-updates/apply', headers=headers, json={'update_common_pool': True})
+    assert response.status_code == 400
+
+
+def test_apply_plugin_updates_invalid_restart_instances(client, app):
+    """Non-list restart_instances returns 400."""
+    with app.app_context():
+        host = create_host(name='plugins-apply-badinst', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post(f'/api/hosts/{host_id}/plugin-updates/apply', headers=headers, json={
+        'update_common_pool': True,
+        'restart_instances': 'not-a-list'
+    })
+    assert response.status_code == 400
+    assert 'list of integers' in response.get_json()['error']['message']
+
+
+def test_apply_plugin_updates_nothing_selected(client, app):
+    """Neither common pool nor any instance selection returns 400."""
+    with app.app_context():
+        host = create_host(name='plugins-apply-empty', provider='vultr', status=HostStatus.ACTIVE)
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post(f'/api/hosts/{host_id}/plugin-updates/apply', headers=headers, json={})
+    assert response.status_code == 400
+
+
 # --- POST /api/hosts/<id>/auto-restart ---
 
 @patch('ui.routes.host_routes.enqueue_task')

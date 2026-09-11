@@ -1,0 +1,82 @@
+---
+# Shared task: refresh the host-baseline plugin pool and its core pip deps
+# from ql-assets/data/{{ runtime_plugins_dirname }}/ (the source of truth for
+# plugin logic — see qlsm-plugin-pool-vs-builtin-preset-duplication in
+# project memory). Included by setup_host.yml (new hosts) and
+# update_common_plugins.yml (existing hosts, run on demand so a plugin fix
+# doesn't require a full host setup re-run just to reach
+# /home/ql/assets/common/{{ runtime_plugins_dirname }}/).
+#
+# Requires: common_assets_dir (e.g. /home/ql/assets/common),
+#           runtime_plugins_dirname (e.g. minqlx-plugins / minqlxtended-plugins)
+# Optional: skip_pip_install (default false) — set true for the on-demand
+# "Update Plugins" UI action, where the host was already fully set up once
+# and reinstalling the same pip floors on every plugin refresh only adds
+# latency for no effect.
+# This only refreshes the host-local common pool. Individual instances still
+# need their own restart (sync_instance_configs_and_restart.yml backfill) to
+# actually pick the change up — see docs/technical.md.
+
+- name: Get pip3 version
+  command: pip3 --version
+  register: pip3_version_output
+  changed_when: false
+  when: not (skip_pip_install | default(false))
+
+- name: Check if runtime's requirements.txt is available on controller
+  stat:
+    path: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
+  delegate_to: localhost
+  become: no
+  register: minqlx_reqs_stat
+  when: not (skip_pip_install | default(false))
+
+- name: Stage runtime requirements file on host
+  copy:
+    src: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
+    dest: "/root/minqlx-requirements.txt"
+    owner: root
+    group: root
+    mode: '0644'
+  when: not (skip_pip_install | default(false)) and minqlx_reqs_stat.stat.exists
+
+- name: Install core Python dependencies for the runtime
+  pip:
+    requirements: "/root/minqlx-requirements.txt"
+    executable: pip3
+    # --ignore-installed avoids "Cannot uninstall X, RECORD file not found" when a
+    # dependency (e.g. pyzmq) was preinstalled via apt/debian packaging, not pip.
+    extra_args: "{{ '--break-system-packages --ignore-installed' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '--ignore-installed' }}"
+  when: not (skip_pip_install | default(false)) and minqlx_reqs_stat.stat.exists
+  ignore_errors: yes
+  register: minqlx_core_pip_result
+
+- name: Warn if core pip install failed
+  debug:
+    msg: "QLSM_PIP_WARN: pip install failed: {{ minqlx_core_pip_result.stderr | default(minqlx_core_pip_result.stdout | default('unknown error')) | truncate(200) }}"
+  when: minqlx_core_pip_result is defined and minqlx_core_pip_result.failed | default(false)
+
+- name: Check if local runtime plugins directory exists
+  stat:
+    path: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}"
+  delegate_to: localhost
+  register: local_minqlx_plugins_stat
+  become: no
+
+- name: Sync common plugins for the host runtime
+  synchronize:
+    src: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/"
+    dest: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}/"
+    private_key: "{{ ansible_ssh_private_key_file }}"
+    archive: yes
+    recursive: yes
+    delete: yes
+  when: local_minqlx_plugins_stat.stat.exists and local_minqlx_plugins_stat.stat.isdir
+
+- name: Ensure correct ownership of common plugin pool
+  file:
+    path: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}"
+    owner: ql
+    group: ql
+    recurse: yes
+    state: directory

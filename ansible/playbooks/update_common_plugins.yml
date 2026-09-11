@@ -1,0 +1,42 @@
+---
+# Narrow, on-demand refresh of the host-baseline plugin pool
+# (/home/ql/assets/common/{{ runtime_plugins_dirname }}/) from
+# ql-assets/data/{{ runtime_plugins_dirname }}/.
+#
+# setup_host.yml does the same sync, but it also touches network/firewall/
+# hostname/SSH config — 66 unrelated tasks, too risky to run against a live
+# host just to land a plugin fix. This playbook (mirroring the narrow
+# force_update_workshop.yml pattern for workshop items) does only the plugin
+# pool refresh, so the "Update Plugins" UI action doesn't require a full
+# host re-setup.
+#
+# This only refreshes the host-local common pool; instances still pick the
+# change up via their own restart (sync_instance_configs_and_restart.yml
+# backfill, which compares by content — see docs/technical.md).
+
+- name: Update Common Plugin Pool
+  hosts: "{{ target_host_name | default('all') }}"
+  become: yes
+  gather_facts: false
+
+  vars:
+    common_assets_dir: "/home/ql/assets/common"
+    # QLSM always passes this from Host.runtime (see runtime_extravars() in
+    # ui/runtime.py). The default keeps manual playbook runs on minqlx.
+    runtime: "minqlx"
+    runtime_plugins_dirname: "{{ 'minqlxtended-plugins' if runtime == 'minqlxtended' else 'minqlx-plugins' }}"
+    # The host was already fully set up once (pip floors installed by
+    # setup_host.yml); re-running that install on every "Update Plugins"
+    # click only adds latency for no effect.
+    skip_pip_install: true
+
+  tasks:
+    - name: Ensure common plugin pool directory exists
+      ansible.builtin.file:
+        path: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}"
+        state: directory
+        owner: ql
+        group: ql
+        mode: '0755'
+
+    - ansible.builtin.import_tasks: tasks/sync_common_plugins.yml

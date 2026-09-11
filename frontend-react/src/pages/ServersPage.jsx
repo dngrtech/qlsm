@@ -35,11 +35,13 @@ import { useInstanceOrder } from '../hooks/useInstanceOrder';
 import { useHostOrder } from '../hooks/useHostOrder';
 import SortableHostList from '../components/hosts/SortableHostList';
 import { useWorkshopUpdate } from '../hooks/useWorkshopUpdate';
+import { useCheckForUpdates } from '../hooks/useCheckForUpdates';
 import { useHostAutoRestart } from '../hooks/useHostAutoRestart';
 import { useHostWatchdog } from '../hooks/useHostWatchdog';
 import { useHostResize } from '../hooks/useHostResize';
 import { rerunHostSetup } from '../services/api';
 import ForceUpdateWorkshopModal from '../components/hosts/ForceUpdateWorkshopModal';
+import CheckForUpdatesModal from '../components/hosts/CheckForUpdatesModal';
 import HostAutoRestartScheduleModal from '../components/hosts/HostAutoRestartScheduleModal';
 import HostWatchdogModal from '../components/hosts/HostWatchdogModal';
 import ResizeHostModal from '../components/hosts/ResizeHostModal';
@@ -80,6 +82,7 @@ export default function ServersPage() {
     const { handleQlfilterAction } = useQlfilterActions(showSuccess, showError, () => refreshData(false));
     const { stopStartAction, isStopStartModalOpen, requestStop, requestStart, confirmStopStart, closeStopStartModal } = useInstanceStopStart(showSuccess, showError, () => refreshData(false));
     const { isWorkshopModalOpen, hostForWorkshopUpdate, openWorkshopModal, closeWorkshopModal, handleWorkshopUpdateSubmit } = useWorkshopUpdate(showSuccess, showError, () => refreshData(false));
+    const { isUpdatesModalOpen, hostForUpdates, isChecking, checkResult, checkError, openUpdatesModal, closeUpdatesModal, handleApplyUpdates } = useCheckForUpdates(showSuccess, showError, () => refreshData(false));
     const { isAutoRestartModalOpen, hostForAutoRestart, openAutoRestartModal, closeAutoRestartModal, handleAutoRestartSubmit } = useHostAutoRestart(showSuccess, showError, () => refreshData(false));
     const { isWatchdogModalOpen, hostForWatchdog, openWatchdogModal, closeWatchdogModal, handleWatchdogSubmit } = useHostWatchdog(showSuccess, showError, () => refreshData(false));
     const { isResizeModalOpen, isResizeSubmitting, resizeError, hostForResize, openResizeModal, closeResizeModal, handleResizeSubmit } = useHostResize(showSuccess, showError, () => refreshData(false));
@@ -298,7 +301,7 @@ export default function ServersPage() {
                                     <QLFilterIndicator qlfilterStatus={host.qlfilter_status} />
                                 </div>
                                 <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
-                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenAutoRestart={openAutoRestartModal} onOpenWatchdog={openWatchdogModal} onOpenViewLogs={openHostLogs} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} />
+                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenCheckForUpdates={openUpdatesModal} onOpenAutoRestart={openAutoRestartModal} onOpenWatchdog={openWatchdogModal} onOpenViewLogs={openHostLogs} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} />
                                 </div>
                             </div>
 
@@ -387,6 +390,7 @@ export default function ServersPage() {
             <ConfirmationModal isOpen={isLanRateModalOpen} onClose={closeLanRateModal} onConfirm={confirmToggleLanRate} title={lanRateAction?.enabling ? 'Enable 99k LAN Rate' : 'Disable 99k LAN Rate'} message={`Are you sure you want to ${lanRateAction?.enabling ? 'enable' : 'disable'} 99k LAN rate mode for instance "${lanRateAction?.name}"? The instance will be reconfigured and restarted.`} confirmButtonText={lanRateAction?.enabling ? 'Enable' : 'Disable'} confirmButtonVariant="amber" />
             <ConfirmationModal isOpen={isStopStartModalOpen} onClose={closeStopStartModal} onConfirm={confirmStopStart} title={stopStartAction?.action === 'stop' ? 'Stop Instance' : 'Start Instance'} message={stopStartAction?.action === 'stop' ? `Are you sure you want to stop instance "${stopStartAction?.name}"? The server will go offline.` : `Are you sure you want to start instance "${stopStartAction?.name}"?`} confirmButtonText={stopStartAction?.action === 'stop' ? 'Stop' : 'Start'} confirmButtonVariant={stopStartAction?.action === 'stop' ? 'warning' : 'primary'} />
             <ForceUpdateWorkshopModal isOpen={isWorkshopModalOpen} onClose={closeWorkshopModal} onSubmit={handleWorkshopUpdateSubmit} host={hostForWorkshopUpdate} />
+            <CheckForUpdatesModal isOpen={isUpdatesModalOpen} onClose={closeUpdatesModal} onSubmit={handleApplyUpdates} host={hostForUpdates} isChecking={isChecking} checkResult={checkResult} checkError={checkError} />
             <HostAutoRestartScheduleModal isOpen={isAutoRestartModalOpen} onClose={closeAutoRestartModal} onSubmit={handleAutoRestartSubmit} host={hostForAutoRestart} />
             <HostWatchdogModal isOpen={isWatchdogModalOpen} onClose={closeWatchdogModal} onSubmit={handleWatchdogSubmit} host={hostForWatchdog} />
             <ResizeHostModal isOpen={isResizeModalOpen} onClose={closeResizeModal} onSubmit={handleResizeSubmit} host={hostForResize} error={resizeError} isSubmitting={isResizeSubmitting} />

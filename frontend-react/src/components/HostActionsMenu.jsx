@@ -1,7 +1,7 @@
 import React, { Fragment, useState } from 'react';
 import { Menu, Transition, Portal } from '@headlessui/react';
 import { useFloating, shift, offset, autoUpdate, flip } from '@floating-ui/react-dom';
-import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon, ArrowUpCircle, RotateCcw, FileText, ActivitySquare } from 'lucide-react';
+import { Trash2, RefreshCw, ShieldCheck, ShieldOff, Loader2, Eye, PowerIcon, ArrowUpCircle, RotateCcw, FileText, ActivitySquare, PackageCheck } from 'lucide-react';
 import { HostStatus, QLFILTER_STATUS } from '../utils/statusEnums';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -13,6 +13,7 @@ function HostActionsMenu({
   onUninstallQlfilter,
   onRequestRestart,
   onOpenUpdateWorkshop,
+  onOpenCheckForUpdates,
   onOpenAutoRestart,
   onOpenWatchdog,
   onOpenResize,
@@ -213,6 +214,23 @@ function HostActionsMenu({
                       >
                         <RefreshCw size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
                         Update Workshop Item
+                      </button>
+                    )}
+                  </Menu.Item>
+
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof onOpenCheckForUpdates === 'function') onOpenCheckForUpdates(host);
+                          closeMenu();
+                        }}
+                        disabled={!isHostReady || isQlFilterBusy}
+                        className={`group flex rounded-md items-center w-full px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'bg-black/[0.04] dark:bg-white/[0.06] text-theme-primary' : 'text-theme-secondary'}`}
+                      >
+                        <PackageCheck size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
+                        Check for Updates
                       </button>
                     )}
                   </Menu.Item>
