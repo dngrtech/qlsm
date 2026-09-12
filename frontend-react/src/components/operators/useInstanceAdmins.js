@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getInstanceAdmins } from '../../services/api';
 
 // Merges QLSM's stored admin rows with the live minqlx levels read off the
@@ -15,6 +15,14 @@ export default function useInstanceAdmins({ instanceId, active, entries, onChang
   const [liveError, setLiveError] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // onLoaded typically closes over parent state-setters, so a real caller
+  // passes it inline and its identity changes every render. Keeping it out of
+  // load's dependency array via a ref (updated every render, never a fetch
+  // trigger) is what stops that from recreating `load` -> re-firing the mount
+  // effect below -> refetching -> calling onLoaded -> parent re-render -> loop.
+  const onLoadedRef = useRef(onLoaded);
+  useEffect(() => { onLoadedRef.current = onLoaded; });
+
   // Refresh replaces server state only. The user's pending edits live in the
   // parent and are deliberately untouched: Refresh shows in-game changes, it is
   // not a discard button.
@@ -29,15 +37,15 @@ export default function useInstanceAdmins({ instanceId, active, entries, onChang
       setLiveError(data.live_error || null);
       // Non-dirtying: lets the parent save-as-preset an untouched list. The
       // parent must not feed this back in as `entries`.
-      if (onLoaded) {
-        onLoaded((data.stored || []).map((r) => ({ steam_id64: r.steam_id64, level: r.level })));
+      if (onLoadedRef.current) {
+        onLoadedRef.current((data.stored || []).map((r) => ({ steam_id64: r.steam_id64, level: r.level })));
       }
     } catch (err) {
       setLiveError(err?.error?.message || 'Could not load the admin list.');
     } finally {
       setLoading(false);
     }
-  }, [instanceId, onLoaded]);
+  }, [instanceId]);
 
   useEffect(() => { if (active) load(); }, [active, load]);
 

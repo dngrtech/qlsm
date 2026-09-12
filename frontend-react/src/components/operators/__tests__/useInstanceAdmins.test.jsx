@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { expect, it, vi, beforeEach } from 'vitest';
 import useInstanceAdmins from '../useInstanceAdmins';
@@ -152,6 +153,32 @@ it('reports the loaded stored list through onLoaded without marking it dirty', a
     [{ steam_id64: '76561198012345678', level: 3 }],
   ));
   expect(result.current.dirty).toBe(false);
+});
+
+it('fetches once even when onLoaded is an inline callback recreated every render', async () => {
+  getInstanceAdmins.mockResolvedValue({
+    stored: [{ steam_id64: '76561198012345678', level: 3 }], live: {}, managed: [], live_error: null,
+  });
+  // A real caller closes over parent state, so onLoaded is a fresh function
+  // identity on every render -- exactly like the onChange harness above, this
+  // wires the parent's setState back into a rerender to prove the fetch effect
+  // does not key off that identity.
+  function Wrapper() {
+    const [presetSource, setPresetSource] = useState(null);
+    const hook = useInstanceAdmins({
+      instanceId: 1,
+      active: true,
+      entries: null,
+      onChange: () => {},
+      onLoaded: (loaded) => setPresetSource(loaded),
+    });
+    return { ...hook, presetSource };
+  }
+  const { result } = renderHook(() => Wrapper());
+  await waitFor(() => expect(result.current.presetSource).toEqual(
+    [{ steam_id64: '76561198012345678', level: 3 }],
+  ));
+  expect(getInstanceAdmins).toHaveBeenCalledTimes(1);
 });
 
 it('does not read live state when inactive', async () => {
