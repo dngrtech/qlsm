@@ -40,10 +40,16 @@ describe('AdminRow', () => {
     expect(screen.getByText(/will be revoked on save/i)).toBeInTheDocument();
   });
 
+  it('shows a Managed badge for a managed row', () => {
+    render(<AdminRow row={row({ state: 'managed' })} />);
+    expect(screen.getByText(/^managed$/i)).toBeInTheDocument();
+  });
+
   it('shows no state badge when the live level is unknown', () => {
     render(<AdminRow row={row({ state: 'unknown' })} />);
     expect(screen.queryByText(/not applied yet/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/set in-game/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^managed$/i)).not.toBeInTheDocument();
   });
 
   it('removes on click', async () => {

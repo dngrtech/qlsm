@@ -2,9 +2,11 @@ import React from 'react';
 import { UserPlus, X } from 'lucide-react';
 
 const STATE_LABELS = {
-  managed: null,
+  managed: 'Managed',
   // The live level is unknown (unreachable host, nothing deployed): say nothing
-  // rather than assert a state the app cannot know.
+  // rather than assert a state the app cannot know. No-badge is this state's
+  // unique signature -- 'managed' must always show something, or the two
+  // become indistinguishable again.
   unknown: null,
   pending: 'Not applied yet',
   'live-only': 'Set in-game',
