@@ -96,11 +96,8 @@ def delete_instance(instance_id):
     if not instance:
         return False
 
-    # delete() is by-query, which does not walk the ORM relationship, so the
-    # admin rows must be removed explicitly before the instance is deleted.
-    from ui.models import InstanceAdmin
-    InstanceAdmin.query.filter_by(instance_id=instance_id).delete(synchronize_session=False)
-
+    # An ORM delete walks QLInstance.admins (cascade='all, delete-orphan'), so
+    # the instance's admin rows go with it.
     db.session.delete(instance)
     db.session.commit()
     return True
