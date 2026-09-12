@@ -63,3 +63,21 @@ def strip_numeric_admin_lines(text):
 def entries_from_rows(rows):
     """{steam_id: level} for the permission sync."""
     return {row.steam_id64: int(row.level) for row in rows}
+
+
+def replace_instance_admins(instance, entries):
+    """Swap an instance's admin rows for `entries` (already validated).
+
+    Does not commit: the caller's transaction owns the change, so a later
+    failure in the same request rolls the list back with everything else.
+    """
+    from ui import db
+    from ui.models import InstanceAdmin
+
+    InstanceAdmin.query.filter_by(instance_id=instance.id).delete(synchronize_session=False)
+    for entry in entries:
+        db.session.add(InstanceAdmin(
+            instance_id=instance.id,
+            steam_id64=entry['steam_id64'],
+            level=entry['level'],
+        ))
