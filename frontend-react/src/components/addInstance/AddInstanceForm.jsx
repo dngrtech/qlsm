@@ -382,9 +382,17 @@ function AddInstanceForm({
     syncConfigFile('server.cfg', nextConfig);
   }, [syncConfigFile]);
 
-  const handleAccessTxtChange = useCallback((nextAccessTxt) => {
-    syncConfigFile('access.txt', nextAccessTxt);
-  }, [syncConfigFile]);
+  // null means "the user has not edited the admin list". Only a real mutation
+  // sets it, so an untouched list is never sent on create.
+  const [adminEntries, setAdminEntries] = useState(null);
+  // What the server currently has, for "Save as preset" on an untouched list.
+  // There is no instance yet here, so this stays null unless a loaded preset
+  // sets it via onAdminEntriesLoaded.
+  const [loadedAdminEntries, setLoadedAdminEntries] = useState(null);
+
+  const handleAdminEntriesChange = useCallback((next) => {
+    setAdminEntries(next);
+  }, []);
 
   const handleHostChange = useCallback(async (hostId, isInitialLoad = false) => {
     setSelectedHostId(hostId);
@@ -614,9 +622,11 @@ function AddInstanceForm({
       factoriesHaveChanges ||
       pluginsHaveChanges ||
       checkedPluginsChanged ||
-      hooksChanged;
+      hooksChanged ||
+      adminEntries !== null;
     if (onDirtyStateChange) onDirtyStateChange(isDirty);
   }, [
+    adminEntries,
     autoGeneratePasswords,
     checkedPlugins,
     configContents,
@@ -786,6 +796,11 @@ function AddInstanceForm({
       setAvailableHooks(presetAvailableHooks);
       setEnabledHookOrder(presetEnabledHooks);
       initialEnabledHookOrderRef.current = presetEnabledHooks;
+      // A null/absent admins means the preset never recorded a list (every
+      // preset written before this feature) -- leave the current list alone.
+      if (Array.isArray(presetData.admins)) {
+        setAdminEntries(presetData.admins);
+      }
       // checked_factories: null = legacy preset (use all factory files); [] or [...] = explicit selection
       const factoriesToLoad = presetData.checked_factories != null
         ? Object.fromEntries(
@@ -920,6 +935,9 @@ function AddInstanceForm({
       presetData.enabled_hooks = enabledHookOrder;
       // Persist the 99k LAN rate toggle so it round-trips with the preset.
       presetData.lan_rate_enabled = lanRateEnabled;
+      // Edited list if there is one, otherwise whatever was loaded. null only
+      // when neither is known, and the backend then leaves admins.json out.
+      presetData.admins = adminEntries ?? loadedAdminEntries;
 
       await savePreset(presetData);
       setIsPresetManagerOpen(false);
@@ -930,7 +948,7 @@ function AddInstanceForm({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [checkedPlugins, draftPreset, enabledHookOrder, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories]);
+  }, [adminEntries, checkedPlugins, draftPreset, enabledHookOrder, lanRateEnabled, loadedAdminEntries, pluginDraftId, serializeConfigs, serializeFactories]);
 
   const handleOverwritePreset = useCallback(async (presetId, { description, runtime }) => {
     setIsUpdatingPreset(true);
@@ -952,6 +970,7 @@ function AddInstanceForm({
       presetData.checked_plugins = Array.from(checkedPlugins);
       presetData.enabled_hooks = enabledHookOrder;
       presetData.lan_rate_enabled = lanRateEnabled;
+      presetData.admins = adminEntries ?? loadedAdminEntries;
       await updatePreset(presetId, presetData);
       const refreshed = await getPresets();
       setPresets(refreshed || []);
@@ -968,7 +987,7 @@ function AddInstanceForm({
     } finally {
       setIsUpdatingPreset(false);
     }
-  }, [checkedPlugins, enabledHookOrder, lanRateEnabled, loadedPreset, pluginDraftId, serializeConfigs, serializeFactories]);
+  }, [adminEntries, checkedPlugins, enabledHookOrder, lanRateEnabled, loadedAdminEntries, loadedPreset, pluginDraftId, serializeConfigs, serializeFactories]);
 
   // Handle preset deletion from PresetManagerModal
   const handlePresetDeleted = useCallback((deletedPresetId) => {
@@ -1171,6 +1190,11 @@ function AddInstanceForm({
       submitData.draft_id = pluginDraftId;
     }
     submitData.enabled_hooks = enabledHookOrder;
+    // Only when the user actually edited it. An empty list is an instruction
+    // to revoke everyone, so an untouched list must not be sent at all.
+    if (adminEntries !== null) {
+      submitData.admins = adminEntries;
+    }
 
     await onSubmit(submitData, { consumeDraft: pluginConsume });
   };
@@ -1351,9 +1375,12 @@ function AddInstanceForm({
             <div className={activeMainTab === 'admins' ? 'flex-1 min-h-0 overflow-y-auto' : 'hidden'}>
               <OwnerAdminEditor
                 serverCfgContent={configContents['server.cfg'] || ''}
-                accessTxtContent={configContents['access.txt'] || ''}
                 onServerCfgChange={handleOwnerChange}
-                onAccessTxtChange={handleAccessTxtChange}
+                instanceId={null}
+                visible={activeMainTab === 'admins'}
+                adminEntries={adminEntries}
+                onAdminEntriesChange={handleAdminEntriesChange}
+                onAdminEntriesLoaded={setLoadedAdminEntries}
               />
             </div>
           </div>
