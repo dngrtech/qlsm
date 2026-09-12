@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import shutil
 import uuid
@@ -1691,3 +1692,74 @@ def test_create_preset_from_draft_drops_backup_files(client, app):
     assert not os.path.exists(
         os.path.join(preset_path, 'user-hooks', 'myhook.so.bak')
     )
+
+
+def test_saved_preset_round_trips_admins(client, app):
+    headers = auth_headers(app, DEFAULT_USER)
+    create = client.post('/api/presets/', json={
+        'name': 'admins-preset',
+        'configs': dict(BASE_CONFIG_MAP),
+        'admins': [{'steam_id64': '76561198012345678', 'level': 4}],
+    }, headers=headers)
+    assert create.status_code in (200, 201), create.get_json()
+    preset_id = create.get_json()['data']['id']
+
+    fetched = client.get(f'/api/presets/{preset_id}', headers=headers).get_json()['data']
+    assert fetched['admins'] == [{'steam_id64': '76561198012345678', 'level': 4}]
+
+    with open(os.path.join('configs', 'presets', 'admins-preset', 'admins.json')) as f:
+        assert json.load(f) == [{'steam_id64': '76561198012345678', 'level': 4}]
+
+
+def test_preset_rejects_bad_admin_level(client, app):
+    response = client.post('/api/presets/', json={
+        'name': 'bad-admins',
+        'configs': dict(BASE_CONFIG_MAP),
+        'admins': [{'steam_id64': '76561198012345678', 'level': 7}],
+    }, headers=auth_headers(app, DEFAULT_USER))
+    assert response.status_code == 400
+
+
+def test_preset_normalizes_admins_before_writing_them(client, app):
+    """admins.json must hold validated entries: ints, de-duplicated."""
+    headers = auth_headers(app, DEFAULT_USER)
+    create = client.post('/api/presets/', json={
+        'name': 'messy-admins',
+        'configs': dict(BASE_CONFIG_MAP),
+        'admins': [{'steam_id64': '76561198012345678', 'level': '1'},
+                   {'steam_id64': '76561198012345678', 'level': '5'}],
+    }, headers=headers)
+    assert create.status_code in (200, 201), create.get_json()
+    with open(os.path.join('configs', 'presets', 'messy-admins', 'admins.json')) as f:
+        assert json.load(f) == [{'steam_id64': '76561198012345678', 'level': 5}]
+
+
+def test_preset_without_admins_json_reports_null_not_an_empty_list(client, app):
+    """None means "this preset never recorded admins", so applying it must not
+    clear the instance's list -- same convention as enabled_hooks."""
+    headers = auth_headers(app, DEFAULT_USER)
+    create = client.post('/api/presets/', json={
+        'name': 'no-admins',
+        'configs': dict(BASE_CONFIG_MAP),
+    }, headers=headers)
+    preset_id = create.get_json()['data']['id']
+    assert client.get(f'/api/presets/{preset_id}', headers=headers).get_json()['data']['admins'] is None
+
+
+def test_preset_update_round_trips_admins(client, app):
+    """admins must be settable via PUT too, and appear in the update response."""
+    headers = auth_headers(app, DEFAULT_USER)
+    create = client.post('/api/presets/', json={
+        'name': 'update-admins',
+        'configs': dict(BASE_CONFIG_MAP),
+    }, headers=headers)
+    preset_id = create.get_json()['data']['id']
+
+    update = client.put(f'/api/presets/{preset_id}', json={
+        'admins': [{'steam_id64': '76561198012345678', 'level': 2}],
+    }, headers=headers)
+    assert update.status_code == 200, update.get_json()
+    assert update.get_json()['data']['admins'] == [{'steam_id64': '76561198012345678', 'level': 2}]
+
+    with open(os.path.join('configs', 'presets', 'update-admins', 'admins.json')) as f:
+        assert json.load(f) == [{'steam_id64': '76561198012345678', 'level': 2}]
