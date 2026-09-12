@@ -14,7 +14,10 @@ function OperatorCombobox({ value, onChange, operators = [], placeholder = 'Sear
     whileElementsMounted: autoUpdate,
   });
 
-  const selected = operators.find((op) => op.steam_id64 === value) || null;
+  // A SteamID that is not in the directory is still a real config value: fall
+  // back to a synthetic entry so it renders as itself rather than as blank.
+  const known = operators.find((op) => op.steam_id64 === value) || null;
+  const selected = known || (value ? { id: `raw-${value}`, name: '', steam_id64: value } : null);
   const q = query.trim().toLowerCase();
   const filtered = q
     ? operators.filter((op) => op.name.toLowerCase().includes(q) || op.steam_id64.includes(q))
@@ -31,7 +34,7 @@ function OperatorCombobox({ value, onChange, operators = [], placeholder = 'Sear
           <Combobox.Input
             ref={refs.setReference}
             autoComplete="off"
-            displayValue={(op) => (op ? `${op.name} (${op.steam_id64})` : '')}
+            displayValue={(op) => (op ? (op.name ? `${op.name} (${op.steam_id64})` : op.steam_id64) : '')}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
             className="input-base pr-10"
