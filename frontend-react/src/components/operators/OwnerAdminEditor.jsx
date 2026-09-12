@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Crown, ExternalLink, RotateCw, ShieldPlus } from 'lucide-react';
-import { getOperators } from '../../services/api';
+import { createOperator, getOperators } from '../../services/api';
 import { setOperatorsCache } from '../../utils/operatorsCache';
 import { readOwnerFromConfig, writeOwnerToConfig } from '../../utils/operatorConfigSync';
 import OperatorCombobox from './OperatorCombobox';
 import AdminRow from './AdminRow';
+import AddOperatorModal from './AddOperatorModal';
 import useInstanceAdmins from './useInstanceAdmins';
 
 // Owner comes from qlx_owner in server.cfg (minqlx reads the cvar). Admin
@@ -23,19 +24,28 @@ function OwnerAdminEditor({
   const [operators, setOperators] = useState([]);
   const [pendingAdmin, setPendingAdmin] = useState('');
   const [pendingLevel, setPendingLevel] = useState('5');
+  // The admin row whose SteamID is being added to the directory, or null.
+  const [directoryRow, setDirectoryRow] = useState(null);
+
+  const applyOperators = (data) => {
+    const list = data || [];
+    setOperators(list);
+    setOperatorsCache(list);
+  };
 
   useEffect(() => {
     let cancelled = false;
     getOperators()
-      .then((data) => {
-        if (cancelled) return;
-        const list = data || [];
-        setOperators(list);
-        setOperatorsCache(list);
-      })
+      .then((data) => { if (!cancelled) applyOperators(data); })
       .catch(() => { if (!cancelled) setOperators([]); });
     return () => { cancelled = true; };
   }, []);
+
+  // Errors propagate so AddOperatorModal shows them inline and stays open.
+  const handleCreateOperator = async (operatorData) => {
+    await createOperator(operatorData);
+    applyOperators(await getOperators());
+  };
 
   // The parent owns the list: it passes adminEntries in and the hook's mutators
   // call onAdminEntriesChange. Nothing is mirrored upward from an effect -- that
@@ -159,9 +169,7 @@ function OwnerAdminEditor({
                   operator={operatorsById.get(row.steamId) || null}
                   onRemove={removeAdmin}
                   onAdopt={adoptAdmin}
-                  onAddToDirectory={(steamId) => window.open(
-                    `/settings/operators?steamId=${steamId}`, '_blank', 'noopener',
-                  )}
+                  onAddToDirectory={() => setDirectoryRow(row)}
                 />
               ))}
             </ul>
@@ -172,6 +180,14 @@ function OwnerAdminEditor({
           </p>
         </div>
       </div>
+
+      <AddOperatorModal
+        isOpen={directoryRow !== null}
+        onClose={() => setDirectoryRow(null)}
+        onSubmit={handleCreateOperator}
+        initialSteamId={directoryRow?.steamId || ''}
+        initialLevel={directoryRow?.level ?? null}
+      />
     </div>
   );
 }

@@ -1,19 +1,22 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi, beforeEach } from 'vitest';
 import OwnerAdminEditor from '../OwnerAdminEditor';
 
 const getOperators = vi.fn();
 const getInstanceAdmins = vi.fn();
+const createOperator = vi.fn();
 vi.mock('../../../services/api', () => ({
   getOperators: (...a) => getOperators(...a),
+  createOperator: (...a) => createOperator(...a),
   getInstanceAdmins: (...a) => getInstanceAdmins(...a),
 }));
 
 beforeEach(() => {
   getOperators.mockReset().mockResolvedValue([{ id: 1, name: 'Vex', steam_id64: '76561198012345678', default_level: 5 }]);
   getInstanceAdmins.mockReset().mockResolvedValue({ stored: [], live: {}, managed: [], live_error: null });
+  createOperator.mockReset().mockResolvedValue({});
 });
 
 // Every render passes visible: the SSH read is gated on the tab being open.
@@ -110,4 +113,26 @@ it('does not offer level 0 when adding', async () => {
   await waitFor(() => expect(getOperators).toHaveBeenCalled());
   const levels = screen.getAllByRole('option').map((o) => o.value);
   expect(levels).toEqual(['1', '2', '3', '4', '5']);
+});
+
+it('Add to operators opens a prefilled modal in place and names the row on save', async () => {
+  getInstanceAdmins.mockResolvedValue({
+    stored: [], live: { '76561198087654321': 4 }, managed: [], live_error: null,
+  });
+  const parentSubmit = vi.fn((e) => e.preventDefault());
+  render(<form onSubmit={parentSubmit}><OwnerAdminEditor {...base} /></form>);
+  await userEvent.click(await screen.findByRole('button', { name: /add to operators/i }));
+
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByLabelText('SteamID64')).toHaveValue('76561198087654321');
+  expect(within(dialog).getByLabelText('Default admin level')).toHaveValue('4');
+
+  getOperators.mockResolvedValue([{ id: 2, name: 'Rex', steam_id64: '76561198087654321', default_level: 4 }]);
+  await userEvent.type(within(dialog).getByLabelText('Name'), 'Rex');
+  await userEvent.click(within(dialog).getByRole('button', { name: /add operator/i }));
+
+  expect(createOperator).toHaveBeenCalledWith({ name: 'Rex', steam_id64: '76561198087654321', default_level: 4 });
+  expect(await screen.findByText('Rex')).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(parentSubmit).not.toHaveBeenCalled();
 });

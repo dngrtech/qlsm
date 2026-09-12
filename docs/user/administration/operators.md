@@ -61,6 +61,13 @@ rebuilt host or a wiped Redis database gets its admins back.
 
 The **Manage operators** link opens **Settings → Operators** in a new tab.
 
+An admin whose SteamID is not in the operator directory shows as a bare
+SteamID with an **Add to operators** button. It opens the same Add Operator
+dialog as the Operators page, on top of the configuration window, with the
+SteamID and current level already filled in. Enter a name and click **Add
+Operator**; the row then shows that name. Your unsaved configuration edits
+are not affected.
+
 ## Row States
 
 Each row in the Admins list carries a badge that says how QLSM's stored list
