@@ -286,3 +286,31 @@ def test_no_admins_still_syncs_so_removals_apply(monkeypatch):
     instance.admins = []
     mod.sync_instance_admin_permissions(instance)
     assert captured['entries'] == {}
+
+
+# --- sync_and_report_access_permissions never raises -----------------------
+
+def test_report_wrapper_swallows_failure_in_log_and_commit_path(monkeypatch):
+    """A failure while logging/committing the warning (e.g. flag_modified()
+    blowing up on an unrealistic mock, or a real DB error) must not escape --
+    the wrapper's docstring promises it never raises and never fails the
+    calling task."""
+    import ui.task_logic.access_permission_sync as mod
+
+    monkeypatch.setattr(mod, "sync_instance_admin_permissions", lambda instance: False)
+
+    def _boom(instance, message):
+        raise RuntimeError("flag_modified explosion")
+
+    monkeypatch.setattr(mod, "append_log", _boom)
+    rollback_calls = []
+    monkeypatch.setattr(mod.db.session, "rollback", lambda: rollback_calls.append(True))
+    monkeypatch.setattr(mod.db.session, "commit", lambda: (_ for _ in ()).throw(RuntimeError("commit failed")))
+
+    instance = _instance(host=_host())
+    instance.admins = []
+
+    result = mod.sync_and_report_access_permissions(instance)
+
+    assert result is False
+    assert rollback_calls, "expected the wrapper to roll back the broken session"

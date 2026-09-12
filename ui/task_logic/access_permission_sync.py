@@ -220,6 +220,14 @@ def sync_and_report_access_permissions(instance):
         )
         result = False
     if result is False:
-        append_log(instance, SYNC_FAILED_LOG_MESSAGE)
-        db.session.commit()
+        try:
+            append_log(instance, SYNC_FAILED_LOG_MESSAGE)
+            db.session.commit()
+        except Exception:
+            logger.warning(
+                "admin permission sync could not log/commit failure for instance %s",
+                getattr(instance, "id", "?"),
+                exc_info=True,
+            )
+            db.session.rollback()
     return result
