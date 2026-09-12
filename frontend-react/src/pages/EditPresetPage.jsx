@@ -65,8 +65,10 @@ function EditPresetPage() {
       access,
       workshop,
       factory,
-      admins: adminEntries,
     };
+    if (adminEntries !== null) {
+      presetData.admins = adminEntries;
+    }
 
     // If name hasn't changed, don't include it in the update payload
     // to avoid potential "name already exists" error for the same preset.
