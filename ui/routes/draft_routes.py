@@ -27,6 +27,7 @@ from ui.preset_support import (
 )
 from ui.runtime import is_valid_runtime, normalize_runtime
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
+from ui.plugin_manifest import read_plugin_manifest
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
 
@@ -434,7 +435,7 @@ def _get_file_type(filename):
     return FILE_TYPE_MAP.get(ext)
 
 
-def _build_draft_tree(path, base_path=None):
+def _build_draft_tree(path, base_path=None, runtime=None):
     """
     Recursively build a file tree with type metadata.
 
@@ -462,7 +463,7 @@ def _build_draft_tree(path, base_path=None):
             continue
 
         if os.path.isdir(full_path):
-            children = _build_draft_tree(full_path, base_path)
+            children = _build_draft_tree(full_path, base_path, runtime)
             items.append({
                 'name': entry,
                 'type': 'folder',
@@ -473,14 +474,19 @@ def _build_draft_tree(path, base_path=None):
             ext = os.path.splitext(entry)[1].lower()
             if ext in ALLOWED_EXTENSIONS:
                 stat = os.stat(full_path)
-                items.append({
+                item = {
                     'name': entry,
                     'type': 'file',
                     'path': relative_path,
                     'file_type': FILE_TYPE_MAP.get(ext, 'unknown'),
                     'size': stat.st_size,
                     'last_modified': stat.st_mtime
-                })
+                }
+                if ext == '.py':
+                    manifest = read_plugin_manifest(full_path, runtime)
+                    if manifest is not None:
+                        item['plugin_manifest'] = manifest
+                items.append(item)
 
     return items
 
@@ -680,7 +686,9 @@ def get_draft_tree(draft_id):
         return jsonify({"error": {"message": "Draft not found"}}), 404
 
     scripts_path = _get_draft_scripts_path(draft_id)
-    tree = _build_draft_tree(scripts_path)
+    # A draft that was filtered for a runtime holds that runtime's plugins, so
+    # its manifests should come from that runtime's pool too.
+    tree = _build_draft_tree(scripts_path, runtime=draft_filtered_runtime(draft_id))
     return jsonify({"data": tree}), 200
 
 

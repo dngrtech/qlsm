@@ -52,6 +52,19 @@ Use **Upload** when you want to bring in an existing file from another server. U
 - `server.cfg` shows inline lint diagnostics.
 - In the deploy form, instance creation is blocked if `server.cfg` has blocking lint errors.
 
+## Autocomplete
+
+In `.cfg` files the editor suggests console commands at the start of a line, and cvar names after `set` or `seta`. Each suggestion shows a short description and, underneath it, **where that description came from** — so a line that was read off the cvar's name is never mistaken for a verified fact.
+
+Two things are suggested, from two different places:
+
+- **Engine and server cvars** come from the catalog the server keeps in `ui/data/ql_cvar_catalog.json`. It lists every cvar a live Quake Live dedicated server registers (a `listcvars` dump), with descriptions taken from the game's own annotated `server.cfg`, from its factory definitions, and from verified reference notes. Bitmask settings such as `g_startingWeapons` and `g_voteFlags` show their bit table, and settings the official factories use show real example values. Regenerate the catalog with `python scripts/gen_cvar_catalog.py` after refreshing its inputs in `scripts/cvar-catalog/`.
+- **Plugin (`qlx_`) cvars** come from the plugins of the server you are editing, read from each plugin's `<plugin>.ql-plugin.json` manifest. Plugins that are enabled are offered first, plugins that are only present are offered below them, and a plugin that isn't on this server is not offered at all. A plugin you uploaded yourself counts exactly as much as a bundled one.
+
+Cvars QLSM sets itself (ports, passwords, Redis, plugin list) are marked as app-managed, the same ones the linter flags when you set them by hand.
+
+`.factories` files get their own suggestions: the keys of a factory definition, the base gametypes for `basegt`, and cvar names inside the `cvars` block — with the cvars the game's own factories actually use offered first.
+
 ## Restart After Saving
 
 <img src="../../images/forced-restart.png" width="220" />
@@ -166,6 +179,22 @@ When validation succeeds, QLSM confirms that the current plugin file passed its 
 When validation fails, QLSM shows line-level errors above the editor. Fix the reported lines, then run `Validate` again.
 
 ![Failed plugin validation](../images/validate-failure.png)
+
+### Plugin Settings (Cvars)
+
+A plugin can ship an optional `<plugin>.ql-plugin.json` file next to its `.py` file with metadata QLSM reads and displays — none of this is required for the plugin to work as a plain checkbox.
+
+The central plugin pool (`ql-assets/data/minqlx-plugins/`) is the source of truth: if it has a manifest for a plugin with that filename, that's what's used everywhere the plugin appears — a preset or instance's own copy is not checked, even if it has its own (possibly outdated) sidecar. A local sidecar only applies as a fallback for a plugin the pool doesn't have at all, e.g. a custom/one-off plugin written directly for one preset or instance. This means metadata for a pool plugin can't drift between presets and instances, and updating the pool's manifest (adding `cvars`, for example) applies everywhere immediately, including already-deployed instances, without re-copying anything by hand.
+
+If that file declares a `cvars` list, a settings (gear) icon appears next to the plugin's row. Click it to edit the plugin's cvars directly, instead of hand-editing `server.cfg`:
+
+- **Toggle** for `bool` cvars.
+- **Number field** (with min/max, when the manifest sets them) for `number` cvars.
+- **Text field** for `string` cvars.
+
+Saving writes each edited cvar as a `set <cvar> "<value>"` line into `server.cfg` — the same mechanism used to sync the **Hostname** field with `sv_hostname`. Values you don't touch keep whatever is already in `server.cfg` (or the manifest's declared default if the line isn't present yet). This is plain text editing under the hood, so it's still visible and editable directly in the **Config** tab afterward.
+
+This is available both when editing an existing instance's config and when deploying a new instance.
 
 
 ## Factories

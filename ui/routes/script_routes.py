@@ -5,6 +5,7 @@ Provides endpoints for browsing, reading, editing, validating, and uploading
 Python scripts used by QLDS instances.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -13,6 +14,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 from ui.preset_support import resolve_preset_subdir
+from ui.plugin_manifest import read_plugin_manifest as _read_plugin_manifest
 
 # Create blueprint
 script_api_bp = Blueprint('script_api_routes', __name__)
@@ -100,11 +102,15 @@ def _build_file_tree(path, base_path=None, filter_py=True):
         elif os.path.isfile(full_path):
             if filter_py:
                 if entry.endswith('.py'):
-                    items.append({
+                    item = {
                         'name': entry,
                         'type': 'file',
                         'path': relative_path
-                    })
+                    }
+                    manifest = _read_plugin_manifest(full_path)
+                    if manifest is not None:
+                        item['plugin_manifest'] = manifest
+                    items.append(item)
             else:
                 items.append({
                     'name': entry,

@@ -33,6 +33,7 @@ const FileManager = forwardRef(function FileManager({
   getBinaryMeta,
   saveBinaryMeta,
   binaryContext = null,
+  onEditCvars = null,
 }, ref) {
   const controller = useFileManagerController({
     adapter,
@@ -100,6 +101,7 @@ const FileManager = forwardRef(function FileManager({
             onNewFolderInFolder: controller.handleNewFolderInFolder,
             onUploadToFolder: controller.handleUploadToFolder,
           }}
+          onEditCvars={onEditCvars}
         />
         <FileSidebarActions
           capabilities={capabilities}

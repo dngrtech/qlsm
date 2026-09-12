@@ -228,6 +228,82 @@ describe('FileTree', () => {
       expect(screen.getByRole('tooltip')).toHaveTextContent(/marks a package/);
     });
 
+    it('shows a cvars settings button when the manifest declares cvars and onEditCvars is passed', () => {
+      render(
+        <FolderHarness
+          files={[
+            {
+              name: 'essentials.py',
+              path: 'essentials.py',
+              type: 'file',
+              plugin_manifest: { cvars: [{ cvar: 'qlx_foo', type: 'bool' }] },
+            },
+            { name: '__init__.py', path: '__init__.py', type: 'file' },
+          ]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={vi.fn()}
+          capabilities={PLUGIN_CAPS}
+          onEditCvars={vi.fn()}
+        />,
+      );
+      expect(screen.getByTestId('plugin-cvars-essentials.py')).toBeInTheDocument();
+    });
+
+    it('omits the cvars settings button when the manifest has no cvars', () => {
+      renderPluginTree();
+      expect(screen.queryByTestId('plugin-cvars-essentials.py')).not.toBeInTheDocument();
+    });
+
+    it('omits the cvars settings button when onEditCvars is not passed', () => {
+      render(
+        <FolderHarness
+          files={[{
+            name: 'essentials.py',
+            path: 'essentials.py',
+            type: 'file',
+            plugin_manifest: { cvars: [{ cvar: 'qlx_foo', type: 'bool' }] },
+          }]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={vi.fn()}
+          capabilities={PLUGIN_CAPS}
+        />,
+      );
+      expect(screen.queryByTestId('plugin-cvars-essentials.py')).not.toBeInTheDocument();
+    });
+
+    it('calls onEditCvars with the item and normalized cvars on click, without toggling the checkbox', () => {
+      const onEditCvars = vi.fn();
+      const onCheck = vi.fn();
+      render(
+        <FolderHarness
+          files={[{
+            name: 'essentials.py',
+            path: 'essentials.py',
+            type: 'file',
+            plugin_manifest: { cvars: [{ cvar: 'qlx_foo', type: 'bool', default: true }] },
+          }]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={onCheck}
+          capabilities={PLUGIN_CAPS}
+          onEditCvars={onEditCvars}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('plugin-cvars-essentials.py'));
+
+      expect(onCheck).not.toHaveBeenCalled();
+      expect(onEditCvars).toHaveBeenCalledTimes(1);
+      const [item, cvars] = onEditCvars.mock.calls[0];
+      expect(item.path).toBe('essentials.py');
+      expect(cvars).toEqual([{ cvar: 'qlx_foo', label: 'qlx_foo', description: null, type: 'bool', default: true, min: null, max: null }]);
+    });
+
     it('leaves factories checkable when the flag is absent', () => {
       render(
         <FileTree

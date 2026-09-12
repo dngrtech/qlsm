@@ -113,6 +113,93 @@ class TestGetScriptTree:
         response = client.get('/api/scripts/tree')
         assert response.status_code == 401
 
+    def test_tree_attaches_plugin_manifest(self, client, app, scripts_dir, auth_headers, monkeypatch):
+        """A <plugin>.ql-plugin.json sibling is parsed and attached to the
+        .py node, not exposed as its own tree entry."""
+        monkeypatch.setattr('ui.routes.script_routes.CONFIGS_BASE', scripts_dir)
+        preset_scripts = os.path.join(scripts_dir, 'presets', 'default', 'scripts')
+        with open(os.path.join(preset_scripts, 'test_plugin.ql-plugin.json'), 'w') as f:
+            f.write('{"label": "Test Plugin", "description": "Does a thing."}')
+
+        response = client.get('/api/scripts/tree?preset=default', headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json['data']
+        names = [item['name'] for item in data]
+        assert 'test_plugin.ql-plugin.json' not in names  # never its own row
+        test_plugin = next(item for item in data if item['name'] == 'test_plugin.py')
+        assert test_plugin['plugin_manifest'] == {'label': 'Test Plugin', 'description': 'Does a thing.'}
+        another = next(item for item in data if item['name'] == 'another.py')
+        assert 'plugin_manifest' not in another  # no sibling file — no key at all
+
+    def test_tree_ignores_malformed_manifest(self, client, app, scripts_dir, auth_headers, monkeypatch):
+        """A broken manifest degrades to a plain checkbox, not a 500."""
+        monkeypatch.setattr('ui.routes.script_routes.CONFIGS_BASE', scripts_dir)
+        preset_scripts = os.path.join(scripts_dir, 'presets', 'default', 'scripts')
+        with open(os.path.join(preset_scripts, 'test_plugin.ql-plugin.json'), 'w') as f:
+            f.write('{not valid json')
+
+        response = client.get('/api/scripts/tree?preset=default', headers=auth_headers)
+
+        assert response.status_code == 200
+        test_plugin = next(item for item in response.json['data'] if item['name'] == 'test_plugin.py')
+        assert 'plugin_manifest' not in test_plugin
+
+    def test_tree_falls_back_to_pool_manifest_when_no_local_sidecar(self, client, app, scripts_dir, auth_headers, monkeypatch, tmp_path):
+        """A preset/instance copy of a plugin with no sidecar of its own
+        still gets enriched from the central ql-assets pool, matched by
+        filename — this is what lets an already-deployed instance pick up a
+        manifest added after it was created, without re-syncing every copy."""
+        monkeypatch.setattr('ui.routes.script_routes.CONFIGS_BASE', scripts_dir)
+        pool_dir = tmp_path / 'pool'
+        pool_dir.mkdir()
+        (pool_dir / 'another.ql-plugin.json').write_text('{"label": "Another (from pool)", "cvars": [{"cvar": "qlx_x", "type": "bool"}]}')
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(pool_dir))
+
+        response = client.get('/api/scripts/tree?preset=default', headers=auth_headers)
+
+        assert response.status_code == 200
+        another = next(item for item in response.json['data'] if item['name'] == 'another.py')
+        assert another['plugin_manifest'] == {'label': 'Another (from pool)', 'cvars': [{'cvar': 'qlx_x', 'type': 'bool'}]}
+
+    def test_tree_pool_manifest_overrides_local_sidecar(self, client, app, scripts_dir, auth_headers, monkeypatch, tmp_path):
+        """The pool wins over a local sidecar for the same filename — a
+        stale local copy (e.g. left over from before manifests existed)
+        must not shadow a newer pool entry. ql-assets is the source of
+        truth; a local sidecar only matters for a plugin the pool doesn't
+        have at all (see test_tree_falls_back_to_local_sidecar_*)."""
+        monkeypatch.setattr('ui.routes.script_routes.CONFIGS_BASE', scripts_dir)
+        preset_scripts = os.path.join(scripts_dir, 'presets', 'default', 'scripts')
+        with open(os.path.join(preset_scripts, 'another.ql-plugin.json'), 'w') as f:
+            f.write('{"label": "Stale local copy"}')
+        pool_dir = tmp_path / 'pool'
+        pool_dir.mkdir()
+        (pool_dir / 'another.ql-plugin.json').write_text('{"label": "Current pool version"}')
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(pool_dir))
+
+        response = client.get('/api/scripts/tree?preset=default', headers=auth_headers)
+
+        assert response.status_code == 200
+        another = next(item for item in response.json['data'] if item['name'] == 'another.py')
+        assert another['plugin_manifest'] == {'label': 'Current pool version'}
+
+    def test_tree_falls_back_to_local_sidecar_for_plugin_not_in_pool(self, client, app, scripts_dir, auth_headers, monkeypatch, tmp_path):
+        """A custom/one-off plugin with no pool entry at all still gets its
+        own sidecar's metadata."""
+        monkeypatch.setattr('ui.routes.script_routes.CONFIGS_BASE', scripts_dir)
+        preset_scripts = os.path.join(scripts_dir, 'presets', 'default', 'scripts')
+        with open(os.path.join(preset_scripts, 'another.ql-plugin.json'), 'w') as f:
+            f.write('{"label": "Custom, not in the pool"}')
+        pool_dir = tmp_path / 'pool'
+        pool_dir.mkdir()
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(pool_dir))
+
+        response = client.get('/api/scripts/tree?preset=default', headers=auth_headers)
+
+        assert response.status_code == 200
+        another = next(item for item in response.json['data'] if item['name'] == 'another.py')
+        assert another['plugin_manifest'] == {'label': 'Custom, not in the pool'}
+
 
 class TestGetScriptContent:
     """Tests for GET /api/scripts/content endpoint."""

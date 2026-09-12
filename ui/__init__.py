@@ -250,6 +250,9 @@ def create_app(test_config=None):
     from ui.routes.operator_routes import operator_api_bp
     api_bp.register_blueprint(operator_api_bp, url_prefix='/operators')
 
+    from ui.routes.cvar_catalog_routes import cvar_catalog_bp
+    api_bp.register_blueprint(cvar_catalog_bp, url_prefix='/cvar-catalog')
+
     app.register_blueprint(api_bp)
     app.register_blueprint(index_bp) # Register index_bp
 

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Box, Code, FileText, Folder, FolderOpen, Lock, Search, Type } from 'lucide-react';
+import { Box, Code, FileText, Folder, FolderOpen, Lock, Search, Settings, Type } from 'lucide-react';
 
 import FileTreeRowMenu from './FileTreeRowMenu';
 import InfoTooltip from '../common/InfoTooltip';
@@ -10,6 +10,7 @@ import {
   isEnableablePluginPath,
   PLUGIN_HINT_TEXT,
 } from './pluginSelection';
+import { formatPluginCommandsText, getPluginCvars, getPluginDescription, getPluginDisplayLabel } from './pluginManifest';
 
 const FILE_TYPE_ICONS = {
   python: Code,
@@ -54,6 +55,7 @@ function TreeItem({
   expandedFolders,
   onToggleFolder,
   rowMenuHandlers,
+  onEditCvars,
 }) {
   const expanded = item.type === 'folder' ? expandedFolders.has(item.path) : false;
   const isFolder = item.type === 'folder';
@@ -70,6 +72,19 @@ function TreeItem({
   const hintReason = !isFolder && rootOnly && !showCheckbox
     ? getPluginHintReason(item.path)
     : null;
+  // rootOnlyCheckable is plugin-tab-exclusive (see capabilities.js PLUGIN_CAPS) —
+  // safe signal to only enrich rows there, never Config/Factories tabs.
+  const displayLabel = !isFolder && rootOnly ? getPluginDisplayLabel(item) : item.name;
+  const manifestDescription = !isFolder && rootOnly ? (() => {
+    // InfoTooltip's bubble is white-space: normal (shared component, other
+    // callers rely on that), so a literal \n here would just collapse to a
+    // space — join with punctuation instead of relying on a line break.
+    const description = getPluginDescription(item);
+    const commandsText = formatPluginCommandsText(item);
+    if (description && commandsText) return `${description} Commands: ${commandsText}`;
+    return description || (commandsText ? `Commands: ${commandsText}` : null);
+  })() : null;
+  const pluginCvars = !isFolder && rootOnly && onEditCvars ? getPluginCvars(item) : [];
   // One hint per open folder, next to its name, instead of one per child row.
   const showFolderHint = isFolder && rootOnly && foldersEnabled && expanded
     && folderHasPluginFiles(item);
@@ -92,6 +107,7 @@ function TreeItem({
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
             rowMenuHandlers={rowMenuHandlers}
+            onEditCvars={onEditCvars}
           />
         ))}
       </>
@@ -142,7 +158,15 @@ function TreeItem({
             />
           )}
           <Icon className={`w-4 h-4 flex-shrink-0 ${iconColor}`} />
-          <span className={`truncate min-w-0 ${showFolderHint ? '' : 'flex-1'}`}>{item.name}</span>
+          <span className={`truncate min-w-0 ${showFolderHint ? '' : 'flex-1'}`}>{displayLabel}</span>
+          {manifestDescription && (
+            <InfoTooltip
+              text={manifestDescription}
+              size={13}
+              testId={`plugin-manifest-${item.path}`}
+              className="flex-shrink-0"
+            />
+          )}
           {/* Swallowing the click keeps a reach for the hint from collapsing the folder. */}
           {showFolderHint && (
             <span
@@ -160,6 +184,17 @@ function TreeItem({
             <Lock className="w-3 h-3 flex-shrink-0 text-[var(--text-muted)]" />
           )}
         </button>
+        {pluginCvars.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onEditCvars(item, pluginCvars)}
+            className="flex-shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            title="Edit plugin settings"
+            data-testid={`plugin-cvars-${item.path}`}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         <FileTreeRowMenu
           itemType={item.type}
           fileType={fileType}
@@ -190,6 +225,7 @@ function TreeItem({
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
           rowMenuHandlers={rowMenuHandlers}
+          onEditCvars={onEditCvars}
         />
       ))}
     </>
@@ -208,6 +244,7 @@ export default function FileTree({
   expandedFolders = new Set(),
   onToggleFolder = () => {},
   rowMenuHandlers = {},
+  onEditCvars = null,
 }) {
   const [search, setSearch] = useState('');
   const filesSignature = useMemo(() => getTreeSignature(files || []), [files]);
@@ -287,6 +324,7 @@ export default function FileTree({
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
             rowMenuHandlers={rowMenuHandlers}
+            onEditCvars={onEditCvars}
           />
         ))}
       </div>
