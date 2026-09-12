@@ -12,6 +12,8 @@ function AddPresetPage() {
   const [access, setAccess] = useState('');
   const [workshop, setWorkshop] = useState('');
   const [factory, setFactory] = useState('');
+  // null = the user has not added any admins to this new preset.
+  const [adminEntries, setAdminEntries] = useState(null);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,6 +37,9 @@ function AddPresetPage() {
       workshop,
       factory,
     };
+    if (adminEntries !== null) {
+      presetData.admins = adminEntries;
+    }
 
     try {
       await createPreset(presetData);
@@ -89,9 +94,10 @@ function AddPresetPage() {
 
         <OwnerAdminEditor
           serverCfgContent={serverCfg}
-          accessTxtContent={access}
           onServerCfgChange={setServerCfg}
-          onAccessTxtChange={setAccess}
+          instanceId={null}
+          adminEntries={adminEntries}
+          onAdminEntriesChange={setAdminEntries}
         />
 
         {configFields.map(field => (

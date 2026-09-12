@@ -290,7 +290,7 @@ That hook is runtime-agnostic — it detours `SV_ClientThink` inside `qzeroded` 
 
 **Backups:** `ui/task_logic/backup_files.py` registers both runtimes' `ql-assets/data/` plugin baselines as separate archive trees (`plugins/minqlx-plugins`, `plugins/minqlxtended-plugins`), so a restore onto a fresh machine carries whichever baselines exist regardless of which runtimes are actually in use.
 
-**Operator Model:** Directory of named operators (`name`, `steam_id64` unique, `default_level` 0-5) assignable as Owner (`qlx_owner` in `server.cfg`) or Admin (`steamid|level` line in `access.txt`) from the Owner & Admins tab (instance editors) or panel (preset pages). Managed via `operator_routes.py` at `/api/operators`.
+**Operator Model:** Directory of named operators (`name`, `steam_id64` unique, `default_level` 0-5) assignable as Owner (`qlx_owner` in `server.cfg`) or Admin from the Owner & Admins tab (instance editors) or panel (preset pages). Managed via `operator_routes.py` at `/api/operators`. Admin levels are no longer stored in `access.txt` — an instance's admin list lives in `InstanceAdmin` rows (`ui/models.py`) and is pushed into the instance's minqlx Redis permissions after each deploy/config-apply by `ui/task_logic/access_permission_sync.py`; Redis is the source of truth for the live level, with QLSM's stored rows reapplied on every deploy so a rebuilt host recovers them. `ui/task_logic/permission_read.py` reads the live levels back for the tab's GET endpoint. `access.txt` now only carries Quake Live's own `admin`/`mod`/`ban` role lines; `ui/admin_permissions.py` strips any leftover numeric `steamid|level` line on save.
 
 ## Testing Framework
 

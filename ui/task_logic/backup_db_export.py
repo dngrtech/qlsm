@@ -1,5 +1,5 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
-from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Operator, QLInstance, User
+from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, InstanceAdmin, Operator, QLInstance, User
 from ui.runtime import normalize_runtime
 
 DB_EXPORT_FORMAT_VERSION = 1
@@ -88,6 +88,10 @@ def _operator_row(row):
     }
 
 
+def _instance_admin_row(row):
+    return {'instance_id': row.instance_id, 'steam_id64': row.steam_id64, 'level': row.level}
+
+
 def serialize_database():
     """Return a JSON-serializable snapshot of every backed-up table."""
     return {
@@ -100,4 +104,7 @@ def serialize_database():
         'app_settings': [_app_setting_row(s) for s in AppSetting.query.order_by(AppSetting.key).all()],
         'binary_metadata': [_binary_meta_row(r) for r in BinaryMetadata.query.order_by(BinaryMetadata.id).all()],
         'operators': [_operator_row(r) for r in Operator.query.order_by(Operator.id).all()],
+        'instance_admins': [
+            _instance_admin_row(r) for r in InstanceAdmin.query.order_by(InstanceAdmin.id).all()
+        ],
     }

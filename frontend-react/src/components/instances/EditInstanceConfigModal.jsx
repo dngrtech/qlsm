@@ -210,7 +210,6 @@ function EditInstanceConfigModal({
   } = pluginsAdapter;
   const { files: serializedConfigFiles } = serializeConfigs();
   const serverCfgContent = serializedConfigFiles['server.cfg'] || '';
-  const accessTxtContent = serializedConfigFiles['access.txt'] || '';
 
   const handleServerCfgOwnerChange = useCallback((nextConfig) => {
     writeConfigContent('server.cfg', nextConfig).catch((err) => {
@@ -219,12 +218,18 @@ function EditInstanceConfigModal({
     setIsDirty(true);
   }, [writeConfigContent]);
 
-  const handleAccessTxtChange = useCallback((nextAccessTxt) => {
-    writeConfigContent('access.txt', nextAccessTxt).catch((err) => {
-      setSaveError(err?.message || 'Failed to update access.txt.');
-    });
+  // null means "the user has not edited the admin list". Only a real mutation
+  // sets it, so an untouched list is never sent -- and the modal is not dirty on
+  // open.
+  const [adminEntries, setAdminEntries] = useState(null);
+  // What the server currently has, for "Save as preset" on an untouched list.
+  // Never passed back into OwnerAdminEditor.
+  const [loadedAdminEntries, setLoadedAdminEntries] = useState(null);
+
+  const handleAdminEntriesChange = useCallback((next) => {
+    setAdminEntries(next);
     setIsDirty(true);
-  }, [writeConfigContent]);
+  }, []);
 
   // Resolve raw qlx_plugins names to full tree paths once on initial load.
   // Only root-level files can match — a name that resolves solely to a
@@ -336,6 +341,8 @@ function EditInstanceConfigModal({
         setHookDiskChanged(false);
         setHooksLoaded(false);
         setInstanceStatus(null);
+        setAdminEntries(null);
+        setLoadedAdminEntries(null);
         pluginsSyncedRef.current = false;
         setDroppedPluginCount(0);
         setPluginNoticeDismissed(false);
@@ -517,9 +524,11 @@ function EditInstanceConfigModal({
       pluginsHaveChanges ||
       checkedPluginsChanged ||
       hooksDirty ||
-      metadataChanged
+      metadataChanged ||
+      adminEntries !== null
     ));
   }, [
+    adminEntries,
     checkedPluginsChanged,
     configsHaveChanges,
     factoriesHaveChanges,
@@ -561,6 +570,11 @@ function EditInstanceConfigModal({
       if (presetData.enabled_hooks !== undefined && presetData.enabled_hooks !== null) {
         setHookEnabledOrder(presetData.enabled_hooks);
         setHooksLoaded(true);
+      }
+      // A null/absent admins means the preset never recorded a list (every
+      // preset written before this feature) -- leave the current list alone.
+      if (Array.isArray(presetData.admins)) {
+        setAdminEntries(presetData.admins);
       }
       // lan_rate_enabled: null/undefined = the preset pre-dates this feature —
       // leave the instance's current LAN rate toggle untouched. Clamp to false
@@ -674,6 +688,10 @@ function EditInstanceConfigModal({
       if (hooksLoaded) {
         presetData.enabled_hooks = hookEnabledOrder;
       }
+      // Edited list if there is one, otherwise whatever the server has. null
+      // only when neither is known (nothing loaded, nothing edited), and the
+      // backend then leaves admins.json out.
+      presetData.admins = adminEntries ?? loadedAdminEntries;
 
       presetData.lan_rate_enabled = lanRateEnabled;
 
@@ -700,7 +718,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
+  }, [adminEntries, checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, lanRateEnabled, loadedAdminEntries, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
   const handleOverwritePreset = useCallback(async (presetId, { description, runtime }) => {
     setIsSavingPreset(true);
@@ -726,6 +744,7 @@ function EditInstanceConfigModal({
       if (hooksLoaded) {
         presetData.enabled_hooks = hookEnabledOrder;
       }
+      presetData.admins = adminEntries ?? loadedAdminEntries;
       presetData.lan_rate_enabled = lanRateEnabled;
       presetData.binary_meta_source = { context_type: 'instance', context_key: String(instanceId) };
       const response = await updatePreset(presetId, presetData);
@@ -740,7 +759,7 @@ function EditInstanceConfigModal({
     } finally {
       setIsSavingPreset(false);
     }
-  }, [checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, lanRateEnabled, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
+  }, [adminEntries, checkedPlugins, hookEnabledOrder, hooksLoaded, instanceId, lanRateEnabled, loadedAdminEntries, pluginDraftId, serializeConfigs, serializeFactories, showSuccess, showError]);
 
   const handlePresetDeleted = useCallback((deletedPresetId) => {
     setPresets(prevPresets => prevPresets.filter(p => p.id !== deletedPresetId));
@@ -795,6 +814,11 @@ function EditInstanceConfigModal({
       };
       if (hooksLoaded) {
         configPayload.enabled_hooks = hookEnabledOrder;
+      }
+      // Only when the user actually edited it. An empty list is an instruction to
+      // revoke everyone, so an untouched list must not be sent at all.
+      if (adminEntries !== null) {
+        configPayload.admins = adminEntries;
       }
 
       // Pass restart parameter to updateInstanceConfig
@@ -1191,9 +1215,12 @@ function EditInstanceConfigModal({
                           <div className={activeMainTab === 'admins' ? 'flex-1 min-h-0 overflow-y-auto' : 'hidden'}>
                             <OwnerAdminEditor
                               serverCfgContent={serverCfgContent}
-                              accessTxtContent={accessTxtContent}
                               onServerCfgChange={handleServerCfgOwnerChange}
-                              onAccessTxtChange={handleAccessTxtChange}
+                              instanceId={instanceId}
+                              visible={activeMainTab === 'admins'}
+                              adminEntries={adminEntries}
+                              onAdminEntriesChange={handleAdminEntriesChange}
+                              onAdminEntriesLoaded={setLoadedAdminEntries}
                             />
                           </div>
                         </div>

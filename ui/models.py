@@ -155,7 +155,11 @@ class QLInstance(db.Model):
 
     # Foreign Key to Host
     host_id = db.Column(db.Integer, db.ForeignKey('host.id'), nullable=False)
-    
+
+    # No passive_deletes: SQLite does not enforce the FK (PRAGMA foreign_keys is
+    # never set), so the ORM has to delete the children itself.
+    admins = db.relationship('InstanceAdmin', backref='instance', cascade='all, delete-orphan')
+
     def __repr__(self):
         # Access host name via the backref relationship
         host_name = self.host.name if self.host else "No Host"
@@ -326,6 +330,34 @@ class Operator(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class InstanceAdmin(db.Model):
+    """Admins QLSM manages for one instance.
+
+    Redis is the source of truth for the live minqlx level; these rows are the
+    list QLSM pushes and reapplies after a deploy, so a rebuilt host or a wiped
+    Redis database gets its admins back. Raw SteamIDs, deliberately not a
+    foreign key to operator: an admin adopted from an in-game !setperm need not
+    be in the directory, and deleting a directory entry must not change
+    anyone's access.
+    """
+    __tablename__ = 'instance_admin'
+
+    id = db.Column(db.Integer, primary_key=True)
+    instance_id = db.Column(
+        db.Integer, db.ForeignKey('ql_instance.id', ondelete='CASCADE'), nullable=False, index=True
+    )
+    steam_id64 = db.Column(db.String(20), nullable=False)
+    level = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('instance_id', 'steam_id64', name='uq_instance_admin_instance_steamid'),
+    )
+
+    def to_dict(self):
+        return {'steam_id64': self.steam_id64, 'level': self.level}
 
 
 class BinaryMetadata(db.Model):

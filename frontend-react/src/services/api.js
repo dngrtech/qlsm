@@ -761,6 +761,16 @@ export const deleteUser = async (userId) => {
   }
 };
 
+export const getInstanceAdmins = async (instanceId) => {
+  try {
+    const response = await apiClient.get(`/instances/${instanceId}/admins`);
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to fetch instance admins:', error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to fetch instance admins');
+  }
+};
+
 // Operator Directory APIs
 export const getOperators = async () => {
   try {

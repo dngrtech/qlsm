@@ -1,14 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, UserPlus, AlertTriangle, LoaderCircle } from 'lucide-react';
 import { STEAMID64_RE } from '../../utils/operatorConfigSync';
 
-function AddOperatorModal({ isOpen, onClose, onSubmit }) {
+// initialSteamId / initialLevel prefill the form each time it opens -- used by
+// the Owner & Admins tab to name an admin that is not in the directory yet.
+function AddOperatorModal({ isOpen, onClose, onSubmit, initialSteamId = '', initialLevel = null }) {
   const [name, setName] = useState('');
   const [steamId64, setSteamId64] = useState('');
   const [defaultLevel, setDefaultLevel] = useState('5');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialSteamId) setSteamId64(initialSteamId);
+    if (initialLevel != null) setDefaultLevel(String(initialLevel));
+  }, [isOpen, initialSteamId, initialLevel]);
 
   const resetForm = () => {
     setName('');
@@ -39,6 +47,9 @@ function AddOperatorModal({ isOpen, onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // React bubbles portal events through the component tree: without this, a
+    // submit here also fires the Edit Configuration / Add Instance form it sits in.
+    e.stopPropagation();
     setError(null);
 
     const validationError = validateForm();

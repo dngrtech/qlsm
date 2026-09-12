@@ -25,6 +25,7 @@ from ui.tasks import deploy_instance, apply_instance_config, restart_instance, s
 from ui.task_logic.job_failure_handlers import instance_job_failure_handler
 from ui.task_logic.zmq_utils import validate_zmq_password
 from ui.task_lock import acquire_lock, release_lock
+from ui.admin_permissions import replace_instance_admins, validate_admin_entries, strip_numeric_admin_lines
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
     MAX_CONFIG_FOLDER_DEPTH,
@@ -146,8 +147,11 @@ def _write_configs_to_disk(instance_dir, configs_data):
     for rel_path, content in configs_data.items():
         full_path = os.path.join(instance_dir, rel_path)
         os.makedirs(os.path.dirname(full_path) or instance_dir, exist_ok=True)
+        content = content if content is not None else ''
+        if os.path.basename(rel_path) == 'access.txt':
+            content = strip_numeric_admin_lines(content)
         with open(full_path, 'w') as f:
-            f.write(content if content is not None else '')
+            f.write(content)
 
 
 def _list_managed_files_recursive(instance_dir):
@@ -309,6 +313,13 @@ def add_instance_api():
         err, code = _validate_enabled_hooks_payload(enabled_hooks_data)
         if err:
             return jsonify({"error": {"message": err}}), code
+
+    admins_data = data.get('admins')
+    admin_entries = None
+    if admins_data is not None:
+        admin_entries, admin_error = validate_admin_entries(admins_data)
+        if admin_error:
+            return jsonify({"error": {"message": admin_error}}), 400
 
     redis_db, redis_db_err = _validate_redis_db(data.get('redis_db'))
     if redis_db_err:
@@ -480,6 +491,9 @@ def add_instance_api():
         lock_token = str(uuid.uuid4())
         if not acquire_lock('instance', instance.id, lock_token, ttl=1260):
             return jsonify({"error": {"message": f'Another operation is running on this instance. Please wait for it to complete.'}}), 409
+
+        if admin_entries is not None:
+            replace_instance_admins(instance, admin_entries)
 
         # Update status to DEPLOYING and enqueue task
         try:
@@ -1218,6 +1232,12 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 if err:
                     return jsonify({"error": {"message": err}}), code
 
+            admins_data = data.get('admins')
+            if admins_data is not None:
+                admin_entries, admin_error = validate_admin_entries(admins_data)
+                if admin_error:
+                    return jsonify({"error": {"message": admin_error}}), 400
+
             if configs_present:
                 _sync_configs_to_disk(
                     instance_config_dir,
@@ -1278,6 +1298,9 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
             if factories_present:
                 instance_factories_dir = os.path.join(instance_config_dir, 'factories')
                 _sync_factories_to_disk(instance_factories_dir, factories_to_save)
+
+            if admins_data is not None:
+                replace_instance_admins(instance, admin_entries)
 
             try:
                 update_instance(instance.id, **update_kwargs)

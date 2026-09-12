@@ -155,7 +155,7 @@ export const qlaccessLanguage = StreamLanguage.define({
 // Suggests operators from the Settings -> Operators directory (via
 // operatorsCache, populated by OwnerAdminEditor) while typing the SteamID
 // field of an access.txt line — matches by SteamID prefix or by name.
-function operatorCompletionSource(context) {
+export function operatorCompletionSource(context) {
   const line = context.state.doc.lineAt(context.pos);
   const textBeforeCursor = line.text.slice(0, context.pos - line.from);
   if (/^\s*#/.test(textBeforeCursor)) return null;
@@ -170,7 +170,7 @@ function operatorCompletionSource(context) {
     .map((op) => ({
       label: op.steam_id64,
       detail: `${op.name} (lvl ${op.default_level})`,
-      apply: `${op.steam_id64}|${op.default_level}`,
+      apply: op.steam_id64,
       type: 'variable',
     }));
 

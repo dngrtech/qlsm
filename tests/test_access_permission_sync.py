@@ -79,44 +79,6 @@ def _install_fake_redis(monkeypatch):
     return FakeRedis
 
 
-# --- parse_access_entries -------------------------------------------------
-
-def test_parse_access_entries_matches_frontend_shape():
-    from ui.task_logic.access_permission_sync import parse_access_entries
-
-    text = "\n".join([
-        "# comment line",
-        "",
-        "76561197999064274|5",
-        "76561198257351377|3",
-        "not-a-steamid|5",
-        "76561197999064274|4  # last line for a dupe wins",
-    ])
-    entries = parse_access_entries(text)
-
-    assert entries == {"76561197999064274": 4, "76561198257351377": 3}
-
-
-def test_parse_access_entries_rejects_invalid_or_out_of_range_level():
-    """A missing/non-numeric/out-of-range level must be dropped, not
-    defaulted or clamped to 5 -- level 5 is what !setperm requires, so
-    silently granting it from a typo would be a privilege escalation."""
-    from ui.task_logic.access_permission_sync import parse_access_entries
-
-    entries = parse_access_entries(
-        "76561197999064274|\n76561198257351377|99\n76561197111111111|e\n76561197222222222|3\n"
-    )
-
-    assert entries == {"76561197222222222": 3}
-
-
-def test_parse_access_entries_empty_input():
-    from ui.task_logic.access_permission_sync import parse_access_entries
-
-    assert parse_access_entries("") == {}
-    assert parse_access_entries(None) == {}
-
-
 # --- build_sync_command ----------------------------------------------------
 
 def test_build_sync_command_shape():
@@ -234,7 +196,7 @@ def test_remote_script_adopts_legacy_db_wide_set_once(monkeypatch):
 def test_sync_access_permissions_returns_none_without_host():
     from ui.task_logic.access_permission_sync import sync_access_permissions
 
-    assert sync_access_permissions(_instance(host=None), "76561197999064274|5") is None
+    assert sync_access_permissions(_instance(host=None), {"76561197999064274": 5}) is None
 
 
 def test_sync_access_permissions_uses_self_host_redis_password(monkeypatch):
@@ -251,7 +213,7 @@ def test_sync_access_permissions_uses_self_host_redis_password(monkeypatch):
     monkeypatch.setenv("REDIS_PASSWORD", "secret-pw")
 
     instance = _instance(host=_host(provider="self"))
-    result = module.sync_access_permissions(instance, "76561197999064274|5")
+    result = module.sync_access_permissions(instance, {"76561197999064274": 5})
 
     assert result == {"synced": [], "reset": []}
     script = _remote_script(captured["command"])
@@ -269,7 +231,7 @@ def test_sync_access_permissions_returns_false_on_nonzero_exit(monkeypatch):
         subprocess, "run",
         lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr="connection refused"),
     )
-    result = module.sync_access_permissions(_instance(host=_host()), "76561197999064274|5")
+    result = module.sync_access_permissions(_instance(host=_host()), {"76561197999064274": 5})
     assert result is False
 
 
@@ -280,48 +242,75 @@ def test_sync_access_permissions_returns_false_on_timeout(monkeypatch):
         raise subprocess.TimeoutExpired(cmd="ssh", timeout=10)
 
     monkeypatch.setattr(subprocess, "run", raise_timeout)
-    result = module.sync_access_permissions(_instance(host=_host()), "76561197999064274|5")
+    result = module.sync_access_permissions(_instance(host=_host()), {"76561197999064274": 5})
     assert result is False
 
 
-# --- sync_instance_access_permissions (disk read wrapper) -------------------
+# --- sync_instance_admin_permissions (row-reading wrapper) ------------------
 
-def test_sync_instance_access_permissions_reads_configured_access_txt(tmp_path, monkeypatch):
-    from ui.task_logic import access_permission_sync as module
-
-    monkeypatch.chdir(tmp_path)
-    host = _host(name="germany-1")
-    instance = _instance(host=host)
-    config_dir = tmp_path / "configs" / host.name / str(instance.id)
-    config_dir.mkdir(parents=True)
-    (config_dir / "access.txt").write_text("76561197999064274|5\n")
+def test_sync_instance_admin_permissions_uses_rows(monkeypatch):
+    import ui.task_logic.access_permission_sync as mod
 
     captured = {}
 
-    def fake_sync(inst, text):
-        captured["instance"] = inst
-        captured["text"] = text
-        return {"synced": ["76561197999064274"], "reset": []}
+    def fake_sync(instance, entries):
+        captured['entries'] = entries
+        return {"synced": sorted(entries), "reset": []}
 
-    monkeypatch.setattr(module, "sync_access_permissions", fake_sync)
-
-    result = module.sync_instance_access_permissions(instance)
-
-    assert result == {"synced": ["76561197999064274"], "reset": []}
-    assert captured["text"] == "76561197999064274|5\n"
-
-
-def test_sync_instance_access_permissions_no_op_without_file(tmp_path, monkeypatch):
-    from ui.task_logic import access_permission_sync as module
-
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "sync_access_permissions", fake_sync)
     instance = _instance(host=_host())
+    instance.admins = [
+        SimpleNamespace(steam_id64="76561198012345678", level=3),
+        SimpleNamespace(steam_id64="76561198087654321", level=0),
+    ]
 
-    assert module.sync_instance_access_permissions(instance) is None
+    result = mod.sync_instance_admin_permissions(instance)
+
+    assert captured['entries'] == {"76561198012345678": 3, "76561198087654321": 0}
+    assert result["synced"] == ["76561198012345678", "76561198087654321"]
 
 
-def test_sync_instance_access_permissions_no_op_without_host():
-    from ui.task_logic.access_permission_sync import sync_instance_access_permissions
-
+def test_sync_instance_admin_permissions_without_host_is_a_noop(monkeypatch):
+    import ui.task_logic.access_permission_sync as mod
     instance = _instance(host=None)
-    assert sync_instance_access_permissions(instance) is None
+    instance.admins = []
+    assert mod.sync_instance_admin_permissions(instance) is None
+
+
+def test_no_admins_still_syncs_so_removals_apply(monkeypatch):
+    import ui.task_logic.access_permission_sync as mod
+    captured = {}
+    monkeypatch.setattr(mod, "sync_access_permissions",
+                        lambda instance, entries: captured.setdefault('entries', entries) or {"synced": [], "reset": []})
+    instance = _instance(host=_host())
+    instance.admins = []
+    mod.sync_instance_admin_permissions(instance)
+    assert captured['entries'] == {}
+
+
+# --- sync_and_report_access_permissions never raises -----------------------
+
+def test_report_wrapper_swallows_failure_in_log_and_commit_path(monkeypatch):
+    """A failure while logging/committing the warning (e.g. flag_modified()
+    blowing up on an unrealistic mock, or a real DB error) must not escape --
+    the wrapper's docstring promises it never raises and never fails the
+    calling task."""
+    import ui.task_logic.access_permission_sync as mod
+
+    monkeypatch.setattr(mod, "sync_instance_admin_permissions", lambda instance: False)
+
+    def _boom(instance, message):
+        raise RuntimeError("flag_modified explosion")
+
+    monkeypatch.setattr(mod, "append_log", _boom)
+    rollback_calls = []
+    monkeypatch.setattr(mod.db.session, "rollback", lambda: rollback_calls.append(True))
+    monkeypatch.setattr(mod.db.session, "commit", lambda: (_ for _ in ()).throw(RuntimeError("commit failed")))
+
+    instance = _instance(host=_host())
+    instance.admins = []
+
+    result = mod.sync_and_report_access_permissions(instance)
+
+    assert result is False
+    assert rollback_calls, "expected the wrapper to roll back the broken session"

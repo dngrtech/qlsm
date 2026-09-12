@@ -32,7 +32,21 @@ vi.mock('../../../hooks/useDraftWorkspace', () => ({
 }));
 
 vi.mock('../../operators/OwnerAdminEditor', () => ({
-  default: () => null,
+  // Renders what it is given (so preset seeding is observable) and exposes a
+  // button (so the create/save-as-preset payload can be asserted).
+  default: ({ adminEntries, onAdminEntriesChange }) => (
+    <div>
+      {(adminEntries || []).map((entry) => (
+        <span key={entry.steam_id64}>{`seeded:${entry.steam_id64}:${entry.level}`}</span>
+      ))}
+      <button
+        type="button"
+        onClick={() => onAdminEntriesChange([{ steam_id64: '76561198012345678', level: 2 }])}
+      >
+        set-admins
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('../../../services/api', () => ({
@@ -2089,6 +2103,100 @@ describe('AddInstanceForm draft lifecycle', () => {
       // accepted replacement -- not silently reseeded to an empty list.
       expect(screen.getByText('Editing preset:').parentElement).toHaveTextContent('presetA');
       expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+    });
+  });
+
+  describe('admin list wiring', () => {
+    const baseInitialData = {
+      hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
+      presets: [],
+      defaultConfigContents: {
+        'server.cfg': '',
+        'mappool.txt': '',
+        'access.txt': '',
+        'workshop.txt': '',
+      },
+    };
+
+    const renderForm = (onSubmit = vi.fn().mockResolvedValue(undefined)) => {
+      render(
+        <AddInstanceForm
+          initialData={baseInitialData}
+          initialHostId={1}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={vi.fn()}
+        />
+      );
+      return onSubmit;
+    };
+
+    it('sends the admin list with the create payload', async () => {
+      const onSubmit = renderForm();
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      fireEvent.click(screen.getByRole('button', { name: /owner & admins/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'set-admins' }));
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].admins).toEqual([{ steam_id64: '76561198012345678', level: 2 }]);
+    });
+
+    it('omits admins entirely from a create that never touched the tab', async () => {
+      const onSubmit = renderForm();
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('admins');
+    });
+
+    it('seeds the admin list from an applied preset and sends it back on save-as-preset', async () => {
+      mocks.getPresetById.mockResolvedValue({
+        name: 'admins-preset',
+        configs: {},
+        factories: {},
+        admins: [{ steam_id64: '76561198087654321', level: 4 }],
+      });
+      renderForm();
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByRole('button', { name: /owner & admins/i }));
+      await waitFor(() => expect(screen.getByText('seeded:76561198087654321:4')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: /save preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
+
+      await waitFor(() => expect(mocks.savePreset).toHaveBeenCalledTimes(1));
+      expect(mocks.savePreset.mock.calls[0][0].admins)
+        .toEqual([{ steam_id64: '76561198087654321', level: 4 }]);
+    });
+
+    it('a preset with no admin list leaves the current one alone', async () => {
+      mocks.getPresetById.mockResolvedValue({ name: 'legacy-preset', configs: {}, factories: {}, admins: null });
+      const onSubmit = renderForm();
+      await waitFor(() => expect(screen.getByTestId('selected-host')).toHaveTextContent('1'));
+
+      fireEvent.click(screen.getByRole('button', { name: /owner & admins/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'set-admins' }));
+
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].admins).toEqual([{ steam_id64: '76561198012345678', level: 2 }]);
     });
   });
 });

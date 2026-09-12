@@ -250,6 +250,9 @@ def create_app(test_config=None):
     from ui.routes.operator_routes import operator_api_bp
     api_bp.register_blueprint(operator_api_bp, url_prefix='/operators')
 
+    from ui.routes.instance_admin_routes import instance_admin_api_bp
+    api_bp.register_blueprint(instance_admin_api_bp, url_prefix='/instances')
+
     app.register_blueprint(api_bp)
     app.register_blueprint(index_bp) # Register index_bp
 

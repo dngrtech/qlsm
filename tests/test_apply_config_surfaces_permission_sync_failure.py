@@ -45,7 +45,7 @@ def _stub_ansible(monkeypatch):
 def test_apply_config_warns_operator_when_permission_sync_fails(app, instance_in_db, monkeypatch):
     from ui.task_logic import access_permission_sync
 
-    monkeypatch.setattr(access_permission_sync, "sync_instance_access_permissions", lambda inst: False)
+    monkeypatch.setattr(access_permission_sync, "sync_instance_admin_permissions", lambda inst: False)
 
     with app.app_context():
         mod.apply_instance_config_logic(instance_in_db.id)
@@ -57,7 +57,7 @@ def test_apply_config_stays_quiet_when_nothing_to_sync(app, instance_in_db, monk
     from ui.task_logic import access_permission_sync
 
     # No access.txt on disk at all -- a legitimate no-op, not a failure.
-    monkeypatch.setattr(access_permission_sync, "sync_instance_access_permissions", lambda inst: None)
+    monkeypatch.setattr(access_permission_sync, "sync_instance_admin_permissions", lambda inst: None)
 
     with app.app_context():
         mod.apply_instance_config_logic(instance_in_db.id)
@@ -73,7 +73,7 @@ def test_apply_config_warns_when_permission_sync_raises(app, instance_in_db, mon
     def boom(inst):
         raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
 
-    monkeypatch.setattr(access_permission_sync, "sync_instance_access_permissions", boom)
+    monkeypatch.setattr(access_permission_sync, "sync_instance_admin_permissions", boom)
 
     with app.app_context():
         result = mod.apply_instance_config_logic(instance_in_db.id)
@@ -89,7 +89,7 @@ def test_deploy_syncs_permissions_after_success(app, instance_in_db, monkeypatch
 
     calls = []
     monkeypatch.setattr(
-        access_permission_sync, "sync_instance_access_permissions",
+        access_permission_sync, "sync_instance_admin_permissions",
         lambda inst: calls.append(inst.id) or False,
     )
 

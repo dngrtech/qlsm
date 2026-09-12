@@ -9,6 +9,7 @@ import zipfile
 from flask import Blueprint, request, jsonify, current_app, send_file
 from flask_jwt_extended import jwt_required
 from ui import db
+from ui.admin_permissions import strip_numeric_admin_lines, validate_admin_entries
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
 from ui.models import BinaryMetadata
 from ui.preset_compat import apply_compatibility
@@ -136,6 +137,7 @@ def _preset_export_manifest(preset, binary_metadata_count):
             'checked_factories': True,
             'enabled_hooks': True,
             'lan_rate_enabled': True,
+            'admins': True,
             'binary_metadata': True,
         },
         'counts': {
@@ -492,6 +494,20 @@ def _validate_enabled_hooks_payload(data):
     return None
 
 
+def _validate_admins_payload(data):
+    """(entries, error). (None, None) when the payload has no 'admins' key.
+
+    Returns the *normalized* entries so the caller writes those -- otherwise
+    admins.json ends up holding the raw client payload, un-deduplicated and
+    with level possibly still the string "5", which then differs in shape
+    from what the config-save path produces and propagates into instance
+    rows.
+    """
+    if 'admins' not in data:
+        return None, None
+    return validate_admin_entries(data['admins'])
+
+
 def _validate_lan_rate_enabled_payload(data):
     if 'lan_rate_enabled' not in data:
         return None
@@ -811,6 +827,29 @@ def _read_preset_enabled_hooks(preset_path):
         return None
 
 
+def _read_preset_admins(preset_path):
+    """Read admins.json from a preset folder.
+
+    None -- not [] -- when the file is absent: that is this module's
+    convention for "the preset never recorded this" (see
+    _read_preset_enabled_hooks), and it is what stops an older preset
+    clearing an instance's admin list and revoking everyone on the next save.
+    """
+    filepath = os.path.join(preset_path, 'admins.json')
+    if not os.path.exists(filepath):
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            entries, error = validate_admin_entries(json.load(f))
+            if error:
+                current_app.logger.warning(f"Ignoring invalid admins.json at {filepath}: {error}")
+                return None
+            return entries
+    except Exception as e:
+        current_app.logger.error(f"Error reading admins.json from {filepath}: {e}")
+        return None
+
+
 def _read_preset_user_hooks(preset):
     """List the .so hook files in a preset's user-hooks/ directory.
 
@@ -858,6 +897,18 @@ def _write_preset_enabled_hooks(preset_path, enabled_hooks):
         current_app.logger.info(f"Wrote enabled_hooks.json: {filepath}")
     except Exception as e:
         current_app.logger.error(f"Error writing enabled_hooks.json to {filepath}: {e}")
+
+
+def _write_preset_admins(preset_path, admins):
+    """Write admins.json to a preset folder (validated entries, not the raw payload)."""
+    os.makedirs(preset_path, exist_ok=True)
+    filepath = os.path.join(preset_path, 'admins.json')
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(admins, f)
+        current_app.logger.info(f"Wrote admins.json: {filepath}")
+    except Exception as e:
+        current_app.logger.error(f"Error writing admins.json to {filepath}: {e}")
 
 
 def _read_preset_lan_rate_enabled(preset_path):
@@ -926,6 +977,8 @@ def _write_preset_configs(preset_path, config_data):
     for rel_path, content in config_files.items():
         filepath = os.path.join(preset_path, rel_path)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        if os.path.basename(rel_path) == 'access.txt':
+            content = strip_numeric_admin_lines(content)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         current_app.logger.info(f"Wrote preset config file: {filepath}")
@@ -1093,6 +1146,10 @@ def create_preset_api():
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
 
+    admin_entries, admins_error = _validate_admins_payload(data)
+    if admins_error:
+        return jsonify({"error": {"message": admins_error}}), 400
+
     runtime, runtime_error = _validate_preset_runtime(data)
     if runtime_error:
         return jsonify({"error": {"message": runtime_error}}), 400
@@ -1169,6 +1226,9 @@ def create_preset_api():
         if 'lan_rate_enabled' in data:
             _write_preset_lan_rate_enabled(preset_path, data['lan_rate_enabled'])
 
+        if admin_entries is not None:
+            _write_preset_admins(preset_path, admin_entries)
+
         # Step 2: Create DB record
         preset_data = {
             'name': name,
@@ -1196,6 +1256,7 @@ def create_preset_api():
         response_data['checked_factories'] = _read_preset_checked_factories(preset_path)
         response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset_path)
         response_data['lan_rate_enabled'] = _read_preset_lan_rate_enabled(preset_path)
+        response_data['admins'] = _read_preset_admins(preset_path)
 
         if metadata_copied:
             db.session.commit()
@@ -1245,6 +1306,7 @@ def get_preset_api(preset_id):
     response_data['checked_factories'] = _read_preset_checked_factories(preset.path)
     response_data['enabled_hooks'] = _read_preset_enabled_hooks(preset.path)
     response_data['lan_rate_enabled'] = _read_preset_lan_rate_enabled(preset.path)
+    response_data['admins'] = _read_preset_admins(preset.path)
     response_data['user_hooks'] = _read_preset_user_hooks(preset)
 
     # Optional: classify this preset's plugins against the runtime of the host
@@ -1338,6 +1400,10 @@ def update_preset_api(preset_id):
     lan_rate_enabled_error = _validate_lan_rate_enabled_payload(data)
     if lan_rate_enabled_error:
         return jsonify({"error": {"message": lan_rate_enabled_error}}), 400
+
+    admin_entries, admins_error = _validate_admins_payload(data)
+    if admins_error:
+        return jsonify({"error": {"message": admins_error}}), 400
 
     runtime_provided = 'runtime' in data
     runtime, runtime_error = _validate_preset_runtime_update(data)
@@ -1443,6 +1509,9 @@ def update_preset_api(preset_id):
         if 'lan_rate_enabled' in data:
             _write_preset_lan_rate_enabled(preset.path, data['lan_rate_enabled'])
 
+        if admin_entries is not None:
+            _write_preset_admins(preset.path, admin_entries)
+
         # Handle name change (rename folder)
         renamed_preset = name_provided and new_name != original_preset_name
         if renamed_preset:
@@ -1494,6 +1563,7 @@ def update_preset_api(preset_id):
             response_data['checked_factories'] = _read_preset_checked_factories(updated_preset.path)
             response_data['enabled_hooks'] = _read_preset_enabled_hooks(updated_preset.path)
             response_data['lan_rate_enabled'] = _read_preset_lan_rate_enabled(updated_preset.path)
+            response_data['admins'] = _read_preset_admins(updated_preset.path)
 
             if metadata_copied or metadata_renamed:
                 db.session.commit()

@@ -9,7 +9,7 @@ import datetime
 from ui import db
 from ui.models import (
     ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
-    InstanceStatus, Operator, QLFilterStatus, QLInstance, User,
+    InstanceAdmin, InstanceStatus, Operator, QLFilterStatus, QLInstance, User,
 )
 from ui.runtime import normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
@@ -61,6 +61,8 @@ def replace_database(data):
     # Children before parents so no foreign key is ever left dangling
     # mid-wipe (QLInstance.host_id -> Host.id).
     BinaryMetadata.query.delete()
+    # instance_admin is a child of ql_instance -- clear it before its parent.
+    InstanceAdmin.query.delete()
     QLInstance.query.delete()
     Host.query.delete()
     ConfigPreset.query.delete()
@@ -123,5 +125,14 @@ def replace_database(data):
             id=row['id'], name=row['name'], steam_id64=row['steam_id64'],
             default_level=row.get('default_level', 5),
             created_at=_parse_dt(row.get('created_at')), updated_at=_parse_dt(row.get('updated_at')),
+        ))
+
+    # 'instance_admins' is intentionally not required: backups predating the
+    # Redis-permissions change do not have it.
+    for row in data.get('instance_admins') or []:
+        db.session.add(InstanceAdmin(
+            instance_id=row['instance_id'],
+            steam_id64=row['steam_id64'],
+            level=row['level'],
         ))
     db.session.flush()

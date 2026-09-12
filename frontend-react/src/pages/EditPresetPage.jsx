@@ -13,6 +13,8 @@ function EditPresetPage() {
   const [access, setAccess] = useState('');
   const [workshop, setWorkshop] = useState('');
   const [factory, setFactory] = useState('');
+  // null = this preset never recorded an admin list (or it hasn't loaded yet).
+  const [adminEntries, setAdminEntries] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +33,7 @@ function EditPresetPage() {
       setAccess(data.access || '');
       setWorkshop(data.workshop || '');
       setFactory(data.factory || '');
+      setAdminEntries(Array.isArray(data.admins) ? data.admins : null);
     } catch (err) {
       console.error(`Error fetching preset ${presetId}:`, err);
       setError(err.message || `Failed to fetch preset ${presetId}.`);
@@ -63,6 +66,9 @@ function EditPresetPage() {
       workshop,
       factory,
     };
+    if (adminEntries !== null) {
+      presetData.admins = adminEntries;
+    }
 
     // If name hasn't changed, don't include it in the update payload
     // to avoid potential "name already exists" error for the same preset.
@@ -127,9 +133,10 @@ function EditPresetPage() {
 
         <OwnerAdminEditor
           serverCfgContent={serverCfg}
-          accessTxtContent={access}
           onServerCfgChange={setServerCfg}
-          onAccessTxtChange={setAccess}
+          instanceId={null}
+          adminEntries={adminEntries}
+          onAdminEntriesChange={setAdminEntries}
         />
 
         {configFields.map(field => (

@@ -20,19 +20,23 @@ You can also create **subfolders** (one level deep) to hold `.ent` entity overri
 The **Owner & Admins** tab, to the right of **Hooks**, lets you assign people
 from the [Operators](../administration/operators.md) directory without
 hand-editing `server.cfg` or `access.txt`. Pick an **Owner** to write
-`qlx_owner`, or add an operator as an **Admin** with a level from 0 to 5 to
-write a `steamid|level` line to `access.txt`.
+`qlx_owner`, or add an operator as an **Admin** with a level from 1 to 5.
+Redis, not `access.txt`, is the source of truth for admin levels — see
+[Row States](../administration/operators.md#row-states) for what each row's
+badge means and how to change or revoke a level.
 
 ![Owner & Admins panel](../images/owner-admins-panel.png)
 
-When you click **Save Configuration**, QLSM also pushes the admin levels into
+When you click **Save Configuration**, QLSM also pushes the admin list into
 the running server's minqlx permissions. They can take up to about 30 seconds
 to apply. Removing an admin sets their in-game level back to 0. If the push
 fails, a warning appears in the instance log. See
 [What Happens In-Game](../administration/operators.md#what-happens-in-game).
 
-Typing a SteamID directly in the `access.txt` editor also suggests operators
-from the directory.
+Any numeric `steamid|level` line left in `access.txt` from an older QLSM
+version is stripped out automatically whenever the file is saved — Quake
+Live's own `admin`, `mod` and `ban` lines are left untouched. The editor's
+autocomplete now inserts a bare SteamID rather than a `steamid|level` line.
 
 
 ## Editor Buttons
