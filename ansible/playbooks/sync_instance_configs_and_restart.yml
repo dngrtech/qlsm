@@ -116,15 +116,35 @@
       delegate_to: localhost
       become: false
 
-    - name: Backfill common minqlx-plugins to instance directory
+    - name: List instance-selected plugin filenames (excluded from common backfill)
+      ansible.builtin.find:
+        paths: "{{ playbook_dir }}/../../configs/{{ host_name }}/{{ qlds_id }}/scripts/"
+        recurse: yes
+        file_type: file
+      delegate_to: localhost
+      become: false
+      register: instance_selected_scripts
+
+    - name: Build common minqlx-plugins backfill exclude list
+      ansible.builtin.set_fact:
+        common_backfill_excludes: >-
+          {{
+            instance_selected_scripts.files
+            | map(attribute='path') | map('basename')
+            | map('regex_replace', '^', '--exclude=') | list
+          }}
+
+    # Compare by content (--checksum), not mere presence: a fix landed in
+    # /home/ql/assets/common/minqlx-plugins/ must still reach an instance that
+    # was already backfilled once, not just brand-new instances.
+    # --ignore-existing used to skip any file that already existed on disk,
+    # including stale files from an earlier backfill, so fixes never landed.
+    # Instance-selected plugins (placed above from configs/.../scripts/, which
+    # is the deliberate per-instance selection/override) are excluded by name
+    # so this backfill still never clobbers them.
+    - name: Backfill/refresh common minqlx-plugins in instance directory
       ansible.builtin.command:
-        argv:
-          - rsync
-          - -a
-          - --ignore-existing
-          - --itemize-changes
-          - "/home/ql/assets/common/{{ runtime_plugins_dirname }}/"
-          - "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/"
+        argv: "{{ ['rsync', '-a', '--checksum', '--itemize-changes'] + common_backfill_excludes + ['/home/ql/assets/common/' ~ runtime_plugins_dirname ~ '/', qlds_dir ~ '/' ~ runtime_plugins_dirname ~ '/'] }}"
       become_user: ql
       register: common_minqlx_backfill
       changed_when: common_minqlx_backfill.stdout != ""

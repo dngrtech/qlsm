@@ -12,8 +12,14 @@ BASELINES = ['minqlx-plugins', 'minqlxtended-plugins']
 # minqlxtended side. This file adds the equivalent for minqlx: a first-ever
 # manifest generation defaulted every file, QLSM ports included, to
 # origin='upstream', and this is the regression test for that.
+#
+# minqlx.py is minqlx-side only (a compat shim resolving `import minqlx` to
+# minqlxtended on a minqlxtended-runtime host -- see its own docstring), not
+# a port of an upstream file at all, but it is just as much QLSM's own code
+# as the seven ports above, so it belongs in this list rather than being
+# mislabeled 'upstream'.
 QLSM_PLUGINS = [
-    'commands.py', 'myFun.py', 'player_info.py', 'reset_acc.py',
+    'commands.py', 'minqlx.py', 'myFun.py', 'player_info.py', 'reset_acc.py',
     'serverchecker.py', 'specqueue.py', 'suppress_join_msg.py',
 ]
 

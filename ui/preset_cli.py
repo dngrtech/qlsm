@@ -6,6 +6,7 @@ from flask.cli import with_appcontext
 
 from ui import db
 from ui.builtin_presets import sync_builtin_presets_command
+from ui.plugin_pool_sync import sync_plugin_pool_command
 from ui.database import (
     create_preset,
     delete_preset,
@@ -143,3 +144,4 @@ def register_preset_commands(app):
     app.cli.add_command(list_presets_command)
     app.cli.add_command(delete_preset_command)
     app.cli.add_command(sync_builtin_presets_command)
+    app.cli.add_command(sync_plugin_pool_command)

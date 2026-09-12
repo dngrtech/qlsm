@@ -128,6 +128,10 @@
       "origin": "upstream",
       "sha256": "cd6ef17de3474bf7e82d9508420f39539b9d11121b6ef50b8774d1ea609044e8"
     },
+    "minqlx.py": {
+      "origin": "qlsm",
+      "sha256": "f2c8939309be0bb740296acab691e7e505e43ec9a9787cef0611c025ec89fcb4"
+    },
     "motd.py": {
       "origin": "upstream",
       "sha256": "5ddd6a60a432da805d2e23074777eb60d82a189cc4b9117fddc15518695e4593"

@@ -156,6 +156,62 @@ def test_minqlx_sync_precedes_service_restart():
     assert sync_idx < restart_idx
 
 
+def test_playbook_backfills_common_plugins_by_content_not_existence():
+    """Regression guard: --ignore-existing skipped any file that already
+    existed on disk (even stale ones from an earlier backfill), so a fix
+    landed in the common minqlx-plugins pool never reached an instance that
+    had already been backfilled once. The backfill must compare by content
+    instead, while still never overwriting the instance's own plugin
+    selection (which is placed onto disk by the sync task right before it).
+    """
+    tasks = _tasks()
+    backfill = next(
+        t for t in tasks
+        if "ansible.builtin.command" in t
+        and "runtime_plugins_dirname" in str(t["ansible.builtin.command"].get("argv", []))
+    )
+    argv = backfill["ansible.builtin.command"]["argv"]
+
+    assert "--ignore-existing" not in argv
+    assert "--checksum" in argv
+    assert "rsync" in argv
+    assert "/home/ql/assets/common/' ~ runtime_plugins_dirname ~ '/'" in argv
+    assert "qlds_dir ~ '/' ~ runtime_plugins_dirname ~ '/'" in argv
+
+    find_task = next(
+        t for t in tasks
+        if t.get("register") == "instance_selected_scripts"
+    )
+    find_args = find_task["ansible.builtin.find"]
+    assert find_args["paths"] == (
+        "{{ playbook_dir }}/../../configs/{{ host_name }}/{{ qlds_id }}/scripts/"
+    )
+    assert find_task["delegate_to"] == "localhost"
+    assert find_task["become"] is False
+
+    excludes_task = next(
+        t for t in tasks
+        if t.get("ansible.builtin.set_fact", {}).get("common_backfill_excludes")
+    )
+    excludes_expr = excludes_task["ansible.builtin.set_fact"]["common_backfill_excludes"]
+    assert "instance_selected_scripts.files" in excludes_expr
+    assert "--exclude=" in excludes_expr
+
+
+def test_backfill_precedes_service_restart():
+    tasks = _tasks()
+    backfill_idx = next(
+        i for i, t in enumerate(tasks)
+        if "ansible.builtin.command" in t
+        and "runtime_plugins_dirname" in str(t["ansible.builtin.command"].get("argv", []))
+    )
+    restart_idx = next(
+        i for i, t in enumerate(tasks)
+        if "Restart QLDS service" in t.get("name", "")
+    )
+    assert backfill_idx < restart_idx
+
+
 def test_playbook_only_stops_non_restarted_service_when_explicitly_requested():
     task = next(
         task for task in _tasks()

@@ -1323,12 +1323,12 @@ def test_seed_draft_same_runtime_load_keeps_everything(app, tmp_path):
     from ui.routes.draft_routes import _seed_draft
     source = os.path.abspath('configs/presets/_builtin/default/scripts')
     source_count = _count_py_files(source)
-    assert source_count == 54  # sanity: matches the reported reproduction
+    assert source_count == 55  # sanity: matches the reported reproduction
 
     draft = tmp_path / 'draft'
     with app.app_context():
         _seed_draft(str(draft), source, 'default', target_runtime='minqlx')
-    assert _count_py_files(draft) == 54
+    assert _count_py_files(draft) == 55
 
 
 def test_seed_draft_same_runtime_load_keeps_everything_minqlxtended(app, tmp_path):

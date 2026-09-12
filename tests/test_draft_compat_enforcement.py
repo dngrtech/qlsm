@@ -193,8 +193,8 @@ def test_real_default_preset_survives_a_matched_runtime_load(app):
     # yields nothing, _seed_draft then falls back to an empty draft, and
     # set() == set() is green having compared zero files -- inside the very
     # module whose purpose is catching exactly that failure mode.
-    assert len(source_files) == 54, (
-        f'expected the real default preset to have 54 .py files, found '
+    assert len(source_files) == 55, (
+        f'expected the real default preset to have 55 .py files, found '
         f'{len(source_files)} -- run pytest from the repo root')
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -228,8 +228,8 @@ def test_real_default_preset_cross_runtime_filter_matches_the_report(app, tmp_pa
     import shutil
     src = 'configs/presets/_builtin/default/scripts'
     source_files = _pys(src)
-    assert len(source_files) == 54, (
-        f'expected the real default preset to have 54 .py files, found '
+    assert len(source_files) == 55, (
+        f'expected the real default preset to have 55 .py files, found '
         f'{len(source_files)} -- run pytest from the repo root')
 
     good_name = 'aliases.py'
@@ -336,8 +336,8 @@ def test_a_cross_runtime_load_keeps_the_target_runtimes_own_shipped_plugins(
     """
     source_files = _pys(MINQLXTENDED_DEFAULT)
     overlay_files = _pys(MINQLX_DEFAULT)
-    assert len(source_files) == 75 and len(overlay_files) == 54, (
-        f'expected the two shipped defaults to hold 75 and 54 .py files, found '
+    assert len(source_files) == 75 and len(overlay_files) == 55, (
+        f'expected the two shipped defaults to hold 75 and 55 .py files, found '
         f'{len(source_files)} and {len(overlay_files)} -- run pytest from the '
         f'repo root')
 

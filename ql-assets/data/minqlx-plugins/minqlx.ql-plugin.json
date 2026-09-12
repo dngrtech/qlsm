@@ -1,0 +1,4 @@
+{
+  "label": "⚠️ minqlx compat shim — DO NOT ENABLE",
+  "description": "Not a plugin. Makes bare `import minqlx` resolve to minqlxtended for a few plugins that haven't been updated to `import minqlxtended as minqlx`. Must stay present as a file but never appear in qlx_plugins — enabling it will error."
+}

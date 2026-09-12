@@ -54,6 +54,10 @@ QLSM_PLUGINS_BY_RUNTIME = {
     'minqlx': {
         'commands.py', 'myFun.py', 'player_info.py', 'reset_acc.py',
         'serverchecker.py', 'specqueue.py', 'suppress_join_msg.py',
+        # Compat shim resolving `import minqlx` to minqlxtended on a
+        # minqlxtended-runtime host (see ql-assets/data/minqlx-plugins/
+        # minqlx.py's own docstring) -- QLSM's own file, not upstream code.
+        'minqlx.py',
     },
 }
 
