@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.32.0` | 2026-09-12 | [#209](https://github.com/dngrtech/qlsm/pull/209) | Make Redis the source of truth for minqlx admin levels. Admins are stored per instance and reapplied after every deploy and config save, the **Owner & Admins** tab shows what is actually live on the server alongside what QLSM stores, a level granted in-game can be adopted, and numeric `steamid|level` lines are no longer written into `access.txt`. |
 | `v1.31.1` | 2026-09-11 | [#208](https://github.com/dngrtech/qlsm/pull/208) | Move **Owner & Admins** out of the Configuration Files tab into its own tab next to **Hooks**, in both Edit Config and Add Instance. |
 | `v1.31.0` | 2026-09-11 | [#204](https://github.com/dngrtech/qlsm/pull/204) | Add an **Operators** directory and an **Owner & Admins** panel for assigning server owners and admins from a list instead of typing SteamIDs. Admin levels are applied in-game when the config is saved. |
 | `v1.30.0` | 2026-09-10 | [#202](https://github.com/dngrtech/qlsm/pull/202) | Add a Host Logs page and a View Logs action on each host, for reading a host's provisioning and setup output. |
