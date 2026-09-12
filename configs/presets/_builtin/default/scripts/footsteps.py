@@ -11,8 +11,15 @@ How it works:
   trampoline that keeps the fraction the cast throws away.  Cadence then
   matches the true 3.125 steps/s at every framerate.
 
-  The game module is reloaded on every map change, which discards the patch,
-  so the plugin re-applies it on the map event, deferred one frame.  Patching
+  The game module is dlclose/dlopen'd whenever the level is reloaded, which
+  discards the patch, so the plugin re-applies it on the new_game event,
+  deferred one frame.  new_game and not map: a map_restart reloads the module
+  exactly like a map change does, but minqlx suppresses the map event for it
+  (`if not is_restart` in _handlers.handle_new_game) and dispatches only
+  new_game.  Warmup ending is a map_restart — CheckTournament sends
+  `map_restart 0` when the countdown expires, on every gametype — so hooking
+  map alone loses the patch at the exact moment the match begins and never
+  gets it back until the next map.  new_game fires on both paths.  Patching
   runs only on the game thread — never from a background thread, which would
   mean rewriting instructions another thread might be executing.
 
@@ -58,7 +65,7 @@ class footsteps(minqlx.Plugin):
         # disappears exactly when there is something to report is worse than
         # none. Registering after the try/except would also make the
         # `if self.lib is None` guards below unreachable dead code.
-        self.add_hook("map", self.handle_map)
+        self.add_hook("new_game", self.handle_new_game)
         self.add_command("footsteps", self.cmd_footsteps, 1)
 
         try:
@@ -74,9 +81,9 @@ class footsteps(minqlx.Plugin):
             self.msg("^2[footsteps]^7 Remainder hook installed.")
         elif status == 0:
             # Expected when the plugin loads before the first map is up. The
-            # map hook installs it as soon as qagame is there.
+            # new_game hook installs it as soon as qagame is there.
             minqlx.console_print(
-                "[footsteps] qagame not mapped yet; will patch on map load\n")
+                "[footsteps] qagame not mapped yet; will patch on level load\n")
         else:
             self.msg("^1[footsteps]^7 Hook not installed ({}).".format(
                 self._status_text(status)))
@@ -97,27 +104,31 @@ class footsteps(minqlx.Plugin):
     def _status_text(self, status):
         return STATUS_TEXT.get(status, "^1unknown status {}^7".format(status))
 
-    def handle_map(self, mapname, factory):
-        """Re-apply the patch: the game module is reloaded on every map."""
+    def handle_new_game(self):
+        """Re-apply the patch: the game module is reloaded on every level load."""
         if self.lib is None:
             return
         self._repatch()
 
     @minqlx.next_frame
     def _repatch(self):
-        """Deferred a frame so the re-patch cannot race the module reload.
+        """Deferred a frame to keep the rewrite off the dispatch stack.
 
-        Nothing documents whether the map event is dispatched before or after
-        qagamex64.so is remapped.  If it fires first, the scan finds nothing,
-        footsteps stay silent for the whole map, and !footsteps reports it with
-        no correction path until the next map.  Running on the next frame
-        removes the question instead of assuming an answer.  No extra retry hook
-        is needed: map fires every map and footsteps_patch() is idempotent.
+        Not race protection: new_game is always dispatched *after* the module is
+        back in memory, on both paths.  A map_restart runs VM_Restart (dlopen)
+        and then G_InitGame, which dispatches; a map change dispatches only once
+        SV_SpawnServer has returned.  So the scan cannot run against an unmapped
+        qagame.  The deferral buys distance instead — footsteps_patch() rewrites
+        live instruction bytes, and doing that from inside the event dispatch,
+        with the engine's init frame still on the stack below, is a needless
+        thing to have to reason about when one frame costs nothing.  No extra
+        retry hook is needed: new_game fires on every level load and
+        footsteps_patch() short-circuits when the patch is already live.
         """
         status = self.lib.footsteps_patch()
         if status != 1:
             minqlx.console_print(
-                "[footsteps] patch not installed after map load: {}\n".format(
+                "[footsteps] patch not installed after level load: {}\n".format(
                     self._status_text(status)))
 
     def cmd_footsteps(self, player, msg, channel):
