@@ -9,6 +9,7 @@ import zipfile
 from flask import Blueprint, request, jsonify, current_app, send_file
 from flask_jwt_extended import jwt_required
 from ui import db
+from ui.admin_permissions import strip_numeric_admin_lines
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
 from ui.models import BinaryMetadata
 from ui.preset_compat import apply_compatibility
@@ -926,6 +927,8 @@ def _write_preset_configs(preset_path, config_data):
     for rel_path, content in config_files.items():
         filepath = os.path.join(preset_path, rel_path)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        if os.path.basename(rel_path) == 'access.txt':
+            content = strip_numeric_admin_lines(content)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         current_app.logger.info(f"Wrote preset config file: {filepath}")

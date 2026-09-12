@@ -1291,3 +1291,25 @@ def test_create_instance_rejects_a_bad_admin_level_before_creating_anything(
     assert response.status_code == 400, response.get_json()
     with app.app_context():
         assert QLInstance.query.count() == before
+
+
+def test_saving_configs_strips_numeric_admin_lines(
+    client, auth_token, sample_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    instance, host = sample_instance
+    access_txt = "# keep me\n76561198012345678|3\n76561198087654321|admin\n"
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')):
+        response = client.put(
+            f'/api/instances/{instance.id}/config',
+            json={'configs': _full_configs(**{'access.txt': access_txt}), 'restart': False},
+            headers=_auth_header(auth_token),
+        )
+
+    assert response.status_code == 202, response.get_json()
+    written = (tmp_path / 'configs' / host.name / str(instance.id) / 'access.txt').read_text()
+    assert '76561198012345678|3' not in written
+    assert '76561198087654321|admin' in written
+    assert '# keep me' in written

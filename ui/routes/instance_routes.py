@@ -25,7 +25,7 @@ from ui.tasks import deploy_instance, apply_instance_config, restart_instance, s
 from ui.task_logic.job_failure_handlers import instance_job_failure_handler
 from ui.task_logic.zmq_utils import validate_zmq_password
 from ui.task_lock import acquire_lock, release_lock
-from ui.admin_permissions import replace_instance_admins, validate_admin_entries
+from ui.admin_permissions import replace_instance_admins, validate_admin_entries, strip_numeric_admin_lines
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
     MAX_CONFIG_FOLDER_DEPTH,
@@ -147,8 +147,11 @@ def _write_configs_to_disk(instance_dir, configs_data):
     for rel_path, content in configs_data.items():
         full_path = os.path.join(instance_dir, rel_path)
         os.makedirs(os.path.dirname(full_path) or instance_dir, exist_ok=True)
+        content = content if content is not None else ''
+        if os.path.basename(rel_path) == 'access.txt':
+            content = strip_numeric_admin_lines(content)
         with open(full_path, 'w') as f:
-            f.write(content if content is not None else '')
+            f.write(content)
 
 
 def _list_managed_files_recursive(instance_dir):
