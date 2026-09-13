@@ -1,0 +1,305 @@
+---
+# Shared task: build or fetch the minqlx/minqlxtended/minqlxtended-patched
+# engine hook (.so + wrapper script + python package) into the host's shared
+# location. qlds@.service.j2 execs the wrapper by its actual per-runtime name
+# via the `launch_script` extra-var (ui.runtime.runtime_extravars()) rather
+# than a canonicalized fixed name.
+#
+# Requires: minqlx_build_dir, minqlx_shared_dir (set by the including playbook)
+# Reads: runtime ('minqlx' | 'minqlxtended' | 'minqlxtended-patched', default
+#        'minqlx'; qlds_engine_flavor is accepted as a legacy alias)
+#        qlds_engine_source ('build' | 'artifact', default 'build')
+#        qlds_engine_artifact_url (required when source == 'artifact')
+#
+# 'minqlxtended' patches note: the local patches under ql-assets/patches/
+# (minqlx-reset-accuracy.patch, minqlx-damage-event.patch) are written
+# against MinoMino/minqlx's source tree. They are NOT applied for the
+# minqlxtended flavor — that's a separate, actively-maintained fork and the
+# patches were never verified against it.
+#
+# minqlxtended-patched gets its own patch chain instead: the vendored
+# qlds-scripts/patch-minqlxtended-*.py + minqlxtended-patches/ C sources
+# under ql-assets/patches/minqlxtended/, kept as the same qlds-scripts/ +
+# minqlxtended-patches/ sibling layout so the scripts' own __file__-relative
+# path resolution keeps working unmodified. Applied as one call to the
+# vendored patch-minqlxtended-qlhub.py orchestrator, which runs all 7
+# patches in their required dependency order (set-position, item-events,
+# item-respawn, redis-pool, demo-cutter, demo-match, demo-bindings) and then
+# regenerates minqlxtended's gen_stub.py output so the new natives are
+# actually re-exported by `import minqlxtended` (see that orchestrator's own
+# module docstring for why the gen_stub step is not optional). Update the
+# vendored copy when that chain changes.
+
+- name: Set engine hook runtime facts
+  set_fact:
+    _engine_flavor: "{{ runtime | default(qlds_engine_flavor | default('minqlx')) }}"
+    _engine_source: "{{ qlds_engine_source | default('build') }}"
+
+- name: Set per-runtime build facts (minqlx)
+  set_fact:
+    _engine_repo: "https://github.com/MinoMino/minqlx.git"
+    _engine_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
+    _engine_apply_local_patches: true
+    _engine_apply_minqlxtended_qlhub_patches: false
+    _engine_so_name: "minqlx.x64.so"
+    _engine_wrapper_name: "run_server_x64_minqlx.sh"
+    _engine_python_pkg: "minqlx"
+  when: _engine_flavor == 'minqlx'
+
+# Vanilla upstream minqlxtended, unpatched -- pinned like minqlx is. This is
+# a plain minqlxtended host without QLSM's own patch chain (see
+# 'minqlxtended-patched' below for that).
+- name: Set per-runtime build facts (minqlxtended)
+  set_fact:
+    _engine_repo: "https://github.com/tjone270/minqlxtended.git"
+    _engine_git_version: "{{ qlds_engine_git_version | default('97fbe6715a4802545aa7eca741d11e2486a306a4') }}"
+    _engine_apply_local_patches: false
+    _engine_apply_minqlxtended_qlhub_patches: false
+    _engine_so_name: "minqlxtended.x64.so"
+    _engine_wrapper_name: "run_server_x64_minqlxtended.sh"
+    _engine_python_pkg: "minqlxtended"
+  when: _engine_flavor == 'minqlxtended'
+
+# minqlxtended plus QLSM's own qlhub patch chain (see the big comment on
+# patch-minqlxtended-qlhub.py invocation below). git_version stays unpinned
+# (floating HEAD) -- see ui/runtime.py's MINQLXTENDED_PATCHED entry for why
+# that is a known, open risk rather than an oversight.
+- name: Set per-runtime build facts (minqlxtended-patched)
+  set_fact:
+    _engine_repo: "https://github.com/tjone270/minqlxtended.git"
+    _engine_git_version: "{{ qlds_engine_git_version | default('HEAD') }}"
+    _engine_apply_local_patches: false
+    _engine_apply_minqlxtended_qlhub_patches: true
+    _engine_so_name: "minqlxtended.x64.so"
+    _engine_wrapper_name: "run_server_x64_minqlxtended.sh"
+    _engine_python_pkg: "minqlxtended"
+  when: _engine_flavor == 'minqlxtended-patched'
+
+- name: Clean up old engine build directory
+  file:
+    path: "{{ minqlx_build_dir }}"
+    state: absent
+
+- name: Create fresh engine build directory
+  file:
+    path: "{{ minqlx_build_dir }}"
+    state: directory
+    owner: ql
+    group: ql
+    mode: '0755'
+
+#######################################################################
+# Source: build from git + patches + make
+#######################################################################
+- block:
+    - name: Clone engine repo as ql user
+      become: yes
+      become_user: ql
+      git:
+        repo: "{{ _engine_repo }}"
+        dest: "{{ minqlx_build_dir }}"
+        version: "{{ _engine_git_version }}"
+        depth: 1
+
+    - name: Copy local patches to build host
+      copy:
+        src: "{{ playbook_dir }}/../../ql-assets/patches/"
+        dest: "/tmp/minqlx-patches/"
+        mode: '0644'
+      when: _engine_apply_local_patches
+
+    - name: Apply local patches
+      become: yes
+      become_user: ql
+      shell: |
+        set -e
+        for patch in /tmp/minqlx-patches/*.patch; do
+          [ -f "$patch" ] || continue
+          patch -p1 --forward --reject-file=- < "$patch"
+        done
+      args:
+        chdir: "{{ minqlx_build_dir }}"
+        executable: /bin/bash
+      when: _engine_apply_local_patches
+
+    - name: Copy minqlxtended qlhub patch chain to build host
+      copy:
+        src: "{{ playbook_dir }}/../../ql-assets/patches/minqlxtended/"
+        dest: "/tmp/minqlxtended-qlhub-patches/"
+        mode: preserve
+      when: _engine_apply_minqlxtended_qlhub_patches | default(false)
+
+    - name: Apply minqlxtended qlhub patch chain (item-events, item-respawn, demo-cutter, demo-match, demo-bindings, redis-pool, set-position + gen_stub re-export)
+      become: yes
+      become_user: ql
+      command: "python3 /tmp/minqlxtended-qlhub-patches/qlds-scripts/patch-minqlxtended-qlhub.py {{ minqlx_build_dir }}"
+      when: _engine_apply_minqlxtended_qlhub_patches | default(false)
+
+    - name: Clean up minqlxtended qlhub patch staging directory
+      file:
+        path: "/tmp/minqlxtended-qlhub-patches"
+        state: absent
+      when: _engine_apply_minqlxtended_qlhub_patches | default(false)
+
+    - name: Compile engine (make) as ql user
+      become: yes
+      become_user: ql
+      make:
+        chdir: "{{ minqlx_build_dir }}"
+
+    - name: Clean up patch staging directory
+      file:
+        path: "/tmp/minqlx-patches"
+        state: absent
+      when: _engine_apply_local_patches
+  when: _engine_source == 'build'
+
+#######################################################################
+# Source: prebuilt artifact tarball (layout not assumed — the "common"
+# section below locates files by name, since build output and CI artifacts
+# don't agree on a directory structure).
+# Downloaded by the QLSM controller (delegate_to: localhost), never fetched
+# directly by the game VPS — the URL may point at a private GitHub Release
+# (e.g. a build-minqlxtended CI pipeline's output artifact), and the
+# game VPS must never hold a GitHub token. See ui/task_logic/
+# ansible_host_setup.py for where qlsm_github_token comes from
+# (GITHUB_ARTIFACT_TOKEN env var; empty/unset is fine for a public URL).
+#######################################################################
+- block:
+    - name: Verify engine_artifact_url is set
+      assert:
+        that: qlds_engine_artifact_url is defined and qlds_engine_artifact_url | length > 0
+        fail_msg: "engine_source=artifact but no engine_artifact_url configured on this Host"
+
+    - name: Download engine artifact via the QLSM controller
+      delegate_to: localhost
+      become: no
+      ansible.builtin.get_url:
+        url: "{{ qlds_engine_artifact_url }}"
+        dest: "/tmp/qlsm-engine-artifact-{{ inventory_hostname }}.tar.gz"
+        headers: "{{ {'Authorization': 'token ' + qlsm_github_token} if (qlsm_github_token | default('')) | length > 0 else omit }}"
+        force: yes
+      register: _engine_artifact_download
+
+    - name: Copy downloaded artifact to the target host build dir
+      copy:
+        src: "{{ _engine_artifact_download.dest }}"
+        dest: "{{ minqlx_build_dir }}/engine-artifact.tar.gz"
+        owner: ql
+        group: ql
+        mode: '0644'
+
+    - name: Extract engine artifact on the target host
+      become: yes
+      become_user: ql
+      ansible.builtin.unarchive:
+        src: "{{ minqlx_build_dir }}/engine-artifact.tar.gz"
+        dest: "{{ minqlx_build_dir }}"
+        remote_src: yes
+
+    - name: Remove downloaded artifact from the QLSM controller
+      delegate_to: localhost
+      become: no
+      ansible.builtin.file:
+        path: "{{ _engine_artifact_download.dest }}"
+        state: absent
+  when: _engine_source == 'artifact'
+
+#######################################################################
+# Common: install into the shared location, canonicalize wrapper name
+#
+# The build and artifact sources don't agree on directory layout — a local
+# `make` puts output under bin/ and python/<pkg>/ (MinoMino/minqlx's own
+# Makefile layout), but a build-minqlxtended CI artifact tarball packs
+# flat (so/wrapper/pkg.zip all at the root). minqlx_shared_dir itself is
+# always flat either way (add_qlds_instance.yml copies its *contents*
+# straight into each instance dir), so locate source files by name via
+# `find` instead of assuming a fixed source path.
+#######################################################################
+- name: Locate engine .so under the build dir (either layout)
+  become: yes
+  shell: "find {{ minqlx_build_dir }} -maxdepth 3 -name {{ _engine_so_name }} -print -quit"
+  register: _engine_so_find
+  changed_when: false
+
+- name: Locate engine wrapper script under the build dir (either layout)
+  become: yes
+  shell: "find {{ minqlx_build_dir }} -maxdepth 3 -name {{ _engine_wrapper_name }} -print -quit"
+  register: _engine_wrapper_find
+  changed_when: false
+
+# Python package ships either as an extracted <pkg>/ dir (build-from-source)
+# or a <pkg>.zip (a CI artifact — the engine imports it straight off
+# sys.path via zipimport, no need to extract it).
+- name: Locate engine python package dir under the build dir
+  become: yes
+  shell: "find {{ minqlx_build_dir }} -maxdepth 3 -type d -name {{ _engine_python_pkg }} -print -quit"
+  register: _engine_pkgdir_find
+  changed_when: false
+
+- name: Locate engine python package zip under the build dir
+  become: yes
+  shell: "find {{ minqlx_build_dir }} -maxdepth 3 -name '{{ _engine_python_pkg }}.zip' -print -quit"
+  register: _engine_pkgzip_find
+  changed_when: false
+
+- name: Fail if the .so, wrapper, or python package weren't found
+  assert:
+    that:
+      - _engine_so_find.stdout | length > 0
+      - _engine_wrapper_find.stdout | length > 0
+      - (_engine_pkgdir_find.stdout | length > 0) or (_engine_pkgzip_find.stdout | length > 0)
+    fail_msg: >-
+      Couldn't find {{ _engine_so_name }} / {{ _engine_wrapper_name }} /
+      {{ _engine_python_pkg }} (dir or .zip) under {{ minqlx_build_dir }} —
+      unexpected engine source layout.
+
+- name: Copy .so and wrapper script to shared location
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ minqlx_shared_dir }}/{{ item.dest }}"
+    remote_src: yes
+    owner: ql
+    group: ql
+    mode: '0755'
+  loop:
+    - { src: "{{ _engine_so_find.stdout }}", dest: "{{ _engine_so_name }}" }
+    - { src: "{{ _engine_wrapper_find.stdout }}", dest: "{{ _engine_wrapper_name }}" }
+
+- name: Copy python package directory to shared location
+  copy:
+    src: "{{ _engine_pkgdir_find.stdout }}/"
+    dest: "{{ minqlx_shared_dir }}/{{ _engine_python_pkg }}/"
+    remote_src: yes
+    owner: ql
+    group: ql
+    mode: preserve
+  when: _engine_pkgdir_find.stdout | length > 0
+
+- name: Copy python package zip to shared location
+  copy:
+    src: "{{ _engine_pkgzip_find.stdout }}"
+    dest: "{{ minqlx_shared_dir }}/{{ _engine_python_pkg }}.zip"
+    remote_src: yes
+    owner: ql
+    group: ql
+    mode: '0644'
+  when: _engine_pkgdir_find.stdout | length == 0 and _engine_pkgzip_find.stdout | length > 0
+
+- name: Copy optional helper scripts to shared location if present
+  become: yes
+  shell: |
+    for h in minqlx-cmd quake_live.sh; do
+      if [ -f "{{ minqlx_build_dir }}/$h" ]; then
+        cp "{{ minqlx_build_dir }}/$h" "{{ minqlx_shared_dir }}/$h"
+        chown ql:ql "{{ minqlx_shared_dir }}/$h"
+        chmod 0755 "{{ minqlx_shared_dir }}/$h"
+      fi
+    done
+  args:
+    executable: /bin/bash
+
+- name: Clean up engine build directory
+  file:
+    path: "{{ minqlx_build_dir }}"
+    state: absent

@@ -13,8 +13,9 @@ import re
 
 MINQLX = 'minqlx'
 MINQLXTENDED = 'minqlxtended'
+MINQLXTENDED_PATCHED = 'minqlxtended-patched'
 
-VALID_RUNTIMES = (MINQLX, MINQLXTENDED)
+VALID_RUNTIMES = (MINQLX, MINQLXTENDED, MINQLXTENDED_PATCHED)
 
 # Nothing ever "flips" this: the Add Host form pre-selects no runtime at all,
 # because the choice is irreversible and QLSM will not make it on an operator's
@@ -43,6 +44,8 @@ _RUNTIME_PATHS = {
         # inventing a gate here would break them on the next setup re-run.
         'min_python': None,
         'excluded_system_hooks': frozenset(),
+        'apply_local_patches': True,
+        'apply_qlhub_patches': False,
     },
     MINQLXTENDED: {
         'runtime': MINQLXTENDED,
@@ -66,6 +69,40 @@ _RUNTIME_PATHS = {
         # order, which QLSM does not control -- so never load it here. The
         # runtime provides the behaviour natively.
         'excluded_system_hooks': frozenset({'force_rate.so'}),
+        'apply_local_patches': False,
+        'apply_qlhub_patches': False,
+    },
+    # QLSM's own build: vanilla minqlxtended plus the qlhub patch chain
+    # vendored under ql-assets/patches/minqlxtended/ (native item events/
+    # respawn, demo capture, a bounded redis pool, set_position -- see
+    # build_engine_hook.yml). Shares minqlx's plugin pool and shared dir
+    # rather than minqlxtended's, since the patch chain is applied on top of
+    # a vanilla minqlxtended checkout and does not touch plugin loading.
+    #
+    # git_version is deliberately left floating on HEAD, matching
+    # build_engine_hook.yml's default: there has never been a pin for this
+    # chain. Upstream minqlxtended restructured its source tree in a "v1.0.0"
+    # release, and the qlhub patch scripts were verified only against the
+    # pre-restructure layout. Floating HEAD today risks the patch chain
+    # failing loudly (acceptable) or applying wrongly (not); pinning is a
+    # known follow-up, not an oversight.
+    MINQLXTENDED_PATCHED: {
+        'runtime': MINQLXTENDED_PATCHED,
+        'plugins_dirname': 'minqlx-plugins',
+        'asset_plugins_dir': 'minqlx-plugins',
+        'shared_dir': '/home/ql/minqlx-shared',
+        'engine_so': 'minqlxtended.x64.so',
+        'launch_script': 'run_server_x64_minqlxtended.sh',
+        'log_filename': 'minqlxtended.log',
+        'git_repo': 'https://github.com/tjone270/minqlxtended.git',
+        'git_version': 'HEAD',
+        'os_name': 'Ubuntu 24.04 LTS x64',
+        'os_family': 'ubuntu',
+        'os_type': 'ubuntu',
+        'min_python': (3, 12),
+        'excluded_system_hooks': frozenset({'force_rate.so'}),
+        'apply_local_patches': False,
+        'apply_qlhub_patches': True,
     },
 }
 
