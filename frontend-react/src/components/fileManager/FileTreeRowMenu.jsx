@@ -6,6 +6,7 @@ export default function FileTreeRowMenu({
   itemType,
   fileType,
   isProtected = false,
+  isShared = false,
   isMaxDepth = false,
   capabilities = {},
   onDownload,
@@ -33,8 +34,8 @@ export default function FileTreeRowMenu({
     : [
         { key: 'download', label: 'Download', icon: Download, onClick: onDownload },
         ...(canCopyContent ? [{ key: 'copy', label: 'Copy Content', icon: Copy, onClick: onCopyContent }] : []),
-        { key: 'rename', label: 'Rename', icon: Pencil, onClick: onRename, disabled: isProtected, disabledTitle: 'Built-in file, cannot be renamed' },
-        { key: 'delete', label: 'Delete', icon: Trash2, onClick: onDelete, danger: true, disabled: isProtected, disabledTitle: 'Built-in file, cannot be deleted' },
+        { key: 'rename', label: 'Rename', icon: Pencil, onClick: onRename, disabled: isProtected || isShared, disabledTitle: isShared ? 'Shared plugin, cannot be renamed' : 'Built-in file, cannot be renamed' },
+        { key: 'delete', label: 'Delete', icon: Trash2, onClick: onDelete, danger: true, disabled: isProtected || isShared, disabledTitle: isShared ? 'Shared plugin, cannot be deleted' : 'Built-in file, cannot be deleted' },
       ];
 
   return (

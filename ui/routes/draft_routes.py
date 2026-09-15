@@ -27,6 +27,8 @@ from ui.preset_support import (
 )
 from ui.runtime import is_valid_runtime, normalize_runtime
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
+from ui.plugin_manifest import read_plugin_manifest
+from ui.plugin_pool import shared_plugin_nodes, shared_plugin_path
 
 draft_api_bp = Blueprint('draft_api_routes', __name__)
 
@@ -44,6 +46,18 @@ USER_HOOKS_DIR = 'user-hooks'
 # directories copied onto an instance or a preset, so the marker can never
 # travel with the files it describes.
 RUNTIME_MARKER_FILE = '.qlsm-filtered-for-runtime'
+
+# Written beside scripts/ for every draft that knows its runtime at creation,
+# whether or not the compatibility gate ended up filtering anything -- unlike
+# RUNTIME_MARKER_FILE, which stays empty on the common, no-filtering path (the
+# target already matches the source). Manifest lookup (get_draft_tree) needs
+# the runtime on that common path too: _pool_dirs() defaults to checking the
+# minqlx pool first when given no runtime, so a minqlxtended draft with no
+# filter marker was reading minqlx cvars/commands/depends_on for any filename
+# that exists in both pools. Kept separate from RUNTIME_MARKER_FILE rather
+# than repurposing it, since save-refusal depends on that one meaning
+# specifically "this draft was filtered."
+EFFECTIVE_RUNTIME_MARKER_FILE = '.qlsm-draft-runtime'
 
 
 def _get_drafts_base():
@@ -180,6 +194,36 @@ def draft_filtered_runtime(draft_id):
     writing them back where they came from is safe.
     """
     path = os.path.join(_get_draft_base_path(draft_id), RUNTIME_MARKER_FILE)
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            value = handle.read().strip()
+    except (OSError, ValueError):
+        return None
+    return value if is_valid_runtime(value) else None
+
+
+def _record_effective_runtime(draft_base_path, runtime):
+    """Mark the draft rooted at `draft_base_path` as being for `runtime`.
+
+    Best-effort, same as _record_filter_runtime: a write failure must never
+    fail the draft creation the operator is waiting on, and a missing marker
+    just falls back to _pool_dirs()'s own default (see draft_effective_runtime).
+    """
+    try:
+        with open(os.path.join(draft_base_path, EFFECTIVE_RUNTIME_MARKER_FILE),
+                  'w', encoding='utf-8') as handle:
+            handle.write(runtime)
+    except OSError:
+        pass
+
+
+def draft_effective_runtime(draft_id):
+    """The runtime `draft_id`'s scripts should be read as belonging to, for
+    manifest lookup -- unlike draft_filtered_runtime(), set on every draft
+    that knew its runtime at creation, not only a filtered one. None means the
+    runtime genuinely was not known when the draft was created, and manifest
+    lookup falls back to trying both pools (minqlx first)."""
+    path = os.path.join(_get_draft_base_path(draft_id), EFFECTIVE_RUNTIME_MARKER_FILE)
     try:
         with open(path, 'r', encoding='utf-8') as handle:
             value = handle.read().strip()
@@ -434,7 +478,7 @@ def _get_file_type(filename):
     return FILE_TYPE_MAP.get(ext)
 
 
-def _build_draft_tree(path, base_path=None):
+def _build_draft_tree(path, base_path=None, runtime=None):
     """
     Recursively build a file tree with type metadata.
 
@@ -462,7 +506,7 @@ def _build_draft_tree(path, base_path=None):
             continue
 
         if os.path.isdir(full_path):
-            children = _build_draft_tree(full_path, base_path)
+            children = _build_draft_tree(full_path, base_path, runtime)
             items.append({
                 'name': entry,
                 'type': 'folder',
@@ -473,14 +517,19 @@ def _build_draft_tree(path, base_path=None):
             ext = os.path.splitext(entry)[1].lower()
             if ext in ALLOWED_EXTENSIONS:
                 stat = os.stat(full_path)
-                items.append({
+                item = {
                     'name': entry,
                     'type': 'file',
                     'path': relative_path,
                     'file_type': FILE_TYPE_MAP.get(ext, 'unknown'),
                     'size': stat.st_size,
                     'last_modified': stat.st_mtime
-                })
+                }
+                if ext == '.py':
+                    manifest = read_plugin_manifest(full_path, runtime)
+                    if manifest is not None:
+                        item['plugin_manifest'] = manifest
+                items.append(item)
 
     return items
 
@@ -604,7 +653,11 @@ def create_draft():
         # what put minqlx defaults onto a minqlxtended host in the first place;
         # keying it on target_runtime alone (ignoring whether the source
         # already matches) reintroduces the same bug from the other side.
-        source_runtime = _resolve_source_runtime(data) if target_runtime else None
+        # Resolved unconditionally (not just `if target_runtime`): _seed_draft
+        # never looks at it when target_runtime is falsy (early `if not
+        # target_runtime: return None`), so this is free to also feed the
+        # effective-runtime marker below on that path.
+        source_runtime = _resolve_source_runtime(data)
         runtimes_differ = bool(target_runtime) and (
             normalize_runtime(source_runtime) != normalize_runtime(target_runtime)
         )
@@ -629,6 +682,14 @@ def create_draft():
             # only caller that owns a real draft root; _seed_draft is also
             # called with bare paths whose parent is not a draft directory.
             _record_filter_runtime(_get_draft_base_path(draft_id), filtered_for)
+        # Effective runtime for manifest lookup: the target when the caller
+        # gave one (the common case -- both AddInstanceForm and
+        # EditInstanceConfigModal always know their host's runtime), else
+        # whatever source_runtime resolved to. Written regardless of whether
+        # filtering happened, unlike the marker above.
+        effective_runtime = target_runtime or source_runtime
+        if is_valid_runtime(effective_runtime):
+            _record_effective_runtime(_get_draft_base_path(draft_id), effective_runtime)
     except OSError as e:
         current_app.logger.error(f"Failed to create draft {draft_id}: {e}")
         return jsonify({"error": {"message": "Failed to create draft workspace"}}), 500
@@ -680,8 +741,28 @@ def get_draft_tree(draft_id):
         return jsonify({"error": {"message": "Draft not found"}}), 404
 
     scripts_path = _get_draft_scripts_path(draft_id)
-    tree = _build_draft_tree(scripts_path)
+    # Manifests come from the pool matching the draft's own runtime, not just
+    # a filtered one -- draft_filtered_runtime() is None on the common,
+    # no-filtering path (target already matched source), which used to fall
+    # through to _pool_dirs()'s minqlx-first default even for a minqlxtended
+    # draft. draft_effective_runtime() is set on every draft that knew its
+    # runtime at creation.
+    runtime = draft_effective_runtime(draft_id)
+    tree = _build_draft_tree(scripts_path, runtime=runtime)
+    # Root plugins from the runtime's shared pool that the draft doesn't hold
+    # itself: deploy backfills them onto the instance, so they're enableable
+    # here too. Marked `shared`; editing one writes a local copy (PUT content).
+    root_names = {item['name'] for item in tree}
+    tree.extend(shared_plugin_nodes(runtime, root_names, read_plugin_manifest))
     return jsonify({"data": tree}), 200
+
+
+def _shared_fallback_path(draft_id, full_path, path):
+    """Pool path to serve read-only when the draft has no file at `path` but
+    it names a shared plugin for the draft's runtime, else None."""
+    if os.path.exists(full_path):
+        return None
+    return shared_plugin_path(draft_effective_runtime(draft_id), path)
 
 
 @draft_api_bp.route('/<draft_id>/content', methods=['GET'])
@@ -706,6 +787,7 @@ def get_draft_content(draft_id):
         return jsonify({"error": {"message": f"Cannot read {ext} files as text. Only .py and .txt are readable."}}), 400
 
     full_path = os.path.join(scripts_path, path)
+    full_path = _shared_fallback_path(draft_id, full_path, path) or full_path
     if not os.path.exists(full_path):
         return jsonify({"error": {"message": "File not found"}}), 404
 
@@ -737,6 +819,7 @@ def download_draft_file(draft_id):
     full_path = os.path.realpath(os.path.join(scripts_path, *path.split('/')))
     if not _is_safe_draft_path(scripts_path, path):
         return jsonify({"error": {"message": "Invalid file path"}}), 400
+    full_path = _shared_fallback_path(draft_id, full_path, path) or full_path
     if not os.path.isfile(full_path):
         return jsonify({"error": {"message": "File not found"}}), 404
 

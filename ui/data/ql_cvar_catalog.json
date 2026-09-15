@@ -1,0 +1,3919 @@
+{
+  "version": 1,
+  "generated_by": "scripts/gen_cvar_catalog.py",
+  "about": "Server cvars and console commands offered by the config editor. Every entry carries the source of its description; regenerate with scripts/gen_cvar_catalog.py.",
+  "sources": {
+    "server.cfg": "the game's own annotated example server.cfg",
+    "ql-live": "verified Quake Live reference notes",
+    "factories": "the game's own factory definitions",
+    "naming": "read off the cvar name - not verified on a live server",
+    "qlsm": "behaviour of this app",
+    "listcvars": "a listcvars dump only - no description"
+  },
+  "groups": [
+    {
+      "key": "server",
+      "label": "Server"
+    },
+    {
+      "key": "gameplay",
+      "label": "Gameplay"
+    },
+    {
+      "key": "weapons",
+      "label": "Weapons"
+    },
+    {
+      "key": "physics",
+      "label": "Player physics"
+    },
+    {
+      "key": "bots",
+      "label": "Bots"
+    },
+    {
+      "key": "network",
+      "label": "Network"
+    },
+    {
+      "key": "rcon",
+      "label": "Rcon / stats sockets"
+    },
+    {
+      "key": "files",
+      "label": "File system"
+    },
+    {
+      "key": "engine",
+      "label": "Engine"
+    }
+  ],
+  "gametypes": [
+    "ad",
+    "ca",
+    "ctf",
+    "dom",
+    "duel",
+    "ffa",
+    "ft",
+    "har",
+    "oneflag",
+    "race",
+    "rr",
+    "tdm"
+  ],
+  "commands": [
+    {
+      "name": "set",
+      "description": "Sets a cvar (no archive flag).",
+      "source": "ql-live"
+    },
+    {
+      "name": "seta",
+      "description": "Sets a cvar with the archive flag.",
+      "source": "ql-live"
+    },
+    {
+      "name": "exec",
+      "description": "Executes a configuration file.",
+      "source": "ql-live"
+    },
+    {
+      "name": "vstr",
+      "description": "Executes commands stored in a cvar.",
+      "source": "ql-live"
+    },
+    {
+      "name": "alias",
+      "description": "Creates a command alias.",
+      "source": "ql-live"
+    },
+    {
+      "name": "unalias",
+      "description": "Removes a single alias.",
+      "source": "ql-live"
+    },
+    {
+      "name": "bind",
+      "description": "Binds a key to a command or alias.",
+      "source": "ql-live"
+    },
+    {
+      "name": "unbind",
+      "description": "Removes a single bind on a key.",
+      "source": "ql-live"
+    },
+    {
+      "name": "unbindall",
+      "description": "Removes all set binds.",
+      "source": "ql-live"
+    },
+    {
+      "name": "toggle",
+      "description": "Inverts a cvar's boolean value.",
+      "source": "ql-live"
+    },
+    {
+      "name": "reset",
+      "description": "Resets a cvar to its initial value.",
+      "source": "ql-live"
+    },
+    {
+      "name": "clearcvar",
+      "description": "Clears a cvar's value, setting it to \"\".",
+      "source": "ql-live"
+    },
+    {
+      "name": "cvar_restart",
+      "description": "Restarts the cvar subsystem, clearing most cvar changes.",
+      "source": "ql-live"
+    },
+    {
+      "name": "writeconfig",
+      "description": "Writes a config with all set cvars and binds.",
+      "source": "ql-live"
+    },
+    {
+      "name": "condump",
+      "description": "Dumps all buffered console text to a file.",
+      "source": "ql-live"
+    },
+    {
+      "name": "echo",
+      "description": "Prints text to the console.",
+      "source": "ql-live"
+    },
+    {
+      "name": "wait",
+      "description": "Waits one frame (or N frames) before continuing.",
+      "source": "ql-live"
+    },
+    {
+      "name": "map",
+      "description": "Loads a map normally.",
+      "source": "ql-live"
+    },
+    {
+      "name": "devmap",
+      "description": "Loads a map in development/cheats mode.",
+      "source": "ql-live"
+    },
+    {
+      "name": "map_restart",
+      "description": "Reloads the map and entities and respawns all players.",
+      "source": "ql-live"
+    },
+    {
+      "name": "startRandomMap",
+      "description": "Runs a random map from the map pool file.",
+      "source": "ql-live"
+    },
+    {
+      "name": "reload_mappool",
+      "description": "Reloads the map pool file from sv_mapPoolFile. The pool is otherwise only read at server init.",
+      "source": "ql-live"
+    },
+    {
+      "name": "kick",
+      "description": "Kicks a player by name.",
+      "source": "ql-live"
+    },
+    {
+      "name": "clientkick",
+      "description": "Kicks a player or bot by client ID.",
+      "source": "ql-live"
+    },
+    {
+      "name": "say",
+      "description": "Sends a message from the server.",
+      "source": "ql-live"
+    },
+    {
+      "name": "status",
+      "description": "Lists all clients with IDs, scores, ping, IP and Steam ID.",
+      "source": "ql-live"
+    },
+    {
+      "name": "serverinfo",
+      "description": "Displays the serverinfo cvars clients and the browser see.",
+      "source": "ql-live"
+    },
+    {
+      "name": "listcvars",
+      "description": "Lists all cvars, with optional filtering.",
+      "source": "ql-live"
+    },
+    {
+      "name": "listcmds",
+      "description": "Lists all commands, with optional filtering.",
+      "source": "ql-live"
+    },
+    {
+      "name": "killserver",
+      "description": "Unloads the current map; the process keeps running.",
+      "source": "ql-live"
+    },
+    {
+      "name": "quit",
+      "description": "Exits the server process immediately.",
+      "source": "ql-live"
+    }
+  ],
+  "cvars": [
+    {
+      "name": "appendlogfile",
+      "group": "server",
+      "description": "Append to the existing console log instead of overwriting it at startup.",
+      "source": "naming"
+    },
+    {
+      "name": "arch",
+      "group": "engine",
+      "description": "Platform the server binary was built for.",
+      "source": "naming"
+    },
+    {
+      "name": "armor_tiered",
+      "group": "gameplay",
+      "description": "Tiered armour system (green/yellow/red absorb differently) on or off.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_aasoptimize",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_autoReady",
+      "group": "bots",
+      "description": "Bots ready up automatically in warmup.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_breakPoint",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_challenge",
+      "group": "bots",
+      "description": "Bots play more aggressively.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_debug",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_debugVar",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_developer",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_dynamicSkill",
+      "group": "bots",
+      "description": "Bot skill adapts to the players.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "_training = 1"
+      ]
+    },
+    {
+      "name": "bot_enable",
+      "group": "bots",
+      "description": "Bots may be added to the server.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_fastchat",
+      "group": "bots",
+      "description": "Bots chat more often.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_followDist",
+      "group": "bots",
+      "description": "Distance a following bot keeps.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_followMe",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_forceclustering",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_forcereachability",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_forcewrite",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_gauntlet",
+      "group": "bots",
+      "description": "Bots may use the gauntlet.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_gauntletOnly",
+      "group": "bots",
+      "description": "Bots use the gauntlet only.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_grapple",
+      "group": "bots",
+      "description": "Bots may use the grappling hook.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_groundonly",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_hud",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_instaGibAimSkill",
+      "group": "bots",
+      "description": "Bot aim skill in instagib.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_interbreedbots",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_interbreedchar",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_interbreedcycle",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_interbreedwrite",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_itemDelayTime",
+      "group": "bots",
+      "description": "Delay before bots go for an item.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_maxdebugpolys",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_minplayers",
+      "group": "bots",
+      "description": "Bots are added until this many players are in the game.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_nochat",
+      "group": "bots",
+      "description": "Bots stay silent.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_pause",
+      "group": "bots",
+      "description": "Freeze all bots.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_reachability",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_reloadcharacters",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_report",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_rocketjump",
+      "group": "bots",
+      "description": "Bots may rocket jump.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_saveroutingcache",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_showAreaNumber",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_showAreas",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_showAvoidSpots",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_showPath",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_showTourPoints",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_startingSkill",
+      "group": "bots",
+      "description": "Skill level new bots start at.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "_training = 2"
+      ]
+    },
+    {
+      "name": "bot_teamkill",
+      "group": "bots",
+      "description": "Bots may hurt their own team.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_testclusters",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_testichat",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_testrchat",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_testsolid",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "bot_thinktime",
+      "group": "bots",
+      "description": "Milliseconds between bot think frames.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_training",
+      "group": "bots",
+      "description": "Bot training mode.",
+      "source": "naming"
+    },
+    {
+      "name": "bot_visualizejumppads",
+      "group": "bots",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "capturelimit",
+      "group": "gameplay",
+      "description": "Flag captures needed to win a CTF-style match.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "har = 30",
+        "ictf = 5"
+      ]
+    },
+    {
+      "name": "cl_paused",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "cl_running",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "close_stdout",
+      "group": "engine",
+      "description": "Close standard output after startup.",
+      "source": "naming"
+    },
+    {
+      "name": "cm_noAreas",
+      "group": "engine",
+      "description": "Ignore area portals in the collision model (debugging).",
+      "source": "naming"
+    },
+    {
+      "name": "cm_noCurves",
+      "group": "engine",
+      "description": "Ignore curved surfaces in the collision model (debugging).",
+      "source": "naming"
+    },
+    {
+      "name": "cm_playerCurveClip",
+      "group": "engine",
+      "description": "Players collide with curved surfaces.",
+      "source": "naming"
+    },
+    {
+      "name": "com_allowConsole",
+      "group": "engine",
+      "description": "Console can be opened.",
+      "source": "naming"
+    },
+    {
+      "name": "com_build",
+      "group": "engine",
+      "description": "Engine build number.",
+      "source": "naming"
+    },
+    {
+      "name": "com_cameraMode",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "com_crashed",
+      "group": "engine",
+      "description": "Set by the engine after a crash.",
+      "source": "naming"
+    },
+    {
+      "name": "com_dropsim",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "com_errormessage",
+      "group": "engine",
+      "description": "Last error message the engine produced.",
+      "source": "naming"
+    },
+    {
+      "name": "com_hunkMegs",
+      "group": "engine",
+      "description": "May need to be increased for additional players.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "com_idleSleep",
+      "group": "engine",
+      "description": "Sleep when idle to give CPU time back.",
+      "source": "naming"
+    },
+    {
+      "name": "com_ignorecrash",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "com_introplayed",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "com_maxfps",
+      "group": "engine",
+      "description": "Frame rate cap for the process.",
+      "source": "naming"
+    },
+    {
+      "name": "com_pid",
+      "group": "engine",
+      "description": "Process ID of the running server.",
+      "source": "naming"
+    },
+    {
+      "name": "com_showtrace",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "com_speeds",
+      "group": "engine",
+      "description": "Print frame timing information.",
+      "source": "naming"
+    },
+    {
+      "name": "com_zoneMegs",
+      "group": "engine",
+      "description": "Zone memory size in MB.",
+      "source": "naming"
+    },
+    {
+      "name": "dedicated",
+      "group": "server",
+      "description": "Dedicated server mode: 0 = listen server, 1 = LAN, 2 = internet. Normally set on the command line at launch.",
+      "source": "naming"
+    },
+    {
+      "name": "developer",
+      "group": "engine",
+      "description": "Extra engine debug output in the console.",
+      "source": "naming"
+    },
+    {
+      "name": "dmflags",
+      "group": "gameplay",
+      "description": "Deathmatch flags bitmask inherited from Quake 3. The official Clan Arena factories set 28; the meaning of the individual bits is not verified for Quake Live.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 28",
+        "race = 28",
+        "_rj = 28"
+      ]
+    },
+    {
+      "name": "fixedtime",
+      "group": "engine",
+      "description": "Run the simulation with a fixed frame time (debugging).",
+      "source": "naming"
+    },
+    {
+      "name": "fraglimit",
+      "group": "gameplay",
+      "description": "Frags needed to win the match; 0 means no frag limit.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 0",
+        "tdm = 150",
+        "ft = 0"
+      ]
+    },
+    {
+      "name": "fs_basegame",
+      "group": "files",
+      "description": "Base game directory name.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_basepath",
+      "group": "files",
+      "description": "Read-only directory the base game data is installed in.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_cdpath",
+      "group": "files",
+      "description": "Extra read-only data path.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_copyfiles",
+      "group": "files",
+      "description": "Copy files from the read-only paths into the home path.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_copypath",
+      "group": "files",
+      "description": "Destination path used by fs_copyfiles.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_debug",
+      "group": "files",
+      "description": "Log every file system access.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_game",
+      "group": "files",
+      "description": "Mod or game directory the server runs out of (normally baseq3).",
+      "source": "naming"
+    },
+    {
+      "name": "fs_homepath",
+      "group": "files",
+      "description": "Writable data directory the server reads and writes configs, plugins and downloads in.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_restrict",
+      "group": "files",
+      "description": "Restrict the file system to shipped content.",
+      "source": "naming"
+    },
+    {
+      "name": "fs_skipWorkshop",
+      "group": "files",
+      "description": "Ignore Steam Workshop content when loading files.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accelFactor_bfg",
+      "group": "weapons",
+      "description": "Acceleration factor of a BFG10K projectile.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accelFactor_pg",
+      "group": "weapons",
+      "description": "Acceleration factor of a Plasma Gun projectile.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accelFactor_rl",
+      "group": "weapons",
+      "description": "Acceleration factor of a Rocket Launcher projectile.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accelRate_bfg",
+      "group": "weapons",
+      "description": "Acceleration rate of a BFG10K projectile.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accelRate_pg",
+      "group": "weapons",
+      "description": "Acceleration rate of a Plasma Gun projectile.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accelRate_rl",
+      "group": "weapons",
+      "description": "Acceleration rate of a Rocket Launcher projectile.",
+      "source": "naming"
+    },
+    {
+      "name": "g_accessFile",
+      "group": "gameplay",
+      "description": "Used to determine which 64-bit Steam IDs have admin access, or are banned.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_adCaptureScoreBonus",
+      "group": "gameplay",
+      "description": "Score bonus for capturing in Attack and Defend.",
+      "source": "naming"
+    },
+    {
+      "name": "g_adElimScoreBonus",
+      "group": "gameplay",
+      "description": "Score bonus for an elimination in Attack and Defend.",
+      "source": "naming"
+    },
+    {
+      "name": "g_adTouchScoreBonus",
+      "group": "gameplay",
+      "description": "Score bonus for touching the objective in Attack and Defend.",
+      "source": "naming"
+    },
+    {
+      "name": "g_allowCustomHeadmodels",
+      "group": "gameplay",
+      "description": "Allow custom head models on player models.",
+      "source": "naming"
+    },
+    {
+      "name": "g_allowForfeit",
+      "group": "gameplay",
+      "description": "Allow a team to forfeit the match.",
+      "source": "naming"
+    },
+    {
+      "name": "g_allowKill",
+      "group": "gameplay",
+      "description": "Allow players to use the kill command to suicide.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 0",
+        "race = 1",
+        "_training = 0"
+      ]
+    },
+    {
+      "name": "g_allowSpecVote",
+      "group": "gameplay",
+      "description": "Allow spectators to call votes",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_allowVote",
+      "group": "gameplay",
+      "description": "Turn off all votes",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_allowVoteMidGame",
+      "group": "gameplay",
+      "description": "Don't allow callvotes once the map has started",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_allTalk",
+      "group": "gameplay",
+      "description": "0: Limit voice comms to teams during match 1: Allow all players to talk to each other always 2: 1+ send back your own voice to yourself for testing",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_ammoPack",
+      "group": "gameplay",
+      "description": "Ammo pack pickups enabled.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ctf = 1",
+        "actf = 1",
+        "har = 1"
+      ]
+    },
+    {
+      "name": "g_ammoPackHack",
+      "group": "gameplay",
+      "description": "Legacy compatibility flag for ammo pack behaviour.",
+      "source": "naming"
+    },
+    {
+      "name": "g_ammoRespawn",
+      "group": "gameplay",
+      "description": "Seconds before a picked-up ammo box reappears.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ctf = 10",
+        "actf = 10",
+        "har = 10"
+      ]
+    },
+    {
+      "name": "g_autoAction",
+      "group": "gameplay",
+      "description": "Bitmask for automatic per-match actions such as demo recording and screenshots.",
+      "source": "factories"
+    },
+    {
+      "name": "g_banIPs",
+      "group": "gameplay",
+      "description": "IP addresses banned from the server.",
+      "source": "naming"
+    },
+    {
+      "name": "g_battleSuitDampen",
+      "group": "gameplay",
+      "description": "Damage reduction the Battle Suit applies.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ctf = .33",
+        "actf = .33",
+        "har = .33"
+      ]
+    },
+    {
+      "name": "g_bestStartingWeapons",
+      "group": "gameplay",
+      "description": "Weapon preference order used when picking the best weapon to spawn with.",
+      "source": "naming"
+    },
+    {
+      "name": "g_botSpawnList",
+      "group": "gameplay",
+      "description": "Bots the server spawns automatically.",
+      "source": "naming"
+    },
+    {
+      "name": "g_complaintDamageThreshold",
+      "group": "gameplay",
+      "description": "Team damage needed before a complaint counts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_complaintLimit",
+      "group": "gameplay",
+      "description": "Complaints against a player before action is taken.",
+      "source": "naming"
+    },
+    {
+      "name": "g_cubeTimeout",
+      "group": "gameplay",
+      "description": "Seconds before a Harvester skull cube expires.",
+      "source": "naming"
+    },
+    {
+      "name": "g_customSettings",
+      "group": "gameplay",
+      "description": "Marks the match as running non-default settings.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_bfg",
+      "group": "weapons",
+      "description": "Direct damage a BFG10K hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_cg",
+      "group": "weapons",
+      "description": "Direct damage a Chaingun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_g",
+      "group": "weapons",
+      "description": "Direct damage a Gauntlet hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_gh",
+      "group": "weapons",
+      "description": "Direct damage a Grappling Hook hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_gl",
+      "group": "weapons",
+      "description": "Direct damage a Grenade Launcher hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_hmg",
+      "group": "weapons",
+      "description": "Direct damage a Heavy Machine Gun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_lg",
+      "group": "weapons",
+      "description": "Direct damage a Lightning Gun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_lg_falloff",
+      "group": "weapons",
+      "description": "Direct damage a Lightning Gun hit deals. This is the falloff variant.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_mg",
+      "group": "weapons",
+      "description": "Direct damage a Machine Gun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_ng",
+      "group": "weapons",
+      "description": "Direct damage a Nailgun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_pg",
+      "group": "weapons",
+      "description": "Direct damage a Plasma Gun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_pl",
+      "group": "weapons",
+      "description": "Direct damage a Prox Launcher hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_rg",
+      "group": "weapons",
+      "description": "Direct damage a Railgun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_rl",
+      "group": "weapons",
+      "description": "Direct damage a Rocket Launcher hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_sg",
+      "group": "weapons",
+      "description": "Direct damage a Shotgun hit deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_sg_falloff",
+      "group": "weapons",
+      "description": "Direct damage a Shotgun hit deals. This is the falloff variant.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damage_sg_outer",
+      "group": "weapons",
+      "description": "Direct damage a Shotgun hit deals. This is the outer-radius variant.",
+      "source": "naming"
+    },
+    {
+      "name": "g_damagePlums",
+      "group": "gameplay",
+      "description": "Show floating damage numbers on hits.",
+      "source": "naming"
+    },
+    {
+      "name": "g_debugAlloc",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_debugDamage",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_debugFlags",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_debugInactivity",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_debugMove",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_debugThawTime",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_debugVampiricDamage",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_disableLoadout",
+      "group": "gameplay",
+      "description": "Turn the loadout system off entirely.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dmgThroughSurfaceAngularThreshold",
+      "group": "gameplay",
+      "description": "Angle limit for damage passing through a surface.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dmgThroughSurfaceDampening",
+      "group": "gameplay",
+      "description": "Damage reduction applied when damage passes through a surface.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dmgThroughSurfaceDistance",
+      "group": "gameplay",
+      "description": "Maximum distance damage may travel through a surface.",
+      "source": "naming"
+    },
+    {
+      "name": "g_domCapTime",
+      "group": "gameplay",
+      "description": "Seconds needed to capture a Domination point.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 4"
+      ]
+    },
+    {
+      "name": "g_domDistressThreshold",
+      "group": "gameplay",
+      "description": "Threshold at which a Domination point counts as under attack.",
+      "source": "naming"
+    },
+    {
+      "name": "g_domEnableContention",
+      "group": "gameplay",
+      "description": "Contested Domination points stop scoring.",
+      "source": "naming"
+    },
+    {
+      "name": "g_domNeutralFlag",
+      "group": "gameplay",
+      "description": "Domination points start neutral.",
+      "source": "naming"
+    },
+    {
+      "name": "g_domScoreRate",
+      "group": "gameplay",
+      "description": "How fast a held Domination point scores.",
+      "source": "naming"
+    },
+    {
+      "name": "g_domTeammateCapScale",
+      "group": "gameplay",
+      "description": "Capture speed scaling when several team-mates capture together.",
+      "source": "naming"
+    },
+    {
+      "name": "g_doWarmup",
+      "group": "gameplay",
+      "description": "Run a warmup period before the match starts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dropCmds",
+      "group": "gameplay",
+      "description": "Bitmask of what players may drop with the drop command.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "tdm = 4",
+        "ft = 6",
+        "ictf = 1"
+      ]
+    },
+    {
+      "name": "g_dropDamagedHealth",
+      "group": "gameplay",
+      "description": "Drop health when damaged.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dropInactive",
+      "group": "gameplay",
+      "description": "Move inactive players to spectators.",
+      "source": "naming"
+    },
+    {
+      "name": "g_droppedFlagBonus",
+      "group": "gameplay",
+      "description": "Score bonus for returning a dropped flag.",
+      "source": "naming"
+    },
+    {
+      "name": "g_droppedPowerupsDecay",
+      "group": "gameplay",
+      "description": "Seconds before a dropped powerup disappears.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dropPowerups",
+      "group": "gameplay",
+      "description": "Players drop their powerups when killed.",
+      "source": "naming"
+    },
+    {
+      "name": "g_dropSkulls",
+      "group": "gameplay",
+      "description": "Players drop skulls when killed (Harvester).",
+      "source": "naming"
+    },
+    {
+      "name": "g_enableDebugTrace",
+      "group": "gameplay",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "g_enableDust",
+      "group": "gameplay",
+      "description": "Dust effects enabled.",
+      "source": "naming"
+    },
+    {
+      "name": "g_enemyTeamRespawnRatio",
+      "group": "gameplay",
+      "description": "Scales the respawn delay by how many enemies are still alive.",
+      "source": "naming"
+    },
+    {
+      "name": "g_factory",
+      "group": "gameplay",
+      "description": "ID of the factory the current match was started with.",
+      "source": "factories"
+    },
+    {
+      "name": "g_factoryTitle",
+      "group": "gameplay",
+      "description": "Display title of the current factory.",
+      "source": "factories"
+    },
+    {
+      "name": "g_filterBan",
+      "group": "gameplay",
+      "description": "Apply the IP ban filter to connecting players.",
+      "source": "naming"
+    },
+    {
+      "name": "g_flagBounce",
+      "group": "gameplay",
+      "description": "Bounciness of a dropped flag.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "oneflag = 0.5"
+      ]
+    },
+    {
+      "name": "g_flagPhysics",
+      "group": "gameplay",
+      "description": "Physics model used by dropped flags.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "oneflag = 1"
+      ]
+    },
+    {
+      "name": "g_flightRefuelRate",
+      "group": "gameplay",
+      "description": "How fast Flight fuel refills.",
+      "source": "naming"
+    },
+    {
+      "name": "g_flightThrust",
+      "group": "gameplay",
+      "description": "Thrust of the Flight powerup.",
+      "source": "naming"
+    },
+    {
+      "name": "g_floodprot_decay",
+      "group": "gameplay",
+      "description": "Decrease the userinfo flood counter by 1 this often, in milliseconds.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_floodprot_maxcount",
+      "group": "gameplay",
+      "description": "Kick the player when their userinfo flood counter reaches this level.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_forceAtmosphericEffects",
+      "group": "gameplay",
+      "description": "Force atmospheric effects (rain, snow) on all clients.",
+      "source": "naming"
+    },
+    {
+      "name": "g_forceDmgThroughSurface",
+      "group": "gameplay",
+      "description": "Force damage to pass through thin surfaces.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "vca = 1"
+      ]
+    },
+    {
+      "name": "g_forceSendConfigstring",
+      "group": "gameplay",
+      "description": "Force configstrings to be resent to clients.",
+      "source": "naming"
+    },
+    {
+      "name": "g_forceSmallScoreboardMessage",
+      "group": "gameplay",
+      "description": "Force the compact scoreboard message.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeAutoThawTime",
+      "group": "gameplay",
+      "description": "Milliseconds before a frozen player thaws on their own.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeEnvironmentalRespawnDelay",
+      "group": "gameplay",
+      "description": "Respawn delay after an environmental death in Freeze Tag.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeProtectedSpawnTime",
+      "group": "gameplay",
+      "description": "Spawn protection time in Freeze Tag.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeRemovePowerupsOnRound",
+      "group": "gameplay",
+      "description": "Remove powerups at the start of each round.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeResetArmorOnRound",
+      "group": "gameplay",
+      "description": "Reset armour at the start of each round.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeResetHealthOnRound",
+      "group": "gameplay",
+      "description": "Reset health at the start of each round.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeResetWeaponsOnRound",
+      "group": "gameplay",
+      "description": "Reset weapons at the start of each round.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeRoundDelay",
+      "group": "gameplay",
+      "description": "Delay between Freeze Tag rounds.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeThawRadius",
+      "group": "gameplay",
+      "description": "Radius in units within which a frozen player can be thawed.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeThawThroughSurface",
+      "group": "gameplay",
+      "description": "Allow thawing through thin surfaces.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeThawTick",
+      "group": "gameplay",
+      "description": "Tick interval of the thaw timer.",
+      "source": "naming"
+    },
+    {
+      "name": "g_freezeThawTime",
+      "group": "gameplay",
+      "description": "Milliseconds a team-mate needs to stand in the thaw radius.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ift = 1000"
+      ]
+    },
+    {
+      "name": "g_freezeThawWinningTeam",
+      "group": "gameplay",
+      "description": "Thawing rules for the winning team.",
+      "source": "naming"
+    },
+    {
+      "name": "g_friendlyFire",
+      "group": "gameplay",
+      "description": "Team-mates can damage each other.",
+      "source": "naming"
+    },
+    {
+      "name": "g_friendlyFireDampen",
+      "group": "gameplay",
+      "description": "Scaling applied to friendly fire damage.",
+      "source": "naming"
+    },
+    {
+      "name": "g_gameState",
+      "group": "gameplay",
+      "description": "Current match state as reported by the engine.",
+      "source": "naming"
+    },
+    {
+      "name": "g_gametype",
+      "group": "gameplay",
+      "description": "Gametype ID of the running match (0 = FFA, 3 = TDM, 4 = CA, 5 = CTF and so on). On a dedicated server this comes from the factory the map was started with, not from server.cfg.",
+      "source": "ql-live"
+    },
+    {
+      "name": "g_gauntletSpeedFactor",
+      "group": "gameplay",
+      "description": "Speed boost while holding the gauntlet.",
+      "source": "naming"
+    },
+    {
+      "name": "g_grantItemOnSpawn",
+      "group": "gameplay",
+      "description": "Item granted to a player every time they spawn.",
+      "source": "naming"
+    },
+    {
+      "name": "g_gravity",
+      "group": "gameplay",
+      "description": "World gravity. 800 is the Quake Live default.",
+      "source": "naming"
+    },
+    {
+      "name": "g_guidedRocket",
+      "group": "gameplay",
+      "description": "Rockets can be steered after firing.",
+      "source": "naming"
+    },
+    {
+      "name": "g_headShotDamage_rg",
+      "group": "gameplay",
+      "description": "Damage a railgun headshot deals.",
+      "source": "naming"
+    },
+    {
+      "name": "g_inactivity",
+      "group": "gameplay",
+      "description": "Kick players who are inactive for x amount of seconds.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_inactivityWarning",
+      "group": "gameplay",
+      "description": "Seconds of warning before the g_inactivity kick fires.",
+      "source": "naming"
+    },
+    {
+      "name": "g_infiniteAmmo",
+      "group": "gameplay",
+      "description": "Weapons never run out of ammo.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "race = 1",
+        "_rj = 1",
+        "_sj = 1"
+      ]
+    },
+    {
+      "name": "g_instaGib",
+      "group": "gameplay",
+      "description": "Instagib mode: railgun only, one shot kills.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ictf = 1",
+        "iffa = 1",
+        "ift = 1"
+      ]
+    },
+    {
+      "name": "g_ironsights_mg",
+      "group": "gameplay",
+      "description": "Iron sights mode for the machine gun.",
+      "source": "naming"
+    },
+    {
+      "name": "g_itemHeight",
+      "group": "gameplay",
+      "description": "Height items float at above the floor.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 15",
+        "race = 35"
+      ]
+    },
+    {
+      "name": "g_itemTimers",
+      "group": "gameplay",
+      "description": "Show item respawn timers to players. The timers callvote (g_voteFlags bit 8192) toggles the same thing.",
+      "source": "ql-live",
+      "factory": true,
+      "examples": [
+        "duel = 0",
+        "race = 0"
+      ]
+    },
+    {
+      "name": "g_kamiAttenuate",
+      "group": "gameplay",
+      "description": "Kamikaze damage falloff with distance.",
+      "source": "naming"
+    },
+    {
+      "name": "g_kamiMinRatio",
+      "group": "gameplay",
+      "description": "Minimum damage ratio the Kamikaze deals at the edge of its blast.",
+      "source": "naming"
+    },
+    {
+      "name": "g_kickBadUserinfo",
+      "group": "gameplay",
+      "description": "Kick clients that send malformed userinfo.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback",
+      "group": "gameplay",
+      "description": "Global knockback multiplier applied to damage.",
+      "source": "factories"
+    },
+    {
+      "name": "g_knockback_bfg",
+      "group": "weapons",
+      "description": "Knockback a BFG10K hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_cg",
+      "group": "weapons",
+      "description": "Knockback a Chaingun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_cripple",
+      "group": "weapons",
+      "description": "Knockback applied to a crippled (heavily damaged) player.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_g",
+      "group": "weapons",
+      "description": "Knockback a Gauntlet hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_gh",
+      "group": "weapons",
+      "description": "Knockback a Grappling Hook hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_gl",
+      "group": "weapons",
+      "description": "Knockback a Grenade Launcher hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_hmg",
+      "group": "weapons",
+      "description": "Knockback a Heavy Machine Gun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_lg",
+      "group": "weapons",
+      "description": "Knockback a Lightning Gun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_mg",
+      "group": "weapons",
+      "description": "Knockback a Machine Gun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_ng",
+      "group": "weapons",
+      "description": "Knockback a Nailgun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_pg",
+      "group": "weapons",
+      "description": "Knockback a Plasma Gun hit imparts.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 1.25",
+        "vca = 1.25"
+      ]
+    },
+    {
+      "name": "g_knockback_pg_self",
+      "group": "weapons",
+      "description": "Knockback a Plasma Gun hit imparts on the player who fired it.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "infected = 0"
+      ]
+    },
+    {
+      "name": "g_knockback_pl",
+      "group": "weapons",
+      "description": "Knockback a Prox Launcher hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_rg",
+      "group": "weapons",
+      "description": "Knockback a Railgun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_rl",
+      "group": "weapons",
+      "description": "Knockback a Rocket Launcher hit imparts.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 1.10",
+        "vca = 1.10"
+      ]
+    },
+    {
+      "name": "g_knockback_rl_self",
+      "group": "weapons",
+      "description": "Knockback a Rocket Launcher hit imparts on the player who fired it.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_sg",
+      "group": "weapons",
+      "description": "Knockback a Shotgun hit imparts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_knockback_z",
+      "group": "weapons",
+      "description": "Vertical component of knockback.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "race = 40",
+        "vca = 40"
+      ]
+    },
+    {
+      "name": "g_knockback_z_self",
+      "group": "weapons",
+      "description": "Vertical component of knockback from your own weapon.",
+      "source": "factories"
+    },
+    {
+      "name": "g_lagHaxHistory",
+      "group": "gameplay",
+      "description": "How many past frames the server keeps for lag compensation.",
+      "source": "ql-live"
+    },
+    {
+      "name": "g_lagHaxMs",
+      "group": "gameplay",
+      "description": "Milliseconds of lag compensation (unlagged) the server applies.",
+      "source": "ql-live"
+    },
+    {
+      "name": "g_lastManStandingMessage",
+      "group": "gameplay",
+      "description": "Announce when one player is left alive.",
+      "source": "naming"
+    },
+    {
+      "name": "g_lastManStandingWarning",
+      "group": "gameplay",
+      "description": "Warn the last player alive.",
+      "source": "naming"
+    },
+    {
+      "name": "g_latchedHookOffset",
+      "group": "gameplay",
+      "description": "Offset applied to a latched grappling hook.",
+      "source": "naming"
+    },
+    {
+      "name": "g_levelStartTime",
+      "group": "gameplay",
+      "description": "Server time the current level started. Status value.",
+      "source": "naming"
+    },
+    {
+      "name": "g_lightningDischarge",
+      "group": "gameplay",
+      "description": "Lightning gun discharges in water.",
+      "source": "naming"
+    },
+    {
+      "name": "g_loadout",
+      "group": "gameplay",
+      "description": "Player loadout selection enabled.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "tdm = 1",
+        "ft = 1",
+        "dom = 1"
+      ]
+    },
+    {
+      "name": "g_log",
+      "group": "gameplay",
+      "description": "Game log file name.",
+      "source": "naming"
+    },
+    {
+      "name": "g_logSync",
+      "group": "gameplay",
+      "description": "Flush the game log after every line instead of buffering it.",
+      "source": "naming"
+    },
+    {
+      "name": "g_max_knockback",
+      "group": "gameplay",
+      "description": "Upper limit on knockback from a single hit.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "race = 160",
+        "vca = 160"
+      ]
+    },
+    {
+      "name": "g_maxDeferredSpawns",
+      "group": "gameplay",
+      "description": "How many spawns the server may defer before forcing them.",
+      "source": "naming"
+    },
+    {
+      "name": "g_maxFlightFuel",
+      "group": "gameplay",
+      "description": "Maximum Flight fuel.",
+      "source": "naming"
+    },
+    {
+      "name": "g_mercytime",
+      "group": "gameplay",
+      "description": "Seconds of a large score lead before the mercy rule ends the match.",
+      "source": "naming"
+    },
+    {
+      "name": "g_midAirMinHeight",
+      "group": "gameplay",
+      "description": "Minimum height a target must be at for a mid-air award.",
+      "source": "naming"
+    },
+    {
+      "name": "g_motd",
+      "group": "gameplay",
+      "description": "Message of the day shown to connecting players.",
+      "source": "naming"
+    },
+    {
+      "name": "g_nailbounce",
+      "group": "gameplay",
+      "description": "Nails bounce off surfaces.",
+      "source": "naming"
+    },
+    {
+      "name": "g_nailbouncepercentage",
+      "group": "gameplay",
+      "description": "How much velocity a nail keeps after bouncing.",
+      "source": "naming"
+    },
+    {
+      "name": "g_nailcount",
+      "group": "gameplay",
+      "description": "Nails fired per nailgun shot.",
+      "source": "naming"
+    },
+    {
+      "name": "g_nailspeed",
+      "group": "gameplay",
+      "description": "Nail projectile speed.",
+      "source": "naming"
+    },
+    {
+      "name": "g_nailspread",
+      "group": "gameplay",
+      "description": "Spread of the nailgun shot pattern.",
+      "source": "naming"
+    },
+    {
+      "name": "g_needpass",
+      "group": "gameplay",
+      "description": "Written by the engine to tell clients a password is required. Set g_password instead.",
+      "source": "naming"
+    },
+    {
+      "name": "g_neutralFlagPingRate",
+      "group": "gameplay",
+      "description": "How often the neutral flag position is announced (One Flag CTF).",
+      "source": "naming"
+    },
+    {
+      "name": "g_obeliskHealth",
+      "group": "gameplay",
+      "description": "Harvester obelisk health.",
+      "source": "naming"
+    },
+    {
+      "name": "g_obeliskRegenAmount",
+      "group": "gameplay",
+      "description": "Health the obelisk regenerates per step.",
+      "source": "naming"
+    },
+    {
+      "name": "g_obeliskRegenPeriod",
+      "group": "gameplay",
+      "description": "Seconds between obelisk regeneration steps.",
+      "source": "naming"
+    },
+    {
+      "name": "g_obeliskRespawnDelay",
+      "group": "gameplay",
+      "description": "Delay before a destroyed obelisk comes back.",
+      "source": "naming"
+    },
+    {
+      "name": "g_overtime",
+      "group": "gameplay",
+      "description": "Overtime length in minutes when a match ends in a draw; 0 disables overtime.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 0",
+        "ffa = 0",
+        "ctf = 0"
+      ]
+    },
+    {
+      "name": "g_password",
+      "group": "gameplay",
+      "description": "Set a server-wide password, and stop all users from connecting without it.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_playerCylinders",
+      "group": "gameplay",
+      "description": "Use cylinder-shaped player hitboxes instead of boxes.",
+      "source": "naming"
+    },
+    {
+      "name": "g_playerheadmodelOverride",
+      "group": "gameplay",
+      "description": "Force every player to use this head model.",
+      "source": "naming"
+    },
+    {
+      "name": "g_playerheadScale",
+      "group": "gameplay",
+      "description": "Scale factor applied to player head models.",
+      "source": "naming"
+    },
+    {
+      "name": "g_playerheadScaleOffset",
+      "group": "gameplay",
+      "description": "Offset applied on top of the head model scale.",
+      "source": "naming"
+    },
+    {
+      "name": "g_playermodelOverride",
+      "group": "gameplay",
+      "description": "Force every player to use this player model.",
+      "source": "naming"
+    },
+    {
+      "name": "g_playerModelScale",
+      "group": "gameplay",
+      "description": "Scale factor applied to player models.",
+      "source": "naming"
+    },
+    {
+      "name": "g_podiumDist",
+      "group": "gameplay",
+      "description": "Camera distance from the end-of-match podium.",
+      "source": "naming"
+    },
+    {
+      "name": "g_podiumDrop",
+      "group": "gameplay",
+      "description": "Camera drop for the end-of-match podium.",
+      "source": "naming"
+    },
+    {
+      "name": "g_powerupRespawn",
+      "group": "gameplay",
+      "description": "Seconds before a picked-up powerup reappears.",
+      "source": "naming"
+    },
+    {
+      "name": "g_proxMineTimeout",
+      "group": "gameplay",
+      "description": "Milliseconds before a proximity mine expires.",
+      "source": "naming"
+    },
+    {
+      "name": "g_quadDamageFactor",
+      "group": "gameplay",
+      "description": "Damage multiplier the Quad Damage powerup applies.",
+      "source": "naming"
+    },
+    {
+      "name": "g_quadHog",
+      "group": "gameplay",
+      "description": "Quad Hog mode: one quad drives the whole match.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "quadhog = 1"
+      ]
+    },
+    {
+      "name": "g_quadHogIdle",
+      "group": "gameplay",
+      "description": "Seconds an untouched Quad Hog quad waits before it moves.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "quadhog = 30"
+      ]
+    },
+    {
+      "name": "g_quadHogPingRate",
+      "group": "gameplay",
+      "description": "How often the Quad Hog quad position is announced.",
+      "source": "naming"
+    },
+    {
+      "name": "g_quadHogTime",
+      "group": "gameplay",
+      "description": "How long a Quad Hog quad lasts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_railJump",
+      "group": "gameplay",
+      "description": "Railgun shots push the shooter (rail jumping).",
+      "source": "naming"
+    },
+    {
+      "name": "g_range_lg_falloff",
+      "group": "gameplay",
+      "description": "Distance at which lightning gun damage starts falling off.",
+      "source": "naming"
+    },
+    {
+      "name": "g_range_sg_falloff",
+      "group": "gameplay",
+      "description": "Distance at which shotgun damage starts falling off.",
+      "source": "naming"
+    },
+    {
+      "name": "g_regenArmor",
+      "group": "gameplay",
+      "description": "Armour regenerates over time.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 1250"
+      ]
+    },
+    {
+      "name": "g_regenArmorAfterHealth",
+      "group": "gameplay",
+      "description": "Only start regenerating armour once health is full.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 1"
+      ]
+    },
+    {
+      "name": "g_regenArmorRate",
+      "group": "gameplay",
+      "description": "How fast armour regenerates.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 133"
+      ]
+    },
+    {
+      "name": "g_regenHealth",
+      "group": "gameplay",
+      "description": "Health regenerates over time.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 1250"
+      ]
+    },
+    {
+      "name": "g_regenHealthRate",
+      "group": "gameplay",
+      "description": "How fast health regenerates.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 133"
+      ]
+    },
+    {
+      "name": "g_respawn_delay_max",
+      "group": "gameplay",
+      "description": "Upper bound in milliseconds on the respawn delay after a player dies. The official race and vca factories set 3500.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "race = 3500",
+        "vca = 3500"
+      ]
+    },
+    {
+      "name": "g_respawn_delay_min",
+      "group": "gameplay",
+      "description": "Lower bound in milliseconds on the respawn delay after a player dies. The official race and vca factories set 500.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "race = 500",
+        "vca = 500"
+      ]
+    },
+    {
+      "name": "g_restarted",
+      "group": "gameplay",
+      "description": "Set by the engine while a map_restart is in progress.",
+      "source": "naming"
+    },
+    {
+      "name": "g_returnFlagOnSuicide",
+      "group": "gameplay",
+      "description": "Return the flag when its carrier suicides.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rocketsplashOffset",
+      "group": "gameplay",
+      "description": "Offset applied to rocket splash damage origin.",
+      "source": "naming"
+    },
+    {
+      "name": "g_roundDrawHealthCount",
+      "group": "gameplay",
+      "description": "Health tie-break used when a round ends in a draw.",
+      "source": "naming"
+    },
+    {
+      "name": "g_roundDrawLivingCount",
+      "group": "gameplay",
+      "description": "Living-player tie-break used when a round ends in a draw.",
+      "source": "naming"
+    },
+    {
+      "name": "g_roundWarmupDelay",
+      "group": "gameplay",
+      "description": "Milliseconds of warmup between rounds in round-based gametypes.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrAllowNegativeScores",
+      "group": "gameplay",
+      "description": "Allow scores to go below zero in Red Rover.",
+      "source": "factories"
+    },
+    {
+      "name": "g_rrDamageScoreBonus",
+      "group": "gameplay",
+      "description": "Score bonus for damage dealt in Red Rover.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrDeathScorePenalty",
+      "group": "gameplay",
+      "description": "Score penalty for dying in Red Rover.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "infected = 0"
+      ]
+    },
+    {
+      "name": "g_rrInfected",
+      "group": "gameplay",
+      "description": "Red Rover infection mode on or off.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "infected = 1"
+      ]
+    },
+    {
+      "name": "g_rrInfectedSpreadTime",
+      "group": "gameplay",
+      "description": "Seconds between infection spread ticks.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedSpreadWarningTime",
+      "group": "gameplay",
+      "description": "Warning time before infection spreads.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedSurvivorMinSpeed",
+      "group": "gameplay",
+      "description": "Minimum speed a survivor must keep.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedSurvivorPingRate",
+      "group": "gameplay",
+      "description": "How often survivor positions are announced.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedSurvivorScoreBonus",
+      "group": "gameplay",
+      "description": "Score bonus for surviving.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedSurvivorScoreMethod",
+      "group": "gameplay",
+      "description": "How survivor score is calculated.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedSurvivorScoreRate",
+      "group": "gameplay",
+      "description": "How fast survivors accumulate score.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedZombieFragBonus",
+      "group": "gameplay",
+      "description": "Frags awarded for a zombie kill.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedZombieHealthBonus",
+      "group": "gameplay",
+      "description": "Extra health given to a zombie.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrInfectedZombieSpeed",
+      "group": "gameplay",
+      "description": "Movement speed of a zombie.",
+      "source": "naming"
+    },
+    {
+      "name": "g_rrRoundScoreBonus",
+      "group": "gameplay",
+      "description": "Score bonus at the end of a Red Rover round.",
+      "source": "naming"
+    },
+    {
+      "name": "g_runes",
+      "group": "gameplay",
+      "description": "Rune pickups (Scout, Guard, Doubler, Ammo Regen) enabled.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "actf = 1"
+      ]
+    },
+    {
+      "name": "g_shuffle_automatic",
+      "group": "gameplay",
+      "description": "Shuffle teams automatically when they look unbalanced.",
+      "source": "naming"
+    },
+    {
+      "name": "g_shuffle_automatic_minplayers",
+      "group": "gameplay",
+      "description": "Players needed before an automatic shuffle may happen.",
+      "source": "naming"
+    },
+    {
+      "name": "g_shuffle_minplayers",
+      "group": "gameplay",
+      "description": "Players needed before a shuffle vote is allowed.",
+      "source": "naming"
+    },
+    {
+      "name": "g_shuffle_timedelay",
+      "group": "gameplay",
+      "description": "Delay before a shuffle takes effect.",
+      "source": "naming"
+    },
+    {
+      "name": "g_skipTrainingEnable",
+      "group": "gameplay",
+      "description": "Let players skip the training intro.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnArmor",
+      "group": "gameplay",
+      "description": "Armour granted on spawn.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnArmorDmgScale",
+      "group": "gameplay",
+      "description": "Damage scaling applied while spawn armour lasts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnDelay_key",
+      "group": "gameplay",
+      "description": "Delay in milliseconds before a key item respawns.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnDelay_powerup",
+      "group": "gameplay",
+      "description": "Delay in milliseconds before a powerup respawns.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnDelayRandom_key",
+      "group": "gameplay",
+      "description": "Random extra delay added to key item respawns.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnDelayRandom_powerup",
+      "group": "gameplay",
+      "description": "Random extra delay added to powerup respawns.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnItemAmmo",
+      "group": "gameplay",
+      "description": "Ammo items are spawned on the map.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 0"
+      ]
+    },
+    {
+      "name": "g_spawnItemArmor",
+      "group": "gameplay",
+      "description": "Armour items are spawned on the map.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 0"
+      ]
+    },
+    {
+      "name": "g_spawnItemHealth",
+      "group": "gameplay",
+      "description": "Health items are spawned on the map.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 0"
+      ]
+    },
+    {
+      "name": "g_spawnItemHoldable",
+      "group": "gameplay",
+      "description": "Holdable items (teleporter, medkit) are spawned on the map.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 0"
+      ]
+    },
+    {
+      "name": "g_spawnItemPowerup",
+      "group": "gameplay",
+      "description": "Powerups (quad, regen, battle suit) are spawned on the map.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 0"
+      ]
+    },
+    {
+      "name": "g_spawnItemWeapons",
+      "group": "gameplay",
+      "description": "Weapon pickups are spawned on the map. The official dom factory sets it to 0, so players keep only their spawn loadout.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "dom = 0"
+      ]
+    },
+    {
+      "name": "g_spawnMinDistance",
+      "group": "gameplay",
+      "description": "Minimum distance a spawn point must be from other players.",
+      "source": "naming"
+    },
+    {
+      "name": "g_spawnRandomRatio",
+      "group": "gameplay",
+      "description": "How much randomness goes into spawn point selection.",
+      "source": "naming"
+    },
+    {
+      "name": "g_specItemTimers",
+      "group": "gameplay",
+      "description": "Show item respawn timers to spectators.",
+      "source": "ql-live"
+    },
+    {
+      "name": "g_speed",
+      "group": "gameplay",
+      "description": "Base player movement speed.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashdamage_bfg",
+      "group": "weapons",
+      "description": "Splash damage of a BFG10K shot.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashdamage_gl",
+      "group": "weapons",
+      "description": "Splash damage of a Grenade Launcher shot.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashdamage_pg",
+      "group": "weapons",
+      "description": "Splash damage of a Plasma Gun shot.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashdamage_pl",
+      "group": "weapons",
+      "description": "Splash damage of a Prox Launcher shot.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashdamage_rl",
+      "group": "weapons",
+      "description": "Splash damage of a Rocket Launcher shot.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashdamageOffset",
+      "group": "gameplay",
+      "description": "Offset applied to splash damage origin.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashradius_bfg",
+      "group": "weapons",
+      "description": "Splash radius of a BFG10K shot, in units.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashradius_gl",
+      "group": "weapons",
+      "description": "Splash radius of a Grenade Launcher shot, in units.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashradius_pg",
+      "group": "weapons",
+      "description": "Splash radius of a Plasma Gun shot, in units.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 32",
+        "vca = 32"
+      ]
+    },
+    {
+      "name": "g_splashradius_pl",
+      "group": "weapons",
+      "description": "Splash radius of a Prox Launcher shot, in units.",
+      "source": "naming"
+    },
+    {
+      "name": "g_splashradius_rl",
+      "group": "weapons",
+      "description": "Splash radius of a Rocket Launcher shot, in units.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_bfg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the BFG10K.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_cg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Chaingun.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_g",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Gauntlet.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_gh",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Grappling Hook.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_gl",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Grenade Launcher.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 25",
+        "ad = 25",
+        "dom = 25"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_hmg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Heavy Machine Gun.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 150",
+        "ad = 150",
+        "dom = 150"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_lg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Lightning Gun.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 150",
+        "ad = 150",
+        "dom = 150"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_mg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Machine Gun.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 100",
+        "ad = 100",
+        "dom = 100"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_ng",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Nailgun.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_pg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Plasma Gun.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 100",
+        "ad = 100",
+        "dom = 100"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_pl",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Prox Launcher.",
+      "source": "naming"
+    },
+    {
+      "name": "g_startingAmmo_rg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Railgun.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 25",
+        "ad = 25",
+        "dom = 25"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_rl",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Rocket Launcher.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 50",
+        "ad = 50",
+        "dom = 50"
+      ]
+    },
+    {
+      "name": "g_startingAmmo_sg",
+      "group": "weapons",
+      "description": "Ammo a player spawns with for the Shotgun.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ca = 50",
+        "ad = 50",
+        "dom = 50"
+      ]
+    },
+    {
+      "name": "g_startingArmor",
+      "group": "gameplay",
+      "description": "Armour a player spawns with.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 100",
+        "ad = 100",
+        "dom = 100"
+      ]
+    },
+    {
+      "name": "g_startingHealth",
+      "group": "gameplay",
+      "description": "Health a player spawns with.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 200",
+        "ad = 100",
+        "infected = 150"
+      ]
+    },
+    {
+      "name": "g_startingHealthBonus",
+      "group": "gameplay",
+      "description": "Extra health on top of g_startingHealth that decays back down over time.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 0",
+        "race = 0",
+        "ad = 0"
+      ]
+    },
+    {
+      "name": "g_startingWeapons",
+      "group": "gameplay",
+      "description": "Bitmask of the weapons a player spawns with. The official ca factory uses 8447, which is every weapon up to the plasma gun plus the heavy machine gun (bit 8192) - dropping that bit is how a factory takes the HMG away.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ca = 8447",
+        "race = 145",
+        "_rj = 17"
+      ],
+      "bitmask": {
+        "source": "factories",
+        "note": "Bit values read out of the game's own factories: ca = 8447 (everything up to the plasma gun, plus the heavy machine gun), ictf/iffa = 65 (gauntlet + railgun), actf = 515 (gauntlet + machine gun + grappling hook), _rj = 17 (gauntlet + rocket launcher), infected = 7 (gauntlet + machine gun + shotgun).",
+        "bits": [
+          [
+            1,
+            "Gauntlet"
+          ],
+          [
+            2,
+            "Machine Gun"
+          ],
+          [
+            4,
+            "Shotgun"
+          ],
+          [
+            8,
+            "Grenade Launcher"
+          ],
+          [
+            16,
+            "Rocket Launcher"
+          ],
+          [
+            32,
+            "Lightning Gun"
+          ],
+          [
+            64,
+            "Railgun"
+          ],
+          [
+            128,
+            "Plasma Gun"
+          ],
+          [
+            256,
+            "BFG10K"
+          ],
+          [
+            512,
+            "Grappling Hook"
+          ],
+          [
+            1024,
+            "Nailgun"
+          ],
+          [
+            2048,
+            "Prox Launcher"
+          ],
+          [
+            4096,
+            "Chaingun"
+          ],
+          [
+            8192,
+            "Heavy Machine Gun"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "g_suddenDeathRespawn",
+      "group": "gameplay",
+      "description": "Respawning during sudden death.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "ctf = 1",
+        "actf = 1",
+        "har = 1"
+      ]
+    },
+    {
+      "name": "g_suddenDeathRespawnIncrement",
+      "group": "gameplay",
+      "description": "Step by which the sudden-death respawn delay grows.",
+      "source": "naming"
+    },
+    {
+      "name": "g_suddenDeathRespawnMax",
+      "group": "gameplay",
+      "description": "Upper limit of the sudden-death respawn delay.",
+      "source": "naming"
+    },
+    {
+      "name": "g_suddenDeathRespawnPrint",
+      "group": "gameplay",
+      "description": "Announce sudden-death respawn changes.",
+      "source": "naming"
+    },
+    {
+      "name": "g_suddenDeathRespawnStart",
+      "group": "gameplay",
+      "description": "When sudden-death respawn scaling starts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_suddenDeathRespawnTick",
+      "group": "gameplay",
+      "description": "Tick interval of the sudden-death respawn timer.",
+      "source": "naming"
+    },
+    {
+      "name": "g_switchTeamDelay",
+      "group": "gameplay",
+      "description": "Delay before a player may switch teams again.",
+      "source": "naming"
+    },
+    {
+      "name": "g_tackleFlag",
+      "group": "gameplay",
+      "description": "Flag carriers can be tackled.",
+      "source": "naming"
+    },
+    {
+      "name": "g_teamAutoJoin",
+      "group": "gameplay",
+      "description": "Put connecting players straight onto a team instead of into spectators.",
+      "source": "naming"
+    },
+    {
+      "name": "g_teamForceBalance",
+      "group": "gameplay",
+      "description": "Stop players from joining the team that already has more players.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "infected = 0",
+        "rr = 0"
+      ]
+    },
+    {
+      "name": "g_teamForcePresent",
+      "group": "gameplay",
+      "description": "Require players to be present in the game before the match starts.",
+      "source": "naming"
+    },
+    {
+      "name": "g_teamSizeMin",
+      "group": "gameplay",
+      "description": "Smallest team size the server will run a match with.",
+      "source": "naming"
+    },
+    {
+      "name": "g_teamSpawnAsSpec",
+      "group": "gameplay",
+      "description": "Put players into spectators when they join a team game.",
+      "source": "naming"
+    },
+    {
+      "name": "g_teamSpecFreeCam",
+      "group": "gameplay",
+      "description": "Allow free-camera spectating for team-mates.",
+      "source": "naming"
+    },
+    {
+      "name": "g_teamSpecSayEnable",
+      "group": "gameplay",
+      "description": "Let spectators chat to players on their team.",
+      "source": "naming"
+    },
+    {
+      "name": "g_throwFlagForwardMult",
+      "group": "gameplay",
+      "description": "Forward multiplier applied to a thrown flag.",
+      "source": "naming"
+    },
+    {
+      "name": "g_throwFlagVelocity",
+      "group": "gameplay",
+      "description": "Velocity a thrown flag gets.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "oneflag = 300"
+      ]
+    },
+    {
+      "name": "g_timeoutCount",
+      "group": "gameplay",
+      "description": "Timeouts each team may call per match.",
+      "source": "factories"
+    },
+    {
+      "name": "g_timeoutLen",
+      "group": "gameplay",
+      "description": "Length of a single timeout in seconds.",
+      "source": "factories"
+    },
+    {
+      "name": "g_training",
+      "group": "gameplay",
+      "description": "Training mode on or off.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "_rj = 1",
+        "_sj = 1",
+        "_training = 1"
+      ]
+    },
+    {
+      "name": "g_vampiricDamage",
+      "group": "gameplay",
+      "description": "Fraction of the damage dealt that comes back to the attacker as health.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "vca = 0.75"
+      ]
+    },
+    {
+      "name": "g_velocity_bfg",
+      "group": "weapons",
+      "description": "Projectile speed of the BFG10K.",
+      "source": "naming"
+    },
+    {
+      "name": "g_velocity_gh",
+      "group": "weapons",
+      "description": "Projectile speed of the Grappling Hook.",
+      "source": "naming"
+    },
+    {
+      "name": "g_velocity_gl",
+      "group": "weapons",
+      "description": "Projectile speed of the Grenade Launcher.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 800",
+        "vca = 800"
+      ]
+    },
+    {
+      "name": "g_velocity_pg",
+      "group": "weapons",
+      "description": "Projectile speed of the Plasma Gun.",
+      "source": "naming"
+    },
+    {
+      "name": "g_velocity_rl",
+      "group": "weapons",
+      "description": "Projectile speed of the Rocket Launcher.",
+      "source": "naming"
+    },
+    {
+      "name": "g_version",
+      "group": "gameplay",
+      "description": "Game module version string.",
+      "source": "naming"
+    },
+    {
+      "name": "g_voteDelay",
+      "group": "gameplay",
+      "description": "Delay allowing votes for x milliseconds after map load.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_voteFlags",
+      "group": "gameplay",
+      "description": "Bitmask of callvote types to disable. Bits 1 (map) and 4 (nextmap) are coupled inside the client: deny either and the in-game vote menu loses its whole map section.",
+      "source": "ql-live",
+      "factory": true,
+      "examples": [
+        "_rj = 2048",
+        "_sj = 2048",
+        "_training = 2048"
+      ],
+      "bitmask": {
+        "source": "ql-live",
+        "note": "Set bit = that vote is DISABLED. Bits 1 (map) and 4 (nextmap) are coupled inside the client: denying either hides the whole map section of the in-game vote menu, so a working tournament value is 13816, not 13820.",
+        "bits": [
+          [
+            1,
+            "map"
+          ],
+          [
+            2,
+            "map_restart"
+          ],
+          [
+            4,
+            "nextmap"
+          ],
+          [
+            8,
+            "gametype"
+          ],
+          [
+            16,
+            "kick"
+          ],
+          [
+            32,
+            "timelimit"
+          ],
+          [
+            64,
+            "fraglimit"
+          ],
+          [
+            128,
+            "shuffle"
+          ],
+          [
+            256,
+            "teamsize"
+          ],
+          [
+            512,
+            "cointoss / random"
+          ],
+          [
+            1024,
+            "loadouts"
+          ],
+          [
+            2048,
+            "end-game voting"
+          ],
+          [
+            4096,
+            "ammo (global)"
+          ],
+          [
+            8192,
+            "timers (item)"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "g_voteLimit",
+      "group": "gameplay",
+      "description": "Limit users to x votes per map.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_warmup",
+      "group": "gameplay",
+      "description": "Warmup length in seconds when g_doWarmup is on.",
+      "source": "naming"
+    },
+    {
+      "name": "g_warmupDelay",
+      "group": "gameplay",
+      "description": "Wait x seconds before allowing match to start to allow all players to connect.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_warmupReadyDelay",
+      "group": "gameplay",
+      "description": "Force the game to start after x seconds after someone readies up.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_warmupReadyDelayAction",
+      "group": "gameplay",
+      "description": "Set to 1 to force players to spectator after g_warmupReady Delay, 2 to force ready up.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "g_weaponRespawn",
+      "group": "gameplay",
+      "description": "Seconds before a picked-up weapon reappears.",
+      "source": "naming"
+    },
+    {
+      "name": "gamedate",
+      "group": "engine",
+      "description": "Build date of the game module.",
+      "source": "naming"
+    },
+    {
+      "name": "in_flush",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "journal",
+      "group": "engine",
+      "description": "Record or play back an engine journal (debugging).",
+      "source": "naming"
+    },
+    {
+      "name": "logfile",
+      "group": "server",
+      "description": "Console logging: 0 = off, 1 = buffered, 2 = flush after every line.",
+      "source": "naming"
+    },
+    {
+      "name": "mapname",
+      "group": "gameplay",
+      "description": "Map currently running. Status value written by the engine.",
+      "source": "naming"
+    },
+    {
+      "name": "mercylimit",
+      "group": "gameplay",
+      "description": "Score lead at which the match ends early by mercy rule; 0 disables it.",
+      "source": "naming"
+    },
+    {
+      "name": "net_ip",
+      "group": "network",
+      "description": "Which IP to bind to. Blank will bind to all interfaces.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "net_noudp",
+      "group": "network",
+      "description": "Disable the UDP network stack.",
+      "source": "naming"
+    },
+    {
+      "name": "net_port",
+      "group": "network",
+      "description": "Which UDP port to bind to. Blank will start at 27960 and keep going up, if net_strict is 0.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "net_qport",
+      "group": "network",
+      "description": "Client port number used to tell connections apart behind NAT.",
+      "source": "naming"
+    },
+    {
+      "name": "net_strict",
+      "group": "network",
+      "description": "Quit out immediately if we can't bind the IP and port.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "nextmap",
+      "group": "gameplay",
+      "description": "Command the server runs when the current match ends. Written by the engine and by map votes.",
+      "source": "naming"
+    },
+    {
+      "name": "nextmaps",
+      "group": "gameplay",
+      "description": "Upcoming maps the engine picked from the map pool.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_AirAccel",
+      "group": "physics",
+      "description": "Acceleration available while airborne.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_AirControl",
+      "group": "physics",
+      "description": "How much steering the player has in the air.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 1",
+        "vca = 1"
+      ]
+    },
+    {
+      "name": "pmove_AirStepFriction",
+      "group": "physics",
+      "description": "Friction applied to air steps.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_AirSteps",
+      "group": "physics",
+      "description": "Air movement is stepped over small obstacles.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_AirStopAccel",
+      "group": "physics",
+      "description": "Acceleration applied when stopping in the air.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_AutoHop",
+      "group": "physics",
+      "description": "Holding jump keeps bunny hopping without re-pressing.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_BunnyHop",
+      "group": "physics",
+      "description": "Bunny hopping enabled.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 0"
+      ]
+    },
+    {
+      "name": "pmove_ChainJump",
+      "group": "physics",
+      "description": "Chained jumps keep speed.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_ChainJumpVelocity",
+      "group": "physics",
+      "description": "Velocity granted by a chained jump.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_CircleStrafeFriction",
+      "group": "physics",
+      "description": "Friction applied while circle strafing.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_CrouchSlide",
+      "group": "physics",
+      "description": "Crouch sliding enabled.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_CrouchSlideFriction",
+      "group": "physics",
+      "description": "Friction applied during a crouch slide.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_CrouchSlideTime",
+      "group": "physics",
+      "description": "How long a crouch slide lasts.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_CrouchStepJump",
+      "group": "physics",
+      "description": "Crouch step jumping enabled.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 0"
+      ]
+    },
+    {
+      "name": "pmove_DoubleJump",
+      "group": "physics",
+      "description": "Double jumping enabled.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_JumpTimeDeltaMin",
+      "group": "physics",
+      "description": "Minimum milliseconds between two jumps.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 50",
+        "race = 50",
+        "vca = 50"
+      ]
+    },
+    {
+      "name": "pmove_JumpVelocity",
+      "group": "physics",
+      "description": "Upward velocity a jump gives.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_JumpVelocityMax",
+      "group": "physics",
+      "description": "Upper limit on jump velocity.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_JumpVelocityScaleAdd",
+      "group": "physics",
+      "description": "Extra jump velocity added when scaling applies.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_JumpVelocityTimeThreshold",
+      "group": "physics",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "pmove_JumpVelocityTimeThresholdOffset",
+      "group": "physics",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "pmove_noPlayerClip",
+      "group": "physics",
+      "description": "Ignore player clip brushes.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 1"
+      ]
+    },
+    {
+      "name": "pmove_RampJump",
+      "group": "physics",
+      "description": "Ramp jumping enabled.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 1",
+        "vca = 1"
+      ]
+    },
+    {
+      "name": "pmove_RampJumpScale",
+      "group": "physics",
+      "description": "Velocity scaling applied to ramp jumps.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_StepHeight",
+      "group": "physics",
+      "description": "Height of a step the player can walk up.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_StepJump",
+      "group": "physics",
+      "description": "Step jumping enabled.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_StepJumpVelocity",
+      "group": "physics",
+      "description": "Velocity granted by a step jump.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_StrafeAccel",
+      "group": "physics",
+      "description": "Acceleration available while strafing.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_velocity_gh",
+      "group": "physics",
+      "description": "Grappling hook pull speed.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_WalkAccel",
+      "group": "physics",
+      "description": "Ground acceleration.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_WalkFriction",
+      "group": "physics",
+      "description": "Ground friction.",
+      "source": "naming"
+    },
+    {
+      "name": "pmove_WaterSwimScale",
+      "group": "physics",
+      "description": "Speed scaling while swimming.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 0.5f"
+      ]
+    },
+    {
+      "name": "pmove_WaterWadeScale",
+      "group": "physics",
+      "description": "Speed scaling while wading.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 0.75f"
+      ]
+    },
+    {
+      "name": "pmove_WeaponDropTime",
+      "group": "physics",
+      "description": "Milliseconds it takes to lower a weapon.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 10",
+        "vca = 10"
+      ]
+    },
+    {
+      "name": "pmove_WeaponRaiseTime",
+      "group": "physics",
+      "description": "Milliseconds it takes to raise a weapon.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "race = 10",
+        "vca = 10"
+      ]
+    },
+    {
+      "name": "pmove_WishSpeed",
+      "group": "physics",
+      "description": "Speed the movement code tries to reach.",
+      "source": "naming"
+    },
+    {
+      "name": "practiceflags",
+      "group": "gameplay",
+      "description": "Bitmask of practice-mode options. Bit meanings are not verified.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "_rj = 1",
+        "_sj = 1",
+        "_training = 0"
+      ]
+    },
+    {
+      "name": "protocol",
+      "group": "engine",
+      "description": "Network protocol version the server speaks.",
+      "source": "naming"
+    },
+    {
+      "name": "r_debugSurfaceUpdate",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "r_uiFullScreen",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "roundlimit",
+      "group": "gameplay",
+      "description": "Rounds needed to win a round-based match (CA, Freeze Tag, Red Rover).",
+      "source": "factories"
+    },
+    {
+      "name": "roundtimelimit",
+      "group": "gameplay",
+      "description": "Length of a single round in seconds.",
+      "source": "factories"
+    },
+    {
+      "name": "scorelimit",
+      "group": "gameplay",
+      "description": "Score needed to win in gametypes scored by points rather than frags (Domination, Harvester).",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "ad = 15",
+        "dom = 150"
+      ]
+    },
+    {
+      "name": "serverstartup",
+      "group": "server",
+      "description": "Command the engine runs once it has finished initializing, for example \"map campgrounds ffa\" or \"startRandomMap\". On a managed instance this is the only reliable way to pick the starting map - a bare map line in server.cfg loses.",
+      "source": "ql-live"
+    },
+    {
+      "name": "session0",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "showdrop",
+      "group": "engine",
+      "description": "Log dropped packets.",
+      "source": "naming"
+    },
+    {
+      "name": "showpackets",
+      "group": "engine",
+      "description": "Log every network packet.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_altEntDir",
+      "group": "server",
+      "description": "Alternative directory the server loads map entity overrides from.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_cheats",
+      "group": "server",
+      "description": "Cheats flag. devmap sets it indirectly.",
+      "source": "ql-live"
+    },
+    {
+      "name": "sv_cylinderScale",
+      "group": "server",
+      "description": "Scale applied to cylinder hitboxes.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_dumpEntities",
+      "group": "server",
+      "description": "Dump the map entity list to a file.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_errorExit",
+      "group": "server",
+      "description": "Exit the process on a fatal server error.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_floodprotect",
+      "group": "server",
+      "description": "Kick the player when they reach x commands, decreases by 1 every second",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_fps",
+      "group": "server",
+      "description": "Change how many frames the server runs per second. WARNING: Has not been tested extensively, and will have a direct impact on CPU and network usage!",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_gtid",
+      "group": "server",
+      "description": "Gametype ID reported by the engine.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_hostname",
+      "group": "server",
+      "description": "Server name shown in the server browser and in the client's connect screen.",
+      "source": "ql-live"
+    },
+    {
+      "name": "sv_idleExit",
+      "group": "server",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "sv_idleRestart",
+      "group": "server",
+      "description": "Restart the server when it has been idle.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_includeCurrentMapInVote",
+      "group": "server",
+      "description": "Offer the current map in the map vote list.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_killserver",
+      "group": "server",
+      "description": "Setting this to 1 makes the engine unload the current server.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_lanForceRate",
+      "group": "server",
+      "description": "Force LAN rates for connected clients.",
+      "source": "qlsm"
+    },
+    {
+      "name": "sv_mapChecksum",
+      "group": "server",
+      "description": "Checksum of the running map.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_mapname",
+      "group": "server",
+      "description": "Map the server is currently running.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_mapPoolFile",
+      "group": "server",
+      "description": "Map pool that the server will use. See default mapcycle.txt for format. Built in map pools: mappool.txt, mappool_ca.txt, mappool_ctf.txt, mappool_duel.txt, mappool_ffa.txt, mappool_race.txt, mappool_tdm.txt",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_master",
+      "group": "server",
+      "description": "Whether the server should respond to queries. Disable this to stop server from appearing in browser. (This will affect the LAN browser!)",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_maxclients",
+      "group": "server",
+      "description": "How many clients can be connected at once (players plus spectators).",
+      "source": "ql-live"
+    },
+    {
+      "name": "sv_padPackets",
+      "group": "server",
+      "description": "Add padding bytes to network packets (debugging).",
+      "source": "naming"
+    },
+    {
+      "name": "sv_pakNames",
+      "group": "server",
+      "description": "Names of the pak files the server has loaded.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_paks",
+      "group": "server",
+      "description": "Checksums of the pak files the server has loaded.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_paused",
+      "group": "server",
+      "description": "Server is paused.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_privateClients",
+      "group": "server",
+      "description": "Reserve slots that can be used with sv_privatePassword.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_privatePassword",
+      "group": "server",
+      "description": "Password to use in conjunction with sv_privateClients.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_pure",
+      "group": "server",
+      "description": "Pure server: clients may only use pak files the server references.",
+      "source": "ql-live"
+    },
+    {
+      "name": "sv_quitOnEmpty",
+      "group": "server",
+      "description": "Quit the process once the last player leaves.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_quitOnExitLevel",
+      "group": "server",
+      "description": "Quit the process when the level ends.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_reconnectlimit",
+      "group": "server",
+      "description": "Seconds a kicked client must wait before reconnecting.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_referencedPakNames",
+      "group": "server",
+      "description": "Names of the pak files clients must have.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_referencedPaks",
+      "group": "server",
+      "description": "Checksums of the pak files clients must have.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_referencedSteamworks",
+      "group": "server",
+      "description": "Steam Workshop items clients must have.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_running",
+      "group": "server",
+      "description": "Set by the engine while a server is running.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_serverid",
+      "group": "server",
+      "description": "Server ID written by the engine.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_serverType",
+      "group": "server",
+      "description": "0 = Offline, 1 = LAN, 2 = Internet",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_showloss",
+      "group": "server",
+      "description": "Log packet loss for connected clients.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_strictAuth",
+      "group": "server",
+      "description": "Require Steam authentication for connecting clients.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_tags",
+      "group": "server",
+      "description": "Comma delimited field of server tags to show in server browser. Will automatically include gametype and some gameplay modifications. ex. \"crouch slide, classic, space\"",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_timeout",
+      "group": "server",
+      "description": "Seconds without packets before a client is dropped.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_vac",
+      "group": "server",
+      "description": "VAC (Valve Anti-Cheat) state for this server.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_warmupReadyPercentage",
+      "group": "server",
+      "description": "Ratio of players that must be ready before the match starts.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "sv_workshopFile",
+      "group": "server",
+      "description": "Steam Workshop manifest file the server loads maps from.",
+      "source": "naming"
+    },
+    {
+      "name": "sv_zombietime",
+      "group": "server",
+      "description": "Seconds a dropped client stays in a zombie state before its slot is freed.",
+      "source": "naming"
+    },
+    {
+      "name": "teamsize",
+      "group": "gameplay",
+      "description": "Players allowed per team. The teamsize callvote and !teamsize change this.",
+      "source": "factories"
+    },
+    {
+      "name": "timedemo",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "timelimit",
+      "group": "gameplay",
+      "description": "Match length in minutes; 0 means no time limit. Normally set by the factory or a callvote rather than by hand.",
+      "source": "factories",
+      "factory": true,
+      "examples": [
+        "duel = 10",
+        "ffa = 15",
+        "tdm = 15"
+      ]
+    },
+    {
+      "name": "timescale",
+      "group": "engine",
+      "description": "Time multiplier. 1 is real time; other values only apply with cheats.",
+      "source": "naming"
+    },
+    {
+      "name": "ttycon",
+      "group": "engine",
+      "description": "Use the terminal console on Linux.",
+      "source": "naming"
+    },
+    {
+      "name": "ui_singlePlayerActive",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "username",
+      "group": "engine",
+      "description": "OS user the server process runs as.",
+      "source": "naming"
+    },
+    {
+      "name": "version",
+      "group": "engine",
+      "description": "Full engine version string.",
+      "source": "naming"
+    },
+    {
+      "name": "viewlog",
+      "group": "engine",
+      "description": "Show the log window (Windows).",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_gravity_bfg",
+      "group": "weapons",
+      "description": "Gravity applied to BFG10K projectiles.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_gravity_ng",
+      "group": "weapons",
+      "description": "Gravity applied to Nailgun projectiles.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_gravity_pg",
+      "group": "weapons",
+      "description": "Gravity applied to Plasma Gun projectiles.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_gravity_rl",
+      "group": "weapons",
+      "description": "Gravity applied to Rocket Launcher projectiles.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_bfg",
+      "group": "weapons",
+      "description": "Milliseconds between BFG10K shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_cg",
+      "group": "weapons",
+      "description": "Milliseconds between Chaingun shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_gauntlet",
+      "group": "weapons",
+      "description": "Milliseconds between Gauntlet shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_gh",
+      "group": "weapons",
+      "description": "Milliseconds between Grappling Hook shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_gl",
+      "group": "weapons",
+      "description": "Milliseconds between Grenade Launcher shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_hmg",
+      "group": "weapons",
+      "description": "Milliseconds between Heavy Machine Gun shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_hook",
+      "group": "weapons",
+      "description": "Milliseconds between Grappling Hook shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_lg",
+      "group": "weapons",
+      "description": "Milliseconds between Lightning Gun shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_mg",
+      "group": "weapons",
+      "description": "Milliseconds between Machine Gun shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_ng",
+      "group": "weapons",
+      "description": "Milliseconds between Nailgun shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_pg",
+      "group": "weapons",
+      "description": "Milliseconds between Plasma Gun shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_prox",
+      "group": "weapons",
+      "description": "Milliseconds between Prox Launcher shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_rg",
+      "group": "weapons",
+      "description": "Milliseconds between Railgun shots.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "vca = 1250"
+      ]
+    },
+    {
+      "name": "weapon_reload_rl",
+      "group": "weapons",
+      "description": "Milliseconds between Rocket Launcher shots.",
+      "source": "naming"
+    },
+    {
+      "name": "weapon_reload_sg",
+      "group": "weapons",
+      "description": "Milliseconds between Shotgun shots.",
+      "source": "naming",
+      "factory": true,
+      "examples": [
+        "vca = 950"
+      ]
+    },
+    {
+      "name": "web_browserActive",
+      "group": "engine",
+      "description": null,
+      "source": "listcvars"
+    },
+    {
+      "name": "zmq_rcon_enable",
+      "group": "rcon",
+      "description": "Enable the ZeroMQ remote console. It binds its own TCP port and cannot be turned on or off after launch.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_rcon_ip",
+      "group": "rcon",
+      "description": "IP the ZeroMQ rcon socket binds to. Cannot change after launch.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_rcon_password",
+      "group": "rcon",
+      "description": "Password for the ZeroMQ rcon socket. Unlike the port, this one can be changed after launch.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_rcon_port",
+      "group": "rcon",
+      "description": "TCP port for ZeroMQ rcon. Must differ from the stats port if both are used, and cannot change after launch.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_stats_enable",
+      "group": "rcon",
+      "description": "Enable the ZeroMQ stats socket, which streams match events to a listening client.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_stats_ip",
+      "group": "rcon",
+      "description": "IP the ZeroMQ stats socket binds to.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_stats_password",
+      "group": "rcon",
+      "description": "Password for the ZeroMQ stats socket.",
+      "source": "server.cfg"
+    },
+    {
+      "name": "zmq_stats_port",
+      "group": "rcon",
+      "description": "TCP port for the ZeroMQ stats socket. Defaults to the game server's own IP and port if left unset.",
+      "source": "server.cfg"
+    }
+  ]
+}

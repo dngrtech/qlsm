@@ -10,6 +10,7 @@ import AddPresetPage from './pages/AddPresetPage';
 import EditPresetPage from './pages/EditPresetPage';
 import UserManagementPage from './pages/UserManagementPage';
 import OperatorsPage from './pages/OperatorsPage';
+import PluginRepositoriesPage from './pages/PluginRepositoriesPage';
 import SettingsPage from './pages/SettingsPage';
 import ServersPage from './pages/ServersPage';
 import GlobalRconPage from './pages/GlobalRconPage';
@@ -43,6 +44,7 @@ function App() {
                   <Route path="/docs/*" element={<DocsPage />} />
                   <Route path="/settings/users" element={<UserManagementPage />} />
                   <Route path="/settings/operators" element={<OperatorsPage />} />
+                  <Route path="/settings/plugin-repositories" element={<PluginRepositoriesPage />} />
                   <Route path="/settings/backup" element={<BackupRestorePage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Route>

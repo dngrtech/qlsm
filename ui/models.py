@@ -1,5 +1,6 @@
 import datetime
 import enum
+import json
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
@@ -325,6 +326,44 @@ class Operator(db.Model):
             'default_level': self.default_level,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PluginRepository(db.Model):
+    """An external source of minqlx plugins the operator can browse and pull
+    individual files from into the local pool (ql-assets/data/<runtime>-plugins/).
+
+    The manifest is fetched over plain HTTP from `<url>/qlsm-plugins.json`
+    (see ui/plugin_repositories.py) and cached here as-fetched, so browsing
+    the plugin list doesn't need a live request every time -- only "Sync"
+    does. This is a source list, not the pool itself: nothing here is ever
+    read at instance-deploy time.
+    """
+    __tablename__ = 'plugin_repository'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    url = db.Column(db.String(500), nullable=False)
+    manifest_json = db.Column(db.Text, nullable=True)  # last-fetched qlsm-plugins.json, verbatim
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    last_sync_error = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        plugins = []
+        if self.manifest_json:
+            try:
+                plugins = json.loads(self.manifest_json)
+            except ValueError:
+                plugins = []
+        return {
+            'id': self.id,
+            'name': self.name,
+            'url': self.url,
+            'plugins': plugins,
+            'last_synced_at': self.last_synced_at.isoformat() if self.last_synced_at else None,
+            'last_sync_error': self.last_sync_error,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 

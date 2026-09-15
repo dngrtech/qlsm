@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PLUGIN_HINT_TEXT,
+  applyPluginDependencies,
+  collectDependencyFilenames,
   folderHasPluginFiles,
+  getPluginDependsOn,
   getPluginHintReason,
   isEnableablePluginPath,
   partitionCheckedPaths,
@@ -128,6 +131,12 @@ describe('resolveRootPluginPaths', () => {
     { name: '__init__.py', path: '__init__.py', type: 'file' },
   ];
 
+  it('resolves a name that exists only as a shared pool row', () => {
+    const withShared = [...tree, { name: 'kickban.py', path: 'kickban.py', type: 'file', shared: true }];
+    const { paths } = resolveRootPluginPaths(withShared, ['kickban']);
+    expect(paths).toEqual(['kickban.py']);
+  });
+
   it('resolves bare names to root-level paths only', () => {
     const { paths } = resolveRootPluginPaths(tree, ['balance', 'essentials']);
     expect(paths.sort()).toEqual(['balance.py', 'essentials.py']);
@@ -169,5 +178,86 @@ describe('toQlxPluginNames', () => {
 
   it('accepts an array as well as a Set', () => {
     expect(toQlxPluginNames(['balance.py'])).toEqual(['balance']);
+  });
+});
+
+describe('plugin dependencies (depends_on)', () => {
+  const depTree = [
+    {
+      name: 'mybalance.py', path: 'mybalance.py', type: 'file',
+      plugin_manifest: { depends_on: ['iouonegirl.py'] },
+    },
+    {
+      name: 'protect.py', path: 'protect.py', type: 'file',
+      plugin_manifest: { depends_on: ['iouonegirl.py', 'shared_helper.py'] },
+    },
+    { name: 'iouonegirl.py', path: 'iouonegirl.py', type: 'file' },
+    { name: 'shared_helper.py', path: 'shared_helper.py', type: 'file' },
+    { name: 'essentials.py', path: 'essentials.py', type: 'file' },
+    {
+      name: 'extras', path: 'extras', type: 'folder',
+      children: [{
+        name: 'nested.py', path: 'extras/nested.py', type: 'file',
+        plugin_manifest: { depends_on: ['ignored_subfolder_dep.py'] },
+      }],
+    },
+  ];
+
+  it('getPluginDependsOn reads and normalizes the manifest field', () => {
+    expect(getPluginDependsOn({ plugin_manifest: { depends_on: [' iouonegirl.py ', '', 42, 'x.py'] } }))
+      .toEqual(['iouonegirl.py', 'x.py']);
+    expect(getPluginDependsOn({})).toEqual([]);
+    expect(getPluginDependsOn({ plugin_manifest: { depends_on: 'not-an-array' } })).toEqual([]);
+  });
+
+  it('collectDependencyFilenames gathers every declared dependency across the tree', () => {
+    expect(collectDependencyFilenames(depTree)).toEqual(new Set(['iouonegirl.py', 'shared_helper.py']));
+  });
+
+  it('ignores depends_on declared by a subfolder file', () => {
+    expect(collectDependencyFilenames(depTree).has('ignored_subfolder_dep.py')).toBe(false);
+  });
+
+  it('isEnableablePluginPath hides a dependency file when libraryNames is passed', () => {
+    const libraryNames = collectDependencyFilenames(depTree);
+    expect(isEnableablePluginPath('iouonegirl.py', libraryNames)).toBe(false);
+    expect(isEnableablePluginPath('shared_helper.py', libraryNames)).toBe(false);
+    expect(isEnableablePluginPath('essentials.py', libraryNames)).toBe(true);
+  });
+
+  it('getPluginHintReason reports plugin-dependency for a library-only file', () => {
+    const libraryNames = collectDependencyFilenames(depTree);
+    expect(getPluginHintReason('shared_helper.py', libraryNames)).toBe('plugin-dependency');
+    expect(PLUGIN_HINT_TEXT['plugin-dependency']).toMatch(/required by another enabled plugin/);
+  });
+
+  it('applyPluginDependencies adds the transitive closure of what is manually checked', () => {
+    const result = applyPluginDependencies(depTree, new Set(['mybalance.py']));
+    expect(result).toEqual(new Set(['mybalance.py', 'iouonegirl.py']));
+  });
+
+  it('applyPluginDependencies merges dependencies from multiple checked plugins', () => {
+    const result = applyPluginDependencies(depTree, new Set(['mybalance.py', 'protect.py']));
+    expect(result).toEqual(new Set(['mybalance.py', 'protect.py', 'iouonegirl.py', 'shared_helper.py']));
+  });
+
+  it('applyPluginDependencies drops nothing when nothing is checked', () => {
+    expect(applyPluginDependencies(depTree, new Set())).toEqual(new Set());
+  });
+
+  it('resolveRootPluginPaths folds a plugin\'s dependency into the resolved set', () => {
+    const { paths } = resolveRootPluginPaths(depTree, ['mybalance']);
+    expect(paths.sort()).toEqual(['iouonegirl.py', 'mybalance.py']);
+  });
+
+  it('partitionCheckedPaths folds dependencies in when a tree is given', () => {
+    const { selectable, dropped } = partitionCheckedPaths(['mybalance.py'], depTree);
+    expect([...selectable].sort()).toEqual(['iouonegirl.py', 'mybalance.py']);
+    expect(dropped).toEqual([]);
+  });
+
+  it('partitionCheckedPaths matches the old behaviour when no tree is given', () => {
+    const { selectable } = partitionCheckedPaths(['mybalance.py']);
+    expect([...selectable]).toEqual(['mybalance.py']);
   });
 });

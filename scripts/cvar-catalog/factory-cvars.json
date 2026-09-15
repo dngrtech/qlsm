@@ -1,0 +1,451 @@
+{
+  "_source": "scripts/factories.txt shipped inside Quake Live's pak00.pk3 (the game's own default factory definitions)",
+  "_what": "Which cvars the official factories set, and to what value. Used to mark a cvar as gameplay/factory-settable and to show real example values in the config editor's autocomplete.",
+  "_generated_by": "scripts/gen_cvar_catalog.py --factories <pak00>/scripts/factories.txt --write-factory-index",
+  "gametypes": [
+    "ad",
+    "ca",
+    "ctf",
+    "dom",
+    "duel",
+    "ffa",
+    "ft",
+    "har",
+    "oneflag",
+    "race",
+    "rr",
+    "tdm"
+  ],
+  "factories": [
+    "_rj",
+    "_sj",
+    "_training",
+    "actf",
+    "ad",
+    "ca",
+    "ctf",
+    "dom",
+    "duel",
+    "ffa",
+    "ft",
+    "har",
+    "ictf",
+    "iffa",
+    "ift",
+    "infected",
+    "oneflag",
+    "quadhog",
+    "race",
+    "rr",
+    "tdm",
+    "vca"
+  ],
+  "cvars": {
+    "bot_dynamicSkill": {
+      "_training": "1"
+    },
+    "bot_startingSkill": {
+      "_training": "2"
+    },
+    "capturelimit": {
+      "har": "30",
+      "ictf": "5"
+    },
+    "dmflags": {
+      "_rj": "28",
+      "_sj": "28",
+      "ad": "28",
+      "ca": "28",
+      "ictf": "28",
+      "iffa": "28",
+      "ift": "28",
+      "infected": "28",
+      "race": "28",
+      "rr": "28",
+      "vca": "60"
+    },
+    "fraglimit": {
+      "_training": "10",
+      "duel": "0",
+      "ft": "0",
+      "ift": "0",
+      "quadhog": "30",
+      "race": "0",
+      "tdm": "150"
+    },
+    "g_allowKill": {
+      "_training": "0",
+      "ca": "0",
+      "ictf": "0",
+      "iffa": "0",
+      "ift": "0",
+      "race": "1",
+      "vca": "0"
+    },
+    "g_ammoPack": {
+      "actf": "1",
+      "ctf": "1",
+      "har": "1",
+      "oneflag": "1"
+    },
+    "g_ammoRespawn": {
+      "actf": "10",
+      "ctf": "10",
+      "har": "10",
+      "oneflag": "10"
+    },
+    "g_battleSuitDampen": {
+      "actf": ".33",
+      "ctf": ".33",
+      "har": ".33",
+      "oneflag": ".33"
+    },
+    "g_domCapTime": {
+      "dom": "4"
+    },
+    "g_dropCmds": {
+      "ft": "6",
+      "ictf": "1",
+      "iffa": "0",
+      "ift": "0",
+      "tdm": "4"
+    },
+    "g_enemyLocators": {
+      "infected": "1"
+    },
+    "g_flagBounce": {
+      "oneflag": "0.5"
+    },
+    "g_flagPhysics": {
+      "oneflag": "1"
+    },
+    "g_forceDmgThroughSurface": {
+      "vca": "1"
+    },
+    "g_freezeThawTime": {
+      "ift": "1000"
+    },
+    "g_infiniteAmmo": {
+      "_rj": "1",
+      "_sj": "1",
+      "race": "1",
+      "vca": "1"
+    },
+    "g_instagib": {
+      "ictf": "1",
+      "iffa": "1",
+      "ift": "1"
+    },
+    "g_itemHeight": {
+      "duel": "15",
+      "race": "35"
+    },
+    "g_itemTimers": {
+      "duel": "0",
+      "race": "0"
+    },
+    "g_knockback_pg": {
+      "race": "1.25",
+      "vca": "1.25"
+    },
+    "g_knockback_pg_self": {
+      "infected": "0"
+    },
+    "g_knockback_rl": {
+      "race": "1.10",
+      "vca": "1.10"
+    },
+    "g_knockback_z": {
+      "race": "40",
+      "vca": "40"
+    },
+    "g_loadout": {
+      "dom": "1",
+      "ft": "1",
+      "quadhog": "1",
+      "tdm": "1"
+    },
+    "g_max_knockback": {
+      "race": "160",
+      "vca": "160"
+    },
+    "g_overtime": {
+      "_rj": "0",
+      "_sj": "0",
+      "_training": "0",
+      "actf": "0",
+      "ad": "0",
+      "ca": "0",
+      "ctf": "0",
+      "dom": "0",
+      "ffa": "0",
+      "ft": "0",
+      "har": "0",
+      "ictf": "0",
+      "iffa": "0",
+      "ift": "0",
+      "infected": "0",
+      "oneflag": "0",
+      "quadhog": "0",
+      "race": "0",
+      "rr": "0",
+      "vca": "0"
+    },
+    "g_quadHog": {
+      "quadhog": "1"
+    },
+    "g_quadHogIdle": {
+      "quadhog": "30"
+    },
+    "g_regenArmor": {
+      "dom": "1250"
+    },
+    "g_regenArmorAfterHealth": {
+      "dom": "1"
+    },
+    "g_regenArmorRate": {
+      "dom": "133"
+    },
+    "g_regenHealth": {
+      "dom": "1250"
+    },
+    "g_regenHealthRate": {
+      "dom": "133"
+    },
+    "g_respawn_delay_max": {
+      "race": "3500",
+      "vca": "3500"
+    },
+    "g_respawn_delay_min": {
+      "race": "500",
+      "vca": "500"
+    },
+    "g_rrDeathScorePenalty": {
+      "infected": "0"
+    },
+    "g_rrInfected": {
+      "infected": "1"
+    },
+    "g_runes": {
+      "actf": "1"
+    },
+    "g_spawnItemAmmo": {
+      "dom": "0"
+    },
+    "g_spawnItemArmor": {
+      "dom": "0"
+    },
+    "g_spawnItemHealth": {
+      "dom": "0"
+    },
+    "g_spawnItemHoldable": {
+      "dom": "0"
+    },
+    "g_spawnItemPowerup": {
+      "dom": "0"
+    },
+    "g_spawnItemWeapons": {
+      "dom": "0"
+    },
+    "g_splashradius_pg": {
+      "race": "32",
+      "vca": "32"
+    },
+    "g_startingAmmo_gl": {
+      "ad": "25",
+      "ca": "25",
+      "dom": "25",
+      "infected": "25",
+      "rr": "25"
+    },
+    "g_startingAmmo_hmg": {
+      "ad": "150",
+      "ca": "150",
+      "dom": "150",
+      "infected": "150",
+      "rr": "150"
+    },
+    "g_startingAmmo_lg": {
+      "ad": "150",
+      "ca": "150",
+      "dom": "150",
+      "infected": "150",
+      "rr": "150"
+    },
+    "g_startingAmmo_mg": {
+      "ad": "100",
+      "ca": "100",
+      "dom": "100",
+      "infected": "100",
+      "rr": "100"
+    },
+    "g_startingAmmo_pg": {
+      "ad": "100",
+      "ca": "100",
+      "dom": "100",
+      "infected": "100",
+      "rr": "100"
+    },
+    "g_startingAmmo_rg": {
+      "ad": "25",
+      "ca": "25",
+      "dom": "25",
+      "infected": "25",
+      "rr": "25"
+    },
+    "g_startingAmmo_rl": {
+      "ad": "50",
+      "ca": "50",
+      "dom": "50",
+      "infected": "50",
+      "rr": "50"
+    },
+    "g_startingAmmo_sg": {
+      "ad": "50",
+      "ca": "50",
+      "dom": "50",
+      "infected": "50",
+      "rr": "50"
+    },
+    "g_startingArmor": {
+      "ad": "100",
+      "ca": "100",
+      "dom": "100",
+      "infected": "0",
+      "rr": "100",
+      "vca": "0"
+    },
+    "g_startingHealth": {
+      "ad": "100",
+      "ca": "200",
+      "infected": "150",
+      "rr": "100",
+      "vca": "300"
+    },
+    "g_startingHealthBonus": {
+      "ad": "0",
+      "ca": "0",
+      "dom": "0",
+      "infected": "0",
+      "race": "0",
+      "rr": "0",
+      "vca": "0"
+    },
+    "g_startingWeapons": {
+      "_rj": "17",
+      "_sj": "1",
+      "actf": "515",
+      "ad": "255",
+      "ca": "8447",
+      "dom": "1",
+      "ictf": "65",
+      "iffa": "65",
+      "ift": "65",
+      "infected": "7",
+      "race": "145",
+      "rr": "8447",
+      "vca": "8447"
+    },
+    "g_suddenDeathRespawn": {
+      "actf": "1",
+      "ctf": "1",
+      "har": "1",
+      "ictf": "1",
+      "oneflag": "1"
+    },
+    "g_teamForceBalance": {
+      "infected": "0",
+      "rr": "0"
+    },
+    "g_throwFlagVelocity": {
+      "oneflag": "300"
+    },
+    "g_training": {
+      "_rj": "1",
+      "_sj": "1",
+      "_training": "1"
+    },
+    "g_vampiricDamage": {
+      "vca": "0.75"
+    },
+    "g_velocity_gl": {
+      "race": "800",
+      "vca": "800"
+    },
+    "g_voteFlags": {
+      "_rj": "2048",
+      "_sj": "2048",
+      "_training": "2048"
+    },
+    "pmove_AirControl": {
+      "race": "1",
+      "vca": "1"
+    },
+    "pmove_BunnyHop": {
+      "duel": "0"
+    },
+    "pmove_CrouchStepJump": {
+      "duel": "0"
+    },
+    "pmove_JumpTimeDeltaMin": {
+      "duel": "50",
+      "race": "50",
+      "vca": "50"
+    },
+    "pmove_noPlayerClip": {
+      "race": "1"
+    },
+    "pmove_RampJump": {
+      "race": "1",
+      "vca": "1"
+    },
+    "pmove_WaterSwimScale": {
+      "duel": "0.5f"
+    },
+    "pmove_WaterWadeScale": {
+      "duel": "0.75f"
+    },
+    "pmove_WeaponDropTime": {
+      "race": "10",
+      "vca": "10"
+    },
+    "pmove_WeaponRaiseTime": {
+      "race": "10",
+      "vca": "10"
+    },
+    "practiceflags": {
+      "_rj": "1",
+      "_sj": "1",
+      "_training": "0"
+    },
+    "scorelimit": {
+      "ad": "15",
+      "dom": "150"
+    },
+    "timelimit": {
+      "_rj": "0",
+      "_sj": "0",
+      "_training": "5",
+      "actf": "15",
+      "ctf": "15",
+      "dom": "15",
+      "duel": "10",
+      "ffa": "15",
+      "ft": "15",
+      "har": "15",
+      "ictf": "15",
+      "iffa": "15",
+      "ift": "15",
+      "oneflag": "15",
+      "quadhog": "10",
+      "race": "8",
+      "tdm": "15"
+    },
+    "weapon_reload_rg": {
+      "vca": "1250"
+    },
+    "weapon_reload_sg": {
+      "vca": "950"
+    }
+  }
+}

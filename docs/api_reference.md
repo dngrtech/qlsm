@@ -678,7 +678,7 @@ lock and return `200` immediately.
 | `/drafts` | POST | Create a plugin draft seeded from a preset or instance |
 | `/drafts/<draft_id>` | DELETE | Discard a draft workspace |
 | `/drafts/<draft_id>/touch` | POST | Refresh draft mtime during long edit sessions |
-| `/drafts/<draft_id>/tree` | GET | Get the draft plugin file tree |
+| `/drafts/<draft_id>/tree` | GET | Get the draft plugin file tree. Root plugins from the draft runtime's shared pool that the draft lacks are appended with `shared: true`; `GET content`/`GET file` fall back to the pool for those paths |
 | `/drafts/<draft_id>/content` | GET | Read a draft `.py` or `.txt` file (`?path=`) |
 | `/drafts/<draft_id>/content` | PUT | Write a draft `.py` or `.txt` file |
 | `/drafts/<draft_id>/upload` | POST | Upload `.py`, `.txt`, `.so`, or a font file into the draft |

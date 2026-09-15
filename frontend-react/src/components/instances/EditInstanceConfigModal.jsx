@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook, Crown } from 'lucide-react';
-import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent, fetchInstanceHooks, getInstanceAdmins } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
@@ -10,12 +9,20 @@ import ConfirmationModal from '../ConfirmationModal';
 import PresetManagerModal from '../presetManager/PresetManagerModal';
 import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
 import { combineAcceptedPaths, mergeReplacements } from '../../utils/presetCompatibility';
-import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, useStateAdapter, useDraftAdapter } from '../fileManager';
+import { FileManager, CONFIG_CAPS, PLUGIN_CAPS, FACTORY_CAPS, PluginCvarsModal, getPluginDisplayLabel, useStateAdapter, useDraftAdapter } from '../fileManager';
 import SubfolderPluginNotice from '../fileManager/SubfolderPluginNotice';
-import { partitionCheckedPaths, resolveRootPluginPaths, toQlxPluginNames } from '../fileManager/pluginSelection';
+import {
+  applyPluginDependencies,
+  collectDependencyFilenames,
+  partitionCheckedPaths,
+  resolveRootPluginPaths,
+  toQlxPluginNames,
+} from '../fileManager/pluginSelection';
 import { useNotification } from '../NotificationProvider';
+import { useCvarAutocomplete } from '../../hooks/useCvarAutocomplete';
 import InfoTooltip from '../common/InfoTooltip';
 import { qlcfgLanguage, createQlCfgLinter, stripManagedCvars } from '../../codemirror-lang-qlcfg';
+import { qlFactoriesLanguage, qlFactoriesLinterSource } from '../../codemirror-lang-qlfactories';
 import { qlmappoolLanguage } from '../../codemirror-lang-qlmappool';
 import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
@@ -42,8 +49,8 @@ const getLanguageForFile = (fileName) => {
   if (fileName?.toLowerCase().endsWith('.ent')) return qlentLanguage;
   return LANGUAGE_MAP[fileName] || null;
 };
-const FACTORY_LANGUAGE = json();
-const FACTORY_LINTER_SOURCE = () => jsonParseLinter();
+const FACTORY_LANGUAGE = qlFactoriesLanguage;
+const FACTORY_LINTER_SOURCE = qlFactoriesLinterSource;
 const PYTHON_LANGUAGE = python();
 const getPluginLanguage = (fileName) => (
   fileName?.toLowerCase().endsWith('.py') ? PYTHON_LANGUAGE : null
@@ -112,6 +119,9 @@ function EditInstanceConfigModal({
   const isUpdatingFromServerCfg = React.useRef(false);
   const [serverHostname, setServerHostname] = useState('');
   const [originalServerHostname, setOriginalServerHostname] = useState('');
+
+  // Plugin cvars edit form (Plugins tab settings icon)
+  const [cvarsModalTarget, setCvarsModalTarget] = useState(null); // { label, cvars } | null
 
   // State for ExpandedEditorModal
   const [isExpandedEditorOpen, setIsExpandedEditorOpen] = useState(false);
@@ -209,6 +219,9 @@ function EditInstanceConfigModal({
     hasChanges: pluginsHaveChanges,
     tree: pluginTree,
   } = pluginsAdapter;
+  // Autocomplete in the config editor: engine cvars from the backend catalog,
+  // qlx_ cvars from this instance's own plugins (enabled ones first).
+  useCvarAutocomplete({ pluginTree, checkedPlugins, enabled: isOpen });
   const { files: serializedConfigFiles } = serializeConfigs();
   const serverCfgContent = serializedConfigFiles['server.cfg'] || '';
 
@@ -285,20 +298,26 @@ function EditInstanceConfigModal({
     return null;
   };
 
-  // Configure plugins based on checkboxes
+  // Configure plugins based on checkboxes. A dependency-only file never
+  // reaches here directly (its checkbox is hidden — see pluginSelection.js),
+  // so `prev` minus the library set is always the operator's manual picks;
+  // re-deriving the dependency closure from that on every toggle keeps a
+  // no-longer-needed dependency from lingering after its last dependent is
+  // unchecked, and pulls in a newly-declared one without extra bookkeeping.
   const togglePluginSelection = useCallback((filename, checked = undefined) => {
     setCheckedPlugins(prev => {
-      const newSet = new Set(prev);
-      const shouldCheck = checked ?? !newSet.has(filename);
+      const libraryNames = collectDependencyFilenames(pluginTree);
+      const manual = new Set([...prev].filter(path => !libraryNames.has(path)));
+      const shouldCheck = checked ?? !prev.has(filename);
       if (shouldCheck) {
-        newSet.add(filename);
+        manual.add(filename);
       } else {
-        newSet.delete(filename);
+        manual.delete(filename);
       }
-      return newSet;
+      return applyPluginDependencies(pluginTree, manual);
     });
     setIsDirty(true);
-  }, []);
+  }, [pluginTree]);
 
   const handleGetBinaryMeta = useCallback(
     (path) => getBinaryMeta(pluginDraftId, path, 'instance', String(instanceId)),
@@ -493,6 +512,17 @@ function EditInstanceConfigModal({
     setIsDirty(true);
   };
 
+  const handleEditPluginCvars = useCallback((item, cvars) => {
+    setCvarsModalTarget({ label: getPluginDisplayLabel(item), cvars });
+  }, []);
+
+  const handleSavePluginCvars = useCallback((nextConfig) => {
+    writeConfigContent('server.cfg', nextConfig).catch((err) => {
+      setSaveError(err?.message || 'Failed to update server.cfg with new plugin settings.');
+    });
+    setIsDirty(true);
+  }, [writeConfigContent]);
+
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
   const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime };
   const canToggleLanRate = canEnableLanRate({
@@ -588,7 +618,7 @@ function EditInstanceConfigModal({
           )
         : (presetData.factories || {});
       resetFactories(factoriesToLoad);
-      const { selectable, dropped } = partitionCheckedPaths(presetData.checked_plugins || []);
+      const { selectable, dropped } = partitionCheckedPaths(presetData.checked_plugins || [], pluginTree);
       setCheckedPlugins(selectable);
       setDroppedPluginCount(dropped.length);
       setPluginNoticeDismissed(false);
@@ -1209,6 +1239,7 @@ function EditInstanceConfigModal({
                                   contextType: 'instance',
                                   contextKey: String(instanceId),
                                 }}
+                                onEditCvars={handleEditPluginCvars}
                               />
                             </div>
                           </div>
@@ -1355,6 +1386,14 @@ function EditInstanceConfigModal({
         compatibility={pendingPreset?.data?.compatibility}
         onConfirm={handleConfirmPresetCompatibility}
         onCancel={handleCancelPresetCompatibility}
+      />
+      <PluginCvarsModal
+        isOpen={!!cvarsModalTarget}
+        onClose={() => setCvarsModalTarget(null)}
+        onSave={handleSavePluginCvars}
+        pluginLabel={cvarsModalTarget?.label || ''}
+        cvars={cvarsModalTarget?.cvars || []}
+        configText={serverCfgContent}
       />
     </>
   );

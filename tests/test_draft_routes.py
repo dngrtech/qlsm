@@ -367,6 +367,113 @@ class TestDraftTree:
         response = client.get(f'/api/drafts/{fake_id}/tree', headers=auth_headers)
         assert response.status_code == 404
 
+    def test_tree_attaches_pool_manifest_to_plugin(self, client, auth_headers, preset_with_scripts, monkeypatch, tmp_path):
+        """The Plugins tab reads through the draft tree (not /api/scripts/tree),
+        so manifest attachment has to happen here too — this is the actual
+        codepath a live instance/preset edit goes through."""
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))
+        pool_dir = tmp_path / 'pool'
+        pool_dir.mkdir()
+        (pool_dir / 'balance.ql-plugin.json').write_text('{"label": "Balance", "cvars": [{"cvar": "qlx_x", "type": "bool"}]}')
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(pool_dir))
+
+        resp = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default'
+        }, headers=auth_headers)
+        draft_id = resp.get_json()['data']['draft_id']
+
+        response = client.get(f'/api/drafts/{draft_id}/tree', headers=auth_headers)
+        tree = response.get_json()['data']
+
+        balance = next(f for f in tree if f['name'] == 'balance.py')
+        assert balance['plugin_manifest'] == {'label': 'Balance', 'cvars': [{'cvar': 'qlx_x', 'type': 'bool'}]}
+        ban = next(f for f in tree if f['name'] == 'ban.py')
+        assert 'plugin_manifest' not in ban  # no pool entry, no local sidecar
+
+    def test_tree_pool_manifest_overrides_stale_local_sidecar(self, client, auth_headers, preset_with_scripts, monkeypatch, tmp_path):
+        """A local sidecar copied into the draft (e.g. from an
+        already-deployed instance's own scripts/ dir, predating a manifest
+        update) must not shadow a newer pool entry for the same filename —
+        this is exactly what broke for the operator's live test instance."""
+        scripts_dir = preset_with_scripts / 'configs' / 'presets' / 'default' / 'scripts'
+        (scripts_dir / 'balance.ql-plugin.json').write_text('{"label": "Stale local copy"}')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))
+        pool_dir = tmp_path / 'pool'
+        pool_dir.mkdir()
+        (pool_dir / 'balance.ql-plugin.json').write_text('{"label": "Current pool version"}')
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(pool_dir))
+
+        resp = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default'
+        }, headers=auth_headers)
+        draft_id = resp.get_json()['data']['draft_id']
+
+        response = client.get(f'/api/drafts/{draft_id}/tree', headers=auth_headers)
+        tree = response.get_json()['data']
+
+        balance = next(f for f in tree if f['name'] == 'balance.py')
+        assert balance['plugin_manifest'] == {'label': 'Current pool version'}
+
+    def test_tree_uses_the_drafts_own_runtime_pool_even_when_nothing_was_filtered(
+        self, client, app, auth_headers, preset_with_scripts, monkeypatch, tmp_path
+    ):
+        """A minqlxtended-targeted draft whose source already matches (the
+        common case -- no cross-runtime filtering happens, so
+        draft_filtered_runtime() stays None) must still read manifests from
+        the minqlxtended pool, not fall through to _pool_dirs()'s
+        minqlx-first default. Regression caught in PR review: a minqlxtended
+        instance/preset was silently getting minqlx cvars, commands and
+        depends_on for any filename that exists in both pools."""
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))
+        preset_dir = preset_with_scripts / 'configs' / 'presets' / 'default'
+        with app.app_context():
+            # resolve_preset_path() uses this DB row's `path` column verbatim
+            # (ignoring configs_base) once a row exists -- it has to match the
+            # fixture's actual on-disk location, not just be some string.
+            db.session.add(ConfigPreset(name='default', path=str(preset_dir), runtime='minqlxtended'))
+            db.session.commit()
+
+        minqlx_pool = tmp_path / 'minqlx_pool'
+        minqlx_pool.mkdir()
+        (minqlx_pool / 'balance.ql-plugin.json').write_text('{"label": "minqlx version"}')
+        minqlxtended_pool = tmp_path / 'minqlxtended_pool'
+        minqlxtended_pool.mkdir()
+        (minqlxtended_pool / 'balance.ql-plugin.json').write_text('{"label": "minqlxtended version"}')
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(minqlx_pool))
+        monkeypatch.setattr('ui.plugin_manifest.MINQLXTENDED_PLUGINS_POOL_DIR', str(minqlxtended_pool))
+
+        resp = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default', 'target_runtime': 'minqlxtended',
+        }, headers=auth_headers)
+        assert resp.status_code == 201, resp.get_json()
+        draft_id = resp.get_json()['data']['draft_id']
+
+        response = client.get(f'/api/drafts/{draft_id}/tree', headers=auth_headers)
+        tree = response.get_json()['data']
+        balance = next(f for f in tree if f['name'] == 'balance.py')
+        assert balance['plugin_manifest'] == {'label': 'minqlxtended version'}
+
+    def test_tree_falls_back_to_local_sidecar_for_plugin_not_in_pool(self, client, auth_headers, preset_with_scripts, monkeypatch, tmp_path):
+        """A custom/one-off plugin with no pool entry at all still gets its
+        own sidecar's metadata."""
+        scripts_dir = preset_with_scripts / 'configs' / 'presets' / 'default' / 'scripts'
+        (scripts_dir / 'ban.ql-plugin.json').write_text('{"label": "Custom ban plugin"}')
+        monkeypatch.setattr('ui.routes.draft_routes.CONFIGS_BASE', str(preset_with_scripts / 'configs'))
+        pool_dir = tmp_path / 'pool'
+        pool_dir.mkdir()
+        monkeypatch.setattr('ui.plugin_manifest.MINQLX_PLUGINS_POOL_DIR', str(pool_dir))
+
+        resp = client.post('/api/drafts/', json={
+            'source': 'preset', 'preset': 'default'
+        }, headers=auth_headers)
+        draft_id = resp.get_json()['data']['draft_id']
+
+        response = client.get(f'/api/drafts/{draft_id}/tree', headers=auth_headers)
+        tree = response.get_json()['data']
+
+        ban = next(f for f in tree if f['name'] == 'ban.py')
+        assert ban['plugin_manifest'] == {'label': 'Custom ban plugin'}
+
 
 class TestDraftContent:
     """Tests for GET/PUT /api/drafts/<draft_id>/content endpoint."""

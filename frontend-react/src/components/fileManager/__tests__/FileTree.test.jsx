@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -162,6 +163,41 @@ describe('FileTree', () => {
       expect(screen.queryByTestId('plugin-hint-essentials.py')).not.toBeInTheDocument();
     });
 
+    it('marks a shared plugin row and keeps it enableable', () => {
+      render(
+        <FolderHarness
+          files={[{ name: 'hello_qlsm.py', path: 'hello_qlsm.py', type: 'file', shared: true }]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={vi.fn()}
+          capabilities={PLUGIN_CAPS}
+        />,
+      );
+
+      expect(screen.getByTestId('plugin-shared-hello_qlsm.py')).toHaveTextContent(/shared/i);
+      expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    });
+
+    it('disables rename and delete on a shared plugin row', async () => {
+      render(
+        <FolderHarness
+          files={[{ name: 'hello_qlsm.py', path: 'hello_qlsm.py', type: 'file', shared: true }]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={vi.fn()}
+          capabilities={PLUGIN_CAPS}
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /file actions/i }));
+
+      const rename = await screen.findByRole('menuitem', { name: /rename/i });
+      expect(rename).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('menuitem', { name: /delete/i })).toHaveAttribute('aria-disabled', 'true');
+    });
+
     it('replaces the checkbox with a hint on __init__.py', () => {
       renderPluginTree();
       expect(screen.getByTestId('plugin-hint-__init__.py')).toBeInTheDocument();
@@ -226,6 +262,82 @@ describe('FileTree', () => {
       fireEvent.mouseEnter(screen.getByTestId('plugin-hint-__init__.py'));
 
       expect(screen.getByRole('tooltip')).toHaveTextContent(/marks a package/);
+    });
+
+    it('shows a cvars settings button when the manifest declares cvars and onEditCvars is passed', () => {
+      render(
+        <FolderHarness
+          files={[
+            {
+              name: 'essentials.py',
+              path: 'essentials.py',
+              type: 'file',
+              plugin_manifest: { cvars: [{ cvar: 'qlx_foo', type: 'bool' }] },
+            },
+            { name: '__init__.py', path: '__init__.py', type: 'file' },
+          ]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={vi.fn()}
+          capabilities={PLUGIN_CAPS}
+          onEditCvars={vi.fn()}
+        />,
+      );
+      expect(screen.getByTestId('plugin-cvars-essentials.py')).toBeInTheDocument();
+    });
+
+    it('omits the cvars settings button when the manifest has no cvars', () => {
+      renderPluginTree();
+      expect(screen.queryByTestId('plugin-cvars-essentials.py')).not.toBeInTheDocument();
+    });
+
+    it('omits the cvars settings button when onEditCvars is not passed', () => {
+      render(
+        <FolderHarness
+          files={[{
+            name: 'essentials.py',
+            path: 'essentials.py',
+            type: 'file',
+            plugin_manifest: { cvars: [{ cvar: 'qlx_foo', type: 'bool' }] },
+          }]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={vi.fn()}
+          capabilities={PLUGIN_CAPS}
+        />,
+      );
+      expect(screen.queryByTestId('plugin-cvars-essentials.py')).not.toBeInTheDocument();
+    });
+
+    it('calls onEditCvars with the item and normalized cvars on click, without toggling the checkbox', () => {
+      const onEditCvars = vi.fn();
+      const onCheck = vi.fn();
+      render(
+        <FolderHarness
+          files={[{
+            name: 'essentials.py',
+            path: 'essentials.py',
+            type: 'file',
+            plugin_manifest: { cvars: [{ cvar: 'qlx_foo', type: 'bool', default: true }] },
+          }]}
+          foldersEnabled
+          checkable
+          checkedFiles={new Set()}
+          onCheck={onCheck}
+          capabilities={PLUGIN_CAPS}
+          onEditCvars={onEditCvars}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('plugin-cvars-essentials.py'));
+
+      expect(onCheck).not.toHaveBeenCalled();
+      expect(onEditCvars).toHaveBeenCalledTimes(1);
+      const [item, cvars] = onEditCvars.mock.calls[0];
+      expect(item.path).toBe('essentials.py');
+      expect(cvars).toEqual([{ cvar: 'qlx_foo', label: 'qlx_foo', description: null, type: 'bool', default: true, min: null, max: null }]);
     });
 
     it('leaves factories checkable when the flag is absent', () => {

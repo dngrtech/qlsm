@@ -65,6 +65,7 @@ nav:
     - Host Actions Menu: operations/host-actions-menu.md
     - Update Workshop Item: operations/update-workshop-item.md
     - Check For Plugin Updates: operations/check-for-updates.md
+    - Plugin Repositories: operations/plugin-repositories.md
     - Configure Watchdog: operations/watchdog.md
     - Instance Actions Menu: operations/instance-actions-menu.md
     - Live Status: operations/live-status.md

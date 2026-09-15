@@ -1,15 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
-import { Box, Code, FileText, Folder, FolderOpen, Lock, Search, Type } from 'lucide-react';
+import { Box, Code, FileText, Folder, FolderOpen, Lock, Search, Settings, Type } from 'lucide-react';
 
 import FileTreeRowMenu from './FileTreeRowMenu';
 import InfoTooltip from '../common/InfoTooltip';
 import { getFileType, sortFileTree, MAX_CONFIG_FOLDER_DEPTH } from './fileManagerUtils';
 import {
+  collectDependencyFilenames,
   folderHasPluginFiles,
   getPluginHintReason,
   isEnableablePluginPath,
   PLUGIN_HINT_TEXT,
 } from './pluginSelection';
+import { formatPluginCommandsText, getPluginCvars, getPluginDescription, getPluginDisplayLabel } from './pluginManifest';
 
 const FILE_TYPE_ICONS = {
   python: Code,
@@ -18,6 +20,8 @@ const FILE_TYPE_ICONS = {
   font: Type,
 };
 
+const SHARED_PLUGIN_TITLE = "From the shared plugin folder. Editing it saves a copy for this configuration.";
+
 const FILE_TYPE_COLORS = {
   python: 'text-blue-400',
   text: 'text-gray-400',
@@ -25,10 +29,10 @@ const FILE_TYPE_COLORS = {
   font: 'text-pink-400',
 };
 
-function isCheckableFile(item, fileType, checkable, capabilities) {
+function isCheckableFile(item, fileType, checkable, capabilities, libraryNames) {
   if (!checkable || item.type === 'folder') return false;
   if (fileType !== 'python' && !item.name?.endsWith('.factories')) return false;
-  if (capabilities?.rootOnlyCheckable && !isEnableablePluginPath(item.path)) return false;
+  if (capabilities?.rootOnlyCheckable && !isEnableablePluginPath(item.path, libraryNames)) return false;
   return true;
 }
 
@@ -54,6 +58,8 @@ function TreeItem({
   expandedFolders,
   onToggleFolder,
   rowMenuHandlers,
+  onEditCvars,
+  libraryNames,
 }) {
   const expanded = item.type === 'folder' ? expandedFolders.has(item.path) : false;
   const isFolder = item.type === 'folder';
@@ -65,11 +71,24 @@ function TreeItem({
   const iconColor = isFolder
     ? 'text-yellow-400'
     : (FILE_TYPE_COLORS[fileType] || 'text-gray-400');
-  const showCheckbox = isCheckableFile(item, fileType, checkable, capabilities);
+  const showCheckbox = isCheckableFile(item, fileType, checkable, capabilities, libraryNames);
   const rootOnly = checkable && !!capabilities?.rootOnlyCheckable;
   const hintReason = !isFolder && rootOnly && !showCheckbox
-    ? getPluginHintReason(item.path)
+    ? getPluginHintReason(item.path, libraryNames)
     : null;
+  // rootOnlyCheckable is plugin-tab-exclusive (see capabilities.js PLUGIN_CAPS) —
+  // safe signal to only enrich rows there, never Config/Factories tabs.
+  const displayLabel = !isFolder && rootOnly ? getPluginDisplayLabel(item) : item.name;
+  const manifestDescription = !isFolder && rootOnly ? (() => {
+    // InfoTooltip's bubble is white-space: normal (shared component, other
+    // callers rely on that), so a literal \n here would just collapse to a
+    // space — join with punctuation instead of relying on a line break.
+    const description = getPluginDescription(item);
+    const commandsText = formatPluginCommandsText(item);
+    if (description && commandsText) return `${description} Commands: ${commandsText}`;
+    return description || (commandsText ? `Commands: ${commandsText}` : null);
+  })() : null;
+  const pluginCvars = !isFolder && rootOnly && onEditCvars ? getPluginCvars(item) : [];
   // One hint per open folder, next to its name, instead of one per child row.
   const showFolderHint = isFolder && rootOnly && foldersEnabled && expanded
     && folderHasPluginFiles(item);
@@ -92,6 +111,8 @@ function TreeItem({
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
             rowMenuHandlers={rowMenuHandlers}
+            onEditCvars={onEditCvars}
+            libraryNames={libraryNames}
           />
         ))}
       </>
@@ -142,7 +163,15 @@ function TreeItem({
             />
           )}
           <Icon className={`w-4 h-4 flex-shrink-0 ${iconColor}`} />
-          <span className={`truncate min-w-0 ${showFolderHint ? '' : 'flex-1'}`}>{item.name}</span>
+          <span className={`truncate min-w-0 ${showFolderHint ? '' : 'flex-1'}`}>{displayLabel}</span>
+          {manifestDescription && (
+            <InfoTooltip
+              text={manifestDescription}
+              size={13}
+              testId={`plugin-manifest-${item.path}`}
+              className="flex-shrink-0"
+            />
+          )}
           {/* Swallowing the click keeps a reach for the hint from collapsing the folder. */}
           {showFolderHint && (
             <span
@@ -159,11 +188,32 @@ function TreeItem({
           {item.protected && (
             <Lock className="w-3 h-3 flex-shrink-0 text-[var(--text-muted)]" />
           )}
+          {item.shared && (
+            <span
+              className="flex-shrink-0 rounded border border-[var(--surface-border)] px-1 text-[10px] uppercase tracking-wide text-[var(--text-muted)]"
+              title={SHARED_PLUGIN_TITLE}
+              data-testid={`plugin-shared-${item.path}`}
+            >
+              shared
+            </span>
+          )}
         </button>
+        {pluginCvars.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onEditCvars(item, pluginCvars)}
+            className="flex-shrink-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            title="Edit plugin settings"
+            data-testid={`plugin-cvars-${item.path}`}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         <FileTreeRowMenu
           itemType={item.type}
           fileType={fileType}
           isProtected={!!item.protected}
+          isShared={!!item.shared}
           isMaxDepth={isFolder && item.path.split('/').length >= MAX_CONFIG_FOLDER_DEPTH}
           capabilities={capabilities}
           onDownload={() => rowMenuHandlers.onDownload(item)}
@@ -190,6 +240,8 @@ function TreeItem({
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
           rowMenuHandlers={rowMenuHandlers}
+          onEditCvars={onEditCvars}
+          libraryNames={libraryNames}
         />
       ))}
     </>
@@ -208,8 +260,10 @@ export default function FileTree({
   expandedFolders = new Set(),
   onToggleFolder = () => {},
   rowMenuHandlers = {},
+  onEditCvars = null,
 }) {
   const [search, setSearch] = useState('');
+  const libraryNames = useMemo(() => collectDependencyFilenames(files || []), [files]);
   const filesSignature = useMemo(() => getTreeSignature(files || []), [files]);
   const filesSignatureRef = useRef(null);
   const sortPriorityRef = useRef(null);
@@ -287,6 +341,8 @@ export default function FileTree({
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
             rowMenuHandlers={rowMenuHandlers}
+            onEditCvars={onEditCvars}
+            libraryNames={libraryNames}
           />
         ))}
       </div>
