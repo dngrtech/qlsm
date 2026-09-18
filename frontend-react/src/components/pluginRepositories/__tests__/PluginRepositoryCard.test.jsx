@@ -71,3 +71,15 @@ describe('PluginRepositoryCard plugin list', () => {
     expect(screen.getByText('afkplus.py')).toBeInTheDocument();
   });
 });
+
+describe('PluginRepositoryCard manifest editor', () => {
+  it('opens the editor modal, pre-filled with this repo, from the Edit action', () => {
+    render(<PluginRepositoryCard repo={repo} onSync={vi.fn()} onDelete={vi.fn()} syncing={false} />);
+    expect(screen.queryByText(/Edit Manifest/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /edit & export manifest/i }));
+
+    expect(screen.getByText(/Edit Manifest — Repo/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('afkplus.py')).toBeInTheDocument();
+  });
+});

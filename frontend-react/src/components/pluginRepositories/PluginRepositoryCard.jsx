@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Trash2, RefreshCw, AlertTriangle, Loader2, Download, ChevronRight,
+  Trash2, RefreshCw, AlertTriangle, Loader2, Download, ChevronRight, FileEdit,
 } from 'lucide-react';
 import { downloadPluginRepositoryPlugins } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import { formatDateTime } from '../../utils/uiUtils';
 import RuntimePicker from './RuntimePicker';
 import OverwritePluginsModal from './OverwritePluginsModal';
+import PluginManifestEditorModal from './PluginManifestEditorModal';
 
 // One repository's plugin list: expand/collapse, per-plugin checkboxes, and a
 // per-plugin runtime pick for selected entries that declare no runtime.
@@ -20,6 +21,7 @@ function PluginRepositoryCard({ repo, onSync, onDelete, onDownloaded, syncing })
   // rather than a dead-end error, since that's the one failure mode with an
   // obvious next step. Shape: { files: [{filename, runtime}] }.
   const [overwriteConfirm, setOverwriteConfirm] = useState(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const { showSuccess, showError } = useNotification();
 
   const toggle = (filename) => {
@@ -148,6 +150,13 @@ function PluginRepositoryCard({ repo, onSync, onDelete, onDownloaded, syncing })
             <RefreshCw size={16} strokeWidth={2} className={syncing ? 'animate-spin' : ''} />
           </button>
           <button
+            onClick={() => setIsEditOpen(true)}
+            className="users-action-btn"
+            title="Edit & Export Manifest"
+          >
+            <FileEdit size={16} strokeWidth={2} />
+          </button>
+          <button
             onClick={() => onDelete(repo)}
             className="users-action-btn users-action-btn-delete"
             title="Delete Repository"
@@ -259,6 +268,12 @@ function PluginRepositoryCard({ repo, onSync, onDelete, onDownloaded, syncing })
           onClose={() => setOverwriteConfirm(null)}
         />
       )}
+
+      <PluginManifestEditorModal
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        repo={repo}
+      />
     </div>
   );
 }
