@@ -6,7 +6,7 @@
 
 📚 **[User Guide →](https://dngrtech.github.io/qlsm/)** · [Issues](https://github.com/dngrtech/qlsm/issues)
 
-![QLSM demo — Servers page, editing an instance's config, plugins, factories, and hooks](docs/user/videos/edit-instance-config-demo.webp)
+![QLSM demo — Servers page, editing an instance's config with Workshop item previews, plugins, factories, hooks, and server owner & admins](docs/user/videos/edit-instance-config-demo.webp)
 
 Features:
 - Three deployment modes:
