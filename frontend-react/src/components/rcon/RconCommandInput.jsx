@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
+import RconSuggestionList from './RconSuggestionList';
+import { useRconAutocomplete } from './useRconAutocomplete';
 
 function RconCommandInput({
   disabled = false,
@@ -13,6 +15,8 @@ function RconCommandInput({
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const inputRef = useRef(null);
+  const suggestionsId = useId();
+  const autocomplete = useRconAutocomplete({ value, setValue, enabled: !disabled });
   // mousedown/keydown only fire for real interaction — the programmatic
   // focus() calls both Headless UI's Dialog FocusTrap and its Menu's
   // close-then-restore-focus make while the modal caller is opening never
@@ -62,22 +66,29 @@ function RconCommandInput({
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [disabled, onSend, value]);
 
-  const navigateHistory = useCallback((event) => {
+  const handleKeyDown = useCallback((event) => {
+    if (autocomplete.handleKeyDown(event)) return;
     if (event.key === 'ArrowUp' && historyIndex < history.length - 1) {
       event.preventDefault();
       const next = historyIndex + 1;
       setHistoryIndex(next);
-      setValue(history[next]);
+      autocomplete.setValueQuietly(history[next]);
     } else if (event.key === 'ArrowDown' && historyIndex >= 0) {
       event.preventDefault();
       const next = historyIndex - 1;
       setHistoryIndex(next);
-      setValue(next < 0 ? '' : history[next]);
+      autocomplete.setValueQuietly(next < 0 ? '' : history[next]);
     }
-  }, [history, historyIndex]);
+  }, [autocomplete, history, historyIndex]);
 
   return (
-    <form onSubmit={submit} className={`flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 flex-shrink-0 ${className}`}>
+    <form onSubmit={submit} className={`relative flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 flex-shrink-0 ${className}`}>
+      <RconSuggestionList
+        id={suggestionsId}
+        items={autocomplete.items}
+        activeIndex={autocomplete.activeIndex}
+        onPick={autocomplete.accept}
+      />
       <span className="font-mono text-sm font-semibold" style={{ color: 'var(--accent-primary)' }}>{prompt}</span>
       {recipientCount != null && <span className="text-xs text-theme-muted">{recipientCount} recipients</span>}
       <input
@@ -86,7 +97,12 @@ function RconCommandInput({
         value={value}
         disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
-        onKeyDown={navigateHistory}
+        onKeyDown={handleKeyDown}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={autocomplete.open}
+        aria-controls={suggestionsId}
+        aria-activedescendant={autocomplete.activeIndex >= 0 ? `${suggestionsId}-${autocomplete.activeIndex}` : undefined}
         placeholder={disabled ? 'Connecting...' : 'Enter command...'}
         className="min-w-0 flex-1 basis-40 bg-transparent border-none outline-none font-mono text-sm text-theme-primary placeholder-theme-muted"
         autoComplete="off"

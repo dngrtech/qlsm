@@ -64,7 +64,9 @@ snapshot taken when you press Send:
   reason, and are **never retried later**. If you want them included, wait
   until they are ready and send again.
 
-Use Up/Down in the input to cycle through your recent commands.
+Use Up/Down in the input to cycle through your recent commands. The input
+also suggests commands and cvar names as you type, the same way as the
+[RCON Console](rcon-console.md#quality-of-life).
 
 ## Reading the output
 

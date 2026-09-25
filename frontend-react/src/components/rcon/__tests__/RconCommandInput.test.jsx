@@ -1,11 +1,43 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RconCommandInput from '../RconCommandInput';
+import { setCvarCatalog } from '../../../codemirror-lang-qlcfg';
+
+vi.mock('../../../services/cvarCatalogApi', () => ({
+  fetchCvarCatalog: vi.fn(() => Promise.resolve({
+    cvars: [
+      { name: 'sv_hostname', group: 'server', description: 'Server name shown in the browser.' },
+      { name: 'sv_maxclients', group: 'server', description: 'Player slots.' },
+      { name: 'g_gametype', group: 'game', description: 'Game mode.' },
+    ],
+    commands: [
+      { name: 'set', description: 'Set a cvar.' },
+      { name: 'status', description: 'List connected players.' },
+      { name: 'say', description: 'Broadcast a message.' },
+    ],
+  })),
+}));
 
 function input() {
-  return screen.getByRole('textbox');
+  return screen.getByRole('combobox');
 }
+
+function type(value) {
+  fireEvent.change(input(), { target: { value } });
+}
+
+function optionLabels() {
+  return screen.queryAllByRole('option').map(option => option.firstChild.textContent);
+}
+
+async function renderReady(props = {}) {
+  const utils = render(<RconCommandInput onSend={() => true} {...props} />);
+  await act(async () => {});
+  return utils;
+}
+
+beforeEach(() => setCvarCatalog(null));
 
 describe('RconCommandInput', () => {
   it('takes focus on mount but does not steal it back from the user', () => {
@@ -88,5 +120,89 @@ describe('RconCommandInput', () => {
     rerender(<RconCommandInput recipientCount={3} buttonLabel="Send to 3 targets" onSend={() => true} />);
     expect(screen.getByText('3 recipients')).toBeInTheDocument();
     expect(screen.getByRole('button')).toHaveTextContent('Send to 3 targets');
+  });
+
+  describe('autocomplete', () => {
+    it('offers commands and cvars for the first word, prefix matches first', async () => {
+      await renderReady();
+      type('s');
+      expect(optionLabels().slice(0, 3)).toEqual(['set', 'status', 'say']);
+      expect(optionLabels()).toContain('sv_hostname');
+      expect(screen.getByText('Server name shown in the browser.')).toBeInTheDocument();
+    });
+
+    it('offers only cvars after set, and nothing for values', async () => {
+      await renderReady();
+      type('set sv_');
+      // App-managed cvars still match but rank last at the console.
+      expect(optionLabels()).toEqual(['sv_hostname', 'sv_maxclients', 'sv_servertype', 'sv_lanforcerate']);
+      expect(optionLabels()).not.toContain('status');
+      type('set sv_hostname My');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      type('say hel');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('Tab accepts the top suggestion and adds a trailing space', async () => {
+      await renderReady();
+      type('set sv_host');
+      fireEvent.keyDown(input(), { key: 'Tab' });
+      expect(input()).toHaveValue('set sv_hostname ');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('arrows move the highlight and Enter accepts it instead of sending', async () => {
+      const onSend = vi.fn(() => true);
+      await renderReady({ onSend });
+      type('sv_');
+      fireEvent.keyDown(input(), { key: 'ArrowDown' });
+      fireEvent.keyDown(input(), { key: 'ArrowDown' });
+      expect(screen.getAllByRole('option')[1]).toHaveAttribute('aria-selected', 'true');
+      fireEvent.keyDown(input(), { key: 'Enter' });
+      expect(input()).toHaveValue('sv_maxclients ');
+      expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it('Enter without a highlighted suggestion sends what was typed', async () => {
+      const onSend = vi.fn(() => true);
+      await renderReady({ onSend });
+      type('stat');
+      const event = fireEvent.keyDown(input(), { key: 'Enter' });
+      expect(event).toBe(true); // not consumed, so the form submits
+      fireEvent.submit(input().closest('form'));
+      expect(onSend).toHaveBeenCalledWith('stat');
+    });
+
+    it('clicking a suggestion accepts it', async () => {
+      await renderReady();
+      type('g_');
+      fireEvent.mouseDown(screen.getByRole('option'));
+      expect(input()).toHaveValue('g_gametype ');
+    });
+
+    it('Escape closes the list and Up then walks history again', async () => {
+      await renderReady();
+      type('status');
+      fireEvent.submit(input().closest('form'));
+      type('s');
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      fireEvent.keyDown(input(), { key: 'Escape' });
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      fireEvent.keyDown(input(), { key: 'ArrowUp' });
+      expect(input()).toHaveValue('status');
+    });
+
+    it('recalling history does not open the list', async () => {
+      await renderReady();
+      type('sv_hostname');
+      fireEvent.submit(input().closest('form'));
+      type('set');
+      fireEvent.submit(input().closest('form'));
+      fireEvent.keyDown(input(), { key: 'ArrowUp' });
+      expect(input()).toHaveValue('set');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      fireEvent.keyDown(input(), { key: 'ArrowUp' });
+      expect(input()).toHaveValue('sv_hostname');
+    });
   });
 });
