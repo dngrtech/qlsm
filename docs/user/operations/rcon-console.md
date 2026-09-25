@@ -31,7 +31,7 @@ The console has a **Show real-time game events** checkbox enabled by default. Wh
 ## Quality-of-Life
 
 - As you type, a list suggests console commands and cvar names (after `set`,
-  `seta`, `reset`, or `toggle`, only cvars). Use Up/Down to move through it,
+  `seta`, `sets`, `setu`, `reset`, or `toggle`, only cvars). Use Up/Down to move through it,
   **Tab** to take the highlighted (or top) suggestion, and **Esc** to close it.
   **Enter** takes a suggestion only if you moved to it; otherwise it sends what you typed.
 - With no suggestion list open, Up/Down cycle through the last 50 commands.
