@@ -8,7 +8,8 @@ vi.mock('../../services/api');
 describe('useRankData', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    api.getInstanceRanks = vi.fn().mockResolvedValue({ ranks: {}, configured: true });
+    vi.mocked(api.getInstanceRanks).mockReset();
+    vi.mocked(api.getInstanceRanks).mockResolvedValue({ ranks: {}, configured: true });
   });
 
   afterEach(() => {
@@ -64,7 +65,7 @@ describe('useRankData', () => {
   });
 
   it('stops polling once the server reports configured false', async () => {
-    api.getInstanceRanks = vi.fn().mockResolvedValue({ ranks: {}, configured: false });
+    vi.mocked(api.getInstanceRanks).mockResolvedValue({ ranks: {}, configured: false });
     const { result } = renderHook(
       () => useRankData(1, ['76561198000000001'], { enabled: true }));
     await waitFor(() => expect(result.current.configured).toBe(false));
@@ -79,7 +80,7 @@ describe('useRankData', () => {
     // request" into one request per join or leave, which on a populated server
     // is frequent. Effects run in declaration order, so the reset would land
     // before the fetch effect re-subscribes and the new request would go out.
-    api.getInstanceRanks = vi.fn().mockResolvedValue({ ranks: {}, configured: false });
+    vi.mocked(api.getInstanceRanks).mockResolvedValue({ ranks: {}, configured: false });
     const { result, rerender } = renderHook(
       ({ ids }) => useRankData(1, ids, { enabled: true }),
       { initialProps: { ids: ['76561198000000001'] } },
@@ -90,7 +91,7 @@ describe('useRankData', () => {
     expect(api.getInstanceRanks).toHaveBeenCalledTimes(1);
   });
 
-  it('reports configured false on the first render, before any response', () => {
+  it('reports configured false on the first render, before any response', async () => {
     // The spec's rule is "hidden entirely, not shown full of dashes". The modal
     // renders before the first /ranks response resolves, so an initial `true`
     // shows a header and a column of dashes on every instance that has no
@@ -98,6 +99,7 @@ describe('useRankData', () => {
     const { result } = renderHook(
       () => useRankData(1, ['76561198000000001'], { enabled: true }));
     expect(result.current.configured).toBe(false);
+    await act(async () => {});
   });
 
   it('clears ranks and configured when the instance changes', async () => {
@@ -106,15 +108,15 @@ describe('useRankData', () => {
     // numbers survive into instance B's first render, and a player on both
     // servers carries A's rating into B's table — a WRONG number rather than a
     // missing one, and the one failure here an operator cannot spot by looking.
-    api.getInstanceRanks = vi.fn().mockResolvedValue({
-      ranks: { 76561198000000001: { display: '1650' } }, configured: true,
+    vi.mocked(api.getInstanceRanks).mockResolvedValue({
+      ranks: { '76561198000000001': { display: '1650' } }, configured: true,
     });
     const { result, rerender } = renderHook(
       ({ id }) => useRankData(id, ['76561198000000001'], { enabled: true }),
       { initialProps: { id: 1 } },
     );
     await waitFor(() => expect(result.current.configured).toBe(true));
-    api.getInstanceRanks = vi.fn(() => new Promise(() => {}));  // never resolves
+    vi.mocked(api.getInstanceRanks).mockImplementation(() => new Promise(() => {}));  // never resolves
     rerender({ id: 2 });
     expect(result.current.ranks).toEqual({});
     expect(result.current.configured).toBe(false);
@@ -127,7 +129,7 @@ describe('useRankData', () => {
     const notFound = Object.assign(new Error('not found'), {
       response: { status: 404 },
     });
-    api.getInstanceRanks = vi.fn().mockRejectedValue(notFound);
+    vi.mocked(api.getInstanceRanks).mockRejectedValue(notFound);
     const { result } = renderHook(
       () => useRankData(1, ['76561198000000001'], { enabled: true }));
     await waitFor(() => expect(api.getInstanceRanks).toHaveBeenCalledTimes(1));
@@ -137,7 +139,7 @@ describe('useRankData', () => {
   });
 
   it('keeps the last good ranks and configured when a poll fails', async () => {
-    api.getInstanceRanks = vi.fn()
+    vi.mocked(api.getInstanceRanks).mockReset()
       .mockResolvedValueOnce({ ranks: { a: { display: '1650' } }, configured: true })
       .mockRejectedValueOnce(new Error('down'));
     const { result } = renderHook(
