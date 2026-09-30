@@ -796,6 +796,44 @@ export const getInstanceAdmins = async (instanceId) => {
   }
 };
 
+// Rank Provider APIs
+export const getRankProvider = async (instanceId) => {
+  try {
+    const response = await apiClient.get(`/instances/${instanceId}/rank-provider`);
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to fetch rank provider:', error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to fetch rank provider');
+  }
+};
+
+export const saveRankProvider = async (instanceId, config) => {
+  try {
+    const response = await apiClient.put(`/instances/${instanceId}/rank-provider`, config);
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to save rank provider:', error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to save rank provider');
+  }
+};
+
+export const deleteRankProvider = async (instanceId) => {
+  try {
+    const response = await apiClient.delete(`/instances/${instanceId}/rank-provider`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to delete rank provider:', error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to delete rank provider');
+  }
+};
+
+export const getInstanceRanks = async (instanceId, steamIds) => {
+  const response = await apiClient.get(`/instances/${instanceId}/ranks`, {
+    params: { steam_ids: steamIds },
+  });
+  return { ranks: response.data.data || {}, configured: !!response.data.configured };
+};
+
 // Operator Directory APIs
 export const getOperators = async () => {
   try {
