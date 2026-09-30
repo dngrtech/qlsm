@@ -3,6 +3,8 @@ import { Transition } from '@headlessui/react';
 import { X, Users } from 'lucide-react';
 import QlColorString from '../common/QlColorString';
 import { useWorkshopPreview } from '../../hooks/useWorkshopPreview';
+import { useRankData } from '../../hooks/useRankData';
+import PlayerRankCell from './PlayerRankCell';
 import standardMapPreviews from '../../constants/standardMapPreviews';
 
 // Team mapping — minqlx sends string values ('red', 'blue', 'free', 'spectator')
@@ -139,6 +141,19 @@ export default function LiveServerStatusModal({ isOpen, onClose, instance, serve
             return cleanNameForSort(a?.name).localeCompare(cleanNameForSort(b?.name));
         });
     }, [serverStatus?.players, isTeamMode]);
+
+    // serverchecker.py writes "steam": str(p.steam_id); the other fields are defensive fallbacks.
+    const steamIds = useMemo(
+        () => sortedPlayers
+            .map((p) => String(p.steam || p.steamid || p.steam_id || ''))
+            .filter(Boolean),
+        [sortedPlayers],
+    );
+
+    // This modal is mounted even while closed, so visibility must gate polling.
+    const { ranks, configured: rankConfigured } = useRankData(
+        instance?.id, steamIds, { enabled: isOpen && !!instance?.id },
+    );
 
     const { previewUrl: workshopPreviewUrl, loading: workshopPreviewLoading } = useWorkshopPreview(
         serverStatus?.workshop_item_id,
@@ -299,6 +314,9 @@ export default function LiveServerStatusModal({ isOpen, onClose, instance, serve
                                                                 <th className="px-3 py-2 font-medium">Name</th>
                                                                 <th className="px-3 py-2 font-medium">SteamID</th>
                                                                 <th className="px-3 py-2 font-medium">Team</th>
+                                                                {rankConfigured && (
+                                                                    <th className="px-3 py-2 font-medium text-right">ELO</th>
+                                                                )}
                                                                 <th className="px-3 py-2 font-medium text-right">Score</th>
                                                                 <th className="px-3 py-2 font-medium text-right">Ping</th>
                                                             </tr>
@@ -315,6 +333,11 @@ export default function LiveServerStatusModal({ isOpen, onClose, instance, serve
                                                                     <td className={`px-3 py-2 font-mono text-[11px] ${teamColor(p.team)}`}>
                                                                         {teamName(p.team)}
                                                                     </td>
+                                                                    {rankConfigured && (
+                                                                        <PlayerRankCell
+                                                                            rank={ranks[String(p.steam || p.steamid || p.steam_id || '')]}
+                                                                        />
+                                                                    )}
                                                                     <td className="px-3 py-2 font-mono text-theme-secondary text-right">
                                                                         {p.score ?? 0}
                                                                     </td>

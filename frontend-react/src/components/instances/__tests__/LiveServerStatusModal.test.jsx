@@ -1,9 +1,14 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import LiveServerStatusModal from '../LiveServerStatusModal';
 
 vi.mock('../../../hooks/useWorkshopPreview', () => ({
     useWorkshopPreview: vi.fn(),
+}));
+
+const mockUseRankData = vi.fn(() => ({ ranks: {}, configured: false }));
+vi.mock('../../../hooks/useRankData', () => ({
+    useRankData: (...args) => mockUseRankData(...args),
 }));
 
 import { useWorkshopPreview } from '../../../hooks/useWorkshopPreview';
@@ -21,6 +26,29 @@ const baseStatus = {
     blue_score: 0,
     workshop_item_id: null,
 };
+
+const statusWithPlayers = {
+    ...baseStatus,
+    players: [
+        { name: 'PlayerOne', steam: '76561198000000001', team: 'red', score: 5, ping: 30 },
+    ],
+};
+
+const renderModal = (props = {}) => render(
+    <LiveServerStatusModal
+        isOpen
+        onClose={() => {}}
+        instance={baseInstance}
+        serverStatus={baseStatus}
+        {...props}
+    />,
+);
+
+beforeEach(() => {
+    mockUseRankData.mockReset();
+    mockUseRankData.mockReturnValue({ ranks: {}, configured: false });
+    useWorkshopPreview.mockReturnValue({ previewUrl: null, loading: false });
+});
 
 describe('LiveServerStatusModal map preview', () => {
     beforeEach(() => {
@@ -161,5 +189,64 @@ describe('LiveServerStatusModal map preview', () => {
         );
 
         expect(screen.getByText('campgrounds')).toBeInTheDocument();
+    });
+});
+
+
+describe('LiveServerStatusModal player ranks', () => {
+    it('hides the rank column entirely when no provider is configured', () => {
+        renderModal({ serverStatus: statusWithPlayers });
+        expect(screen.queryByRole('columnheader', { name: /elo/i })).not.toBeInTheDocument();
+        expect(within(screen.getByText('PlayerOne').closest('tr')).getAllByRole('cell')).toHaveLength(5);
+    });
+
+    it('shows the rank column when a provider is configured', () => {
+        mockUseRankData.mockReturnValue({
+            ranks: { '76561198000000001': { display: '1650', provisional: false } },
+            configured: true,
+        });
+        renderModal({ serverStatus: statusWithPlayers });
+        expect(screen.getByRole('columnheader', { name: /elo/i })).toBeInTheDocument();
+        expect(screen.getByText('1650')).toBeInTheDocument();
+        expect(screen.getAllByRole('columnheader').map((header) => header.textContent))
+            .toEqual(['Name', 'SteamID', 'Team', 'ELO', 'Score', 'Ping']);
+    });
+
+    it('merges on the string steam id', () => {
+        mockUseRankData.mockReturnValue({
+            ranks: { '76561198000000001': { display: '1650', provisional: false } },
+            configured: true,
+        });
+        renderModal({ serverStatus: statusWithPlayers });
+        const row = screen.getByText('PlayerOne').closest('tr');
+        expect(within(row).getByText('1650')).toBeInTheDocument();
+        expect(mockUseRankData).toHaveBeenCalledWith(1, ['76561198000000001'], { enabled: true });
+    });
+
+    it('renders an em dash for a player with no rating', () => {
+        mockUseRankData.mockReturnValue({ ranks: {}, configured: true });
+        renderModal({ serverStatus: statusWithPlayers });
+        const row = screen.getByText('PlayerOne').closest('tr');
+        expect(within(row).getByText('—')).toBeInTheDocument();
+    });
+
+    it('preserves provider display labels whole', () => {
+        mockUseRankData.mockReturnValue({
+            ranks: { '76561198000000001': { display: '1650 (Gold)', provisional: true } },
+            configured: true,
+        });
+        renderModal({ serverStatus: statusWithPlayers });
+        expect(within(screen.getByText('PlayerOne').closest('tr')).getByText('1650 (Gold)'))
+            .toBeInTheDocument();
+    });
+
+    it('disables rank requests while the modal is closed', () => {
+        renderModal({ isOpen: false, serverStatus: statusWithPlayers });
+        expect(mockUseRankData).toHaveBeenCalledWith(1, ['76561198000000001'], { enabled: false });
+    });
+
+    it('disables rank requests without an instance id', () => {
+        renderModal({ instance: null, serverStatus: statusWithPlayers });
+        expect(mockUseRankData).toHaveBeenCalledWith(undefined, ['76561198000000001'], { enabled: false });
     });
 });
