@@ -242,6 +242,20 @@ def test_put_allows_a_rating_system_key_for_a_non_qlstats_provider(client, app):
     }).status_code == 200
 
 
+def test_put_requires_a_game_type_for_elo_service(client, app):
+    """elo-service pools map to no QL gametype, so a blank override would
+    save cleanly and then show a dash for every player forever."""
+    make_user(app, 'adminuser', 'password123')
+    with app.app_context():
+        instance_id = _seed()
+    assert _put(client, app, instance_id, {
+        'provider_type': 'elo_service', 'base_url': 'http://elo:5002',
+        'api_key': 'k', 'game_type': '  ',
+    }).status_code == 400
+    with app.app_context():
+        assert RankProviderConfig.query.count() == 0
+
+
 def test_delete_removes_the_config(client, app):
     make_user(app, 'adminuser', 'password123')
     with app.app_context():

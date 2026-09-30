@@ -77,11 +77,14 @@ def _validate(payload):
     }
 
     # 3. Empty check — game_type is deliberately optional: blank means
-    #    "derive it from the live gametype", the normal case.
+    #    "derive it from the live gametype", the normal case. elo-service is
+    #    the exception: its pools map to no gametype, so blank never rates.
     if not cleaned['provider_type']:
         return None, "'provider_type' is required."
     if not cleaned['base_url']:
         return None, "'base_url' is required."
+    if cleaned['provider_type'] == 'elo_service' and not cleaned['game_type']:
+        return None, "'game_type' is required for elo-service (e.g. 'ffa_auto')."
 
     # 4. Length check
     for field, limit in MAX_LENGTHS.items():

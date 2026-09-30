@@ -16,7 +16,7 @@ Show connected players' external ratings in the **ELO** column of an instance's 
 |----------|----------|------------|-----------|
 | qlstats | Host root, such as `https://qlstats.net`; omit `/elo` and `/elo_b` | None | Automatically follows supported server modes |
 | Slipgate | API root, such as `https://slipgate.gg/api/v1` | **Upload token**, sent as a Bearer token | Automatically maps the server mode to Slipgate's game type |
-| Thunderdome elo-service | Service root, such as `http://host:5002` | **API key**, sent as `X-API-Key` | Set the service pool, such as `ffa_auto`, in the override |
+| Thunderdome elo-service | Service root, such as `http://host:5002` | **API key**, sent as `X-API-Key` | Required: set the service pool, such as `ffa_auto`, in the override |
 
 **Base URL** is the address the QLSM application uses to reach the service. Include `http://` or `https://`; QLSM appends the request path.
 

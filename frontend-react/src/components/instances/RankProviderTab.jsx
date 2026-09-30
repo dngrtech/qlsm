@@ -30,16 +30,23 @@ export default function RankProviderTab({ instanceId }) {
   const [error, setError] = useState(null);
   const [status, setStatus] = useState(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Save with an unloaded (empty) form would delete the real config.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadFailed(false);
     getRankProvider(instanceId)
       .then((config) => {
         if (cancelled) return;
         setForm(config ? { ...EMPTY, ...config, extra: config.extra || {} } : EMPTY);
       })
-      .catch(() => { if (!cancelled) setError('Could not load the rank provider settings.'); })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadFailed(true);
+        setError('Could not load the rank provider settings. Reopen this tab to retry.');
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [instanceId]);
@@ -189,7 +196,7 @@ export default function RankProviderTab({ instanceId }) {
       <button
         type="button"
         onClick={handleSave}
-        disabled={saving}
+        disabled={saving || loadFailed}
         className="px-4 py-2 rounded bg-[var(--accent-primary)] text-black text-sm font-semibold disabled:opacity-50"
       >
         {saving ? 'Saving…' : 'Save'}

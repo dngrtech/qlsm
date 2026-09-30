@@ -26,6 +26,16 @@ describe('RankProviderTab', () => {
     expect(api.saveRankProvider).not.toHaveBeenCalled();
   });
 
+  it('disables Save after a failed load so it cannot delete the real config', async () => {
+    vi.mocked(api.getRankProvider).mockRejectedValue(new Error('network'));
+    render(<RankProviderTab instanceId={7} />);
+    await screen.findByText(/could not load/i);
+    const save = screen.getByRole('button', { name: /save/i });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(api.deleteRankProvider).not.toHaveBeenCalled();
+  });
+
   it('hides the API key field for qlstats and shows it for the others', async () => {
     render(<RankProviderTab instanceId={7} />);
     await screen.findByLabelText(/provider/i);
