@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as requests_lib
 
+from ui.rank_providers.base import RankProvider
 from ui.rank_providers.elo_service import ThunderdomeEloProvider
 from ui.rank_providers.qlstats import QlstatsProvider
+from ui.rank_providers.registry import PROVIDER_TYPES, build_provider
 from ui.rank_providers.slipgate import SlipgateProvider
 
 QLSTATS_BODY = {
@@ -267,3 +269,19 @@ def test_elo_service_has_no_derivable_game_type():
     provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
     for code in ('ca', 'ffa', 'duel', 'har', ''):
         assert provider.map_game_type(code) is None
+
+
+def test_registry_holds_the_three_providers():
+    assert set(PROVIDER_TYPES) == {'qlstats', 'slipgate', 'elo_service'}
+    for cls in PROVIDER_TYPES.values():
+        assert issubclass(cls, RankProvider)
+
+
+def test_build_provider_returns_none_for_an_unknown_type():
+    assert build_provider('nope', 'http://x', None, {}) is None
+
+
+def test_build_provider_constructs_a_known_type():
+    provider = build_provider('slipgate', 'https://slipgate.gg/api/v1', 'tok', {})
+    assert provider.base_url == 'https://slipgate.gg/api/v1'
+    assert provider.api_key == 'tok'
