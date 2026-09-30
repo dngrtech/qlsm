@@ -122,6 +122,33 @@ describe('useRankData', () => {
     expect(result.current.configured).toBe(false);
   });
 
+  it('returns empty data on every render of a new instance while its request is pending', async () => {
+    vi.mocked(api.getInstanceRanks).mockResolvedValueOnce({
+      ranks: { '76561198000000001': { display: '1650' } }, configured: true,
+    }).mockImplementation(() => new Promise(() => {}));
+    const renders = [];
+    const { result, rerender } = renderHook(
+      ({ id }) => {
+        const data = useRankData(id, ['76561198000000001'], { enabled: true });
+        renders.push({ id, ...data });
+        return data;
+      },
+      { initialProps: { id: 1 } },
+    );
+    await waitFor(() => expect(result.current.configured).toBe(true));
+    expect(result.current.ranks['76561198000000001'].display).toBe('1650');
+
+    rerender({ id: 2 });
+
+    expect(api.getInstanceRanks).toHaveBeenLastCalledWith(2, '76561198000000001');
+    const nextInstanceRenders = renders.filter(({ id }) => id === 2);
+    expect(nextInstanceRenders.length).toBeGreaterThan(0);
+    for (const data of nextInstanceRenders) {
+      expect(data.ranks).toEqual({});
+      expect(data.configured).toBe(false);
+    }
+  });
+
   it('treats a 404 as unconfigured and stops polling', async () => {
     // get_ranks 404s on an instance deleted while its drawer is open. Without
     // this the catch would keep polling a dead instance every 30s for the life

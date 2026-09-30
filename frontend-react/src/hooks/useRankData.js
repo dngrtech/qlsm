@@ -18,7 +18,6 @@ const POLL_INTERVAL_MS = 30000;
  *   places and visibility is controlled only by its isOpen prop.
  */
 export function useRankData(instanceId, steamIds, { enabled = true } = {}) {
-  const [ranks, setRanks] = useState({});
   // Starts FALSE. The modal renders before the first /ranks response resolves,
   // so an initial `true` shows the header and a column of dashes on every
   // instance that has no provider — which is every instance on day one — and
@@ -26,7 +25,7 @@ export function useRankData(instanceId, steamIds, { enabled = true } = {}) {
   // "hidden entirely, not shown full of dashes" rule exists to prevent. The
   // cost is one render without a column before a configured instance's first
   // response, which is the correct direction to be wrong in.
-  const [configured, setConfigured] = useState(false);
+  const [data, setData] = useState(() => ({ instanceId, ranks: {}, configured: false }));
   const stopPollingRef = useRef(false);
 
   // A stable primitive, not the array. sortedPlayers is a useMemo over
@@ -42,16 +41,15 @@ export function useRankData(instanceId, steamIds, { enabled = true } = {}) {
   // property of the instance, not of who happens to be connected, so clearing
   // the latch on a join or leave turns "one request for the life of the drawer"
   // into one request per roster change. The cost is that a provider configured
-  // while the drawer is open is not picked up until it is reopened, which is
-  // the right behaviour for a config change.
+  // while the drawer is open is not picked up until the hook remounts or the
+  // instance changes. Toggling enabled alone does not reset the latch.
   //
-  // The same effect resets the DATA. Without it, instance A's column and
-  // numbers survive into instance B's first render, and a player on both
-  // servers carries A's rating into B's table.
+  // Reset stored data as well. The return value also checks its instance key
+  // synchronously, so the new instance's first render is empty before this
+  // passive effect runs.
   useEffect(() => {
     stopPollingRef.current = false;
-    setRanks({});
-    setConfigured(false);
+    setData({ instanceId, ranks: {}, configured: false });
   }, [instanceId]);
 
   useEffect(() => {
@@ -66,8 +64,7 @@ export function useRankData(instanceId, steamIds, { enabled = true } = {}) {
       try {
         const result = await getInstanceRanks(instanceId, steamIdsKey);
         if (cancelled) return;
-        setRanks(result.ranks);
-        setConfigured(result.configured);
+        setData({ instanceId, ranks: result.ranks, configured: result.configured });
         if (!result.configured) {
           // An instance that will never have a provider costs one request,
           // not one every 30s for the life of the drawer.
@@ -78,7 +75,7 @@ export function useRankData(instanceId, steamIds, { enabled = true } = {}) {
         if (error?.response?.status === 404) {
           // The instance was deleted while its drawer is open. Stop, rather
           // than polling a dead instance every 30s for the life of the drawer.
-          setConfigured(false);
+          setData((previous) => ({ ...previous, configured: false }));
           stopPollingRef.current = true;
           return;
         }
@@ -98,5 +95,7 @@ export function useRankData(instanceId, steamIds, { enabled = true } = {}) {
     };
   }, [instanceId, steamIdsKey, enabled]);
 
-  return { ranks, configured };
+  return data.instanceId === instanceId
+    ? { ranks: data.ranks, configured: data.configured }
+    : { ranks: {}, configured: false };
 }
