@@ -156,7 +156,13 @@ class QLInstance(db.Model):
 
     # Foreign Key to Host
     host_id = db.Column(db.Integer, db.ForeignKey('host.id'), nullable=False)
-    
+
+    rank_provider_config = db.relationship(
+        'RankProviderConfig', uselist=False,
+        cascade='all, delete-orphan', passive_deletes=True,
+        backref='instance',
+    )
+
     def __repr__(self):
         # Access host name via the backref relationship
         host_name = self.host.name if self.host else "No Host"
@@ -190,6 +196,58 @@ class QLInstance(db.Model):
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+class RankProviderConfig(db.Model):
+    """Which external rank service one QLDS instance reads ratings from.
+
+    One row per configured instance; an instance with no row has no rank
+    provider. api_key is a plaintext column, exactly as zmq_stats_password
+    already is on QLInstance — see ApiKey's docstring for the project's
+    position on masking.
+    """
+    __tablename__ = 'rank_provider_config'
+
+    id = db.Column(db.Integer, primary_key=True)
+    instance_id = db.Column(
+        db.Integer,
+        db.ForeignKey('ql_instance.id', ondelete='CASCADE'),
+        nullable=False, unique=True,
+    )
+    provider_type = db.Column(db.String(32), nullable=False)
+    base_url = db.Column(db.String(255), nullable=True)
+    api_key = db.Column(db.String(255), nullable=True)
+    # Optional override. Blank means "derive from the live gametype" — the
+    # normal case for qlstats and Slipgate. Set for providers with their own
+    # pool names, e.g. elo-service's "ffa_auto".
+    game_type = db.Column(db.String(16), nullable=True)
+    extra = db.Column(db.Text, nullable=True)  # JSON; qlstats' elo|elo_b selector
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    last_updated = db.Column(
+        db.DateTime, default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+    )
+
+    def extra_dict(self):
+        """The extra blob as a dict; {} when unset or malformed."""
+        if not self.extra:
+            return {}
+        try:
+            parsed = json.loads(self.extra)
+        except (ValueError, TypeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    def to_dict(self):
+        return {
+            'provider_type': self.provider_type,
+            'base_url': self.base_url,
+            'api_key': self.api_key,
+            'game_type': self.game_type,
+            'extra': self.extra_dict(),
+            'enabled': self.enabled,
+        }
+
 
 class User(db.Model):
     """Model representing an application user."""
