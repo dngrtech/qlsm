@@ -9,7 +9,7 @@ import datetime
 from ui import db
 from ui.models import (
     ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
-    InstanceStatus, Operator, QLFilterStatus, QLInstance, User,
+    InstanceStatus, Operator, QLFilterStatus, QLInstance, RankProviderConfig, User,
 )
 from ui.runtime import normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
@@ -60,6 +60,7 @@ def replace_database(data):
 
     # Children before parents so no foreign key is ever left dangling
     # mid-wipe (QLInstance.host_id -> Host.id).
+    RankProviderConfig.query.delete()
     BinaryMetadata.query.delete()
     QLInstance.query.delete()
     Host.query.delete()
@@ -123,6 +124,18 @@ def replace_database(data):
             id=row['id'], name=row['name'], steam_id64=row['steam_id64'],
             default_level=row.get('default_level', 5),
             created_at=_parse_dt(row.get('created_at')), updated_at=_parse_dt(row.get('updated_at')),
+        ))
+
+    # 'rank_provider_configs' is intentionally not in _REQUIRED_KEYS: older
+    # backups predate this table and simply have none to restore.
+    for row in data.get('rank_provider_configs') or []:
+        db.session.add(RankProviderConfig(
+            id=row['id'], instance_id=row['instance_id'],
+            provider_type=row['provider_type'], base_url=row.get('base_url'),
+            api_key=row.get('api_key'), game_type=row.get('game_type'),
+            extra=row.get('extra'), enabled=row.get('enabled', True),
+            created_at=_parse_dt(row.get('created_at')),
+            last_updated=_parse_dt(row.get('last_updated')),
         ))
 
     db.session.flush()

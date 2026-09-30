@@ -1,5 +1,5 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
-from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Operator, QLInstance, User
+from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Operator, QLInstance, RankProviderConfig, User
 from ui.runtime import normalize_runtime
 
 DB_EXPORT_FORMAT_VERSION = 1
@@ -88,6 +88,16 @@ def _operator_row(row):
     }
 
 
+def _rank_provider_config_row(row):
+    return {
+        'id': row.id, 'instance_id': row.instance_id,
+        'provider_type': row.provider_type, 'base_url': row.base_url,
+        'api_key': row.api_key, 'game_type': row.game_type,
+        'extra': row.extra, 'enabled': row.enabled,
+        'created_at': _iso(row.created_at), 'last_updated': _iso(row.last_updated),
+    }
+
+
 def serialize_database():
     """Return a JSON-serializable snapshot of every backed-up table."""
     return {
@@ -100,4 +110,8 @@ def serialize_database():
         'app_settings': [_app_setting_row(s) for s in AppSetting.query.order_by(AppSetting.key).all()],
         'binary_metadata': [_binary_meta_row(r) for r in BinaryMetadata.query.order_by(BinaryMetadata.id).all()],
         'operators': [_operator_row(r) for r in Operator.query.order_by(Operator.id).all()],
+        'rank_provider_configs': [
+            _rank_provider_config_row(r)
+            for r in RankProviderConfig.query.order_by(RankProviderConfig.id).all()
+        ],
     }

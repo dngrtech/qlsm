@@ -159,7 +159,9 @@ class QLInstance(db.Model):
 
     rank_provider_config = db.relationship(
         'RankProviderConfig', uselist=False,
-        cascade='all, delete-orphan', passive_deletes=True,
+        # No passive_deletes: SQLite does not enforce FK ON DELETE CASCADE by
+        # default, so the ORM itself must delete the child row.
+        cascade='all, delete-orphan',
         backref='instance',
     )
 

@@ -13,7 +13,7 @@ from rq import get_current_job
 # Import database and models - requires app context
 from ui import db
 from ui.constants import resolve_redis_db
-from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
+from ui.models import QLInstance, InstanceStatus, Host, RankProviderConfig # Need Host for cleanup path
 from ui.lan_rate_policy import effective_lan_rate
 from ui.runtime import host_runtime, log_filename_pattern, runtime_extravars, runtime_paths
 from .common import append_log # Import from the common module
@@ -855,6 +855,10 @@ def delete_instance_logic(instance_id):
             # need to read it, and core drops their AddonState rows here too
             # (no FK cascade -- scope_id points at two different tables).
             _addon_cleanup_scope('instance', instance.id)
+            # Explicit, not relying on SQLite FK enforcement (off by default).
+            # SQLite reuses a freed rowid, so an orphaned config row can re-bind
+            # a stored third-party credential to a later, unrelated instance.
+            RankProviderConfig.query.filter_by(instance_id=instance.id).delete()
             db.session.delete(instance)
             db.session.commit()
             log.info(f"Finished task delete_instance for instance_id: {instance_id}. Instance record '{instance_name_for_log}' deleted.")
