@@ -37,6 +37,17 @@ def stub_redis(app):
     return client
 
 
+@pytest.fixture(autouse=True)
+def block_outbound_http():
+    """No test in this module may reach a real rating provider. Tests that need
+    a transport patch it themselves; the inner patch takes precedence."""
+    blocked = AssertionError('unpatched outbound HTTP')
+    with patch('ui.rank_providers.qlstats.requests.get', side_effect=blocked), \
+         patch('ui.rank_providers.slipgate.requests.post', side_effect=blocked), \
+         patch('ui.rank_providers.elo_service.requests.get', side_effect=blocked):
+        yield
+
+
 def _seed():
     host = Host(name='host-a', ip_address='10.0.0.1', ssh_user='root',
                 ssh_key_path='/keys/id', ssh_port=22, provider='vultr')
@@ -363,8 +374,13 @@ def test_the_api_key_never_appears_in_the_instance_endpoints(client, app):
     headers = auth_headers(app, 'adminuser')
     listing = client.get('/api/instances/', headers=headers)
     assert 'sgs_secret' not in listing.get_data(as_text=True)
-    ranks = client.get(f'/api/instances/{instance_id}/ranks?steam_ids={VALID_A}',
-                       headers=headers)
+    canned = {'players': [{'steam_id': VALID_A, 'found': True, 'display': '1650'}]}
+    with patch('ui.rank_providers.slipgate.requests.post') as post:
+        post.return_value.status_code = 200
+        post.return_value.json.return_value = canned
+        ranks = client.get(f'/api/instances/{instance_id}/ranks?steam_ids={VALID_A}',
+                           headers=headers)
+    assert ranks.get_json()['data'][VALID_A]['display'] == '1650'
     assert 'sgs_secret' not in ranks.get_data(as_text=True)
 
     key = client.post('/api/settings/api-key', headers=headers).get_json()['data']['key']
