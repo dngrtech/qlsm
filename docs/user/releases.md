@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.46.0` | 2026-09-30 | [#236](https://github.com/dngrtech/qlsm/pull/236) | Configure qlstats, Slipgate, or Thunderdome elo-service per instance and show connected players’ ratings in **Live Status**. |
 | `v1.45.1` | 2026-09-29 | — | Bug fixes and improvements. |
 | `v1.45.0` | 2026-09-25 | [#235](https://github.com/dngrtech/qlsm/pull/235) | Suggest console commands and cvar names as you type in the **RCON Console** and **Global RCON**. |
 | `v1.44.0` | 2026-09-22 | [#234](https://github.com/dngrtech/qlsm/pull/234) | Restart QLSM from the UI to activate addons installed at runtime. |
