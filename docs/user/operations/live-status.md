@@ -22,6 +22,7 @@ You can also open **View Details** for an instance and use the **Live Status** s
 - Gametype/map/score/time metadata
 - Player list with team-aware grouping/sorting rules
 - Colored Quake names rendered in UI
+- An **ELO** column when a provider is configured and enabled. Provider display labels are shown as supplied; a dash (`—`) means no rating is available for that player. The column is hidden when no provider is configured or it is disabled. See [Rank Providers](rank-providers.md).
 
 ## Player Sorting Logic
 
@@ -34,6 +35,8 @@ Non-team modes:
 
 - Active players by score
 - Spectators placed after active players
+
+Ratings do not change these sorting rules: players remain ordered by team and score.
 
 ## Map Preview Fallback Chain
 
@@ -49,5 +52,6 @@ Live status is observational data. Operational actions (restart/stop/logs/RCON) 
 ## Related Pages
 
 - [Instance Actions Menu](instance-actions-menu.md)
+- [Rank Providers](rank-providers.md)
 - [Server Logs](server-logs.md)
 - [Chat Logs](chat-logs.md)

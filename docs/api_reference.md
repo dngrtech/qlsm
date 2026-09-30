@@ -637,6 +637,59 @@ the binary size limit. Rename cascades to `ld_preload_hooks` and
 `BinaryMetadata`. Delete also cascades. Description updates do not require a
 lock and return `200` immediately.
 
+## Rank Providers
+
+Each instance can have one external rank provider. All four endpoints require authentication and return `404` for an unknown instance.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/instances/<id>/rank-provider` | GET | Current configuration in `data`, or `{"data": null}` when absent |
+| `/instances/<id>/rank-provider` | PUT | Create or replace configuration; saved configuration in `data` |
+| `/instances/<id>/rank-provider` | DELETE | Remove configuration; returns `data: null` |
+| `/instances/<id>/ranks?steam_ids=a,b,c` | GET | Ratings keyed by SteamID64, plus `configured` |
+
+### Save Rank Provider
+
+```http
+PUT /api/instances/<id>/rank-provider
+```
+
+```json
+{
+  "provider_type": "qlstats",
+  "base_url": "https://qlstats.net",
+  "api_key": null,
+  "game_type": null,
+  "extra": {"rating_system": "elo"},
+  "enabled": true
+}
+```
+
+`provider_type` and `base_url` are required. Supported types are `qlstats`, `slipgate`, and `elo_service` (Thunderdome). The URL must start with `http://` or `https://`; trailing slashes are removed. For qlstats, supply the host root without `/elo` or `/elo_b`: select that path through `extra.rating_system`, which accepts `elo` (default) or `elo_b`.
+
+`game_type` is optional: blank or `null` follows the live server game type through the adapter's mapping. Thunderdome requires an explicit service pool such as `ffa_auto`, because it has no automatic mapping. `api_key` is optional at the API level and is returned in **clear text** by GET and PUT. Slipgate sends it as a Bearer upload token; Thunderdome sends it as `X-API-Key`; qlstats uses no authentication.
+
+`extra` is an object of string values (default `{}`, also when `null`), with a maximum serialized length of 2048 characters. `enabled` is a boolean defaulting to `true`. String limits are 32 characters for `provider_type`, 255 each for `base_url` and `api_key`, and 16 for `game_type`. Invalid payloads return `400`. PUT replaces the whole configuration: omitted optional fields reset to defaults. PUT and DELETE invalidate the instance's ratings cache and return `200`; DELETE also succeeds when no configuration exists.
+
+### Ratings Response
+
+```json
+{
+  "data": {
+    "76561198000000000": {
+      "rating": 1650,
+      "display": "1650",
+      "provisional": false
+    }
+  },
+  "configured": true
+}
+```
+
+`steam_ids` is comma-separated. Invalid SteamID64 values are silently dropped, duplicates removed, and the list capped at 64 IDs. `rating` can be `null` for providers supplying a display label; render `display` verbatim. `provisional` preserves the provider's flag.
+
+For an existing instance, authenticated ratings requests return `200`, including provider failures, unsupported modes, and unranked players. These cases return empty or partial `data`. `configured` is `false` when configuration is absent, disabled, unusable, or its provider type is unregistered; otherwise it is `true` even when no ratings are available. An unknown instance returns `404`.
+
 ## Server Status
 
 | Endpoint | Method | Description |

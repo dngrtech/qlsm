@@ -68,6 +68,11 @@
         "path": "/docs/operations/live-status.md"
       },
       {
+        "id": "rank-providers",
+        "title": "Rank Providers",
+        "path": "/docs/operations/rank-providers.md"
+      },
+      {
         "id": "edit-configs",
         "title": "Edit Configs, Plugins, Factories, And Hooks",
         "path": "/docs/operations/edit-configs.md"

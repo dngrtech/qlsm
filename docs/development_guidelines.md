@@ -208,3 +208,11 @@ To list what has drifted, diff the two navs against the files on disk (`docs/use
 
 ## File Size Guideline
 Keep source files under 300 lines of code (excluding comments/blanks). Files approaching 500 lines should be refactored into focused submodules. This guideline is aspirational — some high-complexity modules (e.g., `ansible_instance_mgmt.py`, `instance_routes.py`) currently exceed it and are candidates for future refactoring.
+
+## External-Service Integration Template
+
+Use `ui/rank_providers/` as the template for future external-service integrations. `base.py` defines an abstract base class with a narrow `RankResult` return type (`rating`, `display`, `provisional`). Each adapter lives in its own file, selected by a registry keyed by the stored provider string. A new provider requires no schema or generic route change.
+
+Catch network and response errors at the adapter boundary, log failures without credentials, and return an empty result. Keep orchestration in the service: validate inputs, resolve live game types or overrides, and share a Redis cache keyed by instance plus configuration and input fingerprints. The rank cache includes the resolved game type and sorted roster, with 60-second successful-result and 15-second empty-result lifetimes. Credentials are excluded from cache keys; configuration writes and deletes invalidate the instance cache, including on key rotation.
+
+Existing deployments must run `flask db upgrade` in the application environment before starting the updated application, to create the `rank_provider_config` table.

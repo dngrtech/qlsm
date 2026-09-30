@@ -69,6 +69,7 @@ nav:
     - Configure Watchdog: operations/watchdog.md
     - Instance Actions Menu: operations/instance-actions-menu.md
     - Live Status: operations/live-status.md
+    - Rank Providers: operations/rank-providers.md
     - Edit Configs, Plugins, And Factories: operations/edit-configs.md
     - RCON Console: operations/rcon-console.md
     - Global RCON: operations/global-rcon.md
