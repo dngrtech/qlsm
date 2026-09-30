@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests as requests_lib
 
+from ui.rank_providers.elo_service import ThunderdomeEloProvider
 from ui.rank_providers.qlstats import QlstatsProvider
 from ui.rank_providers.slipgate import SlipgateProvider
 
@@ -186,3 +187,83 @@ def test_slipgate_keys_are_strings():
 def test_slipgate_game_type_mapping(qlsm, expected):
     provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
     assert provider.map_game_type(qlsm) == expected
+
+
+ELO_SERVICE_BODY = {
+    '76561198000000001': {'name': 'a', 'mu': 25.1, 'sort_score': 1802.5,
+                          'wins': 10, 'losses': 3},
+    '76561198000000002': {'name': 'b', 'mu': 18.0, 'sort_score': None,
+                          'wins': 0, 'losses': 0},
+    '76561198000000003': None,
+    # The `or` guard: 0 is falsy, so the plugin falls through to mu here.
+    '76561198000000004': {'name': 'd', 'mu': 22.5, 'sort_score': 0,
+                          'wins': 0, 'losses': 0},
+}
+
+
+def test_elo_service_prefers_sort_score_and_falls_back_to_mu():
+    """There is NO 'rating' key on this endpoint. Reading one returns nothing
+    for every player against a healthy service."""
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    with patch('ui.rank_providers.elo_service.requests.get',
+               return_value=_response(body=ELO_SERVICE_BODY)) as get:
+        result = provider.fetch_ratings(
+            ['76561198000000001', '76561198000000002', '76561198000000003'],
+            'ffa_auto')
+    assert get.call_args[1]['params'] == {
+        'ids': '76561198000000001,76561198000000002,76561198000000003',
+        'mode': 'ffa_auto',
+    }
+    assert result['76561198000000001']['rating'] == 1802.5
+    assert result['76561198000000001']['display'] == '1802.5'
+    # sort_score None -> falls back to mu
+    assert result['76561198000000002']['rating'] == 18.0
+    # a null entry yields no result at all
+    assert '76561198000000003' not in result
+
+
+def test_elo_service_treats_a_zero_sort_score_as_absent():
+    """ranked.py:466 and :672 both read `int(d.get("sort_score") or d["mu"])`.
+    Python's `or`, literally: 0 is falsy and mu wins. An `is None` check
+    diverges exactly here and shows 0 for a player whose !rating shows 22."""
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    with patch('ui.rank_providers.elo_service.requests.get',
+               return_value=_response(body=ELO_SERVICE_BODY)):
+        result = provider.fetch_ratings(['76561198000000004'], 'ffa_auto')
+    assert result['76561198000000004']['rating'] == 22.5
+
+
+def test_elo_service_sends_the_api_key():
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    with patch('ui.rank_providers.elo_service.requests.get',
+               return_value=_response(body={})) as get:
+        provider.fetch_ratings(['76561198000000001'], 'ffa_auto')
+    assert get.call_args[1]['headers']['X-API-Key'] == 'k'
+
+
+def test_elo_service_404_is_not_an_error():
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    with patch('ui.rank_providers.elo_service.requests.get', return_value=_response(status=404)):
+        assert provider.fetch_ratings(['76561198000000001'], 'ffa_auto') == {}
+
+
+def test_elo_service_network_error_is_an_empty_dict():
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    with patch('ui.rank_providers.elo_service.requests.get',
+               side_effect=requests_lib.RequestException('boom')):
+        assert provider.fetch_ratings(['76561198000000001'], 'ffa_auto') == {}
+
+
+def test_elo_service_keys_are_strings():
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    body = {76561198000000001: {'mu': 25.0, 'sort_score': 1800}}
+    with patch('ui.rank_providers.elo_service.requests.get', return_value=_response(body=body)):
+        result = provider.fetch_ratings(['76561198000000001'], 'ffa_auto')
+    assert list(result) == ['76561198000000001']
+
+
+def test_elo_service_has_no_derivable_game_type():
+    """mode is a service-specific pool name; it can only come from the override."""
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    for code in ('ca', 'ffa', 'duel', 'har', ''):
+        assert provider.map_game_type(code) is None
