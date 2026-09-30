@@ -12,6 +12,12 @@ const PROVIDERS = [
 // qlstats has no auth; every other provider needs a credential.
 const NEEDS_API_KEY = { qlstats: false, slipgate: true, elo_service: true };
 
+const BASE_URL_PLACEHOLDER = {
+  qlstats: 'https://qlstats.net',
+  slipgate: 'https://slipgate.gg/api/v1',
+  elo_service: 'http://host:5002',
+};
+
 const EMPTY = {
   provider_type: '', base_url: '', api_key: '', game_type: '',
   extra: {}, enabled: true,
@@ -101,9 +107,7 @@ export default function RankProviderTab({ instanceId }) {
               type="text"
               className="w-full bg-[var(--surface-base)] border border-[var(--surface-border)] rounded px-3 py-2 text-sm font-mono"
               value={form.base_url || ''}
-              placeholder={form.provider_type === 'slipgate'
-                ? 'https://slipgate.gg/api/v1'
-                : 'http://host:5002'}
+              placeholder={BASE_URL_PLACEHOLDER[form.provider_type]}
               onChange={(e) => update('base_url', e.target.value)}
             />
           </label>
