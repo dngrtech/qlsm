@@ -73,8 +73,9 @@ class SlipgateProvider(RankProvider):
         if not isinstance(body, dict):
             return {}
 
+        players = body.get('players')
         out = {}
-        for entry in body.get('players') or []:
+        for entry in players if isinstance(players, list) else []:
             if not isinstance(entry, dict):
                 continue
             steam_id = str(entry.get('steam_id') or '').strip()

@@ -285,3 +285,28 @@ def test_build_provider_constructs_a_known_type():
     provider = build_provider('slipgate', 'https://slipgate.gg/api/v1', 'tok', {})
     assert provider.base_url == 'https://slipgate.gg/api/v1'
     assert provider.api_key == 'tok'
+
+
+@pytest.mark.parametrize('body', [
+    {'players': [{'steamid': '1', 'ca': {'elo': 'n/a'}}]},
+    {'players': 5},
+    {'untracked': 7},
+])
+def test_qlstats_malformed_body_is_an_empty_dict(body):
+    provider = QlstatsProvider('http://qlstats.net', None, {})
+    with patch('ui.rank_providers.qlstats.requests.get', return_value=_response(body=body)):
+        assert provider.fetch_ratings(['1'], 'ca') == {}
+
+
+def test_slipgate_malformed_body_is_an_empty_dict():
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
+    with patch('ui.rank_providers.slipgate.requests.post',
+               return_value=_response(body={'players': 5})):
+        assert provider.fetch_ratings(['1'], 'ca') == {}
+
+
+def test_elo_service_malformed_body_is_an_empty_dict():
+    provider = ThunderdomeEloProvider('http://elo:5002', 'k', {})
+    body = {'1': {'sort_score': 'n/a'}, '2': 'junk'}
+    with patch('ui.rank_providers.elo_service.requests.get', return_value=_response(body=body)):
+        assert provider.fetch_ratings(['1', '2'], 'ffa_auto') == {}

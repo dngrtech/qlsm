@@ -44,9 +44,12 @@ class QlstatsProvider(RankProvider):
         if not isinstance(body, dict):
             return {}
 
-        untracked = {str(sid) for sid in (body.get('untracked') or [])}
+        untracked_raw = body.get('untracked')
+        untracked = ({str(sid) for sid in untracked_raw}
+                     if isinstance(untracked_raw, list) else set())
+        players = body.get('players')
         out = {}
-        for entry in body.get('players') or []:
+        for entry in players if isinstance(players, list) else []:
             if not isinstance(entry, dict):
                 continue
             # str(), never int() — balance.py:308 does int() and that key type
@@ -66,7 +69,11 @@ class QlstatsProvider(RankProvider):
             # the cell shows a dash. Without this the cell renders a literal 0.
             if elo == 0 and bucket.get('games') == 0:
                 continue
+            try:
+                rating = float(elo)
+            except (TypeError, ValueError):
+                continue
             out[steam_id] = RankResult(
-                rating=float(elo), display=str(elo), provisional=False,
+                rating=rating, display=str(elo), provisional=False,
             )
         return out
