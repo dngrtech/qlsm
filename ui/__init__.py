@@ -269,6 +269,8 @@ def create_app(test_config=None):
 
     from ui.routes.instance_admin_routes import instance_admin_api_bp
     api_bp.register_blueprint(instance_admin_api_bp, url_prefix='/instances')
+    from ui.routes.rank_provider_routes import rank_provider_api_bp
+    api_bp.register_blueprint(rank_provider_api_bp, url_prefix='/instances')
 
     from ui.routes.plugin_repository_routes import plugin_repository_api_bp
     api_bp.register_blueprint(plugin_repository_api_bp, url_prefix='/plugin-repositories')
