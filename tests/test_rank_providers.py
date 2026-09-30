@@ -6,6 +6,7 @@ import pytest
 import requests as requests_lib
 
 from ui.rank_providers.qlstats import QlstatsProvider
+from ui.rank_providers.slipgate import SlipgateProvider
 
 QLSTATS_BODY = {
     'players': [
@@ -92,4 +93,96 @@ def test_qlstats_non_200_is_an_empty_dict():
 ])
 def test_qlstats_game_type_mapping(qlsm, expected):
     provider = QlstatsProvider('http://qlstats.net', None, {})
+    assert provider.map_game_type(qlsm) == expected
+
+
+# Transcribed from slipgate.py v1.10.1 fetch_ratings/:2496-2507 and
+# rating_entry/:2542-2547. Both unranked shapes are represented.
+SLIPGATE_BODY = {
+    'players': [
+        {'steam_id': '76561198000000001', 'display': '1650',
+         'tier_name': 'Gold', 'provisional': False, 'found': True},
+        {'steam_id': '76561198000000002', 'display': '1200 (Silver)',
+         'tier_name': 'Silver', 'provisional': True, 'found': True},
+        {'steam_id': '76561198000000003', 'display': None,
+         'tier_name': None, 'provisional': False, 'found': True},
+        {'steam_id': '76561198000000004', 'display': None,
+         'tier_name': None, 'provisional': False, 'found': False},
+    ],
+}
+
+
+def test_slipgate_parses_the_bulk_response():
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
+    with patch('ui.rank_providers.slipgate.requests.post',
+               return_value=_response(body=SLIPGATE_BODY)) as post:
+        result = provider.fetch_ratings(
+            ['76561198000000001', '76561198000000002',
+             '76561198000000003', '76561198000000004'], 'ca')
+    assert post.call_args[0][0] == 'https://slipgate.gg/api/v1/ratings/bulk'
+    assert post.call_args[1]['json'] == {
+        'steam_ids': ['76561198000000001', '76561198000000002',
+                      '76561198000000003', '76561198000000004'],
+        'game_type': 'ca',
+    }
+    # Both unranked shapes drop out: found=False AND found=True/display=None.
+    assert set(result) == {'76561198000000001', '76561198000000002'}
+
+
+def test_slipgate_returns_display_verbatim_and_never_parses_it():
+    """display may be a label, not a number. Printing it whole is the contract."""
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
+    with patch('ui.rank_providers.slipgate.requests.post',
+               return_value=_response(body=SLIPGATE_BODY)):
+        result = provider.fetch_ratings(['76561198000000002'], 'ca')
+    assert result['76561198000000002']['display'] == '1200 (Silver)'
+    assert result['76561198000000002']['rating'] is None
+    assert result['76561198000000002']['provisional'] is True
+
+
+def test_slipgate_sends_the_bearer_token():
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
+    with patch('ui.rank_providers.slipgate.requests.post',
+               return_value=_response(body={'players': []})) as post:
+        provider.fetch_ratings(['76561198000000001'], 'ca')
+    assert post.call_args[1]['headers']['Authorization'] == 'Bearer sgs_tok'
+
+
+def test_slipgate_omits_the_header_when_there_is_no_token():
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', None, {})
+    with patch('ui.rank_providers.slipgate.requests.post',
+               return_value=_response(body={'players': []})) as post:
+        provider.fetch_ratings(['76561198000000001'], 'ca')
+    assert 'Authorization' not in post.call_args[1]['headers']
+
+
+def test_slipgate_404_is_not_an_error():
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
+    with patch('ui.rank_providers.slipgate.requests.post', return_value=_response(status=404)):
+        assert provider.fetch_ratings(['76561198000000001'], 'ca') == {}
+
+
+def test_slipgate_keys_are_strings():
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
+    body = {'players': [{'steam_id': 76561198000000001, 'display': '1650',
+                         'provisional': False, 'found': True}]}
+    with patch('ui.rank_providers.slipgate.requests.post', return_value=_response(body=body)):
+        result = provider.fetch_ratings(['76561198000000001'], 'ca')
+    assert list(result) == ['76561198000000001']
+
+
+@pytest.mark.parametrize('qlsm,expected', [
+    # The four that differ. har->harvester and 1f->1flag are THE regression
+    # guards for the silent-empty-column failure this feature exists to avoid.
+    ('har', 'harvester'), ('dom', 'domination'), ('rr', 'redrover'),
+    ('1f', '1flag'),
+    # The seven that pass through unchanged.
+    ('ca', 'ca'), ('ctf', 'ctf'), ('tdm', 'tdm'), ('ft', 'ft'),
+    ('ffa', 'ffa'), ('duel', 'duel'), ('ad', 'ad'),
+    # Unrated here. '1fctf' and 'ictf' are frontend guesses that no plugin
+    # emits, so they are deliberately unmapped rather than aliased to 1flag.
+    ('race', None), ('ob', None), ('1fctf', None), ('ictf', None), ('', None),
+])
+def test_slipgate_game_type_mapping(qlsm, expected):
+    provider = SlipgateProvider('https://slipgate.gg/api/v1', 'sgs_tok', {})
     assert provider.map_game_type(qlsm) == expected
