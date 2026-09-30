@@ -94,7 +94,7 @@ export default function RankProviderTab({ instanceId }) {
           Provider
         </span>
         <select
-          className="w-full bg-[var(--surface-base)] border border-[var(--surface-border)] rounded px-3 py-2 text-sm"
+          className="input-base"
           value={form.provider_type}
           onChange={(e) => update('provider_type', e.target.value)}
         >
@@ -112,7 +112,7 @@ export default function RankProviderTab({ instanceId }) {
             </span>
             <input
               type="text"
-              className="w-full bg-[var(--surface-base)] border border-[var(--surface-border)] rounded px-3 py-2 text-sm font-mono"
+              className="input-base font-mono"
               value={form.base_url || ''}
               placeholder={BASE_URL_PLACEHOLDER[form.provider_type]}
               onChange={(e) => update('base_url', e.target.value)}
@@ -126,7 +126,7 @@ export default function RankProviderTab({ instanceId }) {
               </span>
               <input
                 type="text"
-                className="w-full bg-[var(--surface-base)] border border-[var(--surface-border)] rounded px-3 py-2 text-sm font-mono"
+                className="input-base font-mono"
                 value={form.api_key || ''}
                 onChange={(e) => update('api_key', e.target.value)}
               />
@@ -139,7 +139,7 @@ export default function RankProviderTab({ instanceId }) {
                 Rating system
               </span>
               <select
-                className="w-full bg-[var(--surface-base)] border border-[var(--surface-border)] rounded px-3 py-2 text-sm"
+                className="input-base"
                 value={form.extra?.rating_system || 'elo'}
                 onChange={(e) => update('extra', { ...form.extra, rating_system: e.target.value })}
               >
@@ -149,7 +149,7 @@ export default function RankProviderTab({ instanceId }) {
             </label>
           )}
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
             <input
               type="checkbox"
               checked={!!form.enabled}
@@ -174,7 +174,7 @@ export default function RankProviderTab({ instanceId }) {
                 </span>
                 <input
                   type="text"
-                  className="w-full bg-[var(--surface-base)] border border-[var(--surface-border)] rounded px-3 py-2 text-sm font-mono"
+                  className="input-base font-mono"
                   value={form.game_type || ''}
                   placeholder="ffa_auto"
                   onChange={(e) => update('game_type', e.target.value)}
