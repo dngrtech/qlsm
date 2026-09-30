@@ -31,7 +31,7 @@ def test_instance_id_is_unique_and_cascades():
     )
 
 
-def test_migration_creates_and_drops_the_table(app):
+def test_migration_creates_and_drops_the_table(app, monkeypatch):
     """Exactly one revision, up and back down.
 
     Scoped on purpose. `command.upgrade(cfg, 'head')` against a dropped schema
@@ -55,6 +55,11 @@ def test_migration_creates_and_drops_the_table(app):
     # only works when pytest happens to run from the repo root.
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     migrations_dir = os.path.join(repo_root, 'migrations')
+
+    # env.py calls fileConfig(), whose default disable_existing_loggers=True
+    # would disable every ui.* logger for the rest of the pytest process.
+    # env.py re-imports fileConfig on each exec, so patching the source works.
+    monkeypatch.setattr('logging.config.fileConfig', lambda *a, **k: None)
 
     with app.app_context():
         # conftest.py already built the whole schema with db.create_all(), which
