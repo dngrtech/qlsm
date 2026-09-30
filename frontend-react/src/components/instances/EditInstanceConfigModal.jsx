@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
-import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook, Crown } from 'lucide-react';
+import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook, Crown, Trophy } from 'lucide-react';
 import { python } from '@codemirror/lang-python';
 import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent, fetchInstanceHooks, getInstanceAdmins } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
@@ -29,6 +29,7 @@ import { qlaccessLanguage } from '../../codemirror-lang-qlaccess';
 import { qlworkshopLanguage } from '../../codemirror-lang-qlworkshop';
 import { qlentLanguage, qlentLinter } from '../../codemirror-lang-qlent';
 import HooksTab from './HooksTab';
+import RankProviderTab from './RankProviderTab';
 import OwnerAdminEditor from '../operators/OwnerAdminEditor';
 import AddonPanel from '../addons/AddonPanel';
 import { resolveAddonIcon } from '../addons/addonIcons';
@@ -145,7 +146,7 @@ function EditInstanceConfigModal({
   const [pendingPreset, setPendingPreset] = useState(null); // { id, data } awaiting compat confirmation
 
   // Scripts tab state
-  const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks' | 'admins'
+  const [activeMainTab, setActiveMainTab] = useState(initialTab); // 'config' | 'scripts' | 'factories' | 'hooks' | 'admins' | 'rank'
 
   // Addon-contributed tabs (empty when no addon declares instance_tabs)
   const addonTabs = useAddonMounts('instance_tabs');
@@ -1203,6 +1204,7 @@ function EditInstanceConfigModal({
                             { key: 'factories', icon: LayoutGrid, label: 'Factories' },
                             { key: 'hooks', icon: Webhook, label: 'Hooks' },
                             { key: 'admins', icon: Crown, label: 'Owner & Admins' },
+                            { key: 'rank', icon: Trophy, label: 'Rank Provider' },
                             // Addon tabs come last so a newly installed addon
                             // never reorders the tabs an operator already knows.
                             ...addonTabs.map((mount) => ({
@@ -1295,6 +1297,9 @@ function EditInstanceConfigModal({
                                 instanceStatus={instanceStatus}
                               />
                             </div>
+                          )}
+                          {activeMainTab === 'rank' && (
+                            <RankProviderTab instanceId={instanceId} />
                           )}
                           {/* Kept mounted: OwnerAdminEditor fills the operators cache the access.txt autocomplete reads. */}
                           <div className={activeMainTab === 'admins' ? 'flex-1 min-h-0 overflow-y-auto scrollbar-thick pr-3 mr-0.5' : 'hidden'}>
