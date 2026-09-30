@@ -688,7 +688,7 @@ PUT /api/instances/<id>/rank-provider
 
 `steam_ids` is comma-separated. Invalid SteamID64 values are silently dropped, duplicates removed, and the list capped at 64 IDs. `rating` can be `null` for providers supplying a display label; render `display` verbatim. `provisional` preserves the provider's flag.
 
-For an existing instance, authenticated ratings requests return `200`, including provider failures, unsupported modes, and unranked players. These cases return empty or partial `data`. `configured` is `false` when configuration is absent, disabled, unusable, or its provider type is unregistered; otherwise it is `true` even when no ratings are available. An unknown instance returns `404`.
+For an existing instance, authenticated ratings requests return `200`, including provider failures, unsupported modes, and unranked players. These cases return empty or partial `data`. `configured` is `false` when configuration is absent, disabled, or missing its provider type or base URL. With a nonempty validated roster, an unregistered provider type also returns `false`; an empty validated roster returns empty `data` with `configured: true` once the basic configuration check passes. Provider failures and unsupported modes keep `configured: true`. An unknown instance returns `404`.
 
 ## Server Status
 
