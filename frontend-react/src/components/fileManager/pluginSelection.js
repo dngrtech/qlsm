@@ -21,7 +21,7 @@ export const PLUGIN_HINT_TEXT = {
   subfolder: "Plugins in subfolders can't be enabled directly. Import them from a plugin in the root folder instead.",
   'package-marker': "__init__.py marks a package and can't be enabled as a plugin.",
   'abstract-module': "This file is a shared library imported by other plugins, not a plugin itself. Loading it directly does nothing.",
-  'plugin-dependency': "This plugin is required by another enabled plugin, so it's enabled automatically and can't be toggled on its own.",
+  'plugin-dependency': "This file is a helper required by another enabled plugin, so it's enabled automatically and can't be toggled on its own.",
 };
 
 // depends_on entries a plugin's manifest declares, normalized to bare root

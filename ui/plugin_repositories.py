@@ -25,7 +25,7 @@ Two manifest filenames, tried in this order:
             {"filename": "some_plugin.py", "label": "...",
              "description": "...", "version": "...",
              "sha256": "<hex of the LF-normalized .py>",
-             "runtime": "minqlx" | "minqlxtended" | "minqlxtended-patched",
+             "runtime": "minqlx" | "minqlxtended",
              "requires_qlsm_version": "1.30.0",
              "depends_on": ["some_helper.py"],
              "cvars": [...], "commands": [...]},
