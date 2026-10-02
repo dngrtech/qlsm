@@ -6,7 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.46.1` | 2026-10-01 | [#238](https://github.com/dngrtech/qlsm/pull/238) | Update the addon developer README with the route and icon rules. |
+| `v1.46.1` | 2026-10-01 | [#238](https://github.com/dngrtech/qlsm/pull/238) | Bug fixes and improvements. |
 | `v1.46.0` | 2026-10-01 | [#237](https://github.com/dngrtech/qlsm/pull/237) | Addons can add their own columns to the **Live Status** player table, such as a player rating. |
 | `v1.45.1` | 2026-09-29 | — | Bug fixes and improvements. |
 | `v1.45.0` | 2026-09-25 | [#235](https://github.com/dngrtech/qlsm/pull/235) | Suggest console commands and cvar names as you type in the **RCON Console** and **Global RCON**. |
