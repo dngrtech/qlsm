@@ -236,7 +236,11 @@ def _run_setup_playbook(host, inventory_path):
     # One JSON --extra-vars object: the bare `-e key=value` form stringifies
     # (and whitespace-splits) list values, which silently corrupts the firewall
     # port lists. Scalars stay strings here, exactly as the old form produced.
-    ansible_command_args += ['-e', json.dumps(_setup_playbook_extra_vars(host))]
+    core_extra_vars = _setup_playbook_extra_vars(host)
+    ansible_command_args += ['-e', json.dumps(core_extra_vars)]
+    # Same addon contributions a cloud host's setup gets (host.setup hook).
+    from .ansible_host_setup import addon_setup_extravar_args
+    ansible_command_args += addon_setup_extravar_args(host, core_keys=core_extra_vars)
     ansible_command_args.append(ansible_playbook_path)
 
     log.info(f"Executing Ansible command: {' '.join(ansible_command_args)}")

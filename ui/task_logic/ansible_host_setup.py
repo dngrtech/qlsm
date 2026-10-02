@@ -42,14 +42,33 @@ def _addon_host_setup_extravars(host):
     Returns [] when nothing is installed or enabled, so host setup runs the
     exact command it ran before the addon system existed.
     """
+    host_id = getattr(host, 'id', None)
     try:
         from ui.addons import dispatch
 
-        results = dispatch('host.setup', host.id, host.id) or []
+        results = dispatch('host.setup', host_id, host_id) or []
     except Exception as e:
-        log.warning('Addon host.setup hook skipped for host %s: %s', host.id, e)
+        log.warning('Addon host.setup hook skipped for host %s: %s', host_id, e)
         return []
     return [r for r in results if isinstance(r, dict) and r]
+
+
+def addon_setup_extravar_args(host, core_keys=()):
+    """The `-e` arguments addons contribute to a setup_host.yml run.
+
+    Each handler returns a dict and each dict becomes its own JSON `-e`
+    argument, appended after core's. A key core owns -- one in
+    _RESERVED_SETUP_VARS, or one of `core_keys`, the extra-vars this
+    particular run already passes -- is dropped, so an addon can never change
+    the runtime or the port pool the host is built with.
+    """
+    owned = _RESERVED_SETUP_VARS | frozenset(core_keys)
+    args = []
+    for contribution in _addon_host_setup_extravars(host):
+        safe = {k: v for k, v in contribution.items() if k not in owned}
+        if safe:
+            args += ['-e', json.dumps(safe)]
+    return args
 
 
 def _dispatch_addon_payload_sync(host):
@@ -203,13 +222,8 @@ def setup_host_ansible_logic(host_id, rerun=False):
             'runtime': host_runtime(host),
         })]
         # Addons may contribute extra-vars (a payload to deploy, a flag their
-        # own playbook tasks read). Each handler returns a dict; later addons
-        # cannot overwrite a key core already set, so an addon can never
-        # change the runtime or port pool the host is built with.
-        for contribution in _addon_host_setup_extravars(host):
-            safe = {k: v for k, v in contribution.items() if k not in _RESERVED_SETUP_VARS}
-            if safe:
-                ansible_command_args += ['-e', json.dumps(safe)]
+        # own playbook tasks read, the repository a runtime is built from).
+        ansible_command_args += addon_setup_extravar_args(host)
 
         ansible_command_args.append(ansible_playbook_path)
 

@@ -5,7 +5,9 @@ wired hook must leave core's output byte-identical to what it produced before
 the hook existed. An addon system that quietly perturbs a deploy on an
 install with no addons would be worse than no addon system.
 """
-from unittest.mock import patch
+import json
+import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -131,6 +133,69 @@ def test_host_setup_survives_a_broken_registry(app):
     with app.app_context():
         with patch('ui.addons.dispatch', side_effect=RuntimeError('boom')):
             assert _addon_host_setup_extravars(host) == []
+
+
+def test_host_setup_extravar_args_drop_keys_core_owns(app):
+    from ui.task_logic.ansible_host_setup import addon_setup_extravar_args
+
+    host = Host(id=1, name='h', provider='vultr', status=HostStatus.ACTIVE)
+    contributions = [
+        {'runtime': 'minqlx', 'minqlxtended_git_repo': 'https://example.com/a/b.git'},
+        {'ssh_port': '2222'},
+        {'firewall_mode': 'full', 'payload': [1, 2]},
+    ]
+    with app.app_context():
+        with patch('ui.addons.dispatch', return_value=contributions):
+            args = addon_setup_extravar_args(host, core_keys={'ssh_port', 'firewall_mode'})
+
+    assert args == [
+        '-e', json.dumps({'minqlxtended_git_repo': 'https://example.com/a/b.git'}),
+        '-e', json.dumps({'payload': [1, 2]}),
+    ]
+
+
+@pytest.mark.parametrize('provider', ['standalone', 'self'])
+def test_standalone_and_self_setup_pass_addon_extravars(app, provider):
+    """host.setup used to be dispatched for cloud hosts only, so an addon's
+    contribution silently never reached a standalone or self host."""
+    from ui.task_logic import standalone_host_setup as mod
+
+    host = Host(id=1, name='h', provider=provider, ssh_port=22, status=HostStatus.ACTIVE)
+    contribution = {'minqlxtended_git_repo': 'https://example.com/a/b.git', 'ssh_port': '2222'}
+    popen = MagicMock()
+    popen.return_value.returncode = 0
+
+    with app.app_context():
+        with patch('ui.addons.dispatch', return_value=[contribution]), \
+                patch.object(mod.subprocess, 'Popen', popen), \
+                patch('ui.task_logic.ansible_runner._stream_output', return_value=('', '')), \
+                patch.object(mod, 'append_log'), patch.object(mod.db, 'session'):
+            mod._run_setup_playbook(host, '/tmp/inventory.yml')
+
+    command = popen.call_args.args[0]
+    extra_vars = [json.loads(command[i + 1]) for i, arg in enumerate(command) if arg == '-e']
+    assert extra_vars[0]['ssh_port'] == '22'
+    assert extra_vars[1:] == [{'minqlxtended_git_repo': 'https://example.com/a/b.git'}]
+    assert command[-1].endswith('setup_host.yml')
+
+
+@pytest.mark.parametrize('playbook', ['setup_host.yml', 'rebuild_minqlx.yml'])
+def test_minqlxtended_is_cloned_from_overridable_vars(playbook):
+    """The repository is a var like the version, so a host.setup contribution
+    (or -e on a manual run) can point the build at a fork."""
+    import yaml
+    from ui.runtime import MINQLXTENDED, runtime_paths
+
+    path = os.path.join(os.path.dirname(__file__), '..', 'ansible', 'playbooks', playbook)
+    with open(path, encoding='utf-8') as f:
+        play = yaml.safe_load(f)[0]
+
+    paths = runtime_paths(MINQLXTENDED)
+    assert play['vars']['minqlxtended_git_repo'] == paths['git_repo']
+    assert play['vars']['minqlxtended_git_version'] == paths['git_version']
+    clone = next(t for t in play['tasks'] if t.get('name') == 'Clone minqlxtended repo as ql user')
+    assert clone['git']['repo'] == '{{ minqlxtended_git_repo }}'
+    assert clone['git']['version'] == '{{ minqlxtended_git_version }}'
 
 
 # ---- backup trees ------------------------------------------------------

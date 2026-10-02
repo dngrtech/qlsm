@@ -40,6 +40,10 @@
 
     minqlx_git_version: "fbdd915185337791d8e209dc4b686a1ee60d3721"
     minqlx_shared_dir: "/home/ql/minqlx-shared"
+    # A var rather than a literal in the clone task, so a fork can be built
+    # without editing the playbook: -e on a manual run, or an addon's
+    # host.setup contribution (addons/README.md).
+    minqlxtended_git_repo: "https://github.com/tjone270/minqlxtended.git"
     minqlxtended_git_version: "411591a2f6f8ad26949ee4c83758149d5b95f7ab"
     minqlxtended_shared_dir: "/home/ql/minqlxtended-shared"
 
@@ -663,7 +667,7 @@
       become: yes
       become_user: ql
       git:
-        repo: https://github.com/tjone270/minqlxtended.git
+        repo: "{{ minqlxtended_git_repo }}"
         dest: "{{ minqlx_build_dir }}"
         version: "{{ minqlxtended_git_version }}"
         depth: 1

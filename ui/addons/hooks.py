@@ -27,7 +27,9 @@ no per-addon `if enabled:` check to forget.
 # fails loudly instead of subscribing to nothing.
 HOOK_SCOPES = {
     # host lifecycle
-    'host.setup': 'host',      # ansible_host_setup.py, contributes extra-vars
+    # Contributes extra-vars to setup_host.yml, on every provider's setup and
+    # re-run (ansible_host_setup.py, standalone_host_setup.py).
+    'host.setup': 'host',
     # Fires after a successful host provisioning/update-plugins playbook run,
     # so an addon can rsync its own host-side payload (a language runtime one
     # of its plugins needs, a helper binary). Ungated (None, not 'host'):
