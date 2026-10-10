@@ -55,6 +55,19 @@ A plugin can still ship its own `<name>.ql-plugin.json` file next to its `.py` f
 
 Inline `cvars`/`commands` need QLSM 1.36.0 or newer. Older versions ignore them.
 
+## Publish Your Own Repository
+
+You don't need QLSM to publish a repository. The hosted [Repository Manifest Editor](https://dngrtech.github.io/qlsm/tools/plugin-editor.html) runs entirely in your browser and builds the manifest file for you.
+
+1. Put your plugin `.py` files in a public GitHub repository (or any host that serves the files directly).
+2. Open the [Repository Manifest Editor](https://dngrtech.github.io/qlsm/tools/plugin-editor.html), click **Add Plugin** for each plugin, and fill in its filename, label, description, runtime and cvars. The list under the editor flags anything QLSM would reject.
+3. Click **Download** to save `qlsm-repository.json`, and commit it to the repository root, next to the plugin files.
+4. Share the repository's GitHub URL. Anyone using QLSM adds it under **Settings → Repositories** (see [Add A Repository](#add-a-repository)).
+
+To change a manifest later, click **Load JSON**, pick your existing `qlsm-repository.json` (an older `qlsm-plugins.json` loads too), edit it and download it again.
+
+The editor covers the common fields. It does not compute `sha256` hashes or edit `addons`, `depends_on` or `package_files`, but it keeps any of those that are already in a file you load and writes them back unchanged, so you can add them by hand in the **Raw JSON** tab.
+
 ## Edit The Manifest
 
 The **Edit & Export Manifest** button on a repository card opens its plugin list in an editor. This is for people who *publish* a repository: it writes a new `qlsm-plugins.json` for you to commit to the repository itself.

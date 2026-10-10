@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QLSM Repository Manifest Editor</title>
+<style>
+  :root{
+    --bg:#eef1f5; --surface:#ffffff; --surface-2:#f7f8fa; --border:#d7dce3;
+    --text:#1b2027; --text-dim:#5b6472; --text-faint:#828b98;
+    --accent:#2f6fb0; --accent-ink:#ffffff; --accent-soft:#e2ecf6;
+    --success:#2f8a55; --success-soft:#e3f3e8;
+    --error:#c23b52; --error-soft:#fbe8ec;
+    --warning:#a6740a; --warning-soft:#fbf0dc;
+    --radius:8px;
+    --font-head:"IBM Plex Sans Condensed",system-ui,sans-serif;
+    --font-body:"IBM Plex Sans",system-ui,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#171a20; --surface:#1f242c; --surface-2:#262c35; --border:#333a45;
+      --text:#e7eaee; --text-dim:#96a0ad; --text-faint:#6b7480;
+      --accent:#5b9bd9; --accent-ink:#0b1620; --accent-soft:#233748;
+      --success:#5fb87a; --success-soft:#1e3327;
+      --error:#e2677c; --error-soft:#3a2029;
+      --warning:#d9a441; --warning-soft:#3a2f19;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#171a20; --surface:#1f242c; --surface-2:#262c35; --border:#333a45;
+    --text:#e7eaee; --text-dim:#96a0ad; --text-faint:#6b7480;
+    --accent:#5b9bd9; --accent-ink:#0b1620; --accent-soft:#233748;
+    --success:#5fb87a; --success-soft:#1e3327;
+    --error:#e2677c; --error-soft:#3a2029;
+    --warning:#d9a441; --warning-soft:#3a2f19;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--font-body);
+    font-size:14px; line-height:1.45; padding-inline:16px; padding-block:16px;
+  }
+  h1,h2,h3{font-family:var(--font-head); font-weight:600; margin:0; text-wrap:balance;}
+  button{font-family:var(--font-body); cursor:pointer;}
+  input,textarea,select{font-family:var(--font-body); color:var(--text);}
+  ::selection{background:var(--accent-soft);}
+
+  #app{max-width:1160px; margin:0 auto; display:flex; flex-direction:column; gap:14px;}
+
+  .topbar{
+    display:flex; flex-wrap:wrap; gap:14px; align-items:flex-start; justify-content:space-between;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px;
+  }
+  .brand{display:flex; align-items:center; gap:10px; min-width:0;}
+  .brand-mark{
+    font-family:var(--font-mono); font-size:18px; letter-spacing:-2px; color:var(--accent);
+    flex-shrink:0;
+  }
+  .brand h1{font-size:19px;}
+  .brand .subtitle{margin:2px 0 0; color:var(--text-dim); font-size:12px;}
+
+  .toolbar{display:flex; flex-wrap:wrap; gap:8px; align-items:center;}
+  .btn{
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text);
+    border-radius:6px; padding:7px 12px; font-size:13px; font-weight:500;
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+    outline:2px solid var(--accent); outline-offset:1px;
+  }
+  .btn-primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .btn-primary:hover{filter:brightness(1.05);}
+  .btn-ghost{background:transparent;}
+  .btn-danger-text{color:var(--error);}
+
+  .export-group{display:flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:3px 3px 3px 10px;}
+  .export-group input{
+    background:transparent; border:none; font-family:var(--font-mono); font-size:12.5px;
+    color:var(--text); width:190px; padding:4px 0;
+  }
+  .export-group input:focus-visible{outline:none;}
+
+  .pill{
+    border-radius:999px; padding:6px 12px; font-size:12.5px; font-weight:600; border:1px solid transparent;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .pill-ok{background:var(--success-soft); color:var(--success);}
+  .pill-warn{background:var(--warning-soft); color:var(--warning);}
+  .pill-err{background:var(--error-soft); color:var(--error);}
+
+  #issues-panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:12px 14px; display:flex; flex-direction:column; gap:6px;
+  }
+  #issues-panel h2{font-size:13px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;}
+  .issue-row{
+    display:flex; gap:8px; align-items:flex-start; padding:6px 8px; border-radius:6px; font-size:12.5px;
+    background:var(--surface-2); cursor:pointer; border:1px solid transparent;
+  }
+  .issue-row:hover{border-color:var(--border);}
+  .issue-dot{width:7px; height:7px; border-radius:50%; margin-top:5px; flex-shrink:0;}
+  .issue-dot.error{background:var(--error);}
+  .issue-dot.warning{background:var(--warning);}
+  .issue-text{color:var(--text); overflow-wrap:anywhere;}
+
+  .tabs{display:flex; gap:4px; border-bottom:1px solid var(--border);}
+  .tab{
+    background:transparent; border:none; padding:8px 4px; font-size:13px; font-weight:600;
+    color:var(--text-dim); border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .tab.active{color:var(--accent); border-bottom-color:var(--accent);}
+
+  .workspace{display:grid; grid-template-columns:250px 1fr; gap:14px; align-items:start;}
+  @media (max-width:760px){ .workspace{grid-template-columns:1fr;} }
+
+  #sidebar{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:10px; display:flex; flex-direction:column; gap:8px; max-height:70vh; overflow:auto;
+  }
+  @media (max-width:760px){ #sidebar{max-height:220px;} }
+  .sidebar-list{display:flex; flex-direction:column; gap:4px; list-style:none; margin:0; padding:0;}
+  .plugin-row{
+    display:flex; align-items:center; gap:6px; padding:7px 8px; border-radius:6px; cursor:pointer;
+    border:1px solid transparent; min-width:0; box-shadow:inset 0 0 0 0 transparent;
+  }
+  .plugin-row:hover{background:var(--surface-2);}
+  .plugin-row.active{background:var(--accent-soft); border-color:var(--accent);}
+  .plugin-row.dragging{opacity:.4;}
+  .plugin-row.drag-over-top{box-shadow:inset 0 2px 0 0 var(--accent);}
+  .plugin-row.drag-over-bottom{box-shadow:inset 0 -2px 0 0 var(--accent);}
+  .drag-handle{cursor:grab; color:var(--text-faint); font-size:13px; flex-shrink:0; line-height:1; touch-action:none;}
+  .row-move-btns{display:flex; flex-direction:column; gap:1px; flex-shrink:0;}
+  .move-btn{
+    background:transparent; border:none; color:var(--text-faint); font-size:8px; line-height:1;
+    padding:1px 3px; border-radius:3px;
+  }
+  .move-btn:hover{color:var(--accent); background:var(--accent-soft);}
+  .move-btn:disabled{opacity:.25; cursor:default;}
+  .move-btn:disabled:hover{color:var(--text-faint); background:transparent;}
+  .dot{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
+  .dot-ok{background:var(--success);}
+  .dot-error{background:var(--error);}
+  .plugin-row-text{display:flex; flex-direction:column; min-width:0; flex:1;}
+  .plugin-label{font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .plugin-filename{font-family:var(--font-mono); font-size:11px; color:var(--text-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .icon-btn{
+    background:transparent; border:none; color:var(--text-faint); font-size:13px; padding:2px 4px; border-radius:4px;
+    flex-shrink:0;
+  }
+  .icon-btn:hover{color:var(--error); background:var(--error-soft);}
+  .sidebar-footer{border-top:1px solid var(--border); padding-top:8px; display:flex; gap:6px;}
+  .add-plugin-btn, .sort-btn{flex:1; justify-content:center;}
+
+  #editor-panel, #json-panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px; display:flex; flex-direction:column; gap:20px; min-width:0;
+  }
+  #json-panel{grid-column:1/-1;}
+  .empty-state{color:var(--text-dim); font-size:13px; text-align:center; padding:40px 10px;}
+
+  fieldset{border:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px;}
+  legend{font-family:var(--font-head); font-size:14px; font-weight:600; padding:0; margin-bottom:2px;}
+  .field-row{display:grid; grid-template-columns:repeat(2,1fr); gap:10px;}
+  @media (max-width:520px){ .field-row{grid-template-columns:1fr;} }
+  .field{display:flex; flex-direction:column; gap:4px; min-width:0;}
+  .field label{font-size:11.5px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.03em;}
+  .field input, .field textarea, .field select{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:7px 9px; font-size:13px;
+    width:100%;
+  }
+  .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible{outline:2px solid var(--accent); outline-offset:0;}
+  .mono{font-family:var(--font-mono);}
+
+  .section-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+
+  .rows{display:flex; flex-direction:column; gap:10px;}
+  .row-card{
+    border:1px solid var(--border); border-radius:6px; padding:10px; background:var(--surface-2);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .row-grid{display:grid; grid-template-columns:1.1fr 1.1fr .8fr 1fr .6fr .6fr; gap:8px; align-items:end;}
+  .row-grid.commands{grid-template-columns:1.1fr 1.3fr .6fr 1.6fr;}
+  @media (max-width:900px){ .row-grid, .row-grid.commands{grid-template-columns:1fr 1fr;} }
+  .row-grid .field textarea{min-height:32px; resize:vertical;}
+  .row-card-foot{display:flex; justify-content:flex-end;}
+  .checkbox-field{display:flex; align-items:center; gap:6px; padding-top:6px;}
+  .checkbox-field input{width:16px; height:16px; flex:none;}
+
+  #json-output{
+    font-family:var(--font-mono); font-size:12.5px; white-space:pre; overflow:auto;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:14px;
+    max-height:65vh; margin:0;
+  }
+
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(10,12,16,.5); display:flex; align-items:center; justify-content:center;
+    padding:16px; z-index:50;
+  }
+  .modal{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px;
+    width:100%; max-width:520px; display:flex; flex-direction:column; gap:12px; max-height:85vh; overflow:auto;
+  }
+  .modal h2{font-size:16px;}
+  .modal p{color:var(--text-dim); font-size:13px; margin:0;}
+  .modal textarea{
+    font-family:var(--font-mono); font-size:12px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:6px; padding:10px; min-height:140px; width:100%;
+  }
+  .modal-error{color:var(--error); font-size:12.5px;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+
+  #toast-root{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:60; display:flex; flex-direction:column; gap:8px; align-items:center;}
+  .toast{
+    padding:9px 16px; border-radius:999px; font-size:12.5px; font-weight:600; box-shadow:0 4px 16px rgba(0,0,0,.18);
+    border:1px solid var(--border); background:var(--surface); color:var(--text);
+  }
+  .toast.success{background:var(--success-soft); color:var(--success); border-color:transparent;}
+  .toast.error{background:var(--error-soft); color:var(--error); border-color:transparent;}
+  .toast.warning{background:var(--warning-soft); color:var(--warning); border-color:transparent;}
+
+  [hidden]{display:none !important;}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script>
+const DEFAULT_DATA = {
+  "plugins": [
+    {
+      "filename": "afkplus.py",
+      "label": "AFK Plus",
+      "description": "Detects players who stop moving during a round, warns them, then moves them to spectator. Admins can skip the punishment and spectate AFK players straight away.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "cvars": [
+        { "cvar": "qlx_afk_warning_seconds", "label": "Warning after (seconds)", "type": "number", "default": 10, "min": 1, "description": "Seconds without movement before the player is warned." },
+        { "cvar": "qlx_afk_detection_seconds", "label": "AFK after (seconds)", "type": "number", "default": 20, "min": 1, "description": "Seconds without movement before the player counts as AFK." },
+        { "cvar": "qlx_afk_put_to_spec", "label": "Move AFK players to spectator", "type": "bool", "default": true, "description": "Move a detected AFK player to the spectators." },
+        { "cvar": "qlx_afk_enable_punishment", "label": "Punish before spectating", "type": "bool", "default": true, "description": "On: works like the original plugin and punishes the AFK player until they die. Off: moves the player to spectator as soon as the AFK time is reached." }
+      ]
+    },
+    {
+      "filename": "afkp.py",
+      "label": "AFK Plus (legacy)",
+      "description": "Legacy verion of AFK Plus for older Python systems. Use afkplus.py instead. Don't enable both.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "cvars": [
+        { "cvar": "qlx_afk_warning_seconds", "label": "Warning after (seconds)", "type": "number", "default": 10, "min": 1, "description": "Seconds without movement before the player is warned." },
+        { "cvar": "qlx_afk_detection_seconds", "label": "AFK after (seconds)", "type": "number", "default": 20, "min": 1, "description": "Seconds without movement before the player counts as AFK." },
+        { "cvar": "qlx_afk_put_to_spec", "label": "Move AFK players to spectator", "type": "bool", "default": true, "description": "Move a detected AFK player to the spectators." },
+        { "cvar": "qlx_afk_enable_punishment", "label": "Punish before spectating", "type": "bool", "default": true, "description": "On: works like the original plugin and punishes the AFK player until they die. Off: moves the player to spectator as soon as the AFK time is reached." }
+      ]
+    },
+    {
+      "filename": "aliasesplus.py",
+      "label": "Aliases Plus",
+      "description": "Modified aliases.py (replacement) to list player aliases without lagging the server. Results are limited or sent in chunks.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "alias", "usage": "<id>", "description": "List the names and Steam IDs a player has used." },
+        { "name": "clearaliases", "permission": 5, "description": "Clear stored aliases." },
+        { "name": "tomtec_versions", "description": "Show the plugin version." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_aliasesmode", "label": "Output mode", "type": "string", "default": "limit", "description": "\"limit\" shows only the first results, \"chunk\" sends every result in delayed batches." },
+        { "cvar": "qlx_limitresults", "label": "Result limit", "type": "number", "default": 10, "min": 1, "description": "Limit mode: maximum number of names/IDs shown." },
+        { "cvar": "qlx_chunktime", "label": "Chunk delay (ms)", "type": "number", "default": 500, "min": 0, "description": "Chunk mode: delay in milliseconds between batches." }
+      ]
+    },
+    {
+      "filename": "autokick.py",
+      "label": "Auto Kick",
+      "description": "Automatically kicks players (after a warning) for using words or phrases from the word list. Colour codes are ignored when matching. Regex patterns can also go in autokick_patterns.txt, and incidents are logged to autokick.log and, by default, to the server chat log (chatlogs/chat.log).",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "addword", "usage": "<word or phrase>", "permission": 5, "description": "Add a word or phrase to the list." },
+        { "name": "delword", "usage": "<word or phrase>", "permission": 5, "description": "Remove a word or phrase from the list." },
+        { "name": "listwords", "permission": 5, "description": "Show the word list (sent privately)." },
+        { "name": "reloadpatterns", "permission": 5, "description": "Reload regex patterns from autokick_patterns.txt." },
+        { "name": "akv", "description": "Show the plugin version." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_autokickWarnings", "label": "Kick on offence", "type": "number", "default": 1, "min": 0, "description": "The offence that gets a player kicked: 1 kicks on the first offence, 3 warns twice and kicks on the third." },
+        { "cvar": "qlx_autokickMode", "label": "Mode", "type": "string", "default": "kick", "description": "\"kick\": warn then kick. \"warn\": block the message and notify the player, never kick. \"silent\": block the message without notifying anyone." },
+        { "cvar": "qlx_autokickChatlog", "label": "Log to chat.log", "type": "bool", "default": true, "description": "Also write blocked messages, warnings, kicks and word list changes to chatlogs/chat.log, so they show up in the server chat log. autokick.log is always kept." }
+      ]
+    },
+    {
+      "filename": "backfire.py",
+      "label": "Backfire",
+      "description": "Reflects team damage back onto the attacker (non-lethally, with a sound cue) and logs every incident. Needs g_friendlyfire 1 and a minqlx build with the damage hook (Shino's fork: github.com/mgaertne/minqlx).",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "bfv", "description": "Show the plugin version." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_backfireSlapAmount", "label": "Fixed slap damage", "type": "number", "default": 10, "min": 0, "description": "Damage dealt back per team hit when proportional mode is off." },
+        { "cvar": "qlx_backfireProportional", "label": "Proportional damage", "type": "bool", "default": false, "description": "Deal back the same damage the attacker did, instead of the fixed amount." },
+        { "cvar": "qlx_backfireMinHealth", "label": "Minimum health", "type": "number", "default": 1, "min": 0, "description": "Stop punishing below this health. 1 means the attacker never dies from backfire." },
+        { "cvar": "qlx_logDir", "label": "Log directory", "type": "string", "default": "logs", "description": "Folder for backfire.log, relative to the server folder unless absolute." }
+      ]
+    },
+    {
+      "filename": "factoryvote.py",
+      "label": "Factory Vote",
+      "description": "Lets players vote for a factory listed in baseq3/factories.txt. A matching <factory>.cfg in the plugins folder is run when the vote passes, and restore.cfg can reset the settings afterwards.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "factoryvote", "usage": "[number]", "description": "List factories, or start a vote for the numbered one." },
+        { "name": "fv", "usage": "[number]", "description": "List factories, or start a vote for the numbered one." },
+        { "name": "factory", "description": "Show the current factory." },
+        { "name": "check", "description": "Show the factory set on the server and in the plugin." },
+        { "name": "restorecfg", "description": "Run restore.cfg to reset cvars to their defaults (level set by ql_restorecfg_perm)." },
+        { "name": "fvv", "description": "Show the plugin version." }
+      ],
+      "cvars": [
+        { "cvar": "ql_restorecfg_perm", "label": "!restorecfg permission", "type": "number", "default": 2, "min": 0, "max": 5, "description": "Permission level needed for !restorecfg: 0 everyone, 1 regular, 2 mod, 3 admin, 4 superadmin. Read when the plugin loads." }
+      ]
+    },
+    {
+      "filename": "lastmaps.py",
+      "label": "Last Maps",
+      "description": "Shows the last 5 played maps. Useful to avoid voting overplayed maps.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "lastmaps", "description": "List the last 5 played maps." },
+        { "name": "lm", "description": "List the last 5 played maps." },
+        { "name": "lmv", "permission": 3, "description": "Show the plugin version." }
+      ]
+    },
+    {
+      "filename": "livescoreboard.py",
+      "label": "Live Scoreboard",
+      "description": "Writes the live score to an HTML file, for example to show it in OBS.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "lscheck", "description": "Check that the plugin is running." },
+        { "name": "lsv", "description": "Show the plugin version." },
+        { "name": "lsstyle", "usage": "<1 or 2>", "permission": 5, "description": "Set the scoreboard style: 1 default, 2 one line." },
+        { "name": "lstitle", "usage": "<text>", "permission": 5, "description": "Set the scoreboard title. Leave blank to clear." },
+        { "name": "lsredname", "usage": "<name>", "permission": 5, "description": "Set the Red team name." },
+        { "name": "lsbluename", "usage": "<name>", "permission": 5, "description": "Set the Blue team name." },
+        { "name": "lscolor", "usage": "<#colorcode>", "permission": 5, "description": "Set the text color." },
+        { "name": "lsbgcolor", "usage": "<#colorcode>", "permission": 5, "description": "Set the background color." },
+        { "name": "lscustom", "usage": "<text>", "permission": 5, "description": "Set custom text shown at the end of style 2." },
+        { "name": "lspath", "usage": "<folder_path>", "permission": 5, "description": "Set the output folder. Leave blank to show it, \"clear\" to reset it." },
+        { "name": "lsupdate", "permission": 5, "description": "Write the scoreboard now." },
+        { "name": "resetls", "permission": 5, "description": "Reset all scoreboard settings to defaults." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_scorerefresh", "label": "Refresh interval (seconds)", "type": "number", "default": 30, "min": 1, "description": "How often the scoreboard file is rewritten." },
+        { "cvar": "qlx_lstitle", "label": "Title", "type": "string", "default": "Live Scoreboard", "description": "Scoreboard title." },
+        { "cvar": "qlx_livescorestyle", "label": "Style", "type": "number", "default": 1, "min": 1, "max": 2, "description": "1 = default layout, 2 = one line." },
+        { "cvar": "qlx_lsredname", "label": "Red team name", "type": "string", "default": "Red Team", "description": "Name shown for the Red team." },
+        { "cvar": "qlx_lsbluename", "label": "Blue team name", "type": "string", "default": "Blue Team", "description": "Name shown for the Blue team." },
+        { "cvar": "qlx_livescorecolor", "label": "Text color", "type": "string", "default": "#ffffff", "description": "Hex text color, e.g. #ffffff." },
+        { "cvar": "qlx_livescorebgcolor", "label": "Background color", "type": "string", "default": "#000000", "description": "Hex background color, e.g. #000000." },
+        { "cvar": "qlx_lscustom", "label": "Custom text", "type": "string", "default": "", "description": "Extra text shown at the end of style 2." },
+        { "cvar": "qlx_lspath", "label": "Output folder", "type": "string", "default": "", "description": "Folder the HTML file is written to, e.g. /var/www/html/server2. Empty uses a livescores folder next to the plugins." }
+      ]
+    },
+    {
+      "filename": "mapmanager.py",
+      "label": "Map Manager",
+      "description": "Manages map rotation from mappool.txt, enforces vote cooldowns on recently played maps, and tracks off-pool callvotes too. Includes the features of lastmaps.py, so don't enable both.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "lastmaps", "description": "List the recently played maps." },
+        { "name": "lm", "description": "List the recently played maps." },
+        { "name": "mappool", "description": "Show the next maps in rotation and which will be offered in the vote." },
+        { "name": "skipmaps", "usage": "[n]", "permission": 5, "description": "Advance the rotation by n maps (default 1)." },
+        { "name": "resetrotation", "permission": 5, "description": "Reload mappool.txt and resync the rotation to the current map." },
+        { "name": "mmdebug", "permission": 5, "description": "Dump the plugin state for troubleshooting." },
+        { "name": "mmv", "description": "Show the plugin version." }
+      ],
+      "cvars": [
+        { "cvar": "mapmanager_mappool", "label": "Map pool file", "type": "string", "default": "/home/ql/qlds-27960/baseq3/mappool.txt", "description": "Full path to mappool.txt, including the filename. Set this to match your server." },
+        { "cvar": "mapmanager_history_size", "label": "Blocked recent maps", "type": "number", "default": 5, "min": 1, "description": "Number of recently played maps blocked from voting." },
+        { "cvar": "mapmanager_vote_maps", "label": "Vote candidates", "type": "number", "default": 3, "min": 1, "description": "Number of maps offered in the end-of-game vote." },
+        { "cvar": "mapmanager_allownewvotes", "label": "Allow callvote after map vote", "type": "bool", "default": true, "description": "Allow callvote map after a map vote already passed this round." }
+      ]
+    },
+    {
+      "filename": "motd.py",
+      "label": "MOTD (multi-line)",
+      "description": "Replaces the stock motd.py with a message of the day of up to 10 lines. Lines set in the config are used only while no MOTD is stored; use !clearmotd and restart to reload them.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "setmotd", "usage": "<line> <message>", "permission": 4, "description": "Set a specific MOTD line (1-10)." },
+        { "name": "newmotd", "usage": "<line> <message>", "permission": 4, "description": "Set a specific MOTD line (1-10)." },
+        { "name": "addmotd", "usage": "<message>", "permission": 4, "description": "Add a line in the next free slot." },
+        { "name": "clearmotd", "permission": 4, "description": "Clear all MOTD lines." },
+        { "name": "reloadmotd", "permission": 4, "description": "Reload MOTD lines from motd.cfg in baseq3." },
+        { "name": "motd", "description": "Show the MOTD." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_motdHeader", "label": "Header", "type": "string", "default": "^6======= ^7Message of the Day ^6=======^7", "description": "Header shown above the MOTD. Use \\n for a line break." },
+        { "cvar": "qlx_motdSound", "label": "Sound", "type": "string", "default": "sound/vo/crash_new/37b_07_alt.wav", "description": "Sound played when the MOTD is shown. Empty for no sound." },
+        { "cvar": "qlx_motd1", "label": "Line 1", "type": "string", "default": "", "description": "MOTD line 1." },
+        { "cvar": "qlx_motd2", "label": "Line 2", "type": "string", "default": "", "description": "MOTD line 2." },
+        { "cvar": "qlx_motd3", "label": "Line 3", "type": "string", "default": "", "description": "MOTD line 3." },
+        { "cvar": "qlx_motd4", "label": "Line 4", "type": "string", "default": "", "description": "MOTD line 4." },
+        { "cvar": "qlx_motd5", "label": "Line 5", "type": "string", "default": "", "description": "MOTD line 5." },
+        { "cvar": "qlx_motd6", "label": "Line 6", "type": "string", "default": "", "description": "MOTD line 6." },
+        { "cvar": "qlx_motd7", "label": "Line 7", "type": "string", "default": "", "description": "MOTD line 7." },
+        { "cvar": "qlx_motd8", "label": "Line 8", "type": "string", "default": "", "description": "MOTD line 8." },
+        { "cvar": "qlx_motd9", "label": "Line 9", "type": "string", "default": "", "description": "MOTD line 9." },
+        { "cvar": "qlx_motd10", "label": "Line 10", "type": "string", "default": "", "description": "MOTD line 10." }
+      ]
+    },
+    {
+      "filename": "namesplus.py",
+      "label": "Names Plus",
+      "description": "Replaces names.py. Lets admins set player names (by player or Steam ID), which persist across reconnects until cleared. Unloads names.py if it's loaded, so remove \"names\" (and DEFAULT) from qlx_plugins.",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "name", "usage": "<name>", "description": "Set your own name." },
+        { "name": "setname", "usage": "<player id or steam id> <name>", "permission": 4, "description": "Set a player's name." },
+        { "name": "clear", "usage": "<player id>", "permission": 4, "description": "Remove an admin-set name." },
+        { "name": "enforce", "permission": 4, "description": "Apply stored names to everyone connected now." },
+        { "name": "listnames", "permission": 3, "description": "List admin-set names." },
+        { "name": "npv", "description": "Show the plugin version." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_enforceAdminName", "label": "Enforce admin-set names", "type": "bool", "default": true, "description": "Keep admin-set names on connect, name change and game start." },
+        { "cvar": "qlx_enforceSteamName", "label": "Enforce Steam names", "type": "bool", "default": false, "description": "Only allow names matching the player's Steam name." }
+      ]
+    },
+    {
+      "filename": "votebanplus.py",
+      "label": "Voteban Plus",
+      "description": "Plugin for basic callvote management",
+      "runtime": "minqlx",
+      "requires_qlsm_version": "1.36.0",
+      "commands": [
+        { "name": "voteban", "usage": "<player id or steam id>", "permission": 4, "description": "Ban a player from calling a vote." },
+        { "name": "voteunban", "usage": "<player id or steam id>", "permission": 4, "description": "Unban a player from calling a vote." },
+        { "name": "votebanlist", "permission": 4, "description": "List players banned from calling votes." }
+      ],
+      "cvars": [
+        { "cvar": "qlx_votebanplusAdmin", "label": "Admin level for command usage", "type": "number", "default": 4, "description": "Minimum admin level required to use Voteban Plus commands." }
+      ]
+    }
+  ]
+};
+
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function escapeHtml(s){
+  return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const state = {
+  data: { plugins: [] },
+  selected: -1,
+  tab: 'editor',
+  issuesOpen: false
+};
+
+function newPlugin(){
+  return { filename:'', label:'New Plugin', description:'', runtime:'minqlx', requires_qlsm_version:'', cvars:[], commands:[] };
+}
+function newCvar(){ return { cvar:'', label:'', type:'string', default:'', description:'' }; }
+function newCommand(){ return { name:'', description:'' }; }
+function defaultForType(t){ return t === 'number' ? 0 : t === 'bool' ? false : ''; }
+
+function validateData(data){
+  const issues = [];
+  if(!data || typeof data !== 'object' || Array.isArray(data)){
+    issues.push({ severity:'error', message:'Top-level JSON must be an object.' });
+    return issues;
+  }
+  if(!Array.isArray(data.plugins)){
+    issues.push({ severity:'error', message:'"plugins" must be an array.' });
+    return issues;
+  }
+  data.plugins.forEach((p, i) => {
+    if(!p || typeof p !== 'object'){
+      issues.push({ severity:'error', index:i, message:`Plugin ${i+1}: entry must be an object.` });
+      return;
+    }
+    const where = p.filename ? `Plugin ${i+1} (${p.filename})` : `Plugin ${i+1}`;
+    const req = (field) => {
+      if(typeof p[field] !== 'string' || p[field].trim()===''){
+        issues.push({ severity:'error', index:i, message:`${where}: "${field}" is required.` });
+      }
+    };
+    req('filename');
+    ['label','description','runtime','requires_qlsm_version'].forEach(f => {
+      if(p[f] === undefined || p[f] === '') issues.push({ severity:'warning', index:i, message:`${where}: "${f}" is empty (optional, but recommended).` });
+    });
+    if(p.runtime && !['minqlx','minqlxtended'].includes(p.runtime)){
+      issues.push({ severity:'warning', index:i, message:`${where}: runtime "${p.runtime}" isn't minqlx or minqlxtended, so QLSM will ask the user to pick one.` });
+    }
+    if(typeof p.filename === 'string' && p.filename && !p.filename.endsWith('.py')){
+      issues.push({ severity:'warning', index:i, message:`${where}: filename usually ends in ".py".` });
+    }
+    if(typeof p.requires_qlsm_version === 'string' && p.requires_qlsm_version && !/^\d+\.\d+\.\d+$/.test(p.requires_qlsm_version)){
+      issues.push({ severity:'warning', index:i, message:`${where}: version "${p.requires_qlsm_version}" doesn't look like x.y.z.` });
+    }
+    if(p.cvars !== undefined){
+      if(!Array.isArray(p.cvars)){
+        issues.push({ severity:'error', index:i, message:`${where}: "cvars" must be an array.` });
+      } else {
+        p.cvars.forEach((c, j) => {
+          const cw = `${where} → cvar ${j+1}${c && c.cvar ? ' ('+c.cvar+')' : ''}`;
+          if(!c || typeof c !== 'object'){ issues.push({ severity:'error', index:i, message:`${cw}: entry must be an object.` }); return; }
+          if(typeof c.cvar !== 'string' || !c.cvar.trim()) issues.push({ severity:'error', index:i, message:`${cw}: "cvar" is required.` });
+          if(typeof c.label !== 'string' || !c.label.trim()) issues.push({ severity:'error', index:i, message:`${cw}: "label" is required.` });
+          if(typeof c.description !== 'string' || !c.description.trim()) issues.push({ severity:'error', index:i, message:`${cw}: "description" is required.` });
+          if(!['number','bool','string'].includes(c.type)){
+            issues.push({ severity:'error', index:i, message:`${cw}: "type" must be number, bool, or string.` });
+          } else {
+            const expected = c.type === 'number' ? 'number' : c.type === 'bool' ? 'boolean' : 'string';
+            if(typeof c.default !== expected) issues.push({ severity:'error', index:i, message:`${cw}: "default" should be a ${expected} to match type "${c.type}".` });
+          }
+          if(c.min !== undefined && typeof c.min !== 'number') issues.push({ severity:'error', index:i, message:`${cw}: "min" must be a number.` });
+          if(c.max !== undefined && typeof c.max !== 'number') issues.push({ severity:'error', index:i, message:`${cw}: "max" must be a number.` });
+          if(c.type && c.type !== 'number' && (c.min !== undefined || c.max !== undefined)){
+            issues.push({ severity:'warning', index:i, message:`${cw}: "min"/"max" only make sense when type is number.` });
+          }
+        });
+      }
+    }
+    if(p.commands !== undefined){
+      if(!Array.isArray(p.commands)){
+        issues.push({ severity:'error', index:i, message:`${where}: "commands" must be an array.` });
+      } else {
+        p.commands.forEach((c, j) => {
+          const cw = `${where} → command ${j+1}${c && c.name ? ' ('+c.name+')' : ''}`;
+          if(!c || typeof c !== 'object'){ issues.push({ severity:'error', index:i, message:`${cw}: entry must be an object.` }); return; }
+          if(typeof c.name !== 'string' || !c.name.trim()) issues.push({ severity:'error', index:i, message:`${cw}: "name" is required.` });
+          if(typeof c.description !== 'string' || !c.description.trim()) issues.push({ severity:'error', index:i, message:`${cw}: "description" is required.` });
+          if(c.permission !== undefined){
+            if(typeof c.permission !== 'number' || !Number.isInteger(c.permission) || c.permission < 0 || c.permission > 5){
+              issues.push({ severity:'error', index:i, message:`${cw}: "permission" must be an integer 0-5.` });
+            }
+          }
+          if(c.usage !== undefined && typeof c.usage !== 'string') issues.push({ severity:'error', index:i, message:`${cw}: "usage" must be a string.` });
+        });
+      }
+    }
+  });
+  return issues;
+}
+
+function pluginHasError(issues, i){
+  return issues.some(iss => iss.index === i && iss.severity === 'error');
+}
+
+function toast(message, kind){
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = message;
+  root.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+let dragSrcIndex = null;
+
+function reorderPlugins(fromIndex, toIndex){
+  if(fromIndex === toIndex) return;
+  const ref = state.selected >= 0 ? state.data.plugins[state.selected] : null;
+  const [item] = state.data.plugins.splice(fromIndex, 1);
+  state.data.plugins.splice(toIndex, 0, item);
+  state.selected = ref ? state.data.plugins.indexOf(ref) : -1;
+}
+
+let modalCloser = null;
+function closeModal(){
+  document.getElementById('modal-root').innerHTML = '';
+  modalCloser = null;
+}
+function openConfirmModal({ title, message, confirmLabel, danger, onConfirm }){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" data-action="modal-backdrop">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(message)}</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" data-action="modal-cancel">Cancel</button>
+          <button class="btn ${danger ? 'btn-danger-text' : 'btn-primary'}" id="modal-confirm-btn">${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('modal-confirm-btn').addEventListener('click', () => { closeModal(); onConfirm(); });
+}
+function openLoadModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" data-action="modal-backdrop">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2>Load JSON</h2>
+        <p>Pick a qlsm-repository.json (or qlsm-plugins.json) file, or paste JSON below, then Load. This replaces what's currently open here.</p>
+        <input type="file" id="load-file-input" accept=".json,application/json" />
+        <textarea id="load-textarea" placeholder="…or paste JSON here"></textarea>
+        <div class="modal-error" id="load-error" hidden></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" data-action="modal-cancel">Cancel</button>
+          <button class="btn btn-primary" id="load-confirm-btn">Load</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('load-file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { document.getElementById('load-textarea').value = reader.result; };
+    reader.readAsText(file);
+  });
+  document.getElementById('load-confirm-btn').addEventListener('click', () => {
+    const raw = document.getElementById('load-textarea').value;
+    const errEl = document.getElementById('load-error');
+    let parsed;
+    try{ parsed = JSON.parse(raw); }
+    catch(e){ errEl.hidden = false; errEl.textContent = 'That isn\'t valid JSON: ' + e.message; return; }
+    let next;
+    if(Array.isArray(parsed)) next = { plugins: parsed };
+    else if(parsed && Array.isArray(parsed.plugins)) next = parsed;
+    else { errEl.hidden = false; errEl.textContent = 'Expected a top-level object with a "plugins" array.'; return; }
+    state.data = next;
+    state.selected = next.plugins.length ? 0 : -1;
+    closeModal();
+    renderAll();
+    toast(`Loaded ${next.plugins.length} plugin${next.plugins.length === 1 ? '' : 's'}.`, 'success');
+  });
+}
+
+function renderPill(issues){
+  const errors = issues.filter(i => i.severity === 'error').length;
+  const warnings = issues.filter(i => i.severity === 'warning').length;
+  const el = document.getElementById('validation-pill');
+  if(!el) return;
+  if(errors === 0 && warnings === 0){
+    el.className = 'pill pill-ok'; el.innerHTML = '✓ Valid';
+  } else if(errors > 0){
+    el.className = 'pill pill-err';
+    el.innerHTML = `⚠ ${errors} error${errors===1?'':'s'}${warnings ? ' · ' + warnings + ' warning' + (warnings===1?'':'s') : ''}`;
+  } else {
+    el.className = 'pill pill-warn';
+    el.innerHTML = `⚠ ${warnings} warning${warnings===1?'':'s'}`;
+  }
+}
+
+function renderIssuesPanel(issues){
+  const panel = document.getElementById('issues-panel');
+  if(!panel) return;
+  panel.hidden = !state.issuesOpen;
+  if(!state.issuesOpen) return;
+  if(issues.length === 0){
+    panel.innerHTML = `<h2>Validation</h2><p style="color:var(--text-dim); font-size:12.5px;">No issues found.</p>`;
+    return;
+  }
+  panel.innerHTML = `<h2>Validation — ${issues.length} issue${issues.length===1?'':'s'}</h2>` +
+    issues.map((iss, idx) => `
+      <div class="issue-row" data-action="goto-issue" data-index="${iss.index !== undefined ? iss.index : ''}">
+        <span class="issue-dot ${iss.severity}"></span>
+        <span class="issue-text">${escapeHtml(iss.message)}</span>
+      </div>`).join('');
+}
+
+function renderSidebar(issues){
+  const el = document.getElementById('sidebar');
+  if(!el) return;
+  const last = state.data.plugins.length - 1;
+  const items = state.data.plugins.map((p, i) => `
+    <li class="plugin-row ${i === state.selected ? 'active' : ''}" draggable="true" data-action="select-plugin" data-index="${i}">
+      <span class="drag-handle" aria-hidden="true">⠿</span>
+      <span class="dot ${pluginHasError(issues, i) ? 'dot-error' : 'dot-ok'}"></span>
+      <div class="plugin-row-text">
+        <span class="plugin-label">${escapeHtml(p.label || '(untitled)')}</span>
+        <span class="plugin-filename">${escapeHtml(p.filename || '—')}</span>
+      </div>
+      <div class="row-move-btns">
+        <button class="move-btn" data-action="move-up" data-index="${i}" ${i===0?'disabled':''} title="Move up" aria-label="Move up">▲</button>
+        <button class="move-btn" data-action="move-down" data-index="${i}" ${i===last?'disabled':''} title="Move down" aria-label="Move down">▼</button>
+      </div>
+      <button class="icon-btn" data-action="delete-plugin" data-index="${i}" title="Delete plugin" aria-label="Delete plugin">✕</button>
+    </li>`).join('');
+  el.innerHTML = `
+    <ul class="sidebar-list">${items}</ul>
+    <div class="sidebar-footer">
+      <button class="btn sort-btn" data-action="sort-alpha" title="Sort plugins alphabetically by label">Sort A–Z</button>
+      <button class="btn btn-primary add-plugin-btn" data-action="add-plugin">+ Add Plugin</button>
+    </div>`;
+}
+
+function cvarRowTemplate(i, j, c){
+  const defaultField = c.type === 'bool'
+    ? `<div class="field checkbox-field"><input type="checkbox" id="cvar-default-${i}-${j}" data-array="cvars" data-index="${i}" data-row="${j}" data-field="default" ${c.default ? 'checked' : ''}/><label for="cvar-default-${i}-${j}">Default</label></div>`
+    : `<div class="field"><label for="cvar-default-${i}-${j}">Default</label><input id="cvar-default-${i}-${j}" class="mono" type="${c.type === 'number' ? 'number' : 'text'}" data-array="cvars" data-index="${i}" data-row="${j}" data-field="default" value="${escapeHtml(c.default)}"/></div>`;
+  return `
+    <div class="row-card">
+      <div class="row-grid">
+        <div class="field"><label>Cvar</label><input class="mono" data-array="cvars" data-index="${i}" data-row="${j}" data-field="cvar" value="${escapeHtml(c.cvar)}" placeholder="qlx_example"/></div>
+        <div class="field"><label>Label</label><input data-array="cvars" data-index="${i}" data-row="${j}" data-field="label" value="${escapeHtml(c.label)}"/></div>
+        <div class="field"><label>Type</label>
+          <select data-array="cvars" data-index="${i}" data-row="${j}" data-field="type">
+            <option value="string" ${c.type==='string'?'selected':''}>string</option>
+            <option value="number" ${c.type==='number'?'selected':''}>number</option>
+            <option value="bool" ${c.type==='bool'?'selected':''}>bool</option>
+          </select>
+        </div>
+        ${defaultField}
+        <div class="field"><label>Min</label><input class="mono" type="number" data-array="cvars" data-index="${i}" data-row="${j}" data-field="min" value="${c.min === undefined ? '' : escapeHtml(c.min)}"/></div>
+        <div class="field"><label>Max</label><input class="mono" type="number" data-array="cvars" data-index="${i}" data-row="${j}" data-field="max" value="${c.max === undefined ? '' : escapeHtml(c.max)}"/></div>
+      </div>
+      <div class="field"><label>Description</label><textarea data-array="cvars" data-index="${i}" data-row="${j}" data-field="description">${escapeHtml(c.description)}</textarea></div>
+      <div class="row-card-foot"><button class="btn btn-ghost btn-danger-text" data-action="remove-row" data-array="cvars" data-index="${i}" data-row="${j}">Remove cvar</button></div>
+    </div>`;
+}
+
+function commandRowTemplate(i, j, c){
+  return `
+    <div class="row-card">
+      <div class="row-grid commands">
+        <div class="field"><label>Name</label><input class="mono" data-array="commands" data-index="${i}" data-row="${j}" data-field="name" value="${escapeHtml(c.name)}" placeholder="mycommand"/></div>
+        <div class="field"><label>Usage</label><input class="mono" data-array="commands" data-index="${i}" data-row="${j}" data-field="usage" value="${escapeHtml(c.usage || '')}" placeholder="<optional args>"/></div>
+        <div class="field"><label>Permission</label><input class="mono" type="number" min="0" max="5" data-array="commands" data-index="${i}" data-row="${j}" data-field="permission" value="${c.permission === undefined ? '' : escapeHtml(c.permission)}"/></div>
+        <div class="field"><label>Description</label><textarea data-array="commands" data-index="${i}" data-row="${j}" data-field="description">${escapeHtml(c.description)}</textarea></div>
+      </div>
+      <div class="row-card-foot"><button class="btn btn-ghost btn-danger-text" data-action="remove-row" data-array="commands" data-index="${i}" data-row="${j}">Remove command</button></div>
+    </div>`;
+}
+
+function renderEditor(){
+  const el = document.getElementById('editor-panel');
+  if(!el) return;
+  const i = state.selected;
+  const p = state.data.plugins[i];
+  if(!p){
+    el.innerHTML = `<div class="empty-state">No plugin selected. Add a plugin, or load a file, to get started.</div>`;
+    return;
+  }
+  const cvars = Array.isArray(p.cvars) ? p.cvars : [];
+  const commands = Array.isArray(p.commands) ? p.commands : [];
+  el.innerHTML = `
+    <fieldset>
+      <legend>Plugin details</legend>
+      <div class="field-row">
+        <div class="field"><label for="f-filename">Filename</label><input id="f-filename" class="mono" data-field="filename" data-index="${i}" value="${escapeHtml(p.filename)}" placeholder="myplugin.py"/></div>
+        <div class="field"><label for="f-label">Label</label><input id="f-label" data-field="label" data-index="${i}" value="${escapeHtml(p.label)}"/></div>
+      </div>
+      <div class="field"><label for="f-description">Description</label><textarea id="f-description" data-field="description" data-index="${i}" rows="3">${escapeHtml(p.description)}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label for="f-runtime">Runtime</label><input id="f-runtime" class="mono" data-field="runtime" data-index="${i}" value="${escapeHtml(p.runtime)}"/></div>
+        <div class="field"><label for="f-version">Requires QLSM version</label><input id="f-version" class="mono" data-field="requires_qlsm_version" data-index="${i}" value="${escapeHtml(p.requires_qlsm_version)}" placeholder="1.36.0"/></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <div class="section-head"><legend>Cvars (${cvars.length})</legend><button class="btn" data-action="add-cvar" data-index="${i}">+ Add Cvar</button></div>
+      <div class="rows">${cvars.map((c, j) => cvarRowTemplate(i, j, c)).join('') || '<p style="color:var(--text-dim); font-size:12.5px;">No cvars yet.</p>'}</div>
+    </fieldset>
+
+    <fieldset>
+      <div class="section-head"><legend>Commands (${commands.length})</legend><button class="btn" data-action="add-command" data-index="${i}">+ Add Command</button></div>
+      <div class="rows">${commands.map((c, j) => commandRowTemplate(i, j, c)).join('') || '<p style="color:var(--text-dim); font-size:12.5px;">No commands yet.</p>'}</div>
+    </fieldset>`;
+}
+
+function renderJson(){
+  const el = document.getElementById('json-output');
+  if(!el) return;
+  el.textContent = JSON.stringify(state.data, null, 2);
+}
+
+function renderTabs(){
+  document.getElementById('editor-panel').hidden = state.tab !== 'editor';
+  document.getElementById('json-panel').hidden = state.tab !== 'json';
+  document.getElementById('sidebar').hidden = state.tab !== 'editor';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === state.tab));
+}
+
+function renderShell(){
+  document.getElementById('app').innerHTML = `
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">::</span>
+        <div>
+          <h1>QLSM Repository Manifest Editor</h1>
+          <p class="subtitle">Build the qlsm-repository.json that lists your plugins in QLSM</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" data-action="new-file">New File</button>
+        <button class="btn" data-action="open-load">Load JSON</button>
+        <button class="btn" data-action="load-example">Load Example</button>
+        <div class="export-group">
+          <input id="export-filename" class="mono" value="qlsm-repository.json" aria-label="Export filename"/>
+          <button class="btn btn-primary" data-action="download">Download</button>
+        </div>
+        <button class="btn" data-action="copy">Copy</button>
+        <button class="pill" id="validation-pill" data-action="toggle-issues"></button>
+      </div>
+    </header>
+    <div id="issues-panel" hidden></div>
+    <div class="tabs">
+      <button class="tab" data-tab="editor" data-action="switch-tab">Editor</button>
+      <button class="tab" data-tab="json" data-action="switch-tab">Raw JSON</button>
+    </div>
+    <main class="workspace">
+      <aside id="sidebar"></aside>
+      <section id="editor-panel"></section>
+      <section id="json-panel"><pre id="json-output"></pre></section>
+    </main>`;
+}
+
+function renderAll(){
+  if(!document.getElementById('sidebar')) renderShell();
+  const issues = validateData(state.data);
+  renderPill(issues);
+  renderIssuesPanel(issues);
+  renderSidebar(issues);
+  renderEditor();
+  renderJson();
+  renderTabs();
+}
+
+function updateLight(){
+  const issues = validateData(state.data);
+  renderPill(issues);
+  renderIssuesPanel(issues);
+  renderSidebar(issues);
+  if(state.tab === 'json') renderJson();
+}
+
+function getByPath(i, arrayName, row, field){
+  const p = state.data.plugins[i];
+  if(arrayName) return p[arrayName][row][field];
+  return p[field];
+}
+function setByPath(i, arrayName, row, field, value){
+  const p = state.data.plugins[i];
+  if(arrayName) p[arrayName][row][field] = value;
+  else p[field] = value;
+}
+
+function browserDownload(filename, dataStr){
+  try{
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Saved ${filename}`, 'success');
+  }catch(e){
+    toast('Couldn\'t download the file — try Copy instead.', 'error');
+  }
+}
+
+async function onDownload(){
+  let filename = (document.getElementById('export-filename').value || 'qlsm-repository.json').trim();
+  if(!filename) filename = 'qlsm-repository.json';
+  if(!/\.json$/i.test(filename)) filename += '.json';
+  const dataStr = JSON.stringify(state.data, null, 2);
+  browserDownload(filename, dataStr);
+}
+
+async function onCopy(){
+  const dataStr = JSON.stringify(state.data, null, 2);
+  try{ await navigator.clipboard.writeText(dataStr); toast('Copied JSON to clipboard.', 'success'); }
+  catch(e){ toast('Couldn\'t copy automatically — open the Raw JSON tab and copy manually.', 'error'); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderAll();
+
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-action]');
+    if(!t) return;
+    const action = t.dataset.action;
+
+    if(action === 'select-plugin'){ state.selected = Number(t.dataset.index); renderAll(); }
+    else if(action === 'delete-plugin'){
+      const idx = Number(t.dataset.index);
+      const p = state.data.plugins[idx];
+      openConfirmModal({
+        title: 'Delete plugin?',
+        message: `Remove "${p.label || p.filename || 'this plugin'}" from the manifest. This can't be undone here.`,
+        confirmLabel: 'Delete',
+        danger: true,
+        onConfirm: () => {
+          state.data.plugins.splice(idx, 1);
+          if(state.selected >= state.data.plugins.length) state.selected = state.data.plugins.length - 1;
+          renderAll();
+          toast('Plugin removed.', 'success');
+        }
+      });
+    }
+    else if(action === 'add-plugin'){
+      state.data.plugins.push(newPlugin());
+      state.selected = state.data.plugins.length - 1;
+      state.tab = 'editor';
+      renderAll();
+    }
+    else if(action === 'new-file'){
+      openConfirmModal({
+        title: 'Start a new file?',
+        message: 'This clears every plugin currently open here and starts an empty manifest. Anything already downloaded is unaffected.',
+        confirmLabel: 'Start new file',
+        danger: true,
+        onConfirm: () => {
+          state.data = { plugins: [] };
+          state.selected = -1;
+          renderAll();
+          toast('Started a new file.', 'success');
+        }
+      });
+    }
+    else if(action === 'load-example'){
+      openConfirmModal({
+        title: 'Load the example?',
+        message: 'This replaces everything currently open here with a sample set of plugins you can edit.',
+        confirmLabel: 'Load example',
+        danger: state.data.plugins.length > 0,
+        onConfirm: () => {
+          state.data = clone(DEFAULT_DATA);
+          state.selected = 0;
+          renderAll();
+        }
+      });
+    }
+    else if(action === 'open-load'){ openLoadModal(); }
+    else if(action === 'modal-cancel' || action === 'modal-backdrop'){ if(e.target === t) closeModal(); }
+    else if(action === 'download'){ onDownload(); }
+    else if(action === 'copy'){ onCopy(); }
+    else if(action === 'toggle-issues'){ state.issuesOpen = !state.issuesOpen; renderIssuesPanel(validateData(state.data)); }
+    else if(action === 'goto-issue'){
+      const idx = t.dataset.index;
+      if(idx !== ''){ state.selected = Number(idx); state.tab = 'editor'; renderAll(); }
+    }
+    else if(action === 'switch-tab'){ state.tab = t.dataset.tab; renderTabs(); if(state.tab === 'json') renderJson(); }
+    else if(action === 'move-up' || action === 'move-down'){
+      const idx = Number(t.dataset.index);
+      const target = idx + (action === 'move-up' ? -1 : 1);
+      if(target < 0 || target >= state.data.plugins.length) return;
+      reorderPlugins(idx, target);
+      renderAll();
+    }
+    else if(action === 'sort-alpha'){
+      const ref = state.selected >= 0 ? state.data.plugins[state.selected] : null;
+      state.data.plugins.sort((a, b) => (a.label || a.filename || '').localeCompare(b.label || b.filename || '', undefined, { sensitivity: 'base' }));
+      state.selected = ref ? state.data.plugins.indexOf(ref) : -1;
+      renderAll();
+      toast('Sorted alphabetically by label.', 'success');
+    }
+    else if(action === 'add-cvar'){
+      const i = Number(t.dataset.index);
+      if(!Array.isArray(state.data.plugins[i].cvars)) state.data.plugins[i].cvars = [];
+      state.data.plugins[i].cvars.push(newCvar());
+      renderAll();
+    }
+    else if(action === 'add-command'){
+      const i = Number(t.dataset.index);
+      if(!Array.isArray(state.data.plugins[i].commands)) state.data.plugins[i].commands = [];
+      state.data.plugins[i].commands.push(newCommand());
+      renderAll();
+    }
+    else if(action === 'remove-row'){
+      const arr = t.dataset.array, i = Number(t.dataset.index), row = Number(t.dataset.row);
+      state.data.plugins[i][arr].splice(row, 1);
+      renderAll();
+    }
+  });
+
+  document.addEventListener('input', (e) => {
+    const t = e.target;
+    if(t.id === 'export-filename') return;
+    if(t.type === 'checkbox' || t.tagName === 'SELECT') return;
+    if(t.dataset && t.dataset.field && t.dataset.index !== undefined){
+      const i = Number(t.dataset.index);
+      const arr = t.dataset.array || null;
+      const row = t.dataset.row !== undefined ? Number(t.dataset.row) : null;
+      const field = t.dataset.field;
+      let value = t.value;
+      if(t.type === 'number'){
+        value = t.value === '' ? undefined : Number(t.value);
+      }
+      setByPath(i, arr, row, field, value);
+      updateLight();
+    }
+  });
+
+  document.addEventListener('dragstart', (e) => {
+    const li = e.target.closest('.plugin-row');
+    if(!li){ return; }
+    dragSrcIndex = Number(li.dataset.index);
+    li.classList.add('dragging');
+    if(e.dataTransfer){
+      e.dataTransfer.effectAllowed = 'move';
+      try{ e.dataTransfer.setData('text/plain', String(dragSrcIndex)); }catch(err){}
+    }
+  });
+
+  document.addEventListener('dragover', (e) => {
+    if(dragSrcIndex === null) return;
+    const li = e.target.closest('.plugin-row');
+    if(!li) return;
+    e.preventDefault();
+    const rect = li.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    document.querySelectorAll('.plugin-row').forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+    li.classList.add(before ? 'drag-over-top' : 'drag-over-bottom');
+  });
+
+  document.addEventListener('dragleave', (e) => {
+    const li = e.target.closest('.plugin-row');
+    if(li) li.classList.remove('drag-over-top', 'drag-over-bottom');
+  });
+
+  document.addEventListener('drop', (e) => {
+    if(dragSrcIndex === null) return;
+    const li = e.target.closest('.plugin-row');
+    if(!li){ dragSrcIndex = null; return; }
+    e.preventDefault();
+    const targetIndex = Number(li.dataset.index);
+    const rect = li.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    let insertAt = before ? targetIndex : targetIndex + 1;
+    if(dragSrcIndex < insertAt) insertAt -= 1;
+    reorderPlugins(dragSrcIndex, insertAt);
+    dragSrcIndex = null;
+    renderAll();
+  });
+
+  document.addEventListener('dragend', () => {
+    document.querySelectorAll('.plugin-row').forEach(el => el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom'));
+    dragSrcIndex = null;
+  });
+
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if(t.type === 'checkbox' && t.dataset && t.dataset.field === 'default'){
+      const i = Number(t.dataset.index), row = Number(t.dataset.row);
+      setByPath(i, t.dataset.array, row, 'default', t.checked);
+      updateLight();
+    }
+    else if(t.tagName === 'SELECT' && t.dataset.field === 'type'){
+      const i = Number(t.dataset.index), row = Number(t.dataset.row);
+      state.data.plugins[i].cvars[row].type = t.value;
+      state.data.plugins[i].cvars[row].default = defaultForType(t.value);
+      renderAll();
+    }
+  });
+});
+</script>
+</body>
+</html>
