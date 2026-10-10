@@ -151,7 +151,9 @@ def _run_host_ansible_playbook(host, playbook_name, extravars=None, capture_outp
         log.error(f"Host {host.id} is missing required details (IP, SSH key path, or user) for Ansible.")
         return None, "Host details missing (IP, SSH key, or user)."
 
-    playbook_path = os.path.abspath(f'ansible/playbooks/{playbook_name}')
+    # join, not an f-string: an addon passes the absolute path of a playbook in
+    # its own package directory, and join keeps that instead of nesting it.
+    playbook_path = os.path.abspath(os.path.join('ansible/playbooks', playbook_name))
     inventory_path = os.path.abspath('ansible/inventory/')
 
     base_extravars = {
