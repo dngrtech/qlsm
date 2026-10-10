@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.47.4` | 2026-10-10 | [#246](https://github.com/dngrtech/qlsm/pull/246) | Added a hosted **Repository Manifest Editor** so anyone can build a `qlsm-repository.json` for their plugin repository without running QLSM. |
 | `v1.47.3` | 2026-10-07 | [#243](https://github.com/dngrtech/qlsm/pull/243) | Fixed **Restart QLSM** sometimes staying on "Restarting…" forever, and reloading the page before the restarted QLSM was actually serving. |
 | `v1.47.2` | 2026-10-07 | [#242](https://github.com/dngrtech/qlsm/pull/242) | Bug fixes and improvements. |
 | `v1.47.1` | 2026-10-03 | [#241](https://github.com/dngrtech/qlsm/pull/241) | Bug fixes and improvements. |
