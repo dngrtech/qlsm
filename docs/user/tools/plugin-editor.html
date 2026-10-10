@@ -721,8 +721,8 @@ function cvarRowTemplate(i, j, c){
           </select>
         </div>
         ${defaultField}
-        <div class="field"><label>Min</label><input class="mono" type="number" data-array="cvars" data-index="${i}" data-row="${j}" data-field="min" value="${c.min === undefined ? '' : c.min}"/></div>
-        <div class="field"><label>Max</label><input class="mono" type="number" data-array="cvars" data-index="${i}" data-row="${j}" data-field="max" value="${c.max === undefined ? '' : c.max}"/></div>
+        <div class="field"><label>Min</label><input class="mono" type="number" data-array="cvars" data-index="${i}" data-row="${j}" data-field="min" value="${c.min === undefined ? '' : escapeHtml(c.min)}"/></div>
+        <div class="field"><label>Max</label><input class="mono" type="number" data-array="cvars" data-index="${i}" data-row="${j}" data-field="max" value="${c.max === undefined ? '' : escapeHtml(c.max)}"/></div>
       </div>
       <div class="field"><label>Description</label><textarea data-array="cvars" data-index="${i}" data-row="${j}" data-field="description">${escapeHtml(c.description)}</textarea></div>
       <div class="row-card-foot"><button class="btn btn-ghost btn-danger-text" data-action="remove-row" data-array="cvars" data-index="${i}" data-row="${j}">Remove cvar</button></div>
@@ -735,7 +735,7 @@ function commandRowTemplate(i, j, c){
       <div class="row-grid commands">
         <div class="field"><label>Name</label><input class="mono" data-array="commands" data-index="${i}" data-row="${j}" data-field="name" value="${escapeHtml(c.name)}" placeholder="mycommand"/></div>
         <div class="field"><label>Usage</label><input class="mono" data-array="commands" data-index="${i}" data-row="${j}" data-field="usage" value="${escapeHtml(c.usage || '')}" placeholder="<optional args>"/></div>
-        <div class="field"><label>Permission</label><input class="mono" type="number" min="0" max="5" data-array="commands" data-index="${i}" data-row="${j}" data-field="permission" value="${c.permission === undefined ? '' : c.permission}"/></div>
+        <div class="field"><label>Permission</label><input class="mono" type="number" min="0" max="5" data-array="commands" data-index="${i}" data-row="${j}" data-field="permission" value="${c.permission === undefined ? '' : escapeHtml(c.permission)}"/></div>
         <div class="field"><label>Description</label><textarea data-array="commands" data-index="${i}" data-row="${j}" data-field="description">${escapeHtml(c.description)}</textarea></div>
       </div>
       <div class="row-card-foot"><button class="btn btn-ghost btn-danger-text" data-action="remove-row" data-array="commands" data-index="${i}" data-row="${j}">Remove command</button></div>
