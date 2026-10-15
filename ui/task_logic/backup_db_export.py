@@ -1,5 +1,5 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
-from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Operator, QLInstance, User
+from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User
 from ui.runtime import normalize_runtime
 
 DB_EXPORT_FORMAT_VERSION = 1
@@ -88,6 +88,15 @@ def _operator_row(row):
     }
 
 
+def _notification_row(row):
+    return {
+        'id': row.id, 'source': row.source, 'severity': row.severity,
+        'title': row.title, 'body': row.body, 'link': row.link, 'key': row.key,
+        'created_at': _iso(row.created_at), 'updated_at': _iso(row.updated_at),
+        'resolved_at': _iso(row.resolved_at), 'read_at': _iso(row.read_at),
+    }
+
+
 def serialize_database():
     """Return a JSON-serializable snapshot of every backed-up table."""
     return {
@@ -100,4 +109,5 @@ def serialize_database():
         'app_settings': [_app_setting_row(s) for s in AppSetting.query.order_by(AppSetting.key).all()],
         'binary_metadata': [_binary_meta_row(r) for r in BinaryMetadata.query.order_by(BinaryMetadata.id).all()],
         'operators': [_operator_row(r) for r in Operator.query.order_by(Operator.id).all()],
+        'notifications': [_notification_row(r) for r in Notification.query.order_by(Notification.id).all()],
     }

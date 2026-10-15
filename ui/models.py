@@ -486,3 +486,45 @@ class AddonState(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class Notification(db.Model):
+    """A stored notification shown under the navbar bell.
+
+    Written through ui/notifications.py (core) or ctx.notify() (addons), never
+    directly. `source` is 'core' or the addon id. With a `key`, one open
+    (unresolved) row per (source, key) is kept up to date instead of a new row
+    per report, so a condition that keeps firing never floods the list.
+
+    `updated_at` is the last time the condition was reported and is set only
+    by notify(): marking a row read must not move it to the top of the list,
+    so there is deliberately no onupdate here.
+    """
+    __tablename__ = 'notification'
+
+    id = db.Column(db.Integer, primary_key=True)
+    source = db.Column(db.String(64), nullable=False)
+    severity = db.Column(db.String(16), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    body = db.Column(db.String(1000), nullable=False, default='', server_default='')
+    link = db.Column(db.String(500), nullable=True)
+    key = db.Column(db.String(200), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'source': self.source,
+            'severity': self.severity,
+            'title': self.title,
+            'body': self.body,
+            'link': self.link,
+            'key': self.key,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'read_at': self.read_at.isoformat() if self.read_at else None,
+        }

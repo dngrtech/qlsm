@@ -16,6 +16,7 @@ import importlib.util
 import logging
 import os
 import sys
+import time
 import traceback
 
 from ui.addons.context import AddonContext
@@ -24,6 +25,11 @@ from ui.addons.install import package_stamp
 from ui.addons.manifest import CURRENT_UI_API, MANIFEST_FILENAME, read_manifest
 
 log = logging.getLogger(__name__)
+
+# Hooks that run inline in a latency-sensitive loop, and the seconds after which
+# a handler is logged by addon id. poller.tick handlers run in the poll loop, so
+# a slow one delays the next status poll.
+SLOW_HANDLER_SECONDS = {'poller.tick': 10}
 
 BUNDLED_ADDONS_DIRNAME = 'addons'
 EXTENSION_KEY = 'addons'
@@ -246,13 +252,20 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
             continue
         if not _gates_open(addon, hook, scope_id):
             continue
+        slow_after = SLOW_HANDLER_SECONDS.get(hook)
         for handler in handlers:
+            started = time.monotonic()
             try:
                 value = handler(*args, **kwargs)
             except Exception as e:
                 log.error('Addon %s hook %s failed: %s\n%s',
                           addon.id, hook, e, traceback.format_exc())
                 continue
+            finally:
+                elapsed = time.monotonic() - started
+                if slow_after is not None and elapsed > slow_after:
+                    log.warning('Addon %s hook %s handler took %.1fs (warn threshold %ds)',
+                                addon.id, hook, elapsed, slow_after)
             if hook in LIST_HOOKS:
                 if value:
                     results.extend(value if isinstance(value, (list, tuple)) else [value])

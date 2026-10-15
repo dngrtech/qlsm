@@ -1,11 +1,62 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Menu } from '@headlessui/react';
 import AddonComponentHost from './AddonComponentHost';
 import AddonErrorBoundary from './AddonErrorBoundary';
 import AddonModal from './AddonModal';
 import { resolveAddonIcon } from './addonIcons';
 import { rendersOwnModal } from './addonEntry';
+import { resolveRoute } from './panelRoute';
+import { addonRequest } from '../../services/addons';
 import { useAddonMounts } from '../../contexts/AddonsContext';
+
+/**
+ * The optional status shown after a menu entry's label: a dot (green when
+ * `ok`, grey otherwise) and a short label, from the entry's `status` route
+ * (`{ok: bool, label: str}`, the same shape as a panel's status badge).
+ *
+ * It is rendered inside `Menu.Items`, which unmounts when the menu closes, so
+ * mounting is what fetches: every open asks again, nothing polls while open.
+ * A failed or malformed answer renders nothing -- no spinner, no error -- and
+ * never gets in the way of the entry being clicked.
+ */
+function MenuEntryStatus({ mount, scopeId }) {
+  const route = mount.entry?.status;
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    // Drop the previous entity's answer right away: a stale dot next to a
+    // different host's name is worse than no dot.
+    setStatus(null);
+    if (typeof route !== 'string' || !route) return undefined;
+    const resolved = resolveRoute(route, { scope: mount.scope, scopeId, addonId: mount.addon?.id });
+    // Opening a menu must never mutate anything; the manifest validator
+    // enforces GET and so does this.
+    if (!resolved || resolved.method !== 'GET') return undefined;
+    let cancelled = false;
+    addonRequest(mount.addon?.id, resolved.method, resolved.path)
+      .then((data) => {
+        if (cancelled) return;
+        const valid = data && typeof data.ok === 'boolean'
+          && typeof data.label === 'string' && data.label.trim();
+        setStatus(valid ? { ok: data.ok, label: data.label.trim() } : null);
+      })
+      .catch(() => { if (!cancelled) setStatus(null); });
+    return () => { cancelled = true; };
+  }, [route, mount.scope, mount.addon?.id, scopeId]);
+
+  if (!status) return null;
+  return (
+    <span className="ml-auto flex items-center gap-1.5 pl-3">
+      <span
+        data-testid="addon-menu-status-dot"
+        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${status.ok ? 'bg-emerald-400' : 'bg-gray-400'}`}
+      />
+      <span className="text-xs text-theme-muted truncate max-w-[10rem]" title={status.label}>
+        {status.label}
+      </span>
+    </span>
+  );
+}
 
 /**
  * Addon entries for a host or instance action menu.
@@ -56,6 +107,7 @@ export function useAddonMenu(point, entity, subtitle) {
                 >
                   <Icon size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
                   {mount.label}
+                  <MenuEntryStatus mount={mount} scopeId={scopeId} />
                 </button>
               )}
             </Menu.Item>

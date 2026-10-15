@@ -345,6 +345,12 @@ def deploy_instance_logic(instance_id, admin_levels=None):
                 # Add Instance form (or its preset), into the fresh Redis DB.
                 from .access_permission_sync import write_and_report_admin_levels
                 write_and_report_admin_levels(instance, admin_levels)
+                # A fresh instance's server.cfg is on the host too. Addons that
+                # mirror cvars out of it (the telemetry relay's routing table
+                # from qlx_statsHubServerId) must see this exactly as they see
+                # an Apply, or an id typed into the create form never reaches
+                # them.
+                _addon_contributions('instance.config_applied', instance)
                 return f"Instance {instance_id} deployment successful. Status: RUNNING"
 
         # Handle failures (rc != 0 OR (rc == 0 AND no_hosts_matched))

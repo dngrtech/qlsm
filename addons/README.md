@@ -163,6 +163,42 @@ path has a `.`, `..` or empty segment, which covers a table row's
 `{placeholder}` values: they are filled in from the addon's own response,
 after the manifest was validated.
 
+### `page.nav` -- a navbar entry for the page
+
+An addon `page` is reachable at `/addons/<id>`. Adding `nav` puts a top-level
+entry for it in the navbar, after core's own items and ordered by addon id:
+
+```json
+{ "ui": { "page": { "component": "ui/Page.js",
+  "nav": { "label": "Hosts health", "icon": "activity" } } } }
+```
+
+- `label` -- required, 1-32 characters.
+- `icon` -- optional, a name from the frontend's fixed icon list; falls back
+  to the page's own `icon`, then to the addon's.
+
+The entry follows the same rule as every other mount: it appears only while
+the addon is loaded, compatible with this `ui_api` and switched on from the
+Addons page, and it is highlighted while the page is open. The mobile menu
+lists it as well.
+
+A page with a navbar entry owns its header: core renders no "Addons" back link
+and no title, so render your own title (and any actions) in the page component.
+A page without `nav` keeps core's back link and title, and so does a `nav` page
+whose body cannot be mounted (the addon failed to load or needs a newer
+QLSM). A core that predates `nav` ignores the key (the page still works at
+`/addons/<id>`, there is just no navbar entry).
+
+A `host_menu` or `instance_menu` entry may declare `"status": "GET <route>"`
+to show a small status after its label. The route follows the same rules as a
+panel route (relative to the addon prefix, `{host_id}` / `{instance_id}`
+placeholders) and must be a GET. It answers `{"data": {"ok": true, "label":
+"Streaming"}}`: QLSM shows a green dot when `ok` is true, a grey one
+otherwise, then the label (truncated, full text on hover). The status is
+fetched each time the menu opens and is not refreshed while it stays open. If
+the request fails or the answer is malformed nothing extra is shown, and the
+entry still opens normally. `status` is rejected on other mount points.
+
 ### `live_status_columns` -- a column in core's own players table
 
 Every other mount point gives an addon its own place: a menu entry, a tab, a
@@ -334,6 +370,64 @@ re-checks them whenever the value arrives in a response rather than in a
 manifest -- a `live_status_columns` cell's `icon_url` does, and the manifest
 validator never sees it. An escaping path renders no image at all, rather
 than becoming a credentialed same-origin request to wherever it points.
+
+## Periodic work: `poller.tick`
+
+`ctx.on('poller.tick')` subscribes a handler that runs once per cycle of the
+status poller (every 15 seconds), right after the host poll. It takes no
+arguments and its return value is ignored. Things to know:
+
+- It fires in the `flask run-status-poller` process, not in the web app, so
+  in-memory state a handler keeps there is not visible to request handlers;
+  persist through the addon's settings or the database.
+- Handlers run inline in the poll loop. Keep them short: a handler that takes
+  longer than 10 seconds delays the next poll and is logged as a warning. To
+  act less often than every 15 seconds, count ticks in the handler.
+- A handler that raises is logged and skipped; it cannot stop the poller.
+- The hook is gated at `global` scope: it only fires for an addon that is
+  switched on.
+- `poller.tick` exists only in cores that ship it. On an older core
+  `ctx.on('poller.tick')` raises and marks the addon broken, so an addon that
+  must also run there checks first:
+
+  ```python
+  from ui.addons.hooks import HOOK_SCOPES
+
+  def register(ctx):
+      if 'poller.tick' in HOOK_SCOPES:
+          ctx.on('poller.tick')(tick)
+  ```
+
+## Notifications: `ctx.notify`
+
+`ctx.notify(severity, title, body='', link=None, key=None)` stores a
+notification that shows under the bell in the navbar. `severity` is `info`,
+`warning` or `critical`; `title` is cut at 120 characters and `body` at 1000;
+`link`, if given, must be an in-app path such as `/addons/<id>`. It works from
+a request handler, a task or a `poller.tick` handler alike, and commits the
+current database session.
+
+- Because it commits the session, called from inside a core transaction (a task,
+  a `*.delete` hook) it commits core's pending changes too, and if the commit
+  fails it rolls back the whole session, core's pending work included. Call it
+  where you own the transaction (a request handler, a `poller.tick` handler), or
+  outside other work or at its end.
+
+- Without `key`, every call adds a row.
+- With `key`, a repeat updates the open notification instead of adding
+  another, so a condition you report every tick shows up once. A row the
+  operator already read stays read unless the severity goes up.
+- `ctx.resolve(key)` marks it resolved (shown greyed); the next `notify()` with
+  that key opens a new one. Keys are per addon: two addons using the same key
+  never touch each other's rows.
+- Resolve only after the condition has stayed clear for a while. A condition
+  that flaps opens a new unread row each time it comes back after a resolve.
+- The bell's unread count includes resolved rows nobody has read yet, and read
+  state is shared by all users: one user reading a notification clears it for
+  everyone.
+- To use `ctx.notify` on an older core, check `hasattr(ctx, 'notify')` first.
+- Rows are kept for 30 days after their last update and are part of the
+  database backup.
 
 ## Cross-addon UI contribution (addon-owned hooks)
 

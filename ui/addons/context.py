@@ -83,6 +83,26 @@ class AddonContext:
             host, self.path('playbooks', relative_path), extravars=extravars,
         )
 
+    # ---- notifications --------------------------------------------------
+
+    def notify(self, severity, title, body='', link=None, key=None):
+        """Store a notification under the navbar bell, from this addon.
+
+        `severity` is 'info', 'warning' or 'critical'; `link` an in-app path
+        such as '/addons/<id>'. With `key`, a repeat updates the open
+        notification instead of adding another; resolve(key) closes it, and
+        the next notify() with that key opens a new one. Keys are per addon.
+        """
+        from ui.notifications import notify
+
+        return notify(self.addon_id, severity, title, body=body, link=link, key=key)
+
+    def resolve(self, key):
+        """Resolve this addon's open notification(s) with `key`; returns the count."""
+        from ui.notifications import resolve
+
+        return resolve(self.addon_id, key)
+
     # ---- registration -------------------------------------------------
 
     def blueprint(self, bp):

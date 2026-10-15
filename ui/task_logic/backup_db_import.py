@@ -9,7 +9,7 @@ import datetime
 from ui import db
 from ui.models import (
     ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
-    InstanceStatus, Operator, QLFilterStatus, QLInstance, User,
+    InstanceStatus, Notification, Operator, QLFilterStatus, QLInstance, User,
 )
 from ui.runtime import normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
@@ -68,6 +68,7 @@ def replace_database(data):
     ApiKey.query.delete()
     AppSetting.query.delete()
     Operator.query.delete()
+    Notification.query.delete()
     db.session.flush()
 
     for row in data['hosts']:
@@ -123,6 +124,15 @@ def replace_database(data):
             id=row['id'], name=row['name'], steam_id64=row['steam_id64'],
             default_level=row.get('default_level', 5),
             created_at=_parse_dt(row.get('created_at')), updated_at=_parse_dt(row.get('updated_at')),
+        ))
+
+    # Same for 'notifications'.
+    for row in data.get('notifications') or []:
+        db.session.add(Notification(
+            id=row['id'], source=row['source'], severity=row['severity'],
+            title=row['title'], body=row.get('body') or '', link=row.get('link'), key=row.get('key'),
+            created_at=_parse_dt(row.get('created_at')), updated_at=_parse_dt(row.get('updated_at')),
+            resolved_at=_parse_dt(row.get('resolved_at')), read_at=_parse_dt(row.get('read_at')),
         ))
 
     db.session.flush()

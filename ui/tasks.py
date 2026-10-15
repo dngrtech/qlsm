@@ -284,10 +284,10 @@ def configure_host_watchdog_task(host_id, enabled, config=None, lock_token=None)
 
 @rq.job(timeout=300)
 @with_app_context
-def rename_host_task(host_id, old_name, new_name, lock_token=None):
-    """RQ task entry point for renaming a host (inventory + Ansible)."""
+def rename_host_task(host_id, old_name, new_name, lock_token=None, apply_to_machine=True):
+    """RQ task entry point for renaming a host (inventory, and Ansible when apply_to_machine)."""
     try:
-        return rename_host_logic(host_id, old_name, new_name)
+        return rename_host_logic(host_id, old_name, new_name, apply_to_machine=apply_to_machine)
     finally:
         if lock_token:
             from ui.task_lock import release_lock

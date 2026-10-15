@@ -117,6 +117,7 @@ The Flask application follows the application factory pattern, which provides se
     *   `settings_routes.py`: Handles application settings management (API keys, rate limit config).
     *   `user_routes.py`: Handles user management endpoints.
     *   `operator_routes.py`: CRUD for the Operator directory (name + SteamID64 + default admin level) at `/api/operators`.
+    *   `notification_routes.py`: Lists stored notifications and marks them read (`/api/notifications`); written to by core and by addons through `ui/notifications.py`.
     *   `draft_routes.py`: Handles server-side plugin draft workspaces for preset and instance editing, including tree/content reads, upload, delete, rename, touch, and commit.
     *   `binary_meta_routes.py`: Handles `.so` plugin descriptions for draft file manager sessions.
     *   `script_routes.py`: Handles script management endpoints.
@@ -125,7 +126,7 @@ The Flask application follows the application factory pattern, which provides se
 
 ### Database Models
 
-The application has database models including `User`, `Host`, `QLInstance`, `ConfigPreset`, `ApiKey`, `AppSetting`, `BinaryMetadata`, `Operator`, `PluginRepository`, and `AddonState` (see **Addon System** below).
+The application has database models including `User`, `Host`, `QLInstance`, `ConfigPreset`, `ApiKey`, `AppSetting`, `BinaryMetadata`, `Operator`, `Notification`, `PluginRepository`, and `AddonState` (see **Addon System** below).
 
 **Host Model:** Represents a target server where Quake Live instances can be deployed. These hosts are provisioned via Terraform triggered by the UI.
 

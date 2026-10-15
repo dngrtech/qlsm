@@ -87,6 +87,14 @@ HOOK_SCOPES = {
     # touching player-ranks' code. Contributions are merged into player-ranks'
     # own provider registry, after its built-in ones, deduped by `id`.
     'player_ranks.providers': 'global',
+    # Fires once per status-poller cycle (every 15s), after the host poll, from
+    # the `flask run-status-poller` process -- not from the web app, so a
+    # handler sees that process's app context and its own module state, never
+    # the web workers'. Takes no arguments; a handler that wants a slower
+    # cadence counts ticks itself. Handlers run inline: a slow one delays the
+    # next poll, and the poller logs a warning past 10s. Gated at 'global',
+    # the whole-addon on/off switch, since a tick belongs to no one host.
+    'poller.tick': 'global',
 }
 
 # Deliberately NOT declared until something needs them, because a hook nobody

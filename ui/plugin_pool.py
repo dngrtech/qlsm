@@ -124,6 +124,19 @@ def pool_file_hashes(runtime, extensions=None):
     return merged
 
 
+def pool_package_hashes(runtime, dirnames, extensions=None):
+    """{relpath: sha256} of the named package folders (a plugin's helper
+    package, e.g. match_restore.py's restore/) in the merged view, operator
+    copy winning per file. Same relpath shape as `package_files`."""
+    from ui.update_checks import hash_package_trees  # local, as in pool_file_hashes
+    if not is_valid_runtime(runtime):
+        return {}
+    merged = {}
+    for root in reversed(pool_dirs(runtime)):
+        merged.update(hash_package_trees(root, dirnames, extensions=extensions))
+    return merged
+
+
 def shared_plugin_path(runtime, path):
     """Absolute pool path when `path` names a shared plugin exactly (a bare
     root filename, never a nested or relative path), else None."""

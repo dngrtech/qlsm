@@ -5,6 +5,39 @@ from sqlalchemy.orm.attributes import flag_modified
 log = logging.getLogger(__name__)
 
 
+def record_host_error(host_id, message, attempts=3):
+    """Best effort: put the host in ERROR with a log line after a task died
+    with an unhandled exception. Returns True when the write was committed.
+
+    The task's shared session may be unusable here: a flush that failed (for
+    example SQLite "database is locked" after busy_timeout) leaves it waiting
+    for a rollback, and every later write then fails with PendingRollbackError,
+    which is how a finished setup used to leave a host in CONFIGURING. So every
+    attempt rolls back, reloads the host and writes again, a few seconds apart.
+    """
+    import time
+
+    from ui import db
+    from ui.models import Host, HostStatus
+
+    for attempt in range(1, attempts + 1):
+        try:
+            db.session.rollback()
+            host = db.session.get(Host, host_id)
+            if host is None:
+                return False
+            host.status = HostStatus.ERROR
+            append_log(host, message)
+            db.session.commit()
+            return True
+        except Exception as err:
+            log.error(f"Attempt {attempt}/{attempts} to record ERROR for host {host_id} failed: {err}")
+            if attempt < attempts:
+                time.sleep(2 * attempt)
+    db.session.rollback()
+    return False
+
+
 def append_log(model_instance, message):
     """Appends a timestamped log message to the instance's log field."""
     if not model_instance:

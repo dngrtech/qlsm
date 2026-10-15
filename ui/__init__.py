@@ -279,6 +279,9 @@ def create_app(test_config=None):
     from ui.routes.system_routes import system_api_bp
     api_bp.register_blueprint(system_api_bp, url_prefix='/system')
 
+    from ui.routes.notification_routes import notification_api_bp
+    api_bp.register_blueprint(notification_api_bp, url_prefix='/notifications')
+
     app.register_blueprint(api_bp)
     app.register_blueprint(index_bp) # Register index_bp
 

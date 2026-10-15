@@ -9,7 +9,7 @@ from ui import db
 from ui.constants import GAME_UDP_PORTS, RCON_TCP_PORTS
 from ui.models import Host, HostStatus, QLFilterStatus
 from ui.runtime import host_runtime
-from .common import append_log # Import from the common module
+from .common import append_log, record_host_error # Import from the common module
 # Note: No need to import _run_ansible_playbook as this task uses direct subprocess calls
 
 log = logging.getLogger(__name__)
@@ -80,11 +80,23 @@ def _dispatch_addon_payload_sync(host):
     merely tags along with.
     """
     try:
+        # Setup has just appended its ansible output to host.logs without a
+        # commit. Handlers share this session, so their first query would
+        # autoflush that UPDATE and open a SQLite write transaction that stays
+        # open while the handler runs its own ansible; every other worker's
+        # write then times out with "database is locked". Commit first.
+        db.session.commit()
+
         from ui.addons import dispatch
 
         dispatch('host.payload_sync', host.id, host.id)
     except Exception as e:
         log.warning('Addon host.payload_sync hook skipped for host %s: %s', host.id, e)
+    finally:
+        # A handler whose flush failed leaves the shared session waiting for a
+        # rollback, which would fail the setup task's final status write.
+        if not db.session.is_active:
+            db.session.rollback()
 
 
 def setup_host_ansible_logic(host_id, rerun=False):
@@ -306,12 +318,5 @@ def setup_host_ansible_logic(host_id, rerun=False):
     except Exception as e:
         log.exception(f"Unhandled exception in setup_host_ansible_logic for host_id {host_id}: {e}")
         if host: # Check if host object was retrieved
-            try:
-                # Avoid overwriting specific error status if already set
-                if host.status != HostStatus.ERROR:
-                    host.status = HostStatus.ERROR
-                append_log(host, f"Task failed with unhandled exception: {e}")
-                db.session.commit()
-            except Exception as commit_err:
-                 log.error(f"Failed to update host status/log on unhandled exception: {commit_err}")
+            record_host_error(host_id, f"Task failed with unhandled exception: {e}")
         return f"Error during host {host_id} Ansible setup: {e}"

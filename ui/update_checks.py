@@ -43,6 +43,28 @@ def hash_local_tree(root_dir, extensions=None):
     return result
 
 
+def hash_package_trees(root_dir, dirnames, extensions=None):
+    """Returns {relpath: sha256} for every file under the named immediate
+    subdirectories of root_dir, recursively. relpath is forward-slash and
+    starts with the subdirectory name (e.g. 'restore/items.py'), the same
+    shape `package_files` uses. __pycache__ is skipped. Directories that do
+    not exist are simply empty."""
+    result = {}
+    for dirname in dirnames:
+        top = os.path.join(root_dir, dirname)
+        if not os.path.isdir(top):
+            continue
+        for current, subdirs, files in os.walk(top):
+            subdirs[:] = [d for d in subdirs if d != '__pycache__']
+            for name in files:
+                if extensions and not name.endswith(extensions):
+                    continue
+                full = os.path.join(current, name)
+                rel = os.path.relpath(full, root_dir).replace(os.sep, '/')
+                result[rel] = hash_file(full)
+    return result
+
+
 def parse_sha256sum_output(output, strip_prefix=None):
     """Parses `sha256sum <files>` output ("<hash>  <path>\\n" per line) into
     {relpath: hash}. strip_prefix removes a leading directory so remote

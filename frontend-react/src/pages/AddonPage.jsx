@@ -49,26 +49,34 @@ function AddonPage() {
   }
 
   const Icon = resolveAddonIcon(entry.icon || addon.ui?.icon);
+  // A page with a navbar entry is a destination of its own, not a child of
+  // the Addons list: it draws its own title and actions.
+  const mounted = Boolean(addon.loaded && addon.ui_mountable);
+  const ownsHeader = Boolean(entry.nav) && mounted;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8">
-      <Link to="/addons" className="mb-4 inline-flex items-center gap-1 text-xs text-theme-muted hover:text-theme-primary">
-        <ChevronLeft size={14} /> Addons
-      </Link>
+      {!ownsHeader && (
+        <>
+          <Link to="/addons" className="mb-4 inline-flex items-center gap-1 text-xs text-theme-muted hover:text-theme-primary">
+            <ChevronLeft size={14} /> Addons
+          </Link>
 
-      <div className="mb-6 flex items-center gap-3">
-        <Icon size={22} className="text-theme-muted" />
-        <div>
-          <h1 className="text-xl font-semibold text-theme-primary">
-            {entry.label || addon.name}
-          </h1>
-          {addon.description && (
-            <p className="mt-0.5 text-sm text-theme-secondary">{addon.description}</p>
-          )}
-        </div>
-      </div>
+          <div className="mb-6 flex items-center gap-3">
+            <Icon size={22} className="text-theme-muted" />
+            <div>
+              <h1 className="text-xl font-semibold text-theme-primary">
+                {entry.label || addon.name}
+              </h1>
+              {addon.description && (
+                <p className="mt-0.5 text-sm text-theme-secondary">{addon.description}</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
-      {addon.loaded && addon.ui_mountable ? (
+      {mounted ? (
         <AddonPanel addon={addon} entry={entry} panel={panel} scope="global" scopeId={0} />
       ) : (
         <p className="text-sm" style={{ color: 'var(--accent-danger)' }}>

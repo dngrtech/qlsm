@@ -1,6 +1,8 @@
+import datetime
+
 import pytest
 from ui import db
-from ui.models import Host, QLInstance, User, ConfigPreset, ApiKey, AppSetting, BinaryMetadata, HostStatus, InstanceStatus
+from ui.models import Host, QLInstance, User, ConfigPreset, ApiKey, AppSetting, BinaryMetadata, HostStatus, InstanceStatus, Notification
 from ui.task_logic.backup_db_export import serialize_database
 from ui.task_logic.backup_db_import import replace_database, BackupImportError
 
@@ -79,6 +81,39 @@ class TestReplaceDatabase:
             db.session.commit()
             ids = [h.id for h in Host.query.all()]
             assert len(ids) == len(set(ids))  # no collision
+
+    def test_notifications_round_trip(self, app):
+        _seed(app)
+        with app.app_context():
+            db.session.add(Notification(
+                source='sample-addon', severity='critical', title='Host down', body='details',
+                link='/servers', key='host-1', resolved_at=datetime.datetime(2026, 10, 1, 12, 0),
+                read_at=datetime.datetime(2026, 10, 1, 12, 5),
+            ))
+            db.session.commit()
+            exported = serialize_database()
+            assert len(exported['notifications']) == 1
+            db.session.add(Notification(source='core', severity='info', title='not in backup'))
+            db.session.commit()
+
+            replace_database(exported)
+            db.session.commit()
+            row = Notification.query.one()
+            assert (row.source, row.severity, row.title, row.body, row.link, row.key) == (
+                'sample-addon', 'critical', 'Host down', 'details', '/servers', 'host-1')
+            assert row.resolved_at == datetime.datetime(2026, 10, 1, 12, 0)
+            assert row.read_at == datetime.datetime(2026, 10, 1, 12, 5)
+
+    def test_backup_without_notifications_restores(self, app):
+        _seed(app)
+        with app.app_context():
+            db.session.add(Notification(source='core', severity='info', title='stale'))
+            db.session.commit()
+            exported = serialize_database()
+            del exported['notifications']  # a backup taken before the table existed
+            replace_database(exported)
+            db.session.commit()
+            assert Notification.query.count() == 0
 
     def test_rejects_missing_format_version(self, app):
         with app.app_context():

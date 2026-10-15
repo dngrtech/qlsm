@@ -27,8 +27,10 @@
 
 import os
 
-from ui.update_checks import hash_local_tree, parse_sha256sum_output, diff_trees, PLUGIN_EXTENSIONS
-from ui.plugin_pool import pool_file_hashes
+from ui.update_checks import (
+    hash_local_tree, hash_package_trees, parse_sha256sum_output, diff_trees, PLUGIN_EXTENSIONS,
+)
+from ui.plugin_pool import pool_file_hashes, pool_package_hashes
 from ui.runtime import host_runtime, runtime_paths
 from .ansible_runner import run_host_ansible_adhoc
 
@@ -72,10 +74,34 @@ def check_instance_selected_plugins(host, instance):
     (configs/{host}/{instance}/scripts/) — purely local, no SSH needed.
     Only files present in both are compared, so every change is "modified"
     (see module docstring for why missing pool files aren't reported)."""
+    scripts_dir = _instance_scripts_dir(host.name, instance.id)
     source = _pool_hashes(host)
-    target = hash_local_tree(_instance_scripts_dir(host.name, instance.id), extensions=PLUGIN_EXTENSIONS)
+    target = hash_local_tree(scripts_dir, extensions=PLUGIN_EXTENSIONS)
     shared = source.keys() & target.keys()
-    return diff_trees({n: source[n] for n in shared}, {n: target[n] for n in shared})
+    changes = diff_trees({n: source[n] for n in shared}, {n: target[n] for n in shared})
+
+    # A package-style plugin (match_restore.py + restore/) keeps helper
+    # modules in a subfolder. The flat comparison above never sees them, so a
+    # new match_restore.py could sit next to an old restore/ for ever. Compare
+    # every helper folder the instance already carries against the same folder
+    # in the pool; a pool file new to such a folder is "added" (the package is
+    # only loadable as a whole). Files only the instance has are not reported:
+    # apply never deletes.
+    package_dirs = _instance_package_dirs(scripts_dir)
+    if package_dirs:
+        source_pkg = pool_package_hashes(host_runtime(host), package_dirs, extensions=PLUGIN_EXTENSIONS)
+        target_pkg = hash_package_trees(scripts_dir, package_dirs, extensions=PLUGIN_EXTENSIONS)
+        changes += [c for c in diff_trees(source_pkg, target_pkg) if c["change"] != "removed"]
+    return sorted(changes, key=lambda c: c["name"])
+
+
+def _instance_package_dirs(scripts_dir):
+    """Names of the helper folders directly under an instance's scripts dir."""
+    try:
+        return sorted(e.name for e in os.scandir(scripts_dir)
+                      if e.is_dir() and e.name != '__pycache__' and not e.name.startswith('.'))
+    except OSError:
+        return []
 
 
 def check_host_updates(host):

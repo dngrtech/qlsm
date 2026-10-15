@@ -91,3 +91,15 @@ def test_deploy_writes_the_create_form_admins(app, instance_in_db, monkeypatch):
         assert "successful" in result
         assert calls == [(instance_in_db.id, {ADMIN: 4})]
         assert refreshed.status == InstanceStatus.RUNNING
+
+
+def test_deploy_announces_the_config_to_addons_like_an_apply(app, instance_in_db, monkeypatch):
+    """A new instance must reach addons through instance.config_applied too:
+    the telemetry relay builds its routing table from that hook, so an id set
+    in the create form would otherwise stay unrouted until the first Apply."""
+    _capture_writes(monkeypatch, False)
+    hooks = []
+    monkeypatch.setattr(mod, "_addon_contributions", lambda hook, inst: hooks.append((hook, inst.id)) or [])
+    with app.app_context():
+        mod.deploy_instance_logic(instance_in_db.id)
+        assert ("instance.config_applied", instance_in_db.id) in hooks

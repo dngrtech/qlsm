@@ -61,6 +61,7 @@ export default function HostDetailDrawer({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [ipCopied, setIpCopied] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
+  const [applyNameToMachine, setApplyNameToMachine] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [editedNameError, setEditedNameError] = useState(null);
   const [isUpdatingName, setIsUpdatingName] = useState(false);
@@ -132,9 +133,9 @@ export default function HostDetailDrawer({
   };
 
   const handleStartEditName = () => {
-    if (internalHost) { setEditedName(internalHost.name || ''); setIsEditingName(true); setTimeout(() => nameInputRef.current?.focus(), 0); }
+    if (internalHost) { setEditedName(internalHost.name || ''); setApplyNameToMachine(false); setIsEditingName(true); setTimeout(() => nameInputRef.current?.focus(), 0); }
   };
-  const handleCancelEditName = () => { setIsEditingName(false); setEditedName(''); setEditedNameError(null); };
+  const handleCancelEditName = () => { setIsEditingName(false); setEditedName(''); setEditedNameError(null); setApplyNameToMachine(false); };
 
   const handleSaveEditName = async () => {
     if (!internalHost) return;
@@ -145,7 +146,9 @@ export default function HostDetailDrawer({
     if (trimmedName === internalHost.name) { setIsEditingName(false); return; }
     setIsUpdatingName(true);
     try {
-      const response = await updateHost(internalHost.id, { name: trimmedName });
+      const payload = { name: trimmedName };
+      if (internalHost.is_standalone) payload.apply_to_machine = applyNameToMachine;
+      const response = await updateHost(internalHost.id, payload);
       const updatedName = response.data?.name || trimmedName;
       setInternalHost(prev => ({ ...prev, name: updatedName }));
       addNotification(`Host name updated to "${updatedName}".`, 'success');
@@ -247,6 +250,13 @@ export default function HostDetailDrawer({
                               </button>
                             </div>
                             {editedNameError && <p className="text-sm" style={{ color: 'var(--accent-danger)' }}>{editedNameError}</p>}
+                            {internalHost.is_standalone && (
+                              <label className="flex items-start gap-2 mt-1 text-xs text-theme-muted cursor-pointer">
+                                <input type="checkbox" className="mt-0.5" checked={applyNameToMachine}
+                                  onChange={(e) => setApplyNameToMachine(e.target.checked)} disabled={isUpdatingName} />
+                                <span>Also rename the machine itself (hostname, /etc/hosts). Leave off to change the name inside QLSM only.</span>
+                              </label>
+                            )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">

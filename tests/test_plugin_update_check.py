@@ -142,3 +142,77 @@ def test_check_common_pool_uses_the_operator_copy_over_the_built_in(mock_adhoc, 
     assert error is None
     names = {c["name"]: c["change"] for c in changes}
     assert names == {"balance.py": "modified", "backfire.py": "added"}
+
+
+def _host_with_instance(name):
+    from ui.database import db
+    from ui.models import QLInstance
+
+    host = create_host(name=name, provider='vultr', status=HostStatus.ACTIVE)
+    inst = QLInstance(name='inst-1', port=27960, hostname='server1', host_id=host.id, status=InstanceStatus.RUNNING)
+    db.session.add(inst)
+    db.session.commit()
+    scripts_dir = os.path.join('configs', host.name, str(inst.id), 'scripts')
+    os.makedirs(scripts_dir, exist_ok=True)
+    return host, inst, scripts_dir
+
+
+def _write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        f.write(text)
+
+
+def test_check_instance_selected_plugins_sees_stale_package_folder(app, temp_config_dir):
+    pool_dir = os.path.abspath(MINQLX_PLUGINS_POOL_DIR)
+    _write(os.path.join(pool_dir, 'pkg_plugin.py'), 'same')
+    _write(os.path.join(pool_dir, 'restore', '__init__.py'), 'same')
+    _write(os.path.join(pool_dir, 'restore', 'items.py'), 'new items with note_item_pickup')
+    _write(os.path.join(pool_dir, 'restore', 'fresh.py'), 'module added to the package upstream')
+
+    with app.app_context():
+        host, inst, scripts_dir = _host_with_instance('check-package-host')
+        _write(os.path.join(scripts_dir, 'pkg_plugin.py'), 'same')
+        _write(os.path.join(scripts_dir, 'restore', '__init__.py'), 'same')
+        _write(os.path.join(scripts_dir, 'restore', 'items.py'), 'old items')
+        _write(os.path.join(scripts_dir, 'restore', 'custom_only.py'), 'only the instance has it')
+        _write(os.path.join(scripts_dir, 'restore', '__pycache__', 'items.cpython-312.pyc.py'), 'ignored')
+
+        changes = check_instance_selected_plugins(host, inst)
+
+    assert changes == [
+        {"name": "restore/fresh.py", "change": "added"},
+        {"name": "restore/items.py", "change": "modified"},
+    ]
+
+
+def test_check_instance_selected_plugins_ignores_package_the_instance_lacks(app, temp_config_dir):
+    pool_dir = os.path.abspath(MINQLX_PLUGINS_POOL_DIR)
+    _write(os.path.join(pool_dir, 'restore', 'items.py'), 'pool only package')
+
+    with app.app_context():
+        host, inst, scripts_dir = _host_with_instance('check-nopackage-host')
+        _write(os.path.join(scripts_dir, 'other.py'), 'x')
+
+        assert check_instance_selected_plugins(host, inst) == []
+
+
+def test_apply_copies_package_members_and_refuses_unsafe_paths(app, temp_config_dir):
+    from ui.task_logic.ansible_plugin_update import _copy_selected_plugin_files
+
+    pool_dir = os.path.abspath(MINQLX_PLUGINS_POOL_DIR)
+    _write(os.path.join(pool_dir, 'restore', 'items.py'), 'new items')
+    _write(os.path.join(pool_dir, 'plain.py'), 'plain')
+
+    with app.app_context():
+        host, inst, scripts_dir = _host_with_instance('apply-package-host')
+        applied, skipped = _copy_selected_plugin_files(
+            host, inst,
+            ['restore/items.py', 'plain.py', '../evil.py', 'restore/../../evil.py', '/abs/x.py', 'restore//x.py', 'restore/nope.py'],
+        )
+
+        assert sorted(applied) == ['plain.py', 'restore/items.py']
+        assert sorted(skipped) == sorted(['../evil.py', 'restore/../../evil.py', '/abs/x.py', 'restore//x.py', 'restore/nope.py'])
+        with open(os.path.join(scripts_dir, 'restore', 'items.py')) as f:
+            assert f.read() == 'new items'
+        assert not os.path.exists(os.path.join(scripts_dir, '..', 'evil.py'))

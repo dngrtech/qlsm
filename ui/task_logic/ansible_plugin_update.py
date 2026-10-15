@@ -26,7 +26,7 @@ from flask import current_app
 
 from ui.models import HostStatus, InstanceStatus
 from ui.database import get_host, update_host, update_instance
-from ui.plugin_pool import resolve_pool_file
+from ui.plugin_pool import resolve_pool_file, resolve_pool_path
 from ui.runtime import host_runtime, runtime_extravars
 from .ansible_runner import _run_host_ansible_playbook
 
@@ -37,14 +37,31 @@ log = logging.getLogger(__name__)
 def _copy_selected_plugin_files(host, instance, filenames):
     """Copies filenames from the merged pool (operator copy wins) into this
     instance's selected-scripts directory. Returns (applied, skipped)
-    filename lists. filenames are basenames only (os.path.basename applied
-    defensively — this list ultimately comes from a JSON request body)."""
+    filename lists. A name is a bare filename (os.path.basename applied
+    defensively — this list ultimately comes from a JSON request body) or a
+    forward-slash path into a plugin's helper package ('restore/items.py')."""
     runtime = host_runtime(host)
     dest_dir = os.path.abspath(os.path.join('configs', host.name, str(instance.id), 'scripts'))
     os.makedirs(dest_dir, exist_ok=True)
 
     applied, skipped = [], []
     for raw_name in filenames:
+        if isinstance(raw_name, str) and '/' in raw_name:
+            # A package member such as 'restore/items.py'. Every segment is
+            # checked and the destination must stay inside dest_dir.
+            parts = raw_name.split('/')
+            if any(not p or p in ('.', '..') or '\\' in p or ':' in p for p in parts):
+                skipped.append(raw_name)
+                continue
+            src = resolve_pool_path(runtime, raw_name)
+            dest = os.path.abspath(os.path.join(dest_dir, *parts))
+            if src is None or os.path.commonpath([dest_dir, dest]) != dest_dir:
+                skipped.append(raw_name)
+                continue
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy2(src, dest)
+            applied.append(raw_name)
+            continue
         name = os.path.basename(raw_name)
         src = resolve_pool_file(runtime, name) if name else None
         if src is None:

@@ -7,12 +7,15 @@ import click
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 15  # seconds
+# A slow poller.tick handler is logged by addon id in ui.addons.registry.dispatch.
 
 
 def register_cli_commands(app):
     @app.cli.command('run-status-poller')
     def run_status_poller():
         """Daemon: polls game server status from game host Redis via SSH every 15s."""
+        from ui import db
+        from ui.addons import dispatch
         from ui.task_logic.server_status_poll import poll_all_hosts
 
         stop_event = threading.Event()
@@ -30,6 +33,17 @@ def register_cli_commands(app):
                 poll_all_hosts()
             except Exception as e:
                 logger.error(f"Poll cycle failed: {e}", exc_info=True)
+            try:
+                dispatch('poller.tick')
+            except Exception as e:
+                logger.error(f"poller.tick dispatch failed: {e}", exc_info=True)
+            # dispatch() swallows handler errors, so a handler that left this
+            # process's one session needing a rollback would otherwise break
+            # every later poll cycle. Handlers commit their own work.
+            try:
+                db.session.rollback()
+            except Exception as e:
+                logger.error(f"Session rollback after poller.tick failed: {e}", exc_info=True)
             stop_event.wait(POLL_INTERVAL)
         logger.info("Status poller stopped")
 

@@ -115,14 +115,17 @@ def _update_inventory_file(old_name, new_name, host):
         return False, error_msg
 
 
-def rename_host_logic(host_id, old_name, new_name):
+def rename_host_logic(host_id, old_name, new_name, apply_to_machine=True):
     """
     Handle host rename: update inventory file and run Ansible playbook.
 
     This task is called AFTER the database has been updated with the new name.
     It:
     1. Updates the inventory file (rename + update content)
-    2. Runs the rename_host.yml playbook to update the remote server's hostname
+    2. Renames the config folder
+    3. Runs the rename_host.yml playbook to update the remote server's hostname,
+       unless apply_to_machine is False (the name then only changes inside QLSM
+       and the machine's own hostname, /etc/hosts and cloud-init are not touched)
     """
     host = get_host(host_id)
     if not host:
@@ -167,6 +170,15 @@ def rename_host_logic(host_id, old_name, new_name):
         # Refresh host object to get updated logs
         host = get_host(host_id)
         update_host(host.id, logs=f"Config folder renamed successfully.\n{host.logs or original_logs}")
+
+        if not apply_to_machine:
+            current_app.logger.info(f"Host {old_name} renamed to {new_name} inside QLSM only; remote hostname left unchanged.")
+            update_host(
+                host.id,
+                status=HostStatus.ACTIVE,
+                logs=f"Host renamed from '{old_name}' to '{new_name}' inside QLSM only. The machine's hostname was not changed.\n{original_logs}"
+            )
+            return True
 
         # Step 3: Run the Ansible playbook to rename the host on the remote server
         current_app.logger.info(f"Step 3: Running rename_host.yml playbook for host {new_name}")

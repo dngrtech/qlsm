@@ -1238,6 +1238,46 @@ The engine cvars and console commands the config editor's autocomplete is built 
 - `qlx_*` plugin cvars are deliberately **not** in this catalog — those come from the plugin manifests of the server being edited (`ui/plugin_manifest.py`).
 - A missing or unreadable catalog file returns an empty catalog (`version: 0`, `etag: "empty"`) rather than an error, so autocomplete degrades to plugin cvars instead of breaking the editor.
 
+## Notifications
+
+Stored notifications shown under the bell in the navbar. Core and addons write them (`ctx.notify`, see the [addon guide](../addons/README.md)); the API only lists them and records that they were read. All three endpoints require authentication, like the rest of the API.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/notifications` | GET | Newest first (by `updated_at`). `?limit=` is clamped to 1-100 (default 20, an unparsable value falls back to it); `?unread=1` limits the list to unread rows |
+| `/notifications/<id>/read` | POST | Mark one notification read. Idempotent; `404` if it does not exist |
+| `/notifications/read-all` | POST | Mark every unread notification read: `{data: {updated}}` |
+
+### List Notifications Response
+
+```json
+{
+  "data": {
+    "notifications": [
+      {
+        "id": 7,
+        "source": "core",
+        "severity": "warning",
+        "title": "Host germany is slow",
+        "body": "",
+        "link": "/servers",
+        "key": "host-slow:3",
+        "created_at": "2026-10-15T09:00:00.000000",
+        "updated_at": "2026-10-15T09:10:00.000000",
+        "resolved_at": null,
+        "read_at": null
+      }
+    ],
+    "unread_count": 1
+  }
+}
+```
+
+- `unread_count` is the total number of unread rows, whatever `limit` and `unread` say, so a client can poll with `limit=1`. It includes resolved-but-unread rows: a condition that has already cleared still counts until someone reads it.
+- Read state is shared by all users: reading a notification, or all of them, clears it for everyone.
+- `severity` is `info`, `warning` or `critical`; `source` is `core` or an addon id. `link`, when set, is an in-app path.
+- Rows are deleted 30 days after their last update.
+
 ## System
 
 qlsm's own process, not the servers it manages. Used to activate addons: they register during `create_app()`, and Flask cannot hot-add a blueprint to a live app, so an addon installed at runtime stays `pending_restart` until the process builds the app again.

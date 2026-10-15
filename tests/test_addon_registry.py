@@ -7,6 +7,8 @@ blows up mid-deploy -- each must be contained and visible, never fatal.
 import json
 import os
 import textwrap
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -389,3 +391,38 @@ def test_ctx_path_refuses_to_escape_the_addon_directory(addon_app):
     assert ctx.path('ui', 'panel.js').startswith(os.path.abspath(ctx.root_dir))
     with pytest.raises(ValueError):
         ctx.path('..', '..', 'terraform', 'ssh-keys')
+
+
+def _slow_tick_app(addon_app):
+    build, packages, _ = addon_app
+    write_addon(packages, 'sluggish', manifest={'id': 'sluggish', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('poller.tick')
+            def tick():
+                return 'ticked'
+    ''')
+    return build()
+
+
+def _dispatch_tick(app, readings):
+    """Dispatch poller.tick with monotonic() returning `readings`; returns the
+    warnings the registry logged."""
+    ticks = iter(readings)
+    with app.app_context():
+        registry.get_addon('sluggish').ctx.settings.set_enabled('global', 0, True)
+        with patch('ui.addons.registry.time', SimpleNamespace(monotonic=lambda: next(ticks))),                 patch.object(registry.log, 'warning') as warning:
+            assert registry.dispatch('poller.tick') == ['ticked']
+    return warning
+
+
+def test_a_slow_poller_tick_handler_is_logged_by_addon_id(addon_app):
+    # monotonic() is read before and after the handler: 12s apart
+    warning = _dispatch_tick(_slow_tick_app(addon_app), [100.0, 112.0])
+    warning.assert_called_once()
+    message = warning.call_args.args[0] % warning.call_args.args[1:]
+    assert message.startswith('Addon sluggish hook poller.tick handler took 12.0s')
+
+
+def test_a_fast_poller_tick_handler_logs_no_warning(addon_app):
+    warning = _dispatch_tick(_slow_tick_app(addon_app), [100.0, 100.5])
+    warning.assert_not_called()
