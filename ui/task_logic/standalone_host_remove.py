@@ -8,7 +8,7 @@ from ui import db
 from ui.models import Host, HostStatus
 from ui.routes.self_host_helpers import remove_authorized_key
 from ui.standalone_ssh import remove_managed_key as remove_managed_key_via_key
-from .common import append_log
+from .common import append_log, record_task_failure
 from .standalone_inventory import inventory_filename_for_host
 
 log = logging.getLogger(__name__)
@@ -159,10 +159,11 @@ def remove_standalone_host_logic(host_id):
     except Exception as e:
         log.exception(f"Unhandled exception in remove_standalone_host_logic for host_id {host_id}: {e}")
         if host and host.status != HostStatus.ERROR:
-            try:
+            failure_message = f"Task failed with unhandled exception: {e}"
+
+            def _mark_failed():
                 host.status = HostStatus.ERROR
-                append_log(host, f"Task failed with unhandled exception: {e}")
-                db.session.commit()
-            except Exception as commit_err:
-                log.error(f"Failed to update host status/log on unhandled exception: {commit_err}")
+                append_log(host, failure_message)
+
+            record_task_failure(_mark_failed)
         return f"Error during standalone host {host_id} removal: {e}"

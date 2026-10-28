@@ -156,7 +156,12 @@ class QLInstance(db.Model):
 
     # Foreign Key to Host
     host_id = db.Column(db.Integer, db.ForeignKey('host.id'), nullable=False)
-    
+
+    # Changes synced without a restart (see ui/pending_changes.py).
+    pending_changes = db.relationship(
+        'PendingInstanceChange', lazy=True, cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
         # Access host name via the backref relationship
         host_name = self.host.name if self.host else "No Host"
@@ -301,6 +306,38 @@ class AppSetting(db.Model):
 
     def to_dict(self):
         return {'key': self.key, 'value': self.value}
+
+
+class PendingInstanceChange(db.Model):
+    """One save (or plugin update) whose files reached the host but are not
+    live yet because the instance was not restarted. Cleared on restart.
+
+    `changes_json` holds {"files": [...], "settings": [...]} as built by
+    ui/pending_changes.py.
+    """
+    __tablename__ = 'pending_instance_change'
+
+    id = db.Column(db.Integer, primary_key=True)
+    instance_id = db.Column(db.Integer, db.ForeignKey('ql_instance.id'), nullable=False, index=True)
+    source = db.Column(db.String(32), nullable=False)
+    changes_json = db.Column(db.Text, nullable=False, default='{}', server_default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        try:
+            changes = json.loads(self.changes_json or '{}')
+        except (TypeError, ValueError):
+            changes = {}
+        if not isinstance(changes, dict):
+            changes = {}
+        return {
+            'id': self.id,
+            'instance_id': self.instance_id,
+            'source': self.source,
+            'files': changes.get('files') or [],
+            'settings': changes.get('settings') or [],
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class Operator(db.Model):

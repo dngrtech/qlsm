@@ -25,6 +25,13 @@ from ui.tasks import deploy_instance, apply_instance_config, restart_instance, s
 from ui.task_logic.job_failure_handlers import instance_job_failure_handler
 from ui.task_logic.zmq_utils import validate_zmq_password
 from ui.task_lock import acquire_lock, release_lock
+from ui.pending_changes import (
+    SOURCE_CONFIG_SAVE, diff_snapshots, list_pending_changes, record_pending_change, snapshot_dir,
+)
+from ui.preset_apply import PresetApplyError, build_preset_target, diff_preset_target, target_hash
+from ui.preset_keep_cvars import collect_keep_cvars
+from ui.routes.preset_api_routes import read_preset_payload
+from ui.database import get_preset
 from ui.admin_permissions import levels_from_entries, validate_admin_entries, strip_numeric_admin_lines
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
@@ -279,6 +286,46 @@ def _read_default_config(filename):
         return None
 
 
+def _validate_addon_options(addon_options):
+    """`addon_options` on create: {<addon_id>: {...}}, what each addon's
+    add-instance tab collected. Only the shape is checked here; what the
+    values mean is the addon's business (its instance.created handler).
+    Returns (options, error_message)."""
+    if addon_options is None:
+        return {}, None
+    if not isinstance(addon_options, dict):
+        return None, "addon_options must be an object keyed by addon id"
+    for addon_id, options in addon_options.items():
+        if not isinstance(options, dict):
+            return None, f'addon_options["{addon_id}"] must be an object'
+    return addon_options, None
+
+
+def _dispatch_instance_created(instance_id, addon_options):
+    """Run every addon's instance.created handler with its own options.
+
+    Never raises: an addon must not be able to stop an instance from being
+    created. A handler that raises is logged by the registry, and its
+    half-done session work is rolled back so it cannot ride along with the
+    status update that follows (the instance row itself is already
+    committed).
+    """
+    # Whatever the route still holds in the session (ld_preload_hooks) is
+    # committed first, so a rollback after a failing handler cannot drop it.
+    db.session.commit()
+    try:
+        from ui.addons import dispatch_each
+
+        dispatch_each(
+            'instance.created', instance_id,
+            lambda addon_id: ((instance_id, dict(addon_options.get(addon_id) or {})), {}),
+            on_error=lambda addon_id, exc: db.session.rollback(),
+        )
+    except Exception as e:  # registry unavailable, e.g. outside an app context
+        db.session.rollback()
+        current_app.logger.warning(f"Addon hook instance.created skipped for instance {instance_id}: {e}")
+
+
 @instance_api_bp.route('/', methods=['POST'], endpoint='add_instance_api')
 @jwt_required()
 def add_instance_api():
@@ -324,6 +371,10 @@ def add_instance_api():
     redis_db, redis_db_err = _validate_redis_db(data.get('redis_db'))
     if redis_db_err:
         return jsonify({"error": {"message": redis_db_err}}), 400
+
+    addon_options, addon_options_err = _validate_addon_options(data.get('addon_options'))
+    if addon_options_err:
+        return jsonify({"error": {"message": addon_options_err}}), 400
 
     zmq_stats_password, stats_pwd_err = validate_zmq_password(
         data.get('zmq_stats_password'), 'ZMQ Stats Password'
@@ -486,6 +537,11 @@ def add_instance_api():
             if os.path.exists(default_factories_dir):
                 shutil.copytree(default_factories_dir, instance_factories_dir, dirs_exist_ok=True)
                 current_app.logger.info(f"Copied default factories to {instance_factories_dir} for instance {instance.id}")
+
+        # Addons prepare their per-instance state now, before the deploy is
+        # queued, so what they contribute to the deploy (launch args,
+        # plugins) is already there on the first run.
+        _dispatch_instance_created(instance.id, addon_options)
 
         # Acquire entity lock before enqueue
         lock_token = str(uuid.uuid4())
@@ -1108,6 +1164,287 @@ def _read_instance_config(host_name, instance_id, filename):
         current_app.logger.error(f"Error reading instance config file {config_path}: {e}")
         return f"# Error reading file: {e}" # Return error message in content
 
+@instance_api_bp.route('/<int:instance_id>/pending-changes', methods=['GET'], endpoint='get_instance_pending_changes_api')
+@jwt_required()
+def get_instance_pending_changes_api(instance_id):
+    """Changes synced to the host without a restart, oldest first. Cleared
+    when the instance restarts."""
+    instance = get_instance(instance_id)
+    if not instance:
+        return jsonify({"error": {"message": "Instance not found."}}), 404
+    return jsonify({"data": {
+        "instance_id": instance.id,
+        "status": instance.status.value if instance.status else None,
+        "entries": list_pending_changes(instance.id),
+    }})
+
+
+def save_instance_config(instance, data):
+    """Validate and apply a config save (PUT body already parsed) to an instance.
+
+    Returns a (response, status) tuple. Needs an app/request context.
+    """
+    instance_config_dir = os.path.join('configs', instance.host.name, str(instance.id))
+
+    metadata_update_kwargs = {}
+    new_name = data.get('name')
+    if new_name is not None:
+        if not isinstance(new_name, str):
+            return jsonify({"error": {"message": "Name must be a string"}}), 400
+        stripped_name = new_name.strip()
+        if not stripped_name:
+            return jsonify({"error": {"message": "Name cannot be empty"}}), 400
+        existing_instance = QLInstance.query.filter(
+            db.func.lower(QLInstance.name) == stripped_name.lower()
+        ).first()
+        if existing_instance and existing_instance.id != instance.id:
+            return jsonify({"error": {"message": f"An instance with the name '{stripped_name}' already exists."}}), 409
+        metadata_update_kwargs['name'] = stripped_name
+
+    new_hostname = data.get('hostname')
+    if new_hostname is not None:
+        if not isinstance(new_hostname, str):
+            return jsonify({"error": {"message": "Server Hostname must be a string"}}), 400
+        stripped_hostname = new_hostname.strip()
+        if not stripped_hostname:
+            return jsonify({"error": {"message": "Server Hostname cannot be empty."}}), 400
+        if len(stripped_hostname) > 64:
+            return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
+        metadata_update_kwargs['hostname'] = stripped_hostname
+
+    if (
+        'lan_rate_enabled' in data and
+        would_enable_unsupported_lan_rate(
+            instance.host,
+            current_enabled=instance.lan_rate_enabled,
+            requested_enabled=data.get('lan_rate_enabled'),
+        )
+    ):
+        return jsonify({"error": {"message": lan_rate_unsupported_message(instance.host)}}), 400
+
+    configs_present = 'configs' in data
+    configs_to_save = data.get('configs', {}) if configs_present else None
+    if configs_present:
+        err, code = _validate_configs_map(configs_to_save, require_protected=True)
+        if err:
+            return jsonify({"error": {"message": err}}), code
+
+    factories_present = 'factories' in data
+    factories_to_save = data.get('factories', {}) if factories_present else None
+    if factories_present:
+        err, code = _validate_factories_map(factories_to_save)
+        if err:
+            return jsonify({"error": {"message": err}}), code
+
+    config_folders_present = 'config_folders' in data
+    config_folders_value = data.get('config_folders') if config_folders_present else None
+    if config_folders_present:
+        err, code = _validate_config_folders(config_folders_value)
+        if err:
+            return jsonify({"error": {"message": err}}), code
+
+    draft_id = data.get('draft_id')
+    scripts_to_save = data.get('scripts', {})
+    if draft_id:
+        from ui.routes.draft_routes import _validate_draft_id, _draft_exists
+        if not _validate_draft_id(draft_id):
+            return jsonify({"error": {"message": "Invalid draft_id"}}), 400
+        if not _draft_exists(draft_id):
+            return jsonify({"error": {"message": "Draft not found. It may have expired."}}), 400
+
+    original_status = instance.status
+    original_ld_preload_hooks = instance.ld_preload_hooks or None
+    original_lan_rate_enabled = instance.lan_rate_enabled
+    original_hostname = instance.hostname
+    original_qlx_plugins = instance.qlx_plugins
+
+    update_kwargs = dict(status=InstanceStatus.CONFIGURING)
+    update_kwargs.update(metadata_update_kwargs)
+    if 'lan_rate_enabled' in data:
+        update_kwargs['lan_rate_enabled'] = bool(data.get('lan_rate_enabled'))
+
+    lock_token = str(uuid.uuid4())
+    if not acquire_lock('instance', instance.id, lock_token, ttl=360):
+        return jsonify({"error": {"message": f'Another operation is running on instance "{instance.name}". Please wait for it to complete.'}}), 409
+    lock_transferred = False
+    status_committed = False
+
+    try:
+        checked_plugins = data.get('checked_plugins')
+        if checked_plugins is not None:
+            if (
+                not isinstance(checked_plugins, list) or
+                not all(isinstance(plugin, str) for plugin in checked_plugins)
+            ):
+                return jsonify({"error": {"message": "checked_plugins must be a list of strings"}}), 400
+            qlx_plugins_str = ', '.join(checked_plugins)
+            validated_plugins, qlx_err = _validate_qlx_plugins(qlx_plugins_str)
+            if qlx_err:
+                return jsonify({"error": {"message": qlx_err}}), 400
+            update_kwargs['qlx_plugins'] = validated_plugins
+        elif 'qlx_plugins' in data:
+            validated_plugins, qlx_err = _validate_qlx_plugins(data['qlx_plugins'])
+            if qlx_err:
+                return jsonify({"error": {"message": qlx_err}}), 400
+            update_kwargs['qlx_plugins'] = validated_plugins
+
+        enabled_hooks_data = data.get('enabled_hooks')
+        if enabled_hooks_data is not None:
+            err, code = _validate_enabled_hooks_payload(enabled_hooks_data)
+            if err:
+                return jsonify({"error": {"message": err}}), code
+
+        # Only what the operator changed in the Owner & Admins tab: level 0
+        # removes an admin. Everything else in Redis is left alone.
+        admin_changes = None
+        admin_changes_data = data.get('admin_changes')
+        if admin_changes_data is not None:
+            admin_changes, admin_error = validate_admin_entries(admin_changes_data)
+            if admin_error:
+                return jsonify({"error": {"message": admin_error}}), 400
+
+        # A save without a restart leaves the running server on the old
+        # files: snapshot them now, before they are overwritten, so the
+        # "Updated" badge can show what is pending.
+        may_defer = (
+            data.get('restart', True) is False
+            and original_status != InstanceStatus.STOPPED
+        )
+        files_before = snapshot_dir(instance_config_dir) if may_defer else None
+
+        if configs_present:
+            _sync_configs_to_disk(
+                instance_config_dir,
+                configs_to_save,
+                config_folders_value if config_folders_present else None,
+            )
+            current_app.logger.info(
+                f"Synced {len(configs_to_save)} config files and "
+                f"{len(config_folders_value or [])} folders for instance {instance.id}"
+            )
+
+        # Handle scripts via draft or legacy
+        instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
+        os.makedirs(instance_user_hooks_dir, exist_ok=True)  # rsync source must exist (spec §5.4)
+        if draft_id:
+            from ui.routes.draft_routes import (
+                _get_draft_base_path, _get_draft_scripts_path, _get_draft_source,
+                _get_draft_user_hooks_path, _merge_draft_user_hooks_into_instance,
+            )
+
+            instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
+            draft_scripts = _get_draft_scripts_path(draft_id)
+            if os.path.exists(draft_scripts):
+                if os.path.exists(instance_scripts_dir):
+                    shutil.rmtree(instance_scripts_dir)
+                shutil.copytree(draft_scripts, instance_scripts_dir)
+
+            # Only a preset-sourced draft can legitimately introduce new hook
+            # binaries here — a plain instance-sourced draft is just a stale
+            # snapshot of user-hooks/ taken when the modal opened, and blindly
+            # copying it back would silently undo any replace/delete done via
+            # the Hooks tab's live per-file API in the same edit session.
+            if _get_draft_source(draft_id) == 'preset':
+                draft_user_hooks = _get_draft_user_hooks_path(draft_id)
+                _merge_draft_user_hooks_into_instance(draft_user_hooks, instance_user_hooks_dir)
+
+            shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
+
+        elif scripts_to_save:
+            # Legacy partial-update path (text edits only, no binary support)
+            instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
+            os.makedirs(instance_scripts_dir, exist_ok=True)
+            for relative_path, content in scripts_to_save.items():
+                script_path = os.path.join(instance_scripts_dir, relative_path)
+                os.makedirs(os.path.dirname(script_path), exist_ok=True)
+                with open(script_path, 'w') as f:
+                    f.write(content)
+            current_app.logger.info(f"Saved updated scripts for instance {instance.id}")
+
+        hooks_changed = False
+        if enabled_hooks_data is not None:
+            filtered_hooks = _filtered_enabled_hooks(enabled_hooks_data, instance_user_hooks_dir)
+            next_ld_preload_hooks = ",".join(filtered_hooks) if filtered_hooks else None
+            hooks_changed = next_ld_preload_hooks != original_ld_preload_hooks
+            update_kwargs['ld_preload_hooks'] = next_ld_preload_hooks
+
+        # Handle factories updates when the client sends the full factories map.
+        if factories_present:
+            instance_factories_dir = os.path.join(instance_config_dir, 'factories')
+            _sync_factories_to_disk(instance_factories_dir, factories_to_save)
+
+        try:
+            update_instance(instance.id, **update_kwargs)
+            status_committed = True
+        except sqlalchemy.exc.IntegrityError:
+            db.session.rollback()
+            return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
+
+        restart = data.get('restart', True)
+        lan_rate_changed = (
+            'lan_rate_enabled' in data
+            and bool(data.get('lan_rate_enabled')) != original_lan_rate_enabled
+        )
+        if hooks_changed:
+            if original_status == InstanceStatus.RUNNING:
+                restart = True
+            elif original_status == InstanceStatus.STOPPED and not lan_rate_changed:
+                restart = False
+        if not restart and files_before is not None:
+            setting_changes = []
+            if 'hostname' in metadata_update_kwargs and metadata_update_kwargs['hostname'] != original_hostname:
+                setting_changes.append({
+                    'field': 'hostname',
+                    'before': original_hostname,
+                    'after': metadata_update_kwargs['hostname'],
+                })
+            if 'qlx_plugins' in update_kwargs and (update_kwargs['qlx_plugins'] or '') != (original_qlx_plugins or ''):
+                setting_changes.append({
+                    'field': 'qlx_plugins',
+                    'before': original_qlx_plugins,
+                    'after': update_kwargs['qlx_plugins'],
+                })
+            record_pending_change(
+                instance.id,
+                SOURCE_CONFIG_SAVE,
+                diff_snapshots(files_before, snapshot_dir(instance_config_dir)),
+                setting_changes,
+            )
+            db.session.commit()
+
+        reconcile_lan_rate_network = 'lan_rate_enabled' in data
+        job = enqueue_task(
+            apply_instance_config,
+            instance.id,
+            restart=restart,
+            reconcile_lan_rate_network=reconcile_lan_rate_network,
+            previous_status=original_status.value,
+            admin_levels=levels_from_entries(admin_changes),
+            lock_token=lock_token,
+            on_failure=instance_job_failure_handler,
+        )
+        if job:
+            lock_transferred = True
+            current_app.logger.info(f"Enqueued job {job.id} for apply_instance_config for instance {instance.id}")
+            return jsonify({"message": f'Configuration for instance "{instance.name}" saved and update task queued.'}), 202
+        else:
+            current_app.logger.error(f"Failed to enqueue apply_instance_config task for instance {instance.id}")
+            update_instance(instance.id, status=InstanceStatus.ERROR)
+            return jsonify({"error": {"message": "Error queuing configuration update task."}}), 500
+
+    except Exception as e:
+        current_app.logger.error(f"Error saving updated config files for instance {instance.id}: {e}", exc_info=True)
+        if status_committed:
+            try:
+                update_instance(instance.id, status=InstanceStatus.ERROR)
+            except Exception as status_error:
+                current_app.logger.error(f"Failed to mark instance {instance.id} ERROR after config save failure: {status_error}", exc_info=True)
+        return jsonify({"error": {"message": f'Error saving configuration files: {str(e)}'}}), 500
+    finally:
+        if not lock_transferred:
+            release_lock('instance', instance.id, lock_token)
+
+
 # Route for viewing/editing instance configuration files
 @instance_api_bp.route('/<int:instance_id>/config', methods=['GET', 'PUT'], endpoint='manage_instance_config_api')
 @jwt_required()
@@ -1128,230 +1465,7 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
         if not data:
             return jsonify({"error": {"message": "Request body must be JSON"}}), 400
 
-        metadata_update_kwargs = {}
-        new_name = data.get('name')
-        if new_name is not None:
-            if not isinstance(new_name, str):
-                return jsonify({"error": {"message": "Name must be a string"}}), 400
-            stripped_name = new_name.strip()
-            if not stripped_name:
-                return jsonify({"error": {"message": "Name cannot be empty"}}), 400
-            existing_instance = QLInstance.query.filter(
-                db.func.lower(QLInstance.name) == stripped_name.lower()
-            ).first()
-            if existing_instance and existing_instance.id != instance.id:
-                return jsonify({"error": {"message": f"An instance with the name '{stripped_name}' already exists."}}), 409
-            metadata_update_kwargs['name'] = stripped_name
-
-        new_hostname = data.get('hostname')
-        if new_hostname is not None:
-            if not isinstance(new_hostname, str):
-                return jsonify({"error": {"message": "Server Hostname must be a string"}}), 400
-            stripped_hostname = new_hostname.strip()
-            if not stripped_hostname:
-                return jsonify({"error": {"message": "Server Hostname cannot be empty."}}), 400
-            if len(stripped_hostname) > 64:
-                return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
-            metadata_update_kwargs['hostname'] = stripped_hostname
-
-        if (
-            'lan_rate_enabled' in data and
-            would_enable_unsupported_lan_rate(
-                instance.host,
-                current_enabled=instance.lan_rate_enabled,
-                requested_enabled=data.get('lan_rate_enabled'),
-            )
-        ):
-            return jsonify({"error": {"message": lan_rate_unsupported_message(instance.host)}}), 400
-
-        configs_present = 'configs' in data
-        configs_to_save = data.get('configs', {}) if configs_present else None
-        if configs_present:
-            err, code = _validate_configs_map(configs_to_save, require_protected=True)
-            if err:
-                return jsonify({"error": {"message": err}}), code
-
-        factories_present = 'factories' in data
-        factories_to_save = data.get('factories', {}) if factories_present else None
-        if factories_present:
-            err, code = _validate_factories_map(factories_to_save)
-            if err:
-                return jsonify({"error": {"message": err}}), code
-
-        config_folders_present = 'config_folders' in data
-        config_folders_value = data.get('config_folders') if config_folders_present else None
-        if config_folders_present:
-            err, code = _validate_config_folders(config_folders_value)
-            if err:
-                return jsonify({"error": {"message": err}}), code
-
-        draft_id = data.get('draft_id')
-        scripts_to_save = data.get('scripts', {})
-        if draft_id:
-            from ui.routes.draft_routes import _validate_draft_id, _draft_exists
-            if not _validate_draft_id(draft_id):
-                return jsonify({"error": {"message": "Invalid draft_id"}}), 400
-            if not _draft_exists(draft_id):
-                return jsonify({"error": {"message": "Draft not found. It may have expired."}}), 400
-
-        original_status = instance.status
-        original_ld_preload_hooks = instance.ld_preload_hooks or None
-        original_lan_rate_enabled = instance.lan_rate_enabled
-
-        update_kwargs = dict(status=InstanceStatus.CONFIGURING)
-        update_kwargs.update(metadata_update_kwargs)
-        if 'lan_rate_enabled' in data:
-            update_kwargs['lan_rate_enabled'] = bool(data.get('lan_rate_enabled'))
-
-        lock_token = str(uuid.uuid4())
-        if not acquire_lock('instance', instance.id, lock_token, ttl=360):
-            return jsonify({"error": {"message": f'Another operation is running on instance "{instance.name}". Please wait for it to complete.'}}), 409
-        lock_transferred = False
-        status_committed = False
-
-        try:
-            checked_plugins = data.get('checked_plugins')
-            if checked_plugins is not None:
-                if (
-                    not isinstance(checked_plugins, list) or
-                    not all(isinstance(plugin, str) for plugin in checked_plugins)
-                ):
-                    return jsonify({"error": {"message": "checked_plugins must be a list of strings"}}), 400
-                qlx_plugins_str = ', '.join(checked_plugins)
-                validated_plugins, qlx_err = _validate_qlx_plugins(qlx_plugins_str)
-                if qlx_err:
-                    return jsonify({"error": {"message": qlx_err}}), 400
-                update_kwargs['qlx_plugins'] = validated_plugins
-            elif 'qlx_plugins' in data:
-                validated_plugins, qlx_err = _validate_qlx_plugins(data['qlx_plugins'])
-                if qlx_err:
-                    return jsonify({"error": {"message": qlx_err}}), 400
-                update_kwargs['qlx_plugins'] = validated_plugins
-
-            enabled_hooks_data = data.get('enabled_hooks')
-            if enabled_hooks_data is not None:
-                err, code = _validate_enabled_hooks_payload(enabled_hooks_data)
-                if err:
-                    return jsonify({"error": {"message": err}}), code
-
-            # Only what the operator changed in the Owner & Admins tab: level 0
-            # removes an admin. Everything else in Redis is left alone.
-            admin_changes = None
-            admin_changes_data = data.get('admin_changes')
-            if admin_changes_data is not None:
-                admin_changes, admin_error = validate_admin_entries(admin_changes_data)
-                if admin_error:
-                    return jsonify({"error": {"message": admin_error}}), 400
-
-            if configs_present:
-                _sync_configs_to_disk(
-                    instance_config_dir,
-                    configs_to_save,
-                    config_folders_value if config_folders_present else None,
-                )
-                current_app.logger.info(
-                    f"Synced {len(configs_to_save)} config files and "
-                    f"{len(config_folders_value or [])} folders for instance {instance.id}"
-                )
-
-            # Handle scripts via draft or legacy
-            instance_user_hooks_dir = os.path.join(instance_config_dir, 'user-hooks')
-            os.makedirs(instance_user_hooks_dir, exist_ok=True)  # rsync source must exist (spec §5.4)
-            if draft_id:
-                from ui.routes.draft_routes import (
-                    _get_draft_base_path, _get_draft_scripts_path, _get_draft_source,
-                    _get_draft_user_hooks_path, _merge_draft_user_hooks_into_instance,
-                )
-
-                instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
-                draft_scripts = _get_draft_scripts_path(draft_id)
-                if os.path.exists(draft_scripts):
-                    if os.path.exists(instance_scripts_dir):
-                        shutil.rmtree(instance_scripts_dir)
-                    shutil.copytree(draft_scripts, instance_scripts_dir)
-
-                # Only a preset-sourced draft can legitimately introduce new hook
-                # binaries here — a plain instance-sourced draft is just a stale
-                # snapshot of user-hooks/ taken when the modal opened, and blindly
-                # copying it back would silently undo any replace/delete done via
-                # the Hooks tab's live per-file API in the same edit session.
-                if _get_draft_source(draft_id) == 'preset':
-                    draft_user_hooks = _get_draft_user_hooks_path(draft_id)
-                    _merge_draft_user_hooks_into_instance(draft_user_hooks, instance_user_hooks_dir)
-
-                shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
-
-            elif scripts_to_save:
-                # Legacy partial-update path (text edits only, no binary support)
-                instance_scripts_dir = os.path.join(instance_config_dir, 'scripts')
-                os.makedirs(instance_scripts_dir, exist_ok=True)
-                for relative_path, content in scripts_to_save.items():
-                    script_path = os.path.join(instance_scripts_dir, relative_path)
-                    os.makedirs(os.path.dirname(script_path), exist_ok=True)
-                    with open(script_path, 'w') as f:
-                        f.write(content)
-                current_app.logger.info(f"Saved updated scripts for instance {instance.id}")
-
-            hooks_changed = False
-            if enabled_hooks_data is not None:
-                filtered_hooks = _filtered_enabled_hooks(enabled_hooks_data, instance_user_hooks_dir)
-                next_ld_preload_hooks = ",".join(filtered_hooks) if filtered_hooks else None
-                hooks_changed = next_ld_preload_hooks != original_ld_preload_hooks
-                update_kwargs['ld_preload_hooks'] = next_ld_preload_hooks
-
-            # Handle factories updates when the client sends the full factories map.
-            if factories_present:
-                instance_factories_dir = os.path.join(instance_config_dir, 'factories')
-                _sync_factories_to_disk(instance_factories_dir, factories_to_save)
-
-            try:
-                update_instance(instance.id, **update_kwargs)
-                status_committed = True
-            except sqlalchemy.exc.IntegrityError:
-                db.session.rollback()
-                return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
-
-            restart = data.get('restart', True)
-            lan_rate_changed = (
-                'lan_rate_enabled' in data
-                and bool(data.get('lan_rate_enabled')) != original_lan_rate_enabled
-            )
-            if hooks_changed:
-                if original_status == InstanceStatus.RUNNING:
-                    restart = True
-                elif original_status == InstanceStatus.STOPPED and not lan_rate_changed:
-                    restart = False
-            reconcile_lan_rate_network = 'lan_rate_enabled' in data
-            job = enqueue_task(
-                apply_instance_config,
-                instance.id,
-                restart=restart,
-                reconcile_lan_rate_network=reconcile_lan_rate_network,
-                previous_status=original_status.value,
-                admin_levels=levels_from_entries(admin_changes),
-                lock_token=lock_token,
-                on_failure=instance_job_failure_handler,
-            )
-            if job:
-                lock_transferred = True
-                current_app.logger.info(f"Enqueued job {job.id} for apply_instance_config for instance {instance.id}")
-                return jsonify({"message": f'Configuration for instance "{instance.name}" saved and update task queued.'}), 202
-            else:
-                current_app.logger.error(f"Failed to enqueue apply_instance_config task for instance {instance.id}")
-                update_instance(instance.id, status=InstanceStatus.ERROR)
-                return jsonify({"error": {"message": "Error queuing configuration update task."}}), 500
-
-        except Exception as e:
-            current_app.logger.error(f"Error saving updated config files for instance {instance.id}: {e}", exc_info=True)
-            if status_committed:
-                try:
-                    update_instance(instance.id, status=InstanceStatus.ERROR)
-                except Exception as status_error:
-                    current_app.logger.error(f"Failed to mark instance {instance.id} ERROR after config save failure: {status_error}", exc_info=True)
-            return jsonify({"error": {"message": f'Error saving configuration files: {str(e)}'}}), 500
-        finally:
-            if not lock_transferred:
-                release_lock('instance', instance.id, lock_token)
+        return save_instance_config(instance, data)
 
     # GET request
     current_configs = {}
@@ -1386,6 +1500,157 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
     current_configs['factories'] = factories_content
 
     return jsonify({"data": current_configs})
+
+def _bad_request(message):
+    return jsonify({"error": {"message": message}}), 400
+
+
+def _string_list(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _preset_request(instance_id, data=None):
+    """Load the instance and, with `data`, validate a preview/apply body.
+
+    Returns (instance, preset, params, error); `error` is a ready response
+    tuple. `params` carries the validated optional fields.
+    """
+    instance = get_instance(instance_id)
+    if not instance or not instance.host:
+        return None, None, None, (jsonify({"error": {"message": "Instance or associated host not found."}}), 404)
+    if data is None:
+        return instance, None, None, None
+    if not isinstance(data, dict):
+        return None, None, None, _bad_request("Request body must be a JSON object")
+    preset_id = data.get('preset_id')
+    if not isinstance(preset_id, int) or isinstance(preset_id, bool):
+        return None, None, None, _bad_request("preset_id must be an integer")
+    params = {}
+    for key in ('accepted_replacements', 'keep_cvars'):
+        value = data.get(key)
+        if value is not None and not _string_list(value):
+            return None, None, None, _bad_request(f"{key} must be a list of strings")
+        params[key] = value
+    rejection = _reject_mutation_while_host_configuring(instance.host)
+    if rejection:
+        return None, None, None, rejection
+    preset = get_preset(preset_id)
+    if not preset:
+        return None, None, None, (jsonify({"error": {"message": "Preset not found."}}), 404)
+    return instance, preset, params, None
+
+
+def _drop_draft(target):
+    from ui.routes.draft_routes import _get_draft_base_path
+    draft_id = (target or {}).get('payload', {}).get('draft_id')
+    if draft_id:
+        shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
+
+
+def _build_target(instance, preset, params):
+    """(target, error response). The target's draft is the caller's to hand on or drop."""
+    try:
+        return build_preset_target(
+            instance, preset, params['accepted_replacements'], params['keep_cvars']), None
+    except PresetApplyError as e:
+        return None, (jsonify({"error": {"message": e.message}}), e.status)
+
+
+@instance_api_bp.route('/<int:instance_id>/preset-keep-cvars', methods=['GET'], endpoint='get_instance_preset_keep_cvars_api')
+@jwt_required()
+def get_instance_preset_keep_cvars_api(instance_id):
+    """Cvars whose server.cfg lines a preset apply can keep on this instance."""
+    instance, _, _, error = _preset_request(instance_id)
+    if error:
+        return error
+    preset_id = request.args.get('preset_id', type=int)
+    preset = get_preset(preset_id) if preset_id is not None else None
+    if not preset:
+        return jsonify({"error": {"message": "Preset not found."}}), 404
+    try:
+        preset_payload = read_preset_payload(preset, host_runtime(instance.host))
+    except FileNotFoundError:
+        return jsonify({"error": {"message": "Preset configuration files not found."}}), 500
+    return jsonify({"data": collect_keep_cvars(instance, preset_payload)})
+
+
+@instance_api_bp.route('/<int:instance_id>/preset-preview', methods=['POST'], endpoint='preview_instance_preset_api')
+@jwt_required()
+def preview_instance_preset_api(instance_id):
+    """What loading a preset would change on this instance; changes nothing.
+
+    With `keep_draft` the scripts draft the target points at stays for the
+    editor's Save, otherwise it is deleted before returning.
+    """
+    data = request.get_json(silent=True)
+    instance, preset, params, error = _preset_request(instance_id, data)
+    if error:
+        return error
+    keep_draft = data.get('keep_draft', False)
+    if not isinstance(keep_draft, bool):
+        return _bad_request("keep_draft must be a boolean")
+
+    target, error = _build_target(instance, preset, params)
+    if error:
+        return error
+    try:
+        diff = diff_preset_target(instance, target)
+        preview_hash = target_hash(target)
+        payload = dict(target['payload'])
+    except Exception:
+        _drop_draft(target)
+        raise
+    if not keep_draft:
+        _drop_draft(target)
+        payload.pop('draft_id', None)
+    return jsonify({"data": {
+        "compatibility": target['compatibility'],
+        "needs_decision": target['needs_decision'],
+        "keep_cvars": target['keep_cvars'],
+        "kept_cvars": target['kept_cvars'],
+        "diff": diff,
+        "preview_hash": preview_hash,
+        "target": payload,
+    }})
+
+
+@instance_api_bp.route('/<int:instance_id>/apply-preset', methods=['POST'], endpoint='apply_instance_preset_api')
+@jwt_required()
+def apply_instance_preset_api(instance_id):
+    """Load a preset into this instance as a normal config save.
+
+    Rebuilds the target and refuses (409) when it no longer hashes to the
+    `preview_hash` the preview returned.
+    """
+    data = request.get_json(silent=True)
+    instance, preset, params, error = _preset_request(instance_id, data)
+    if error:
+        return error
+    restart = data.get('restart')
+    preview_hash = data.get('preview_hash')
+    if not isinstance(restart, bool):
+        return _bad_request("restart must be a boolean")
+    if not isinstance(preview_hash, str) or not preview_hash:
+        return _bad_request("preview_hash must be a string")
+
+    target, error = _build_target(instance, preset, params)
+    if error:
+        return error
+    try:
+        if target['needs_decision']:
+            _drop_draft(target)
+            return jsonify({"error": {"message": "Plugin compatibility needs a decision"}}), 422
+        if target_hash(target) != preview_hash:
+            _drop_draft(target)
+            return jsonify({"error": {"message": "Preset or server changed since the preview. Preview again."}}), 409
+        response, status = save_instance_config(instance, {**target['payload'], 'restart': restart})
+    except Exception:
+        _drop_draft(target)
+        raise
+    if status >= 400:
+        _drop_draft(target)
+    return response, status
+
 
 @instance_api_bp.route('/check-name', methods=['GET'])
 # This route is often used for frontend validation before form submission,

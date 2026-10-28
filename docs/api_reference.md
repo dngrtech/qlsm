@@ -103,7 +103,8 @@ Read-only diff of the host runtime's merged plugin pool (the built-in tier
 `.py` and `.ql-plugin.json` files at the top level of the pool are compared.
 
 - **Common pool:** the host's `/home/ql/assets/common/<pool>/`, hashed with
-  one ad-hoc `sha256sum` over SSH (15s connect timeout, 30s overall).
+  one `sha256sum` over plain ssh (15s connect timeout, 30s overall; the ssh
+  connection is kept for 60s, so a repeated check of the host is near instant).
 - **Each instance:** `configs/<host_name>/<instance_id>/scripts/`, hashed locally.
   Only files the instance already has are compared, so every entry is
   `modified`. A pool file missing from `scripts/` isn't reported, because the
@@ -169,7 +170,10 @@ the host to be `ACTIVE` and takes the host lock.
   any existing copy. Names are reduced to their basename and must exist in the
   pool. Unknown names, and ids that aren't instances of this host, are skipped.
 - `restart_instances`: instance ids to restart afterwards. Stopped instances are
-  never restarted.
+  never restarted. A running instance that got files but is not in this list
+  has them synced to the host right away without a restart
+  (`apply_instance_config` with `restart=False`), gets a pending-change record
+  and shows `UPDATED` until it restarts.
 
 At least one of `update_common_pool` or a non-empty `instances` is required.
 
@@ -483,6 +487,10 @@ Example success response:
 | `/instances/<id>/stop` | POST | Stop instance service |
 | `/instances/<id>/config` | GET | Get instance config files |
 | `/instances/<id>/config` | PUT | Update config and apply (triggers Ansible sync) |
+| `/instances/<id>/pending-changes` | GET | Changes synced without a restart, not live yet |
+| `/instances/<id>/preset-keep-cvars` | GET | Cvars a preset apply can keep on this instance (`?preset_id=`) |
+| `/instances/<id>/preset-preview` | POST | Diff of loading a preset into this instance; changes nothing |
+| `/instances/<id>/apply-preset` | POST | Load a preset into this instance as a config save |
 | `/instances/<id>/hooks` | GET | List available LD_PRELOAD hook shared objects |
 | `/instances/<id>/hooks/files` | POST | Upload a new hook `.so` file |
 | `/instances/<id>/hooks/files/<filename>` | GET/PUT/PATCH/DELETE | Download, replace, rename, or delete a hook file |
@@ -536,6 +544,8 @@ Example success response:
 `redis_db` is an optional integer, range 1-8 (`MAX_INSTANCES_PER_HOST`). Omitted means the instance's Redis DB is derived from its port at read time (`resolve_redis_db()`), matching every instance created before this field existed. Out-of-range or non-integer values are rejected with 400. Duplicates on the same host are allowed — there is no uniqueness check, since sharing a DB across instances is a deliberate, supported choice. Selection happens only at creation; there is no path to change it afterward.
 
 `zmq_stats_password` and `zmq_rcon_password` are optional. When both are omitted or blank, QLSM generates them at deploy time, which is the behavior of every instance created before these fields existed. When supplied they are stored on the instance at creation and the deploy-time generator leaves them untouched. Both must be supplied together — sending only one is rejected with 400. Each must be 8 to 64 characters drawn from letters, digits, `-`, `_`, and `=`; that is the same alphabet QLSM's generator uses, chosen because a wider set gets mangled by the shell, Ansible extra-vars, or Quake argument parsing on the way to the systemd unit. The two values are allowed to be identical.
+
+`addon_options` is optional: `{"<addon_id>": {...}}`, the values each addon's Add Instance tab collected (`ui.add_instance_tabs`, see `addons/README.md`). Core checks only that it is an object of objects (400 otherwise, before any database write) and hands each addon its own entry in the `instance.created` hook, which runs after the instance and its config files exist and before the deploy is queued. A failing addon handler never fails the request.
 
 ### Update LAN Rate Request
 ```json
@@ -613,6 +623,69 @@ Example success response:
 `config_folders` is returned alongside the flat `configs` map. It lists every managed subfolder present in the instance config directory, nested up to 3 levels deep (excluding the reserved `scripts`, `factories`, and `user-hooks` folders).
 
 `PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `enabled_hooks`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles subfolders at any depth up to 3 levels: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed. When `draft_id` is present, its `user-hooks/` directory is copied into the instance's `user-hooks/` directory. When `enabled_hooks` is present (typically from a loaded preset), `ld_preload_hooks` is fully replaced with that list filtered to hooks that actually exist on disk after the copy — same replace-on-load semantics as `checked_plugins`/`checked_factories`. When `enabled_hooks` is omitted, the instance's current hook enablement (managed separately via the Hooks tab) is left untouched.
+
+### Preset Apply (GET preset-keep-cvars, POST preset-preview, POST apply-preset)
+
+Server-side "Load preset" for one instance, the same result as loading the preset in the config editor.
+
+`GET /instances/<id>/preset-keep-cvars?preset_id=<n>` returns `{"data": [{"cvar": "sv_tags", "sources": ["launch args", "addon:<id>", "plugin:<file>"]}]}`: the cvars whose `server.cfg` lines the instance keeps instead of the preset's. 404 for an unknown instance or preset.
+
+`POST /instances/<id>/preset-preview` takes `{"preset_id": 1, "accepted_replacements": [], "keep_cvars": [], "keep_draft": false}`. Only `preset_id` is required. `accepted_replacements` and `keep_cvars` must be lists of strings (omit `keep_cvars` to use the collected list). Omitting `accepted_replacements` (or `null`) means no decision has been taken yet, so `needs_decision` is true while a stripped plugin with a replacement is not auto-accepted. Sending a list, even `[]`, is the operator's decision: `needs_decision` is false, the listed paths are taken and every other replacement is declined (that plugin is dropped). It changes nothing and returns:
+
+```json
+{
+  "data": {
+    "compatibility": {},
+    "needs_decision": false,
+    "keep_cvars": ["sv_tags"],
+    "kept_cvars": ["sv_tags"],
+    "diff": {"files": [], "plugins": null, "hooks": null, "admins": null, "lan_rate": null, "unchanged": true},
+    "preview_hash": "<sha256>",
+    "target": {"hostname": "...", "configs": {}, "config_folders": [], "factories": {}}
+  }
+}
+```
+
+`target` is a `PUT /instances/<id>/config` body. It carries a `draft_id` only with `keep_draft: true`, so the editor can save it; otherwise the draft is deleted before the response. A legacy preset (no recorded `checked_plugins`) makes no draft at all: the target has no `draft_id`, so the instance keeps its `scripts/` as well as its `qlx_plugins`.
+
+`POST /instances/<id>/apply-preset` takes the same body plus `restart` (bool) and `preview_hash` (the preview's). It rebuilds the target and saves it like `PUT /instances/<id>/config` (202 on success, `restart` passed through, 409 when another operation holds the instance). It returns 422 `Plugin compatibility needs a decision` when a replacement still needs the operator's decision (`accepted_replacements` omitted; any list, even `[]`, counts as the decision), and 409 `Preset or server changed since the preview. Preview again.` when the rebuilt target no longer hashes to `preview_hash`. Both preview and apply return 400 for a malformed body, 404 for an unknown instance or preset, and 409 while the host is being set up.
+
+### Pending Changes (GET /instances/<id>/pending-changes)
+
+A save with `restart: false` on an instance that is not stopped (and that nothing forces to restart) records what it changed: the instance directory is snapshotted before the files are overwritten and diffed after. Plugin updates and workshop updates applied without a restart add records too. Records accumulate, oldest first, and are dropped once the instance actually restarts — a restart/start/deploy from QLSM, a config apply with restart, or the runtime reconciliation that promotes `UPDATED` to `RUNNING` after an external restart.
+
+```json
+{
+  "data": {
+    "instance_id": 3,
+    "status": "updated",
+    "entries": [
+      {
+        "id": 1,
+        "instance_id": 3,
+        "source": "config_save",
+        "created_at": "2026-10-19T12:00:00",
+        "settings": [{"field": "hostname", "before": "Old", "after": "New"}],
+        "files": [
+          {
+            "path": "server.cfg",
+            "change": "modified",
+            "diff": "--- a/server.cfg
++++ b/server.cfg
+@@ ...",
+            "truncated": false,
+            "binary": false,
+            "sha256_before": "...",
+            "sha256_after": "..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`source` is `config_save`, `plugin_update` or `workshop_update`. `change` is `added`, `modified` or `removed`. Text files carry a unified diff capped at 20000 characters per file (`truncated: true` when cut); binaries and files over 512 KiB carry only their hashes (`binary: true`, `diff: null`). `created_at` is UTC.
 
 ### LD_PRELOAD Hooks
 
@@ -1346,6 +1419,8 @@ qlsm's own process, not the servers it manages. Used to activate addons: they re
 | `/settings/api-key` | DELETE | Revoke (delete) the current API key |
 | `/settings/vultr-key` | GET | Get the configured Vultr API key |
 | `/settings/vultr-key` | PUT | Set (or clear) the Vultr API key |
+| `/settings/defer-restarts` | GET | `{"enabled": bool}`: whether saves and plugin updates default to no restart (default `false`) |
+| `/settings/defer-restarts` | PUT | Set it: body `{"enabled": bool}` |
 | `/settings/backup/export` | POST | Export the full instance state as a downloadable `.qlsmbak` archive |
 | `/settings/backup/import` | POST | Wipe and restore the full instance state from an uploaded `.qlsmbak` archive |
 

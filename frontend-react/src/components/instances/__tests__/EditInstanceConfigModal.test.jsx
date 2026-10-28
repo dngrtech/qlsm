@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   getInstanceConfig: vi.fn(),
   getPresetById: vi.fn(),
   getPresets: vi.fn(),
+  previewPresetApply: vi.fn(),
+  discardDraft: vi.fn(),
+  getDeferRestartsSetting: vi.fn(),
   saveBinaryMeta: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -26,9 +29,11 @@ const mocks = vi.hoisted(() => ({
   qlentLanguage: { name: 'qlent' },
   qlentLinter: vi.fn(),
   useDraftWorkspace: vi.fn(),
-  // Last acceptedReplacements the plugin draft adapter saw for each preset name --
-  // proves whether a stale accepted list from a previous preset leaked onto this one.
-  draftAdapterAcceptedReplacementsByPreset: {},
+  // Every existingDraftId the plugin draft adapter was rendered with: shows
+  // which server-made draft the Plugins tab works on.
+  draftAdapterExistingDraftIds: [],
+  // The same, only for renders where the workspace is active (would adopt it).
+  draftAdapterActiveDraftIds: [],
   // instance_tabs an installed addon contributes; empty unless a test sets it.
   addonMounts: [],
   addonPanelSubmit: vi.fn(),
@@ -77,6 +82,8 @@ vi.mock('../../../services/api', () => ({
   getInstanceConfig: mocks.getInstanceConfig,
   getPresetById: mocks.getPresetById,
   getPresets: mocks.getPresets,
+  previewPresetApply: mocks.previewPresetApply,
+  getDeferRestartsSetting: mocks.getDeferRestartsSetting,
   updateInstance: mocks.updateInstance,
   updateInstanceConfig: mocks.updateInstanceConfig,
   updatePreset: mocks.updatePreset,
@@ -85,6 +92,7 @@ vi.mock('../../../services/api', () => ({
 }));
 
 vi.mock('../../../services/draftApi', () => ({
+  discardDraft: mocks.discardDraft,
   getBinaryMeta: mocks.getBinaryMeta,
   saveBinaryMeta: mocks.saveBinaryMeta,
 }));
@@ -258,12 +266,13 @@ vi.mock('../../fileManager', () => ({
       </div>
     );
   }),
-  useDraftAdapter: ({ preset, acceptedReplacements } = {}) => {
-    if (preset) {
-      mocks.draftAdapterAcceptedReplacementsByPreset[preset] = acceptedReplacements || [];
-    }
+  useDraftAdapter: ({ existingDraftId, active } = {}) => {
+    mocks.draftAdapterExistingDraftIds.push(existingDraftId);
+    if (active) mocks.draftAdapterActiveDraftIds.push(existingDraftId);
+    const workspace = mocks.useDraftWorkspace();
     return {
-      ...mocks.useDraftWorkspace(),
+      ...workspace,
+      draftId: existingDraftId || workspace.draftId,
       hasChanges: false,
     };
   },
@@ -357,6 +366,38 @@ const baseDraftWorkspace = {
   consume: vi.fn(),
 };
 
+const DEFAULT_TARGET_CONFIGS = {
+  'server.cfg': 'set sv_hostname "Test123"',
+  'mappool.txt': '',
+  'access.txt': '',
+  'workshop.txt': '',
+};
+
+// What POST /instances/<id>/preset-preview returns for preset 99, named `name`
+// in the presets list. `target` fields override the defaults.
+const mockPresetPreview = (name, target = {}, extra = {}) => {
+  mocks.getPresets.mockResolvedValue([{ id: 99, name }]);
+  return {
+    compatibility: null,
+    needs_decision: false,
+    keep_cvars: [],
+    kept_cvars: [],
+    diff: {},
+    preview_hash: 'hash',
+    ...extra,
+    target: {
+      hostname: 'Test123',
+      configs: { ...DEFAULT_TARGET_CONFIGS },
+      config_folders: [],
+      factories: {},
+      draft_id: 'preset-draft-1',
+      ...target,
+    },
+  };
+};
+
+const PREVIEW_BODY = { preset_id: 99, keep_draft: true };
+
 describe('EditInstanceConfigModal preset saving', () => {
   let EditInstanceConfigModal;
 
@@ -365,7 +406,8 @@ describe('EditInstanceConfigModal preset saving', () => {
     mocks.fileManagerProps = [];
     mocks.hooksTabProps = [];
     mocks.addonMounts = [];
-    mocks.draftAdapterAcceptedReplacementsByPreset = {};
+    mocks.draftAdapterExistingDraftIds = [];
+    mocks.draftAdapterActiveDraftIds = [];
     if (!EditInstanceConfigModal) {
       ({ default: EditInstanceConfigModal } = await import('../EditInstanceConfigModal'));
     }
@@ -400,6 +442,9 @@ describe('EditInstanceConfigModal preset saving', () => {
     });
     mocks.getPresetById.mockResolvedValue(null);
     mocks.getPresets.mockResolvedValue([]);
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('my-preset'));
+    mocks.discardDraft.mockResolvedValue(undefined);
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: false });
     mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.updateInstance.mockResolvedValue({});
     mocks.updateInstanceConfig.mockResolvedValue({ message: 'ok' });
@@ -448,13 +493,11 @@ describe('EditInstanceConfigModal preset saving', () => {
   });
 
   it('folds a loaded preset\'s plugin dependency in from the draft tree', async () => {
-    // handleLoadPreset passes the draft tree to partitionCheckedPaths so a
-    // preset that only recorded mybalance.py still enables the iouonegirl.py
-    // it declares. A stale [] in that callback's deps made the tree argument
-    // inert and silently dropped the dependency.
+    // The server's checked_plugins are qlx_plugins names, dependencies left
+    // out; resolving them against the preset draft's tree still enables the
+    // iouonegirl.py that mybalance.py declares.
     // The draft tree is empty on the first render and arrives after it, which
-    // is what the real workspace does -- and what makes the callback capture a
-    // stale [] unless the tree is in its dependency list.
+    // is what the real workspace does.
     mocks.useDraftWorkspace.mockReturnValueOnce({ ...baseDraftWorkspace, tree: [] });
     mocks.useDraftWorkspace.mockReturnValue({
       ...baseDraftWorkspace,
@@ -466,12 +509,9 @@ describe('EditInstanceConfigModal preset saving', () => {
         { type: 'file', name: 'iouonegirl.py', path: 'iouonegirl.py' },
       ],
     });
-    mocks.getPresetById.mockResolvedValue({
-      name: 'dep-preset',
-      configs: {},
-      factories: {},
-      checked_plugins: ['mybalance.py'],
-    });
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('dep-preset', {
+      checked_plugins: ['mybalance'],
+    }));
 
     render(
       <EditInstanceConfigModal
@@ -486,7 +526,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "dep-preset" loaded successfully.'));
 
     fireEvent.click(await screen.findByRole('button', { name: /save preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm save preset/i }));
@@ -497,11 +537,10 @@ describe('EditInstanceConfigModal preset saving', () => {
   });
 
   it('keeps the instance hostname when a preset is loaded', async () => {
-    mocks.getPresetById.mockResolvedValue({
-      name: 'named-preset',
-      configs: { 'server.cfg': 'set sv_hostname "Preset Server"\nset g_motd "from preset"' },
-      factories: {},
-    });
+    // The server has already put the instance's hostname into the preset's cfg.
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('named-preset', {
+      configs: { ...DEFAULT_TARGET_CONFIGS, 'server.cfg': 'set sv_hostname "Test123"\nset g_motd "from preset"' },
+    }));
 
     render(
       <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
@@ -510,7 +549,6 @@ describe('EditInstanceConfigModal preset saving', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalled());
     await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "named-preset" loaded successfully.'));
 
     expect(screen.getByLabelText(/server hostname/i)).toHaveValue('Test123');
@@ -520,6 +558,146 @@ describe('EditInstanceConfigModal preset saving', () => {
     const payload = mocks.updateInstanceConfig.mock.calls[0][1];
     expect(payload.hostname).toBe('Test123');
     expect(payload.configs['server.cfg']).toBe('set sv_hostname "Test123"\nset g_motd "from preset"');
+  });
+
+  it('loads a preset through the server preview and keeps the server\'s hostname', async () => {
+    // The instance record's hostname wins over the cfg text the modal opened
+    // with, and every per-server cvar the server kept (sv_tags here) stays.
+    const serverCfg = 'set sv_hostname "Record Name"\nset sv_tags "own,tags"\nset g_motd "from preset"';
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('server-preset', {
+      hostname: 'Record Name',
+      configs: { ...DEFAULT_TARGET_CONFIGS, 'server.cfg': serverCfg, 'custom.cfg': 'set g_custom "1"' },
+      config_folders: ['maps'],
+      factories: { 'ca.factories': 'factory' },
+      draft_id: 'server-draft-7',
+    }, { kept_cvars: ['sv_tags'] }));
+
+    render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "server-preset" loaded successfully.'));
+
+    expect(mocks.previewPresetApply).toHaveBeenCalledTimes(1);
+    expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY);
+    expect(mocks.getPresetById).not.toHaveBeenCalled();
+    expect(mocks.getFactoryTree).toHaveBeenLastCalledWith({ preset: 'server-preset' });
+    expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('server-draft-7');
+    expect(screen.getByLabelText(/server hostname/i)).toHaveValue('Record Name');
+
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    const payload = mocks.updateInstanceConfig.mock.calls[0][1];
+    expect(payload.hostname).toBe('Record Name');
+    expect(payload.configs).toEqual({ ...DEFAULT_TARGET_CONFIGS, 'server.cfg': serverCfg, 'custom.cfg': 'set g_custom "1"' });
+    expect(payload.config_folders).toEqual(['maps']);
+    expect(payload.factories).toEqual({ 'ca.factories': 'factory' });
+    expect(payload.draft_id).toBe('server-draft-7');
+  });
+
+  it('keeps the instance\'s checked plugins when the preset records no selection', async () => {
+    // A legacy preset (checked_plugins null): the server leaves qlx_plugins
+    // and scripts/ alone and sends neither the field nor a draft, so the modal
+    // keeps what was ticked and its own instance draft.
+    mocks.useDraftWorkspace.mockReturnValue({
+      ...baseDraftWorkspace,
+      tree: [{ type: 'file', name: 'balance.py', path: 'balance.py' }],
+    });
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('legacy-preset', { draft_id: undefined }));
+
+    render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "legacy-preset" loaded successfully.'));
+
+    expect(mocks.draftAdapterActiveDraftIds.at(-1)).toBeUndefined();
+    expect(mocks.discardDraft).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].checked_plugins).toEqual(['balance']);
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].draft_id).toBe('draft-123');
+  });
+
+  it('keeps the instance\'s plugins when a legacy preset is loaded before the plugin tree arrives', async () => {
+    // The instance's qlx_plugins are only ticked once a tree is in; a legacy
+    // load before that must not cancel that sync, or Save sends [].
+    let treeReady = false;
+    mocks.useDraftWorkspace.mockImplementation(() => ({
+      ...baseDraftWorkspace,
+      tree: treeReady ? [{ type: 'file', name: 'balance.py', path: 'balance.py' }] : [],
+    }));
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('legacy-preset', { draft_id: undefined }));
+
+    render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "legacy-preset" loaded successfully.'));
+
+    // The instance draft's tree arrives now; any render picks it up.
+    treeReady = true;
+    fireEvent.click(screen.getByRole('button', { name: /plugins/i }));
+    await waitFor(() => {
+      const props = mocks.fileManagerProps.filter(p => p.binaryContext?.contextType === 'instance').at(-1);
+      expect([...(props?.checkedFiles ?? [])]).toEqual(['balance.py']);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].checked_plugins).toEqual(['balance']);
+  });
+
+  it('keeps a hostname typed before the preset load in the field and in server.cfg', async () => {
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('named-preset', {
+      configs: { ...DEFAULT_TARGET_CONFIGS, 'server.cfg': 'set sv_hostname "Test123"\nset g_motd "from preset"' },
+    }));
+
+    render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+
+    const hostnameField = await screen.findByLabelText(/server hostname/i);
+    fireEvent.change(hostnameField, { target: { value: 'Edited Name' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "named-preset" loaded successfully.'));
+
+    expect(screen.getByLabelText(/server hostname/i)).toHaveValue('Edited Name');
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    const payload = mocks.updateInstanceConfig.mock.calls[0][1];
+    expect(payload.hostname).toBe('Edited Name');
+    expect(payload.configs['server.cfg']).toBe('set sv_hostname "Edited Name"\nset g_motd "from preset"');
+  });
+
+  it('does not adopt a loaded preset\'s draft again after the modal is closed and reopened', async () => {
+    const props = { onClose: vi.fn(), instanceId: 1, instanceName: 'Test123', onConfigSaved: vi.fn() };
+    const { rerender } = render(<EditInstanceConfigModal isOpen={true} {...props} />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "my-preset" loaded successfully.'));
+    expect(mocks.draftAdapterActiveDraftIds.at(-1)).toBe('preset-draft-1');
+
+    rerender(<EditInstanceConfigModal isOpen={false} {...props} />);
+    const seenBeforeReopen = mocks.draftAdapterActiveDraftIds.length;
+    rerender(<EditInstanceConfigModal isOpen={true} {...props} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+
+    expect(mocks.draftAdapterActiveDraftIds.slice(seenBeforeReopen)).not.toContain('preset-draft-1');
   });
 
   it('shows the modal while the admin read is still running and the preset waits for it', async () => {
@@ -612,12 +790,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       name: 'inst',
       qlx_plugins: '',
     });
-    mocks.getPresetById.mockResolvedValue({
-      name: 'lan-preset',
-      configs: {},
-      factories: {},
-      lan_rate_enabled: true,
-    });
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('lan-preset', { lan_rate_enabled: true }));
 
     render(
       <EditInstanceConfigModal
@@ -645,7 +818,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+    await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY));
     await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
 
     expect(restartToggle).toHaveAttribute('aria-pressed', 'true');
@@ -660,12 +833,8 @@ describe('EditInstanceConfigModal preset saving', () => {
       name: 'UbuntuInst',
       qlx_plugins: '',
     });
-    mocks.getPresetById.mockResolvedValue({
-      name: 'lan-preset',
-      configs: {},
-      factories: {},
-      lan_rate_enabled: true,
-    });
+    // The server clamps the preset's true to false for this host.
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('lan-preset', { lan_rate_enabled: false }));
 
     render(
       <EditInstanceConfigModal
@@ -681,7 +850,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+    await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY));
 
     const toggle = await screen.findByRole('button', { name: /toggle 99k lan rate/i });
     await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'));
@@ -697,12 +866,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       name: 'UbuntuInst',
       qlx_plugins: '',
     });
-    mocks.getPresetById.mockResolvedValue({
-      name: 'lan-preset',
-      configs: {},
-      factories: {},
-      lan_rate_enabled: true,
-    });
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('lan-preset', { lan_rate_enabled: true }));
 
     render(
       <EditInstanceConfigModal
@@ -721,7 +885,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+    await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY));
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -734,12 +898,8 @@ describe('EditInstanceConfigModal preset saving', () => {
       name: 'inst',
       qlx_plugins: '',
     });
-    mocks.getPresetById.mockResolvedValue({
-      name: 'legacy-preset',
-      configs: {},
-      factories: {},
-      lan_rate_enabled: null,
-    });
+    // No recorded value: the server leaves lan_rate_enabled out of the target.
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('legacy-preset', { draft_id: undefined }));
 
     render(
       <EditInstanceConfigModal
@@ -758,7 +918,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-    await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+    await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY));
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -1013,6 +1173,30 @@ describe('EditInstanceConfigModal preset saving', () => {
     await waitFor(() => expect(toggle).toBeDisabled());
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Changing hooks requires an instance restart')).toBeInTheDocument();
+  });
+
+  it('starts with restart off when Settings > Defer restarts is on', async () => {
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: true });
+    mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'running', name: 'i' });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        instanceId={1}
+        onClose={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    const toggle = screen.getByRole('button', { name: /toggle restart after save/i });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'));
+    expect(toggle).not.toBeDisabled();
+
+    // A change that needs a restart still forces it on.
+    fireEvent.click(screen.getByText('Mock Toggle c.so'));
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
+    expect(toggle).toBeDisabled();
   });
 
   it('keeps restart off and disabled when hooks change on a STOPPED instance', async () => {
@@ -1340,7 +1524,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       );
     });
 
-    it('drops non-enableable entries when loading a preset and shows the notice', async () => {
+    it('ticks the preset\'s plugins from the server\'s names and drops a subfolder-only one with the notice', async () => {
       mocks.getInstanceById.mockResolvedValue({
         host_name: 'test-host',
         lan_rate_enabled: false,
@@ -1348,12 +1532,23 @@ describe('EditInstanceConfigModal preset saving', () => {
         name: 'inst',
         qlx_plugins: '',
       });
-      mocks.getPresetById.mockResolvedValue({
-        name: 'my-preset',
-        configs: {},
-        factories: {},
-        checked_plugins: ['balance.py', 'extras/textart.py', '__init__.py'],
+      // The server already dropped subfolder files and __init__.py; a name
+      // that only matches a subfolder file of the draft tree is still dropped.
+      mocks.useDraftWorkspace.mockReturnValue({
+        ...baseDraftWorkspace,
+        tree: [
+          { type: 'file', name: 'balance.py', path: 'balance.py' },
+          {
+            type: 'folder',
+            name: 'extras',
+            path: 'extras',
+            children: [{ type: 'file', name: 'textart.py', path: 'extras/textart.py' }],
+          },
+        ],
       });
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('my-preset', {
+        checked_plugins: ['balance', 'textart'],
+      }));
 
       render(
         <EditInstanceConfigModal
@@ -1369,14 +1564,14 @@ describe('EditInstanceConfigModal preset saving', () => {
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+      await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY));
 
       fireEvent.click(screen.getByRole('button', { name: /plugins/i }));
       await waitFor(() => {
         expect([...(getPluginManagerProps()?.checkedFiles ?? [])]).toEqual(['balance.py']);
       });
       expect(screen.getByRole('status')).toHaveTextContent(
-        "2 plugins that can't be enabled were deselected"
+        "1 plugin that can't be enabled was deselected"
       );
     });
 
@@ -1480,19 +1675,17 @@ describe('EditInstanceConfigModal preset saving', () => {
       />
     );
 
-    it('sends the host runtime with the preset fetch', async () => {
-      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', configs: {}, factories: {} });
+    it('previews the preset on the server and keeps its draft', async () => {
       renderModal();
 
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-      await waitFor(() => expect(mocks.getPresetById).toHaveBeenCalledWith('99', { targetRuntime: 'minqlx' }));
+      await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(1, PREVIEW_BODY));
     });
 
     it('applies directly when the response carries no compatibility block', async () => {
-      mocks.getPresetById.mockResolvedValue({ name: 'my-preset', configs: {}, factories: {} });
       renderModal();
 
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
@@ -1508,10 +1701,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       // response would apply exactly like the no-compatibility-block case
       // above, so showSuccess firing here is the bug the gate exists to
       // prevent.
-      mocks.getPresetById.mockResolvedValue({
-        name: 'my-preset',
-        configs: {},
-        factories: {},
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('my-preset', { draft_id: 'asked-draft' }, {
         compatibility: {
           preset_runtime: 'minqlxtended',
           target_runtime: 'minqlx',
@@ -1520,7 +1710,7 @@ describe('EditInstanceConfigModal preset saving', () => {
           ],
           replacements: {},
         },
-      });
+      }));
       renderModal();
 
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
@@ -1529,22 +1719,23 @@ describe('EditInstanceConfigModal preset saving', () => {
 
       await screen.findByText(/won.t carry over/i);
       expect(mocks.showSuccess).not.toHaveBeenCalled();
+      // The draft of a preview that waits for the operator is not kept.
+      expect(mocks.discardDraft).toHaveBeenCalledWith('asked-draft');
+      expect(mocks.draftAdapterExistingDraftIds).not.toContain('asked-draft');
     });
 
     it('applies a cross-runtime preset silently when every plugin is compatible', async () => {
       // stripped: [] is a real response shape -- every plugin scanned clean --
       // and it must not surface a dialog with nothing in it.
-      mocks.getPresetById.mockResolvedValue({
-        name: 'my-preset',
-        configs: {},
-        factories: {},
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('my-preset', {}, {
         compatibility: {
           preset_runtime: 'minqlxtended',
           target_runtime: 'minqlx',
           stripped: [],
           replacements: {},
+          auto_accepted: ['balance.py'],
         },
-      });
+      }));
       renderModal();
 
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
@@ -1555,17 +1746,66 @@ describe('EditInstanceConfigModal preset saving', () => {
       expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument();
     });
 
+    it('asks the compatibility question from the preview and re-previews with the accepted paths', async () => {
+      const compatibility = {
+        preset_runtime: 'minqlxtended',
+        target_runtime: 'minqlx',
+        stripped: [
+          {
+            path: 'essentials.py',
+            verdict: 'incompatible',
+            reasons: ['uses a minqlxtended-only API'],
+            replacement: 'essentials_mqx.py',
+            originally_checked: true,
+          },
+        ],
+        replacements: { 'essentials.py': 'essentials_mqx.py' },
+        auto_accepted: ['balance.py'],
+      };
+      mocks.useDraftWorkspace.mockReturnValue({
+        ...baseDraftWorkspace,
+        tree: [{ type: 'file', name: 'essentials.py', path: 'essentials.py' }],
+      });
+      mocks.previewPresetApply
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-asked' }, {
+          compatibility, needs_decision: true,
+        }))
+        .mockResolvedValueOnce(mockPresetPreview('presetA', {
+          draft_id: 'draft-accepted', checked_plugins: ['essentials'],
+        }, { compatibility }));
+      renderModal();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await screen.findByText(/won.t carry over/i);
+      await waitFor(() => expect(screen.getByRole('checkbox')).toBeChecked());
+      // @headlessui/react is mocked to plain <div>s in this file, so the
+      // dialog's own confirm button is the last "Load preset" one.
+      const loadPresetButtons = screen.getAllByRole('button', { name: /load preset/i });
+      fireEvent.click(loadPresetButtons[loadPresetButtons.length - 1]);
+
+      await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "presetA" loaded successfully.'));
+      // The ticked paths only: the server adds auto_accepted itself.
+      expect(mocks.previewPresetApply).toHaveBeenNthCalledWith(2, 1, {
+        ...PREVIEW_BODY, accepted_replacements: ['essentials.py'],
+      });
+      expect(mocks.discardDraft).toHaveBeenCalledWith('draft-asked');
+      expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('draft-accepted');
+
+      fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+      await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+      const payload = mocks.updateInstanceConfig.mock.calls[0][1];
+      expect(payload.draft_id).toBe('draft-accepted');
+      expect(payload.checked_plugins).toEqual(['essentials']);
+    });
+
     it('does not carry a confirmed preset\'s accepted replacements onto the next preset loaded', async () => {
-      // Regression: handleLoadPreset used to leave acceptedReplacements untouched
-      // when the next load needed no compatibility confirmation of its own, so a
-      // stale accepted filename from preset A rode along into preset B's draft
-      // seed. Fixed by clearing at the top of every load; only the compatibility
-      // dialog's confirm handler is allowed to repopulate it.
-      mocks.getPresetById
-        .mockResolvedValueOnce({
-          name: 'presetA',
-          configs: {},
-          factories: {},
+      // Regression: a stale accepted filename from preset A must not ride
+      // along into preset B's load. Only the compatibility dialog's confirm
+      // handler sends accepted_replacements.
+      mocks.previewPresetApply
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-a1' }, {
           compatibility: {
             preset_runtime: 'minqlxtended',
             target_runtime: 'minqlx',
@@ -1580,8 +1820,9 @@ describe('EditInstanceConfigModal preset saving', () => {
             ],
             replacements: { 'essentials.py': 'essentials_mqx.py' },
           },
-        })
-        .mockResolvedValueOnce({ name: 'presetB', configs: {}, factories: {} });
+        }))
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-a2' }))
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-b' }));
       renderModal();
 
       // Load preset A and confirm the compatibility dialog, accepting the one
@@ -1602,21 +1843,22 @@ describe('EditInstanceConfigModal preset saving', () => {
       fireEvent.click(loadPresetButtons[loadPresetButtons.length - 1]);
 
       await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "presetA" loaded successfully.'));
-      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+      expect(mocks.previewPresetApply).toHaveBeenNthCalledWith(2, 1, {
+        ...PREVIEW_BODY, accepted_replacements: ['essentials.py'],
+      });
+      expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('draft-a2');
 
       // Now load preset B, which needs no confirmation of its own.
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
       fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
 
-      await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "presetB" loaded successfully.'));
-      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetB).toEqual([]);
+      await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledTimes(3));
+      expect(mocks.previewPresetApply).toHaveBeenNthCalledWith(3, 1, PREVIEW_BODY);
+      await waitFor(() => expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('draft-b'));
     });
 
     it('shows an error notification and closes the preset manager when the compatibility dialog is cancelled', async () => {
-      mocks.getPresetById.mockResolvedValue({
-        name: 'my-preset',
-        configs: {},
-        factories: {},
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('my-preset', {}, {
         compatibility: {
           preset_runtime: 'minqlxtended',
           target_runtime: 'minqlx',
@@ -1625,7 +1867,7 @@ describe('EditInstanceConfigModal preset saving', () => {
           ],
           replacements: {},
         },
-      });
+      }));
       renderModal();
 
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
@@ -1643,20 +1885,11 @@ describe('EditInstanceConfigModal preset saving', () => {
     });
 
     it('leaves the active preset\'s accepted replacements intact when a subsequent load is cancelled', async () => {
-      // Regression, round 2: an earlier fix cleared acceptedReplacements
-      // speculatively at the start of every load, before it was known whether
-      // the load would even complete. Since acceptedKey is a dependency of
-      // useDraftWorkspace's seeding effect, that speculative clear re-seeded
-      // preset A's still-active draft with an empty list immediately -- so
-      // cancelling the load of preset B destroyed a replacement the operator
-      // had explicitly accepted for A. Fixed by making the accepted list an
-      // argument to applyPresetData (called only on confirm, never on cancel)
-      // instead of ambient state cleared ahead of time.
-      mocks.getPresetById
-        .mockResolvedValueOnce({
-          name: 'presetA',
-          configs: {},
-          factories: {},
+      // Regression, round 2: cancelling the load of preset B must not touch
+      // preset A's still-active draft, which holds the replacement the
+      // operator accepted for A.
+      mocks.previewPresetApply
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-a1' }, {
           compatibility: {
             preset_runtime: 'minqlxtended',
             target_runtime: 'minqlx',
@@ -1671,11 +1904,9 @@ describe('EditInstanceConfigModal preset saving', () => {
             ],
             replacements: { 'essentials.py': 'essentials_mqx.py' },
           },
-        })
-        .mockResolvedValueOnce({
-          name: 'presetB',
-          configs: {},
-          factories: {},
+        }))
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-a2' }))
+        .mockResolvedValueOnce(mockPresetPreview('presetA', { draft_id: 'draft-b' }, {
           compatibility: {
             preset_runtime: 'minqlxtended',
             target_runtime: 'minqlx',
@@ -1684,7 +1915,7 @@ describe('EditInstanceConfigModal preset saving', () => {
             ],
             replacements: {},
           },
-        });
+        }));
       renderModal();
 
       // Load preset A and confirm, accepting the offered replacement.
@@ -1701,7 +1932,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       fireEvent.click(loadPresetButtons[loadPresetButtons.length - 1]);
 
       await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "presetA" loaded successfully.'));
-      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+      expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('draft-a2');
 
       // Start loading preset B, then cancel out of its compatibility dialog.
       // @headlessui/react is mocked to plain <div>s in this file, so
@@ -1716,9 +1947,10 @@ describe('EditInstanceConfigModal preset saving', () => {
 
       await waitFor(() => expect(screen.queryByText(/won.t carry over/i)).not.toBeInTheDocument());
 
-      // Preset A is still the active preset, and it must still show its
-      // accepted replacement -- not silently reseeded to an empty list.
-      expect(mocks.draftAdapterAcceptedReplacementsByPreset.presetA).toEqual(['essentials.py']);
+      // Preset A's draft is still the active one; only B's preview draft went.
+      expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('draft-a2');
+      expect(mocks.discardDraft).toHaveBeenCalledWith('draft-b');
+      expect(mocks.discardDraft).not.toHaveBeenCalledWith('draft-a2');
     });
   });
 
@@ -1783,12 +2015,10 @@ describe('EditInstanceConfigModal preset saving', () => {
     });
 
     it('seeds the admin list from an applied preset and sends it back on save-as-preset', async () => {
-      mocks.getPresetById.mockResolvedValue({
-        name: 'admins-preset',
-        configs: {},
-        factories: {},
-        admins: [{ steam_id64: '76561198087654321', level: 4 }],
-      });
+      // The server list is empty, so the preview's changes are the preset's list.
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('admins-preset', {
+        admin_changes: [{ steam_id64: '76561198087654321', level: 4 }],
+      }));
       renderModal();
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
@@ -1802,8 +2032,31 @@ describe('EditInstanceConfigModal preset saving', () => {
         .toEqual([{ steam_id64: '76561198087654321', level: 4 }]);
     });
 
+    it('applies the preview\'s admin changes to the server list so Save sends them back', async () => {
+      // Server: A=3, B=5. Preset: A=2, C=1. The server's diff re-levels A,
+      // adds C and revokes B; Save must send exactly that.
+      const adminChanges = [
+        { steam_id64: '76561198012345678', level: 2 },
+        { steam_id64: '76561198000000001', level: 1 },
+        { steam_id64: '76561198087654321', level: 0 },
+      ];
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('admins-preset', { admin_changes: adminChanges }));
+      renderModal();
+      fireEvent.click(await screen.findByRole('button', { name: 'load-server-admins' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(screen.getByText('seeded:76561198000000001:1')).toBeInTheDocument());
+      expect(screen.getByText('seeded:76561198012345678:2')).toBeInTheDocument();
+      expect(screen.queryByText(/seeded:76561198087654321/)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+      await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalled());
+      expect(mocks.updateInstanceConfig.mock.calls[0][1].admin_changes).toEqual(adminChanges);
+    });
+
     it('a preset with no admin list leaves the current one alone', async () => {
-      mocks.getPresetById.mockResolvedValue({ name: 'legacy-preset', configs: {}, factories: {}, admins: null });
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('legacy-preset', { draft_id: undefined }));
       renderModal();
       await screen.findByRole('button', { name: 'set-admins' });
       fireEvent.click(screen.getByRole('button', { name: 'set-admins' }));

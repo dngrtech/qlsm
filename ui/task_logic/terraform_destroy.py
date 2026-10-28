@@ -10,7 +10,7 @@ from rq import get_current_job
 # Import database and models - requires app context
 from ui import db
 from ui.models import Host, HostStatus
-from .common import append_log # Import from the common module
+from .common import append_log, record_task_failure # Import from the common module
 from .terraform_runner import _run_terraform_command, _os_vars # Import the runner helper
 
 log = logging.getLogger(__name__)
@@ -217,12 +217,13 @@ def destroy_host_logic(host_id):
     except Exception as e:
         log.exception(f"Unhandled exception in destroy_host_logic for host_id {host_id}: {e}")
         if host and host.status != HostStatus.ERROR: # Avoid overwriting specific error status
-            try:
+            failure_message = f"Task failed with unhandled exception: {e}"
+
+            def _mark_failed():
                 host.status = HostStatus.ERROR
-                append_log(host, f"Task failed with unhandled exception: {e}")
-                db.session.commit()
-            except Exception as commit_err:
-                log.error(f"Failed to update host status/log on unhandled exception: {commit_err}")
+                append_log(host, failure_message)
+
+            record_task_failure(_mark_failed)
         return f"Error during host {host_id} destruction: {e}"
     finally:
         os.chdir(original_dir)

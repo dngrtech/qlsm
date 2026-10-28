@@ -79,6 +79,8 @@ except Exception as e:
 - Use `append_log()` from `task_logic/common.py`
 - Always commit status changes
 - Return boolean or error string (don't raise exceptions to RQ)
+- In an `except` path, save the failure with `record_task_failure()` from `task_logic/common.py`: it rolls back the session first (the exception may have come from the session itself), retries while SQLite reports "database is locked", and raises only if the status still cannot be saved -- the one case where raising to RQ is right, because it fails the job and runs its `on_failure` handler instead of leaving the record in a transitional status
+- Never hold a write transaction across a playbook run: `_run_ansible_playbook()` and `_run_host_ansible_playbook()` commit before launching ansible. Code that runs ansible some other way commits first itself
 
 ## Task Logic Patterns
 

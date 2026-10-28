@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { copyToClipboard as copyTextToClipboard } from '../utils/clipboard';
-import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, Globe, MapPin, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, Plus, Copy, Check, Globe, MapPin, GripVertical, Layers } from 'lucide-react';
 import { useServers } from '../hooks/useServers';
 import StatusIndicator from '../components/StatusIndicator';
 import QLFilterIndicator from '../components/hosts/QLFilterIndicator';
@@ -50,6 +50,9 @@ import { useHostLogsModal } from '../hooks/useHostLogsModal';
 import { useServerStatus } from '../hooks/useServerStatus';
 import { clearAutoOpenAddHost, shouldAutoOpenAddHost } from '../utils/addHostAutoOpen';
 
+// Loaded on first open: the bulk dialog and its tabs are heavy and rarely used.
+const BulkActionsModal = lazy(() => import('../components/bulk/BulkActionsModal'));
+
 export default function ServersPage() {
     const { addNotification, showSuccess, showError } = useNotification();
 
@@ -63,6 +66,7 @@ export default function ServersPage() {
     const [selectedHostId, setSelectedHostId] = useState(null);
     const [isHostDrawerOpen, setIsHostDrawerOpen] = useState(false);
     const [isAddHostModalOpen, setIsAddHostModalOpen] = useState(false);
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [isAddInstanceModalOpen, setIsAddInstanceModalOpen] = useState(false);
     const [addInstanceModalHostId, setAddInstanceModalHostId] = useState(null);
     const [selectedInstanceId, setSelectedInstanceId] = useState(null);
@@ -205,6 +209,9 @@ export default function ServersPage() {
                         <button onClick={allExpanded ? collapseAll : expandAll} className="btn btn-secondary w-full justify-center gap-2 sm:w-auto">
                             {allExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             {allExpanded ? 'Collapse All' : 'Expand All'}
+                        </button>
+                        <button onClick={() => setIsBulkModalOpen(true)} className="btn btn-secondary w-full justify-center gap-2 sm:w-auto">
+                            <Layers size={14} /> Bulk actions
                         </button>
                         <button onClick={() => setIsAddHostModalOpen(true)} className="btn btn-primary w-full justify-center gap-2 sm:w-auto">
                             <Plus size={14} /> Add New Host
@@ -378,6 +385,11 @@ export default function ServersPage() {
             {/* Modals */}
             <ConfirmationModal isOpen={deleteModal.open} onClose={closeDeleteModal} onConfirm={confirmDelete} title={`Delete ${deleteModal.type === 'host' ? 'Host' : 'Instance'}`} message={deleteModal.item ? `Are you sure you want to delete "${deleteModal.item.name}"?` : ''} confirmButtonText="Delete" confirmButtonVariant="danger" />
             <ConfirmationModal isOpen={restartModal.open} onClose={closeRestartModal} onConfirm={confirmRestart} title="Restart Instance" message={restartModal.instance ? `Are you sure you want to restart "${restartModal.instance.name}"?` : ''} confirmButtonText="Restart" confirmButtonVariant="primary" />
+            {isBulkModalOpen && (
+                <Suspense fallback={null}>
+                    <BulkActionsModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} hosts={serversData} />
+                </Suspense>
+            )}
             <AddHostModal isOpen={isAddHostModalOpen} onClose={() => setIsAddHostModalOpen(false)} onHostAdded={() => refreshData(false)} />
             <AddInstanceModal isOpen={isAddInstanceModalOpen} onClose={() => { setIsAddInstanceModalOpen(false); setAddInstanceModalHostId(null); }} onInstanceAdded={() => { setAddInstanceModalHostId(null); refreshData(false); }} initialHostId={addInstanceModalHostId} />
             <HostDetailDrawer host={currentHostForDrawer || selectedHostId} open={isHostDrawerOpen} onClose={() => setIsHostDrawerOpen(false)} onHostUpdated={() => refreshData(false)} onHostDeleted={() => refreshData(false)} onDeleteHost={(host) => requestDeleteHost({ id: host.id, name: host.name })} onRequestRestart={handleRequestHostRestart} onQlfilterAction={handleQlfilterAction} onSwitchToInstanceDrawer={(instanceId) => { setIsHostDrawerOpen(false); handleOpenInstanceDetails(instanceId); }} />

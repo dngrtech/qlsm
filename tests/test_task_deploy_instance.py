@@ -64,7 +64,7 @@ def test_deploy_instance_success(
     mock_prep_zmq.assert_called_once_with(mock_instance)
     mock_run_playbook.assert_called_once()
     assert mock_instance.status == InstanceStatus.RUNNING
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
     assert mock_append_log.called, "append_log should be called during deploy"
     assert 'deployment successful. Status: RUNNING' in result
 
@@ -116,7 +116,7 @@ def test_deploy_instance_ansible_failure(
     result = deploy_instance(10)
 
     assert mock_instance.status == InstanceStatus.ERROR
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
     assert 'stderr' in result
 
 
@@ -204,7 +204,8 @@ def test_deploy_instance_exception(
     result = deploy_instance(10)
 
     assert mock_instance.status == InstanceStatus.ERROR
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
+    mock_session.rollback.assert_called_once()
     assert 'Playbook init error' in result
 
 

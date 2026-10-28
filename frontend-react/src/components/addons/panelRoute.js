@@ -16,6 +16,9 @@ export const MOUNT_SCOPES = {
   settings_section: SCOPE_GLOBAL,
   page: SCOPE_GLOBAL,
   live_status_columns: SCOPE_INSTANCE,
+  // The instance does not exist yet; the tab is about the host picked in the
+  // Add Instance form, which is what its `load` route can name.
+  add_instance_tabs: SCOPE_HOST,
 };
 
 /**

@@ -10,6 +10,15 @@ vi.mock('../../InstanceActionsMenu', () => ({
   default: () => <button type="button">Actions</button>,
 }));
 
+vi.mock('../PendingChangesModal', () => ({
+  default: ({ instance, onRestart }) => (
+    <div>
+      pending-changes-modal {instance.id}
+      <button type="button" onClick={() => onRestart(instance.id, instance.name)}>modal-restart</button>
+    </div>
+  ),
+}));
+
 function renderRow(overrides = {}) {
   const props = {
     inst: {
@@ -63,5 +72,22 @@ describe('InstanceRowContent', () => {
 
     expect(screen.getByText('99k')).toBeInTheDocument();
     expect(screen.queryByText('25k')).not.toBeInTheDocument();
+  });
+
+  it('opens the pending changes modal from the Updated badge and restarts from it', () => {
+    const props = renderRow({ inst: { status: 'updated' } });
+
+    expect(screen.queryByText(/pending-changes-modal/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /show pending changes/i }));
+    expect(screen.getByText(/pending-changes-modal 1/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'modal-restart' }));
+    expect(props.onRestart).toHaveBeenCalledWith(1, 'Inst');
+  });
+
+  it('keeps a plain status badge for other statuses', () => {
+    renderRow({ inst: { status: 'running' } });
+
+    expect(screen.queryByRole('button', { name: /show pending changes/i })).not.toBeInTheDocument();
   });
 });

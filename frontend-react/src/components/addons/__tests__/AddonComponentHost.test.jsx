@@ -77,6 +77,34 @@ describe('AddonComponentHost', () => {
     expect(await screen.findByText('handles:api,apiFor,download,saveBlob')).toBeInTheDocument();
   });
 
+  it('hands an Add Instance tab its form state as ctx.addInstance', async () => {
+    const onChange = vi.fn();
+    render(
+      <AddonComponentHost
+        addon={ADDON}
+        entry={ENTRY}
+        scope="host"
+        scopeId={3}
+        addInstance={{ hostId: 3, values: { on: true }, onChange }}
+      />,
+    );
+    await screen.findByText('entity:none');
+
+    const ctx = window.__lastAddonCtx;
+    expect(ctx.addInstance.hostId).toBe(3);
+    expect(ctx.addInstance.values).toEqual({ on: true });
+    ctx.addInstance.onChange({ on: false });
+    expect(onChange).toHaveBeenCalledWith({ on: false });
+  });
+
+  it('leaves ctx.addInstance undefined everywhere else', async () => {
+    render(
+      <AddonComponentHost addon={ADDON} entry={ENTRY} scope="instance" scopeId={7} />,
+    );
+    await screen.findByText('entity:none');
+    expect(window.__lastAddonCtx.addInstance).toBeUndefined();
+  });
+
   it('leaves ctx.modal undefined for an ordinary panel mount', async () => {
     render(
       <AddonComponentHost addon={ADDON} entry={ENTRY} scope="instance" scopeId={7} />,

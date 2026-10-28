@@ -256,6 +256,15 @@ describe('plugin dependencies (depends_on)', () => {
     expect(dropped).toEqual([]);
   });
 
+  it('toQlxPluginNames keeps a dependency-only helper out of qlx_plugins when a tree is given', () => {
+    const checked = applyPluginDependencies(depTree, new Set(['mybalance.py', 'protect.py', 'essentials.py']));
+    expect(toQlxPluginNames(checked, depTree)).toEqual(['mybalance', 'protect', 'essentials']);
+  });
+
+  it('toQlxPluginNames without a tree still lists every enableable name', () => {
+    expect(toQlxPluginNames(['mybalance.py', 'shared_helper.py'])).toEqual(['mybalance', 'shared_helper']);
+  });
+
   it('partitionCheckedPaths matches the old behaviour when no tree is given', () => {
     const { selectable } = partitionCheckedPaths(['mybalance.py']);
     expect([...selectable]).toEqual(['mybalance.py']);

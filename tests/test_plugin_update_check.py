@@ -18,7 +18,7 @@ def temp_config_dir(tmp_path, monkeypatch):
     yield tmp_path
 
 
-@patch('ui.task_logic.plugin_update_check.run_host_ansible_adhoc')
+@patch('ui.task_logic.plugin_update_check.run_host_ssh_command')
 def test_check_common_pool_reports_modified_and_added(mock_adhoc, app, temp_config_dir):
     pool_dir = os.path.abspath(MINQLX_PLUGINS_POOL_DIR)
     os.makedirs(pool_dir, exist_ok=True)
@@ -47,7 +47,7 @@ def test_check_common_pool_reports_modified_and_added(mock_adhoc, app, temp_conf
     assert "b.py" not in names
 
 
-@patch('ui.task_logic.plugin_update_check.run_host_ansible_adhoc')
+@patch('ui.task_logic.plugin_update_check.run_host_ssh_command')
 def test_check_common_pool_propagates_error(mock_adhoc, app, temp_config_dir):
     mock_adhoc.return_value = (False, "", "unreachable")
 
@@ -91,7 +91,7 @@ def test_check_instance_selected_plugins_reports_only_modified_files(app, temp_c
     assert changes == [{"name": "present.py", "change": "modified"}]
 
 
-@patch('ui.task_logic.plugin_update_check.run_host_ansible_adhoc')
+@patch('ui.task_logic.plugin_update_check.run_host_ssh_command')
 def test_check_host_updates_aggregates_instances(mock_adhoc, app, temp_config_dir):
     mock_adhoc.return_value = (True, "", "")
 
@@ -113,7 +113,7 @@ def test_check_host_updates_aggregates_instances(mock_adhoc, app, temp_config_di
     assert result["instances"][0]["selected_plugin_changes"] == []
 
 
-@patch('ui.task_logic.plugin_update_check.run_host_ansible_adhoc')
+@patch('ui.task_logic.plugin_update_check.run_host_ssh_command')
 def test_check_common_pool_uses_the_operator_copy_over_the_built_in(mock_adhoc, app, temp_config_dir):
     """A repo download that shadows a bundled plugin, or adds a new one, is
     what the host must be compared against -- workers read the same data/

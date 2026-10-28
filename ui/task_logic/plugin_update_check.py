@@ -32,7 +32,7 @@ from ui.update_checks import (
 )
 from ui.plugin_pool import pool_file_hashes, pool_package_hashes
 from ui.runtime import host_runtime, runtime_paths
-from .ansible_runner import run_host_ansible_adhoc
+from .ssh_command import run_host_ssh_command
 
 COMMON_ASSETS_REMOTE_DIR = "/home/ql/assets/common"
 
@@ -57,10 +57,10 @@ def check_common_pool(host):
     the host was unreachable."""
     remote_dir = _common_pool_remote_dir(host)
     source = _pool_hashes(host)
-    success, stdout, stderr = run_host_ansible_adhoc(
+    success, stdout, stderr = run_host_ssh_command(
         host,
-        module_args=f"find {remote_dir} -maxdepth 1 -type f "
-                    f"\\( -name '*.py' -o -name '*.ql-plugin.json' \\) -exec sha256sum {{}} +",
+        f"find {remote_dir} -maxdepth 1 -type f "
+        f"\\( -name '*.py' -o -name '*.ql-plugin.json' \\) -exec sha256sum {{}} +",
     )
     if not success:
         return None, stderr or "Failed to read remote plugin pool state"
