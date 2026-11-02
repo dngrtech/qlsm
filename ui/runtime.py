@@ -39,6 +39,7 @@ _RUNTIME_PATHS = {
         'os_name': 'Debian 12 x64 (bookworm)',
         'os_family': 'debian',
         'os_type': 'debian',
+        'os_version': '12',
         # No Python floor: existing hosts run whatever they already run, and
         # inventing a gate here would break them on the next setup re-run.
         'min_python': None,
@@ -57,6 +58,7 @@ _RUNTIME_PATHS = {
         'os_name': 'Ubuntu 24.04 LTS x64',
         'os_family': 'ubuntu',
         'os_type': 'ubuntu',
+        'os_version': '24.04',
         # The build links -lpython3.12 explicitly.
         'min_python': (3, 12),
         # minqlxtended hooks Sys_IsLANAddress itself, unconditionally

@@ -56,6 +56,7 @@ class Host(db.Model):
     ssh_key_path = db.Column(db.String(255), nullable=True) # Path to private key generated/used by Terraform
     ssh_port = db.Column(db.Integer, default=22, nullable=False) # SSH port for connections
     os_type = db.Column(db.String(50), nullable=True) # Detected OS type when known (e.g. 'debian', 'ubuntu')
+    os_version = db.Column(db.String(50), nullable=True) # OS VERSION_ID when known (e.g. '24.04', '12')
     is_standalone = db.Column(db.Boolean, default=False, nullable=False) # True for user-provided servers
     timezone = db.Column(db.String(50), nullable=True) # IANA timezone name (e.g., 'America/New_York')
     cpu_count = db.Column(db.Integer, nullable=True) # Detected/inferred Linux CPU count for affinity assignment
@@ -100,6 +101,7 @@ class Host(db.Model):
             'ssh_key_path': self.ssh_key_path,
             'ssh_port': self.ssh_port,
             'os_type': self.os_type,
+            'os_version': self.os_version,
             'is_standalone': self.is_standalone,
             'timezone': self.timezone,
             'cpu_count': self.cpu_count,

@@ -253,6 +253,7 @@ def _handle_cloud_host_creation(name, provider, data, runtime=DEFAULT_RUNTIME):
             # Ubuntu 24.04, which is also the only Terraform image that ships
             # the Python 3.12 it links against.
             os_type=runtime_paths(runtime)['os_type'],
+            os_version=runtime_paths(runtime)['os_version'],
             is_standalone=False,
             runtime=runtime,
             status=HostStatus.PENDING
@@ -614,6 +615,7 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
             ssh_key_path=ssh_key_path,
             ssh_port=ssh_port,
             os_type=detected_os['os_type'],
+            os_version=detected_os.get('version_id'),
             timezone=timezone,
             is_standalone=True,
             runtime=runtime,
@@ -777,6 +779,7 @@ def _handle_self_host_creation(name, data, runtime=DEFAULT_RUNTIME):
     lock_token = None
     local_os_info = detect_local_os()
     local_os_type = local_os_info.get('os_type') if local_os_info else None
+    local_os_version = local_os_info.get('version_id') if local_os_info else None
     try:
         key_path, public_key = generate_self_host_keys(name)
         host = create_host(
@@ -787,6 +790,7 @@ def _handle_self_host_creation(name, data, runtime=DEFAULT_RUNTIME):
             ssh_key_path=key_path,
             ssh_port=22,
             os_type=local_os_type,
+            os_version=local_os_version,
             is_standalone=True,
             timezone=timezone,
             runtime=runtime,

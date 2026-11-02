@@ -249,6 +249,7 @@ def detect_local_os(path="/etc/os-release", host_info_path="/host-ssh/host-os-ty
         return None
 
     return {
+        "version_id": os_release_values.get("VERSION_ID", "").strip() or None,
         "pretty_name": detected_name,
         "os_type": _detect_supported_os_type(os_release_values),
     }

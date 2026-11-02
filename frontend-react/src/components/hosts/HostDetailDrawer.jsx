@@ -286,8 +286,8 @@ export default function HostDetailDrawer({
                         {internalHost.is_standalone ? (
                           <>
                             <Field label="SSH Port">{internalHost.ssh_port || 22}</Field>
-                            <Field label="OS Type">
-                              {OS_TYPE_LABELS[internalHost.os_type] || internalHost.os_type || 'Unknown'}
+                            <Field label="OS">
+                              {[OS_TYPE_LABELS[internalHost.os_type] || internalHost.os_type || 'Unknown', internalHost.os_version].filter(Boolean).join(' ')}
                             </Field>
                             {internalHost.cpu_count > 0 && (
                               <Field label="Capacity">
