@@ -146,7 +146,7 @@ dropdowns/tooltips instead of manual absolute positioning.
 
 ## File size note
 
-Per `CLAUDE.md`, source files are capped at 300 lines (soft) / 500 lines
-(hard). `frontend-react/src/index.css` (4,300+ lines) already exceeds this —
-it's a known/accepted exception for the single global stylesheet, not a
-pattern to replicate in new files.
+There is no hard line cap (see `File Size Guideline` in
+`development_guidelines.md`). `frontend-react/src/index.css` (4,300+ lines) is
+the single global stylesheet. Put styles for new components in their own files
+rather than growing it further.
