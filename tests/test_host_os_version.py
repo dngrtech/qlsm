@@ -7,7 +7,7 @@ from tests.helpers import auth_headers, make_user
 from ui import db
 from ui.database import create_host, get_host
 from ui.models import HostStatus
-from ui.task_logic.host_os_version import backfill_host_os_version_logic
+from ui.task_logic.host_os_version import backfill_host_os_version_logic, detect_self_host_os_version
 
 OS_RELEASE = 'NAME="Ubuntu"\nVERSION_ID="24.04"\nID=ubuntu\n'
 
@@ -61,16 +61,39 @@ def test_backfill_without_version_id_stores_nothing(mock_run, app):
         assert get_host(host.id).os_version is None
 
 
-@pytest.mark.parametrize('overrides', [
-    {'os_version': '22.04'},
-    {'provider': 'self'},
-])
 @patch('ui.task_logic.host_os_version.subprocess.run')
-def test_backfill_skips_hosts_it_must_not_probe(mock_run, overrides, app):
+def test_backfill_skips_host_that_already_has_a_version(mock_run, app):
     with app.app_context():
-        host = _host(**overrides)
+        host = _host(os_version='22.04')
         backfill_host_os_version_logic(host.id)
         mock_run.assert_not_called()
+
+
+@patch('ui.task_logic.host_os_version.detect_self_host_os_version', return_value='24.04')
+@patch('ui.task_logic.host_os_version.subprocess.run')
+def test_backfill_self_host_reads_host_init_file_not_ssh(mock_run, mock_self, app):
+    with app.app_context():
+        host = _host(provider='self')
+        assert backfill_host_os_version_logic(host.id) == '24.04'
+        assert get_host(host.id).os_version == '24.04'
+        mock_run.assert_not_called()
+
+
+@pytest.mark.parametrize('content, expected', [
+    ('{"os_type":"ubuntu","pretty_name":"Ubuntu 24.04.1 LTS","version_id":"24.04"}', '24.04'),
+    ('{"os_type":"ubuntu","pretty_name":"Ubuntu 24.04.1 LTS"}', None),  # written by older host-init
+    ('{"os_type":"ubuntu","pretty_name":"x","version_id":""}', None),
+    ('not json', None),
+    ('[]', None),
+])
+def test_detect_self_host_os_version(tmp_path, content, expected):
+    path = tmp_path / 'host-os-type'
+    path.write_text(content)
+    assert detect_self_host_os_version(str(path)) == expected
+
+
+def test_detect_self_host_os_version_missing_file(tmp_path):
+    assert detect_self_host_os_version(str(tmp_path / 'absent')) is None
 
 
 # --- GET /api/hosts/ enqueues the backfill ---
@@ -92,15 +115,15 @@ def fake_redis(app):
 
 
 @patch('ui.routes.host_routes.enqueue_task')
-def test_list_enqueues_only_active_non_self_hosts_without_version(mock_enqueue, client, app, headers, fake_redis):
+def test_list_enqueues_only_active_hosts_without_version(mock_enqueue, client, app, headers, fake_redis):
     with app.app_context():
         legacy = _host(name='legacy').id
         _host(name='known', os_version='12')
         _host(name='pending', status=HostStatus.PENDING)
-        _host(name='self-host', provider='self')
+        self_host = _host(name='self-host', provider='self').id
 
     assert client.get('/api/hosts/', headers=headers).status_code == 200
-    assert [c.args[1] for c in mock_enqueue.call_args_list] == [legacy]
+    assert sorted(c.args[1] for c in mock_enqueue.call_args_list) == sorted([legacy, self_host])
 
 
 @patch('ui.routes.host_routes.enqueue_task')

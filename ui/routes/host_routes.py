@@ -190,15 +190,12 @@ def list_hosts_api():
 
 
 def _enqueue_os_version_backfill(hosts):
-    """Read the OS version of ACTIVE hosts created before os_version existed.
+    """Read the OS version of ACTIVE hosts that don't have one recorded yet.
 
     At most one probe per host per hour, so an unreachable host is not retried
     on every list refresh. The version shows up on a later refresh.
     """
-    pending = [
-        h for h in hosts
-        if h.status == HostStatus.ACTIVE and not h.os_version and h.provider != 'self'
-    ]
+    pending = [h for h in hosts if h.status == HostStatus.ACTIVE and not h.os_version]
     if not pending:
         return
     redis_client = current_app.extensions.get('redis')

@@ -469,7 +469,7 @@ Example success response:
 
 `runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and never changed afterward. `NULL`/legacy rows normalize to `"minqlx"`.
 
-`os_version` is the host's `/etc/os-release` `VERSION_ID` (e.g. `"24.04"`), or `null` when unknown. Hosts created before this field existed are filled in by a background task that `GET /api/hosts/` starts for ACTIVE non-self hosts (at most once per host per hour), so the value appears on a later request.
+`os_version` is the host's `/etc/os-release` `VERSION_ID` (e.g. `"24.04"`), or `null` when unknown. Hosts created before this field existed are filled in by a background task that `GET /api/hosts/` starts for ACTIVE hosts (at most once per host per hour; self deployments need a `docker compose up` after updating before the version is available), so the value appears on a later request.
 
 ## Instances
 

@@ -21,6 +21,7 @@ nsenter -t 1 -m -u -i -n -p -- /bin/sh -c '
 HOST_OS_RELEASE=$(nsenter -t 1 -m -- cat /etc/os-release 2>/dev/null || echo "")
 HOST_OS_ID=$(printf '%s\n' "$HOST_OS_RELEASE" | grep "^ID=" | cut -d= -f2 | tr -d '"')
 HOST_OS_PRETTY=$(printf '%s\n' "$HOST_OS_RELEASE" | grep "^PRETTY_NAME=" | cut -d= -f2- | tr -d '"')
+HOST_OS_VERSION=$(printf '%s\n' "$HOST_OS_RELEASE" | grep "^VERSION_ID=" | cut -d= -f2 | tr -d '"')
 
 case "${HOST_OS_ID:-}" in
   debian) HOST_OS_TYPE="debian" ;;
@@ -30,5 +31,6 @@ esac
 
 HOST_OS_TYPE_SAFE=$(printf '%s' "$HOST_OS_TYPE" | sed 's/\\/\\\\/g; s/"/\\"/g')
 HOST_OS_PRETTY_SAFE=$(printf '%s' "$HOST_OS_PRETTY" | sed 's/\\/\\\\/g; s/"/\\"/g')
-printf '{"os_type":"%s","pretty_name":"%s"}\n' "$HOST_OS_TYPE_SAFE" "$HOST_OS_PRETTY_SAFE" \
+HOST_OS_VERSION_SAFE=$(printf '%s' "$HOST_OS_VERSION" | sed 's/\\/\\\\/g; s/"/\\"/g')
+printf '{"os_type":"%s","pretty_name":"%s","version_id":"%s"}\n' "$HOST_OS_TYPE_SAFE" "$HOST_OS_PRETTY_SAFE" "$HOST_OS_VERSION_SAFE" \
   > /qlsm-ssh/host-os-type || true

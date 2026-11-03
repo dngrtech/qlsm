@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import subprocess
@@ -7,6 +8,9 @@ from ui.models import Host
 from ui.standalone_ssh import _parse_os_release
 
 log = logging.getLogger(__name__)
+
+# Written by host-init/init.sh from the Docker host's /etc/os-release.
+SELF_HOST_OS_INFO_PATH = '/host-ssh/host-os-type'
 
 
 def _read_os_release(host):
@@ -42,16 +46,32 @@ def detect_host_os_version(host):
     return _parse_os_release(content).get('VERSION_ID', '').strip() or None
 
 
-def backfill_host_os_version_logic(host_id):
-    """Fill Host.os_version for a host created before the column existed.
+def detect_self_host_os_version(path=SELF_HOST_OS_INFO_PATH):
+    """Return the Docker host's VERSION_ID from the file host-init writes.
 
-    Self hosts are skipped: their OS is detected from inside the QLSM
-    container, which can report the container's OS instead of the host's.
+    Only that file is trusted: the container's own /etc/os-release describes
+    the QLSM image, not the machine QLDS runs on. Older host-init versions
+    did not write a version, so it appears after the next `docker compose up`.
     """
-    host = db.session.get(Host, host_id)
-    if host is None or host.os_version or host.provider == 'self':
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            info = json.loads(f.read().strip())
+    except (OSError, ValueError):
         return None
-    version = detect_host_os_version(host)
+    if not isinstance(info, dict):
+        return None
+    return str(info.get('version_id') or '').strip() or None
+
+
+def backfill_host_os_version_logic(host_id):
+    """Fill Host.os_version for a host created before the version was recorded."""
+    host = db.session.get(Host, host_id)
+    if host is None or host.os_version:
+        return None
+    if host.provider == 'self':
+        version = detect_self_host_os_version()
+    else:
+        version = detect_host_os_version(host)
     if version:
         host.os_version = version
         db.session.commit()
