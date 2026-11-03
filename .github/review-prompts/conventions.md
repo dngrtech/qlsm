@@ -9,9 +9,9 @@
    - User-facing changes update `docs/user/`.
    - A new page under `docs/user/` is added to both navs, as
      `docs/development_guidelines.md` describes.
-2. History. Run `git log -L` or `git blame` on the changed hunks, and read the
-   commit messages that last touched them. Flag a change that reintroduces
-   something an earlier commit deliberately fixed or removed. Cite the commit.
+2. History. Read `.review-context/history.txt` for the commits that last touched
+   each changed file. Flag a change that reintroduces something an earlier commit
+   deliberately fixed or removed. Cite the commit.
 3. Code comments. Flag a change that contradicts a nearby comment that explains a
    constraint ("must stay in sync with…", "order matters because…").
 

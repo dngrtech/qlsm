@@ -41,7 +41,15 @@ finding.
   elsewhere. A bug in untouched code is out of scope unless this PR makes it
   reachable or worse.
 - Read surrounding code freely to understand the change.
-- Your review is read-only. Don't modify files, the index or branch state.
+
+## Tools
+
+You have Read, Glob and Grep, and no shell. The workflow prepared what git would
+have told you, in `.review-context/`:
+- `diff.patch`: the full diff of the PR against its base branch
+- `files.txt`: the changed files
+- `history.txt`: the last commits on the base branch that touched each changed
+  file, with their messages
 
 ## Output
 

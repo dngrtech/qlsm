@@ -6,7 +6,7 @@
 # - Every job reviews the head SHA that triage pinned.
 # - Prompts and the post script load from the base branch.
 # - Agent config the PR adds (CLAUDE.md, .claude/, .mcp.json) is deleted.
-# - Claude gets read-only tools; only the script posts to GitHub.
+# - Claude gets Read/Glob/Grep only (no shell); only the script posts to GitHub.
 #
 # Keep the workflow name and the github-actions[bot] review: the local skills
 # assess-review, auto-pr-merge and review-pr depend on both.
@@ -120,6 +120,19 @@ jobs:
           mkdir .review-base
           git archive "origin/$BASE" .github/review-prompts | tar -x -C .review-base --strip-components=1
 
+      - name: Build review context
+        # The agents get no shell (git log/diff/show can write files with
+        # --output), so the diff and history they need are prepared here.
+        run: |
+          rm -rf .review-context
+          mkdir .review-context
+          git diff "origin/$BASE...$HEAD_SHA" > .review-context/diff.patch
+          git diff --name-only "origin/$BASE...$HEAD_SHA" > .review-context/files.txt
+          while IFS= read -r f; do
+            echo "=== $f"
+            git log -n 10 --date=short --format='%h %ad %s%n%w(0,4,4)%b' "origin/$BASE" -- "$f" | head -n 80
+          done < .review-context/files.txt > .review-context/history.txt
+
       - name: Find issues (${{ matrix.lens }})
         id: find
         uses: anthropics/claude-code-action@4845bacbb38b3c4b15d948f035349786f678e068 # v1
@@ -129,11 +142,12 @@ jobs:
           prompt: |
             Read `.review-base/review-prompts/_shared.md` and then
             `.review-base/review-prompts/${{ matrix.lens }}.md`, and follow them.
-            The change under review is PR #${{ env.PR }}:
-            `git diff origin/${{ env.BASE }}...HEAD`
+            The change under review is PR #${{ env.PR }} against `${{ env.BASE }}`.
+            Its diff is `.review-context/diff.patch`.
           claude_args: >-
             --model claude-sonnet-5-5 --effort high --max-turns 40
-            --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)"
+            --allowedTools "Read,Glob,Grep"
+            --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
             --json-schema '{"type":"object","required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","required":["file","line","title","failure_scenario","evidence","severity","confidence"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"failure_scenario":{"type":"string"},"evidence":{"type":"string"},"severity":{"type":"string","enum":["critical","high","medium","low"]},"confidence":{"type":"number"}}}}}}'
 
       - name: Save findings
@@ -178,7 +192,20 @@ jobs:
           rm -rf .review-base .review-findings
           find . -path ./.git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name .claude -o -name .mcp.json \) -prune -exec rm -rf {} +
           mkdir .review-base
-          git archive "origin/$BASE" .github/review-prompts .github/scripts | tar -x -C .review-base --strip-components=1
+          git archive "origin/$BASE" .github/review-prompts | tar -x -C .review-base --strip-components=1
+
+      - name: Build review context
+        # The agents get no shell (git log/diff/show can write files with
+        # --output), so the diff and history they need are prepared here.
+        run: |
+          rm -rf .review-context
+          mkdir .review-context
+          git diff "origin/$BASE...$HEAD_SHA" > .review-context/diff.patch
+          git diff --name-only "origin/$BASE...$HEAD_SHA" > .review-context/files.txt
+          while IFS= read -r f; do
+            echo "=== $f"
+            git log -n 10 --date=short --format='%h %ad %s%n%w(0,4,4)%b' "origin/$BASE" -- "$f" | head -n 80
+          done < .review-context/files.txt > .review-context/history.txt
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: true
@@ -196,11 +223,13 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             Follow `.review-base/review-prompts/judge.md`.
-            The change under review is PR #${{ env.PR }}: `git diff origin/${{ env.BASE }}...HEAD`.
+            The change under review is PR #${{ env.PR }} against `${{ env.BASE }}`.
+            Its diff is `.review-context/diff.patch`.
             The finders' output is in `.review-findings/`.
           claude_args: >-
             --model ${{ env.VERIFIER_MODEL }} --effort high --max-turns 50
-            --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)"
+            --allowedTools "Read,Glob,Grep"
+            --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
             --json-schema '{"type":"object","required":["accepted","filtered"],"properties":{"accepted":{"type":"array","items":{"type":"object","required":["file","line","severity","title","what_breaks","fix"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["critical","high","medium","low"]},"title":{"type":"string"},"what_breaks":{"type":"string"},"fix":{"type":"string"}}}},"filtered":{"type":"array","items":{"type":"object","required":["file","line","title","decision","reason"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"decision":{"type":"string","enum":["reject","acknowledge"]},"reason":{"type":"string"}}}}}}'
 
       - name: Post review
@@ -211,4 +240,9 @@ jobs:
           FINDINGS_DIR: .review-findings
           VERDICT_JSON: ${{ steps.verify.outputs.structured_output }}
           MODEL: ${{ env.VERIFIER_MODEL }}
-        run: python3 -I .review-base/scripts/post_claude_review.py
+        # Extract a fresh copy outside the workspace, so nothing the agents
+        # could reach is executed with the token.
+        run: |
+          D=$(mktemp -d "$RUNNER_TEMP/post.XXXXXX")
+          git archive "origin/$BASE" .github/scripts/post_claude_review.py | tar -x -C "$D"
+          python3 -I "$D/.github/scripts/post_claude_review.py"

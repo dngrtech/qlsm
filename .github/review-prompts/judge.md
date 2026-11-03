@@ -5,8 +5,10 @@ favour coverage, so expect duplicates, speculation and false positives. Your job
 to decide which findings the author should act on. A script turns your decisions
 into the posted review and sets the verdict, so you don't post anything yourself.
 
-Read `docs/development_guidelines.md` first. You have the PR checkout and read-only
-tools.
+Read `docs/development_guidelines.md` first. You have the PR checkout and Read,
+Glob and Grep, with no shell. The PR diff is `.review-context/diff.patch`, the
+changed files are in `files.txt`, and the recent history of each changed file is
+in `history.txt`, all in the same folder.
 
 ## For each finding
 

@@ -28,7 +28,8 @@ Trust boundary:
 - **The reviewed commit is pinned.** Every job checks out the head SHA that triage saw.
 - **Prompts and the post script load from the base branch.** So editing either in a PR doesn't change how that PR gets reviewed.
 - **PR-supplied agent config is deleted** before Claude runs: `CLAUDE.md`, `CLAUDE.local.md`, `.claude/` and `.mcp.json` at any depth.
-- **Claude only reads.** It has read-only tools, no GitHub access, and no git credentials (`persist-credentials: false`). PR content can't make it post anything, and a forged verdict can't get through the script.
+- **Claude only reads.** It has Read, Glob and Grep, and no shell: even `git log` and `git diff` can write files through `--output`. The workflow writes the diff and per-file history to `.review-context/` for it. It has no GitHub access and no git credentials (`persist-credentials: false`). PR content can't make it post anything, and a forged verdict can't get through the script.
+- **The post script runs from a fresh copy.** The Post step extracts it from the base branch into `$RUNNER_TEMP` right before running it.
 - **Actions are pinned to commit SHAs.**
 
 GitHub validates a workflow change against the default branch, so a PR that edits this workflow can't review itself. Merge it first, then test it with a manual run on an existing PR.
