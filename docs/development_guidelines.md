@@ -8,6 +8,22 @@ This document outlines the version control strategy and coding practices for the
 *   **Repository:** Central repository recommended (e.g., named `qlds-ui`).
 *   **Branching:** Feature branching workflow (e.g., `feature/list-instances`, `feature/edit-config`, `fix/auth-bug`).
 
+## Automated PR Review
+
+`.github/workflows/claude-code-review.yml` reviews each PR when it is opened, reopened or marked ready for review. It doesn't run on new pushes. To review again, toggle the PR to draft and back, or run the workflow manually with the PR number (**Actions → Claude Code Review → Run workflow**).
+
+The pipeline has three stages. The prompts live in `.github/review-prompts/`.
+
+1. **Triage** (no model). A PR that only touches `docs/`, `README.md` or `VERSION` gets a short "review skipped" comment and nothing else runs. Otherwise triage picks the finders: `correctness` and `conventions` always run, and `security` runs only when the diff touches `ui/`, `frontend-react/src/`, `ansible/`, `terraform/`, `.github/`, dependencies, Docker files or shell scripts.
+2. **Finders** (Sonnet, run in parallel). Each one reviews the diff through a single lens and returns JSON findings with a failure scenario, evidence, severity and confidence. The finders are tuned for coverage: they report everything they find and leave the filtering to the verifier.
+3. **Verifier** (Opus, fresh context). It reads the code to check every finding, merges duplicates, and accepts or rejects each one using the same rules as the `/assess-review` skill. It then posts one review with the accepted findings and inline comments. Rejected findings are listed in a collapsed section, so you can check how it filtered them.
+
+Lenses are split by concern (correctness, security, project rules), not by layer. Bugs between the Flask API and the React client would be missed by a frontend-only or backend-only reviewer.
+
+The finders read `docs/development_guidelines.md`, `docs/architecture.md`, `docs/design-system.md` and `docs/security/threat_model.md`, because `CLAUDE.md` isn't in the repo. A convention that should be enforced in review needs to be written in one of these docs.
+
+GitHub validates a workflow change against the default branch, so a PR that edits this workflow can't review itself. Merge it first, then test it with a manual run on an existing PR.
+
 ## Coding Practices & Principles
 
 *   **Descriptive Naming:** Clear, purpose-indicating names for files, variables, functions.
