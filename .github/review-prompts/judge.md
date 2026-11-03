@@ -69,6 +69,8 @@ Format `review.md` like this:
 
     <sub>Finders: correctness, security, conventions · verifier: <model></sub>
 
-If nothing is accepted, the verdict is "Ready to merge" and the Accepted section
-says "None". Keep the filtered list, because it is how the owner audits your
+If any scheduled finder failed (no findings file, or one that isn't valid JSON),
+the verdict is "Review incomplete: <lens> finder failed", whatever else you
+found. A missing lens is not a clean result. Otherwise, if nothing is accepted,
+the verdict is "Ready to merge" and the Accepted section says "None". Keep the filtered list, because it is how the owner audits your
 judgement. Don't add a strengths section, and don't use emojis.

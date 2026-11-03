@@ -1,4 +1,5 @@
 # Multi-agent PR review: parallel finders (coverage) -> one verifier (precision).
+# Prompts load from the base branch; fork PRs are skipped (see triage).
 # Prompts live in .github/review-prompts/. Keep the workflow name and the
 # github-actions[bot] review it posts: local skills (assess-review,
 # auto-pr-merge, review-pr) depend on both.
@@ -41,6 +42,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           [[ "$PR" =~ ^[0-9]+$ ]] || { echo "PR must be a number, got: $PR"; exit 1; }
+          # Fork PRs would run untrusted code next to the OAuth token on a manual
+          # dispatch (and get no secrets on pull_request anyway), so skip them.
+          if [ "$(gh pr view "$PR" --json isCrossRepository -q .isCrossRepository)" = "true" ]; then
+            echo "::notice::PR #$PR is from a fork; Claude review skipped."
+            echo "skip=fork" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh pr checkout "$PR"
           BASE=$(gh pr view "$PR" --json baseRefName -q .baseRefName)
           git fetch origin "$BASE"
@@ -51,12 +59,7 @@ jobs:
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          LENSES='["correctness","conventions"'
-          # The security finder runs only when the diff touches an attack surface.
-          if echo "$CODE" | grep -qE '^(ui/|frontend-react/src/|ansible/|terraform/|\.github/|requirements|Dockerfile|docker-compose|.*\.sh$)'; then
-            LENSES="$LENSES,\"security\""
-          fi
-          echo "lenses=$LENSES]" >> "$GITHUB_OUTPUT"
+          echo 'lenses=["correctness","conventions","security"]' >> "$GITHUB_OUTPUT"
 
       - name: Post skip notice for docs-only PRs
         if: steps.t.outputs.skip == 'true'
@@ -65,9 +68,9 @@ jobs:
         run: |
           gh pr review "$PR" --comment --body "## Claude Code Review
 
-          **Verdict:** Ready to merge
+          **Verdict:** Not reviewed
 
-          Docs-only change (docs/, README.md, VERSION), so the code review was skipped."
+          Docs-only change (docs/, README.md, VERSION), so the code review was skipped. This is not an approval."
 
   find:
     needs: triage
@@ -95,6 +98,11 @@ jobs:
           BASE=$(gh pr view "$PR" --json baseRefName -q .baseRefName)
           git fetch origin "$BASE"
           echo "PR_BASE=origin/$BASE" >> "$GITHUB_ENV"
+          # Prompts come from the base branch, never the PR, and any agent
+          # config the PR adds is dropped before Claude starts.
+          mkdir -p .review-prompts-base
+          git archive "origin/$BASE" .github/review-prompts | tar -x -C .review-prompts-base --strip-components=2
+          rm -rf .claude CLAUDE.md .mcp.json
 
       - name: Find issues (${{ matrix.lens }})
         id: find
@@ -104,8 +112,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           show_full_output: true
           prompt: |
-            Read `.github/review-prompts/_shared.md` and then
-            `.github/review-prompts/${{ matrix.lens }}.md`, and follow them.
+            Read `.review-prompts-base/_shared.md` and then
+            `.review-prompts-base/${{ matrix.lens }}.md`, and follow them.
             The change under review is PR #${{ env.PR }}:
             `git diff ${{ env.PR_BASE }}...HEAD`
           claude_args: >-
@@ -144,7 +152,14 @@ jobs:
       - name: Check out PR head
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr checkout "$PR"
+        run: |
+          gh pr checkout "$PR"
+          BASE=$(gh pr view "$PR" --json baseRefName -q .baseRefName)
+          git fetch origin "$BASE"
+          # Same as the finders: base-branch prompts, no PR-supplied agent config.
+          mkdir -p .review-prompts-base
+          git archive "origin/$BASE" .github/review-prompts | tar -x -C .review-prompts-base --strip-components=2
+          rm -rf .claude CLAUDE.md .mcp.json
 
       - uses: actions/download-artifact@v4
         continue-on-error: true
@@ -163,7 +178,7 @@ jobs:
           classify_inline_comments: "false"
           prompt: |
             PR #${{ env.PR }} in ${{ github.repository }}.
-            Follow `.github/review-prompts/judge.md`. The finders' output is in `findings/*.json`.
+            Follow `.review-prompts-base/judge.md`. The finders' output is in `findings/*.json`.
             Finders that were scheduled: ${{ needs.triage.outputs.lenses }}.
             A scheduled finder with no file failed; name it in the review footer.
           claude_args: >-
