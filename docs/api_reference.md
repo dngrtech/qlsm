@@ -438,6 +438,7 @@ Example success response:
     "ssh_user": "ansible",
     "ssh_port": 22,
     "os_type": "debian",
+    "os_version": "12",
     "runtime": "minqlx",
     "is_standalone": false,
     "timezone": "America/New_York",
@@ -467,6 +468,8 @@ Example success response:
 `firewall_pool_v2: false` means the host's firewall allow-list was rendered before the game/RCON port pool was widened, so the higher instance slots may not be reachable. A successful host setup run — initial or "Re-run Host Setup" — sets it to `true`.
 
 `runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and never changed afterward. `NULL`/legacy rows normalize to `"minqlx"`.
+
+`os_version` is the host's `/etc/os-release` `VERSION_ID` (e.g. `"24.04"`), or `null` when unknown. Hosts created before this field existed are filled in by a background task that `GET /api/hosts/` starts for ACTIVE non-self hosts (at most once per host per hour), so the value appears on a later request.
 
 ## Instances
 

@@ -156,7 +156,7 @@ from ui.tasks import provision_host, destroy_host, \
     setup_standalone_host_ansible, remove_standalone_host, \
     force_update_workshop_task, apply_plugin_updates_task, configure_host_auto_restart_task, \
     configure_host_watchdog_task, \
-    resize_host_task, \
+    resize_host_task, backfill_host_os_version, \
     rerun_host_setup_ansible, rerun_standalone_host_setup, \
     RERUN_CLOUD_SETUP_TIMEOUT, RERUN_SETUP_LOCK_RELEASE_BUFFER, \
     RERUN_STANDALONE_SETUP_TIMEOUT, \
@@ -184,8 +184,32 @@ host_api_bp = Blueprint('host_api_routes', __name__) # url_prefix will be set wh
 def list_hosts_api():
     """Returns a list of configured host servers."""
     hosts = get_hosts()
+    _enqueue_os_version_backfill(hosts)
     host_list = [host.to_dict() for host in hosts] # Assuming Host model has a to_dict() method
     return jsonify({"data": host_list})
+
+
+def _enqueue_os_version_backfill(hosts):
+    """Read the OS version of ACTIVE hosts created before os_version existed.
+
+    At most one probe per host per hour, so an unreachable host is not retried
+    on every list refresh. The version shows up on a later refresh.
+    """
+    pending = [
+        h for h in hosts
+        if h.status == HostStatus.ACTIVE and not h.os_version and h.provider != 'self'
+    ]
+    if not pending:
+        return
+    redis_client = current_app.extensions.get('redis')
+    if redis_client is None:
+        return
+    try:
+        for host in pending:
+            if redis_client.set(f"host:os_version_probe:{host.id}", 1, nx=True, ex=3600):
+                enqueue_task(backfill_host_os_version, host.id)
+    except Exception:
+        current_app.logger.exception("Could not enqueue OS version backfill")
 
 @host_api_bp.route('/', methods=['POST'], endpoint='add_host_api')
 @jwt_required()
