@@ -143,7 +143,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/findings"
           F="$RUNNER_TEMP/findings/${{ matrix.lens }}.json"
           printf '%s' "$OUT" > "$F"
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d['findings']), 'findings')" "$F"
+          python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d['findings']), 'findings')" "$F"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -211,4 +211,4 @@ jobs:
           FINDINGS_DIR: .review-findings
           VERDICT_JSON: ${{ steps.verify.outputs.structured_output }}
           MODEL: ${{ env.VERIFIER_MODEL }}
-        run: python3 .review-base/scripts/post_claude_review.py
+        run: python3 -I .review-base/scripts/post_claude_review.py
