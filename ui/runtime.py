@@ -10,6 +10,7 @@ the two runtimes cannot drift apart.
 minqlxtended (github.com/tjone270/minqlxtended) is a hard fork of minqlx with
 no backwards compatibility: plugins written for one do not run on the other.
 """
+import os
 import re
 
 MINQLX = 'minqlx'
@@ -122,8 +123,11 @@ def runtime_extravars(host):
 
 ISOLATED_INSTANCE_DEPS_ROOT = '/home/ql/runtime-deps/minqlxtended/instances'
 # Controller-side core requirements for venvs built outside an upgrade
-# operation (new/redeployed instances on an isolated host).
-_CORE_REQUIREMENTS = ('ql-assets', 'data', 'minqlxtended-plugins', 'requirements.txt')
+# operation (new/redeployed instances on an isolated host). Anchored at the
+# repository root (as preset_compat.ASSETS_DIR is), never the worker's cwd.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+_CORE_REQUIREMENTS = os.path.join(
+    _REPO_ROOT, 'ql-assets', 'data', _RUNTIME_PATHS[MINQLXTENDED]['asset_plugins_dir'], 'requirements.txt')
 
 
 def isolated_instance_deps_path(instance_id):
@@ -142,9 +146,12 @@ def instance_runtime_extravars(instance):
     ISOLATED_INSTANCE_DEPS_ROOT (persisted with the caller's next commit), and
     python_deps_ensure asks tasks/install_minqlx_deps.yml to build or refresh
     it as ql before any pip -- system pip is never used there. The instance's
-    own requirements are the copy already synced to the host."""
-    import os
+    own requirements are the copy already synced to the host.
 
+    A venv under ISOLATED_INSTANCE_DEPS_ROOT is keyed by the instance id,
+    which SQLite can reuse after a delete, so it also gets python_deps_owner
+    (id + creation time): install_minqlx_deps.yml rebuilds a venv whose
+    marker names another instance. Operation venvs embed the operation id."""
     host = instance.host
     extravars = runtime_extravars(host)
     isolated = (bool(getattr(host, 'runtime_deps_isolated', False))
@@ -156,5 +163,8 @@ def instance_runtime_extravars(instance):
         extravars['python_deps_path'] = deps_path
     if isolated:
         extravars['python_deps_ensure'] = True
-        extravars['python_deps_core_requirements_src'] = os.path.abspath(os.path.join(*_CORE_REQUIREMENTS))
+        extravars['python_deps_core_requirements_src'] = _CORE_REQUIREMENTS
+        if deps_path == isolated_instance_deps_path(instance.id):
+            created = getattr(instance, 'created_at', None)
+            extravars['python_deps_owner'] = f'{int(instance.id)}:{created.isoformat() if created else "unknown"}'
     return extravars

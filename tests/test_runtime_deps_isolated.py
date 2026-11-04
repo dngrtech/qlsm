@@ -293,3 +293,101 @@ def test_remote_requirements_join_the_single_pip_run():
     install = _named(tasks, 'Install core and instance requirements')
     assert 'item.remote_requirements' in install['ansible.builtin.command']['argv']
     assert 'item.remote_requirements' in str(install['when'])
+
+
+# --- Local review #5: a reused instance id never inherits a deleted instance's venv ---
+
+def test_new_instance_venv_carries_an_ownership_marker(make_instance):
+    inst = make_instance(True)
+    extravars = instance_runtime_extravars(inst)
+    assert extravars['python_deps_owner'] == f'{inst.id}:{inst.created_at.isoformat()}'
+
+
+@pytest.mark.parametrize('isolated,deps', [(False, None), (True, OP_VENV)])
+def test_no_ownership_marker_outside_new_instance_venvs(make_instance, isolated, deps):
+    assert 'python_deps_owner' not in instance_runtime_extravars(make_instance(isolated, deps=deps))
+
+
+def _claim_task():
+    tasks = _tasks('ansible/playbooks/tasks/install_minqlx_deps.yml')
+    claim = _named(tasks, 'Claim the instance')
+    ensure = _named(tasks, "Ensure the instance's isolated dependency venv")
+    assert tasks.index(claim) < tasks.index(ensure)
+    assert claim['become_user'] == 'ql'
+    assert 'python_deps_owner' in str(claim['when'])
+    return claim
+
+
+def _run_claim(tmp_path, venv, owner):
+    import subprocess
+    import sys
+    claim = _claim_task()
+    script = claim['vars']['python_deps_claim_py']
+    out = subprocess.run([sys.executable, '-c', script, str(venv), owner],
+                         capture_output=True, text=True, check=True)
+    return out.stdout.strip()
+
+
+def test_claim_rebuilds_a_venv_owned_by_another_instance(tmp_path):
+    venv = tmp_path / 'instances' / '7'
+    (venv / 'lib').mkdir(parents=True)
+    (venv / 'lib' / 'old_pkg.py').write_text('x')
+    (venv / '.qlsm-owner').write_text('7:2026-01-01T00:00:00')
+    assert _run_claim(tmp_path, venv, '7:2026-11-04T10:00:00') == 'rebuilt'
+    assert sorted(p.name for p in venv.iterdir()) == ['.qlsm-owner']
+    assert (venv / '.qlsm-owner').read_text() == '7:2026-11-04T10:00:00'
+
+
+def test_claim_keeps_its_own_venv(tmp_path):
+    venv = tmp_path / 'instances' / '7'
+    (venv / 'lib').mkdir(parents=True)
+    (venv / '.qlsm-owner').write_text('7:a')
+    assert _run_claim(tmp_path, venv, '7:a') == 'kept'
+    assert (venv / 'lib').is_dir()
+
+
+def test_claim_creates_a_missing_venv_dir_with_its_marker(tmp_path):
+    venv = tmp_path / 'instances' / '7'
+    assert _run_claim(tmp_path, venv, '7:a') == 'claimed'
+    assert (venv / '.qlsm-owner').read_text() == '7:a'
+
+
+def test_claim_replaces_an_unmarked_venv_and_never_follows_a_symlink(tmp_path):
+    target = tmp_path / 'elsewhere'
+    target.mkdir()
+    (target / 'keep.txt').write_text('x')
+    venv = tmp_path / 'instances' / '7'
+    venv.parent.mkdir()
+    venv.symlink_to(target)
+    assert _run_claim(tmp_path, venv, '7:a') == 'rebuilt'
+    assert (target / 'keep.txt').exists()
+    assert venv.is_dir() and not venv.is_symlink()
+
+
+def test_claim_validates_the_venv_path():
+    claim = _claim_task()
+    tasks = _tasks('ansible/playbooks/tasks/install_minqlx_deps.yml')
+    check = tasks[tasks.index(claim) - 1]
+    assert 'ansible.builtin.assert' in check
+    text = str(check['ansible.builtin.assert']['that'])
+    assert '^/home/ql/runtime-deps/minqlxtended/instances/[0-9]+$' in text
+
+
+def test_instance_delete_removes_its_new_instance_venv_as_ql():
+    tasks = _tasks('ansible/playbooks/manage_qlds_service.yml')[0]['tasks']
+    remove = _named(tasks, "Remove the instance's isolated dependency venv")
+    assert remove['become_user'] == 'ql'
+    assert remove['ansible.builtin.file'] == {
+        'path': '/home/ql/runtime-deps/minqlxtended/instances/{{ id | int }}', 'state': 'absent'}
+    assert "service_action == 'delete'" in str(remove['when'])
+
+
+# --- Local review #6: the core requirements path does not depend on the cwd ---
+
+def test_core_requirements_path_is_independent_of_the_cwd(make_instance, monkeypatch, tmp_path):
+    inst = make_instance(True)
+    monkeypatch.chdir(tmp_path)
+    core = instance_runtime_extravars(inst)['python_deps_core_requirements_src']
+    assert os.path.isfile(core), core
+    assert core.endswith('ql-assets/data/minqlxtended-plugins/requirements.txt')
+    assert not core.startswith(str(tmp_path))

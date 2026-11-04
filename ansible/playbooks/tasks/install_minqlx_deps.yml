@@ -30,6 +30,54 @@
 # pip check -- before any other pip. Never system pip on such a host. A pip
 # failure only warns (QLSM_PIP_WARN) and the restart/apply/deploy goes on, as
 # on legacy hosts; failing to create a missing venv still fails the play.
+# A new-instance venv (instances/<id>) is keyed by an id SQLite can reuse after
+# a delete. python_deps_owner (id + creation time) is recorded in the venv; a
+# venv with a different or no marker is removed (a symlink is unlinked, never
+# followed) and rebuilt by the ensure step below. Runs as ql, like every step
+# under /home/ql.
+- name: Require a new-instance venv path before claiming it
+  ansible.builtin.assert:
+    that:
+      - python_deps_path is match('^/home/ql/runtime-deps/minqlxtended/instances/[0-9]+$')
+    fail_msg: "Refusing to claim {{ python_deps_path }}: not a new-instance dependency venv."
+    quiet: true
+  when: python_deps_ensure | default(false) | bool and python_deps_owner | default('') | length > 0
+
+- name: Claim the instance's venv (rebuild one left by a deleted instance)
+  become: yes
+  become_user: ql
+  vars:
+    python_deps_claim_py: |
+      import os, shutil, sys
+      path, owner = sys.argv[1], sys.argv[2]
+      marker = os.path.join(path, '.qlsm-owner')
+      state = 'claimed'
+      if os.path.islink(path) or (os.path.lexists(path) and not os.path.isdir(path)):
+          os.unlink(path)
+          state = 'rebuilt'
+      elif os.path.isdir(path):
+          try:
+              fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW)
+              with os.fdopen(fd) as handle:
+                  current = handle.read().strip()
+          except OSError:
+              current = None
+          if current == owner:
+              print('kept')
+              sys.exit(0)
+          shutil.rmtree(path)
+          state = 'rebuilt'
+      os.makedirs(path, mode=0o755)
+      fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+      os.write(fd, owner.encode())
+      os.close(fd)
+      print(state)
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -c, "{{ python_deps_claim_py }}", "{{ python_deps_path }}", "{{ python_deps_owner }}"]
+  register: python_deps_claim
+  changed_when: python_deps_claim.stdout | trim != 'kept'
+  when: python_deps_ensure | default(false) | bool and python_deps_owner | default('') | length > 0
+
 - name: Ensure the instance's isolated dependency venv
   ansible.builtin.include_tasks: runtime_python_deps.yml
   vars:
