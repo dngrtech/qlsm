@@ -382,8 +382,8 @@ def _complete_swap(live, staged, backup, entry, source, instance_id):
     """Idempotently move the staged restore into place, keeping live as backup."""
     if os.path.isdir(staged):
         if _tree_problems(staged, entry):
-            if os.path.lexists(live) and not os.path.lexists(backup):
-                raise RestoreSwapError('Staged restore is damaged; live data left in place')
+            # Restaging touches only the operation-owned staged copy; live (or
+            # its backup) stays put until the rebuilt copy has been verified.
             _stage(source, staged, entry, instance_id)
         if os.path.lexists(live):
             if os.path.lexists(backup):

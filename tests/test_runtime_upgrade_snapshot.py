@@ -582,3 +582,28 @@ def test_recovery_completes_an_interrupted_swap(env, monkeypatch, crash_at):
     db.session.refresh(inst)
     assert inst.qlx_plugins is None
     assert _siblings(env, host) == []
+
+
+def test_recovery_restages_a_damaged_staged_copy(env, monkeypatch):
+    host, op, path = _prepared(env, instances=1)
+    inst = host.instances[0]
+    expected = _inventory(os.path.join(path, 'inputs', 'instances', str(inst.id)))
+    _mutate(_live(env, host, inst))
+    mutated = _inventory(_live(env, host, inst))
+
+    real = _crash_on_rename(monkeypatch, 1)  # before_first_rename
+    with pytest.raises(Crash):
+        restore_instance(inst, path)
+    monkeypatch.setattr(snap, '_rename', real)
+    db.session.rollback()
+
+    staged = env.configs / host.name / f'.upgrade-restore-{inst.id}-{op.id}'
+    assert staged.is_dir()
+    (staged / 'server.cfg').write_text('corrupted')
+    (staged / 'scripts' / 'custom.py').unlink()
+    assert _inventory(_live(env, host, inst)) == mutated  # live untouched so far
+
+    result = restore_instance(inst, path)
+    assert result['ok'] is True, result
+    assert _inventory(_live(env, host, inst)) == expected
+    assert _siblings(env, host) == []
