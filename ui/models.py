@@ -68,8 +68,8 @@ class Host(db.Model):
     runtime_deps_isolated = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     firewall_pool_v2 = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = firewall rendered with the current game/RCON port pool; False = narrower legacy allow-list
     # Which minqlx runtime this host builds and runs. Chosen at creation and
-    # immutable thereafter -- migrating a live host is destructive, and a locked
-    # column can never drift from what is actually installed on the box.
+    # changed only by the Upgrade to minqlxtended action (minqlx -> minqlxtended,
+    # with whole-host rollback), so it can never drift from what is installed.
     runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
                         server_default=DEFAULT_RUNTIME)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)

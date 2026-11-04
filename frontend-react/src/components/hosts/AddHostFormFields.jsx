@@ -157,8 +157,9 @@ function AddHostFormFields({
           className="mt-1.5 text-xs"
           style={{ color: 'var(--accent-warning, var(--text-muted))' }}
         >
-          This cannot be changed after the host is created. Moving a host between
-          runtimes means saving a preset and deploying a new host.
+          After the host is created, the runtime changes only through the Upgrade to
+          minqlxtended action, which moves a minqlx host on Ubuntu 24.04 or newer to
+          minqlxtended. It cannot be moved back.
         </p>
       </div>
 

@@ -100,9 +100,9 @@ describe('AddHostFormFields runtime picker', () => {
     });
   });
 
-  it('tells the operator the choice cannot be changed later', () => {
+  it('tells the operator the runtime changes only through the upgrade action', () => {
     render(<AddHostFormFields {...baseProps} />);
-    expect(screen.getByTestId('runtime-immutable-warning')).toHaveTextContent(/cannot be changed/i);
+    expect(screen.getByTestId('runtime-immutable-warning')).toHaveTextContent(/Upgrade to minqlxtended action/i);
   });
 });
 

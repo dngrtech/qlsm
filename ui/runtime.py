@@ -1,7 +1,8 @@
 """Single source of truth for the per-host minqlx runtime split.
 
-A host picks its runtime at creation (Host.runtime) and never changes it, so
-every path this module returns is stable for the life of the host. Every
+A host picks its runtime at creation (Host.runtime). It is changed only by the
+"Upgrade to minqlxtended" action (ui/runtime_upgrade.py), so every path this
+module returns is stable except across that one audited transition. Every
 hardcoded 'minqlx-plugins' / 'minqlx.log' / '/home/ql/minqlx-shared' string in
 the backend, the playbooks and the Terraform roots resolves through here, so
 the two runtimes cannot drift apart.
@@ -17,8 +18,8 @@ MINQLXTENDED = 'minqlxtended'
 VALID_RUNTIMES = (MINQLX, MINQLXTENDED)
 
 # Nothing ever "flips" this: the Add Host form pre-selects no runtime at all,
-# because the choice is irreversible and QLSM will not make it on an operator's
-# behalf. This constant is the fallback for the two cases where no human is
+# because the choice is changed only by the Upgrade to minqlxtended action and
+# QLSM will not make it on an operator's behalf. This constant is the fallback for the two cases where no human is
 # choosing -- a host row that predates the runtime column, and an API payload
 # that omits the field -- and it points at minqlx because that is the
 # conservative answer, not because it is anyone's default.
