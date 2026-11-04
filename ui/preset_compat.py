@@ -452,7 +452,11 @@ def pool_plugin_compatibility(pool_plugins, source_runtime, target_runtime, targ
         reasons = [POOL_SOURCE_REASON.format(source=source)] + list(reasons)
         entry = _strip_entry(path, verdict, reasons, available)
         entry['originally_checked'] = True
-        entry['from_catalog'] = entry_source.get('tier') == 'builtin'
+        # A built-in pool file is stock; an operator copy under a stock name is
+        # "a standard plugin whose copy differs", as apply_compatibility words it.
+        entry['from_catalog'] = (
+            entry_source.get('tier') == 'builtin' or path in source_catalog
+            or (path in source_hashes and is_root_plugin_path(path)))
         entry['kind'] = _report_kind(entry)
         if entry['replacement']:
             offered[path] = target_text

@@ -456,7 +456,7 @@ def test_edited_operator_pool_copy_of_a_target_plugin_is_replaceable(env):
     result = classify_instance(host.instances[0])
     row = _rows(result)['motd.py']
     assert row['kind'] == 'replaceable' and row['replacement'] == 'motd.py'
-    assert row['from_catalog'] is False and row['originally_checked'] is True
+    assert row['from_catalog'] is True and row['originally_checked'] is True
     assert 'motd.py' in result['replacements']
     assert result['checked_plugins'] == []
 
