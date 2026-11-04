@@ -167,3 +167,41 @@ def test_deps_install_global_branch_only_runs_without_a_deps_path():
     for task in tasks:
         if task.get("ansible.builtin.pip") or "pip3" in str(task.get("command", "")):
             assert "python_deps_path | default('') | length == 0" in str(task.get("when", "")), task["name"]
+
+
+def test_migration_adds_and_removes_the_column(tmp_path):
+    """Applies only this migration on top of its parent revision."""
+    import os
+    import sqlite3
+
+    from flask_migrate import downgrade, stamp, upgrade
+
+    from ui import create_app
+
+    db_path = tmp_path / 'migrated.db'
+    app = create_app({'TESTING': True, 'SQLALCHEMY_DATABASE_URI': f'sqlite:///{db_path}',
+                      'SQLALCHEMY_TRACK_MODIFICATIONS': False, 'RCON_ENABLED': False})
+    migrations = os.path.join(os.path.dirname(__file__), '..', 'migrations')
+
+    def columns():
+        conn = sqlite3.connect(db_path)
+        try:
+            return {row[1] for row in conn.execute('PRAGMA table_info(ql_instance)')}
+        finally:
+            conn.close()
+
+    try:
+        with app.app_context():
+            db.create_all()
+            db.session.execute(db.text('ALTER TABLE ql_instance DROP COLUMN python_deps_path'))
+            db.session.commit()
+            assert 'python_deps_path' not in columns()
+            stamp(directory=migrations, revision='20261104120000')
+            upgrade(directory=migrations, revision='20261104130000')
+            assert 'python_deps_path' in columns()
+            downgrade(directory=migrations, revision='20261104120000')
+            assert 'python_deps_path' not in columns()
+    finally:
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()

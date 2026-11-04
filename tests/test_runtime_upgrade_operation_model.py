@@ -110,7 +110,7 @@ def test_migration_creates_table_and_partial_index(tmp_path):
             db.create_all()
             HostRuntimeUpgradeOperation.__table__.drop(db.engine)
             stamp(directory=migrations, revision='20261101120000')
-            upgrade(directory=migrations)
+            upgrade(directory=migrations, revision='20261104120000')
     finally:
         with app.app_context():
             db.session.remove()
