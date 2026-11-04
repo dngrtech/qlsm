@@ -95,6 +95,9 @@ def _restore(execution, iid, original, snapshot_root):
             instance.python_deps_path = original_deps
             execution.commit()
 
+    if not _touched(outcome) and outcome.get('stop') != 'ok':
+        return _leave_untouched(execution, iid, original, outcome)
+
     instance = execution.instance(iid)
     state = deps.service_state(instance)
     if original == InstanceStatus.RUNNING.value:
@@ -114,6 +117,32 @@ def _restore(execution, iid, original, snapshot_root):
         instance.status = InstanceStatus.STOPPED
     # Fenced commit: a superseded execution cannot write this status/journal.
     execution.record(iid, rollback={'phase': 'complete', 'ok': True, 'error': None, 'pending': False})
+
+
+_DESCRIBE = {'active': 'running', 'inactive': 'stopped', 'stray_process': 'stopped in systemd but a '
+             'server process is still running', 'unknown': 'not observable'}
+
+
+def _leave_untouched(execution, iid, original, outcome):
+    """An instance the upgrade never stopped (or whose stop never succeeded)
+    and never converted or configured: its files and remote state are what
+    they were, and whatever its service is doing now is not our doing. It
+    counts as restored and never pins the reservation; it is not started (a
+    failed stop may have left a server holding the port). Anything unexpected
+    is recorded and logged for the operator."""
+    instance = execution.instance(iid)
+    state = execution.deps.service_state(instance)
+    expected = 'active' if original == InstanceStatus.RUNNING.value else 'inactive'
+    note = None
+    if state != expected:
+        stop = outcome.get('stop')
+        why = ('its stop failed' if stop == 'failed' else 'it was never stopped') \
+            if original == InstanceStatus.RUNNING.value else 'it was never started by the upgrade'
+        note = (f'left as found ({why}, files unchanged): it is {_DESCRIBE.get(state, state)}, '
+                f'expected {original.upper()}')
+        append_log(execution.host, f'Rollback: instance {instance.name} {note}.')
+    execution.record(iid, rollback={'phase': 'complete', 'ok': True, 'error': None, 'pending': False,
+                                    'untouched': True, 'note': note})
 
 
 def _fail_instance(execution, iid, failure):

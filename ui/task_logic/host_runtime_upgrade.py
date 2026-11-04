@@ -159,10 +159,31 @@ def _validate(execution):
     return inputs
 
 
+_STATE_TEXT = {'active': 'its service is running', 'unknown': 'its state cannot be observed',
+               'stray_process': 'its service is stopped but a server process is still running'}
+
+
+def _preflight_stopped(execution):
+    """Every originally STOPPED instance must already be quiesced (systemd
+    inactive and no server process), checked before anything is stopped:
+    otherwise the upgrade is cancelled with no change at all."""
+    for iid, original in sorted(execution.originals().items()):
+        if original != InstanceStatus.STOPPED.value:
+            continue
+        instance = execution.instance(iid)
+        state = execution.deps.service_state(instance)
+        if state != 'inactive':
+            raise PreparationFailed(
+                f'instance {instance.name} is STOPPED but {_STATE_TEXT.get(state, f"its service is {state}")}; '
+                'stop it fully and try again')
+
+
 def _prepare(execution, inputs):
-    """Step 2: complete, published snapshot; then the last pre-mutation check."""
+    """Step 2: STOPPED preflight, complete published snapshot, then the last
+    pre-mutation check."""
     op = execution.op
     host = execution.host
+    _preflight_stopped(execution)
     try:
         prepare_upgrade_snapshot(host, op.id, inputs)
     except Exception as exc:
@@ -199,7 +220,8 @@ def _quiesce(execution):
             if state != 'inactive':
                 execution.record(iid, stop='failed', error=f'service is {state}')
                 raise StepFailed(f'instance {instance.name} was STOPPED but its service is {state}')
-            execution.record(iid, stop='ok')
+            # Not stopped by us: 'ok' is reserved for instances the upgrade stopped.
+            execution.record(iid, stop='verified_inactive')
 
 
 def _install(execution, ids):

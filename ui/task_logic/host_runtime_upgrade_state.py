@@ -3,17 +3,19 @@
 The HostRuntimeUpgradeOperation row is the source of truth. Every execution
 (the first worker, or a recovery worker) takes ownership by compare-and-set
 incrementing `fencing_token`. Every write it makes is committed through
-Execution.commit(), which is conditional on that token (and on the operation
-being nonterminal), and every side effect is preceded by Execution.fence();
-a superseded execution gets StaleExecution and stops. Intent is committed before each side effect and the
-outcome after it is verified.
+Execution.commit(), which is conditional on that token only (a claim refuses
+terminal operations, so finishing one always bumps the token first), and
+every side effect is preceded by Execution.fence(), which also refuses a
+terminal operation; a superseded execution gets StaleExecution and stops.
+Intent is committed before each side effect and the outcome after it is
+verified.
 
 instance_outcomes_json layout:
 
     {"host": {"original_runtime_deps_isolated": false, "rollback_reason": "..."},
      "instances": {"<id>": {"original_status": "running",
                             "original_python_deps_path": null,
-                            "stop": "requested|ok|failed", "convert": "swapping|swapped",
+                            "stop": "requested|ok|failed|verified_inactive", "convert": "swapping|swapped",
                             "configure": "requested|ok|failed", "start": "requested|ok|failed",
                             "rollback": {"phase": "...", "ok": bool, "error": "...", "pending": bool},
                             "error": "..."}}}

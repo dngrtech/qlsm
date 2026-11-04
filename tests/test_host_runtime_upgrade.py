@@ -405,11 +405,66 @@ def test_answers_with_auto_accepted_paths_succeed(env):
 
 
 def test_stopped_instance_with_a_stray_server_process_aborts_the_upgrade(world):
-    """STOPPED means systemd inactive AND no server process for the port."""
+    """STOPPED means systemd inactive AND no server process for the port; the
+    preflight runs before anything is stopped and ends failed_preparation."""
     env, host, ids, op, remote, locks, orig = world
     result, deps = _run(op, remote, locks, fail={('stray', ids['B'])})
     assert result is False
-    assert not _called(deps, 'install')
+    _assert_cancelled(host.id, op.id, deps, orig, env)  # no stop/install/configure, reservation released
+    assert not _called(deps, 'stop')
     finished = _op(op.id)
-    assert 'was STOPPED but its service is stray_process' in finished.last_error
+    assert 'instance uh-B is STOPPED but its service is stopped but a server process is still running' \
+        in finished.last_error
+    assert 'uh-B' in db.session.get(Host, host.id).logs
+
+
+def test_forward_stop_failure_leaving_a_stray_process_is_not_started_and_does_not_pin(world):
+    env, host, ids, op, remote, locks, orig = world
+    deps = FakeDeps(remote, locks, fail={('stray', ids['C'])})
+
+    def stop(instance):
+        deps.calls.append(('stop', instance.id))
+        if instance.id == ids['C']:
+            remote.services[ids['C']]['active'] = False  # unit stopped, process survived
+            return False, 'stop timed out'
+        remote.services[instance.id]['active'] = False
+        instance.status = InstanceStatus.STOPPED
+        db.session.commit()
+        return True, None
+
+    deps.stop = stop
+    assert upgrade_host_runtime_logic(op.id, deps=deps, job_id='job-1') is False
+    finished = _op(op.id)
+    assert finished.state == 'rolled_back'
+    assert active_runtime_upgrade(host.id) is None and locks.owners == {}
+    assert ('start', ids['C']) not in deps.calls  # never started over a stray server
+    assert ('start', ids['A']) in deps.calls  # A was stopped by us: it comes back
+    outcome = json.loads(finished.instance_outcomes_json)['instances'][str(ids['C'])]['rollback']
+    assert outcome['ok'] is True and outcome['untouched'] is True and 'its stop failed' in outcome['note']
+    assert 'Rollback: instance uh-C left as found' in db.session.get(Host, host.id).logs
+    assert db.session.get(QLInstance, ids['C']).status != InstanceStatus.ERROR
+    assert tree_state(env.configs / host.name / str(ids['C'])) == orig[ids['C']]['tree']
+
+
+def test_untouched_instance_never_blocks_rollback_completion(world):
+    """A STOPPED instance that grows a stray process mid-upgrade (not our
+    doing: we never stopped, converted or configured it) does not pin the
+    reservation."""
+    env, host, ids, op, remote, locks, orig = world
+    deps = FakeDeps(remote, locks)
+    real_install = deps.install
+
+    def install(host_id, **kwargs):
+        deps.fail |= {('stray', ids['B']), 'install'}
+        return real_install(host_id, **kwargs)
+
+    deps.install = install
+    assert upgrade_host_runtime_logic(op.id, deps=deps, job_id='job-1') is False
+    finished = _op(op.id)
+    assert finished.state == 'rolled_back', (finished.phase, finished.instance_outcomes_json)
+    assert finished.recovery_required is False
+    assert active_runtime_upgrade(host.id) is None
+    outcome = json.loads(finished.instance_outcomes_json)['instances'][str(ids['B'])]['rollback']
+    assert outcome['untouched'] is True and 'never started by the upgrade' in outcome['note']
+    assert db.session.get(QLInstance, ids['B']).status == InstanceStatus.STOPPED
     assert ('start', ids['B']) not in deps.calls
