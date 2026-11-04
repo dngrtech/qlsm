@@ -201,7 +201,9 @@ def save_snapshot_presets(host, operation_id):
     names = []
     try:
         meta_root = os.path.join(source, 'instances')
-        for instance_id in sorted(int(entry) for entry in os.listdir(meta_root)):
+        # A host with no instances has no instances/ directory and no presets.
+        entries = os.listdir(meta_root) if os.path.isdir(meta_root) else []
+        for instance_id in sorted(int(entry) for entry in entries):
             with open(os.path.join(meta_root, str(instance_id), 'instance.json'),
                       encoding='utf-8') as handle:
                 meta = json.load(handle)
