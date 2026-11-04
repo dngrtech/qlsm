@@ -51,7 +51,8 @@ def detect_self_host_os_version(path=SELF_HOST_OS_INFO_PATH):
 
     Only that file is trusted: the container's own /etc/os-release describes
     the QLSM image, not the machine QLDS runs on. Older host-init versions
-    did not write a version, so it appears after the next `docker compose up`.
+    did not write a version, so it appears after updating with
+    `qlsm-install.sh --update`, which rebuilds host-init.
     """
     try:
         with open(path, 'r', encoding='utf-8') as f:
