@@ -158,8 +158,11 @@ def _read(path):
         return handle.read()
 
 
+FENCE = ['--operation-id', OP_A, '--fencing-token', '3']
+
+
 @pytest.fixture
-def instance(tmp_path):
+def instance(tmp_path, helper, capsys):
     tmp_path = tmp_path.resolve()  # macOS: /var is a symlink, and symlinks are refused
     base = tmp_path / 'runtime-ops'
     qlds = tmp_path / 'qlds-27960'
@@ -204,11 +207,16 @@ def instance(tmp_path):
     }
     plan_path = tmp_path / 'plan.json'
     plan_path.write_text(json.dumps(plan))
-    return {'qlds': qlds, 'ops': str(ops), 'base': str(base), 'tmp': tmp_path,
-            'unit': unit_dir / 'qlds@27960.service', 'plan_data': plan,
-            'apply': ['apply', '--base', str(base), '--plan', str(plan_path)],
-            'restore': ['restore', '--base', str(base), '--ops-dir', str(ops),
-                        '--qlds-dir', str(qlds), '--unit-path', unit]}
+    # apply/restore only run while this operation/token holds the lock.
+    rc, out = _run(helper, capsys, 'acquire', '--base', str(base), *FENCE, '--ttl', '120')
+    assert rc == 0, out
+    yield {'qlds': qlds, 'ops': str(ops), 'base': str(base), 'tmp': tmp_path,
+           'unit': unit_dir / 'qlds@27960.service', 'plan_data': plan,
+           'apply': ['apply', '--base', str(base), *FENCE, '--plan', str(plan_path)],
+           'restore': ['restore', '--base', str(base), *FENCE, '--ops-dir', str(ops),
+                       '--qlds-dir', str(qlds), '--unit-path', unit]}
+    helper.main(['release', '--base', str(base), *FENCE])
+    capsys.readouterr()
 
 
 def test_apply_records_then_installs_and_restore_reverses_it(helper, instance, capsys):
@@ -262,7 +270,7 @@ def test_restore_keeps_a_created_file_that_changed_since(helper, instance, capsy
 def _replan(instance, name, **changes):
     path = instance['tmp'] / name
     path.write_text(json.dumps(dict(instance['plan_data'], **changes)))
-    return ['apply', '--base', instance['base'], '--plan', str(path)]
+    return ['apply', '--base', instance['base'], *FENCE, '--plan', str(path)]
 
 
 def test_unrecorded_apply_writes_no_inventory(helper, instance, capsys):
@@ -415,3 +423,73 @@ def test_the_base_itself_may_never_be_writable_by_others(helper, tmp_path, capsy
     rc, out = _run(helper, capsys, 'acquire', '--base', str(base),
                    '--operation-id', OP_A, '--fencing-token', '1')
     assert rc == 3 and 'non-writable-by-others' in out['refused']
+
+
+# --- fencing on every write phase ----------------------------------------------------
+
+def _with_token(args, token):
+    args = list(args)
+    args[args.index('--fencing-token') + 1] = str(token)
+    return args
+
+
+def test_apply_with_a_stale_or_newer_token_is_refused(helper, instance, capsys):
+    for token in (2, 4):
+        rc, out = _run(helper, capsys, *_with_token(instance['apply'], token))
+        assert rc == 3 and 'fencing' in out['refused']
+    assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'old cfg\n'
+
+
+def test_restore_with_a_stale_token_is_refused(helper, instance, capsys):
+    _run(helper, capsys, *instance['apply'])
+    rc, out = _run(helper, capsys, *_with_token(instance['restore'], 2))
+    assert rc == 3 and 'fencing' in out['refused']
+    assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'new cfg\n'
+
+
+def test_apply_after_the_lock_lapsed_is_refused(helper, instance, capsys):
+    """Holder gone (TTL or crash): the play no longer owns the host."""
+    rc, out = _run(helper, capsys, 'release', '--base', instance['base'], *FENCE)
+    assert out['signalled'] is True
+    for _ in range(50):
+        if not helper._holder_alive(json.loads(_read(os.path.join(instance['base'], helper.TOKEN_NAME)))):
+            break
+        time.sleep(0.1)
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3 and 'no longer held' in out['refused']
+    assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'old cfg\n'
+
+
+def test_apply_after_a_newer_token_took_over_is_refused(helper, instance, capsys):
+    _run(helper, capsys, 'release', '--base', instance['base'], *FENCE)
+    time.sleep(0.5)
+    rc, out = _run(helper, capsys, 'acquire', '--base', instance['base'], '--operation-id', OP_A,
+                   '--fencing-token', '4', '--ttl', '60')
+    assert rc == 0
+    try:
+        rc, out = _run(helper, capsys, *instance['apply'])  # still token 3
+        assert rc == 3 and 'fencing' in out['refused']
+    finally:
+        helper.main(['release', '--base', instance['base'], '--operation-id', OP_A, '--fencing-token', '4'])
+        capsys.readouterr()
+
+
+def test_release_never_signals_a_recycled_pid(helper, tmp_path, capsys):
+    """A recorded holder pid now belonging to another process (different
+    start time) must not be killed."""
+    import subprocess
+    base = tmp_path.resolve() / 'ops-root'
+    base.mkdir(mode=0o700)
+    bystander = subprocess.Popen(['sleep', '30'])
+    try:
+        with open(base / helper.TOKEN_NAME, 'w') as handle:
+            json.dump({'operation_id': OP_A, 'fencing_token': 1, 'state': 'active',
+                       'holder_pid': bystander.pid, 'holder_start': 'not-this-process'}, handle)
+        rc, out = _run(helper, capsys, 'release', '--base', str(base), '--operation-id', OP_A,
+                       '--fencing-token', '1')
+        assert rc == 0 and out['signalled'] is False
+        time.sleep(0.2)
+        assert bystander.poll() is None  # still alive
+    finally:
+        bystander.kill()
+        bystander.wait()

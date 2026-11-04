@@ -76,6 +76,16 @@ def _terminal_operation_ids(host_id):
     return [row.id for row in rows]
 
 
+def _run_playbook(host, playbook, extravars):
+    """(ok, error text) from _run_host_ansible_playbook, which returns
+    (ok, stdout, stderr) normally but (None, error) on its early exits."""
+    outcome = _run_host_ansible_playbook(host, playbook, extravars=extravars)
+    if len(outcome) == 2:
+        return False, outcome[1] or 'ansible-playbook could not run'
+    ok, stdout, stderr = outcome
+    return bool(ok), None if ok else _failure_text(stdout, stderr)
+
+
 def _failure_text(stdout, stderr):
     """The failing task lines from ansible-playbook stdout (where Ansible
     reports them), else the tail of stderr/stdout."""
@@ -117,6 +127,7 @@ def install_runtime_on_host(host_id, *, operation_id, fencing_token, immutable_i
     the runtime and common assets. details['dependency_paths'] maps each
     instance id to its venv when the play succeeded.
     """
+    empty_pool = None
     try:
         _check_identity(operation_id, fencing_token)
         host = db.session.get(Host, host_id)
@@ -137,16 +148,23 @@ def install_runtime_on_host(host_id, *, operation_id, fencing_token, immutable_i
             'common_plugins_builtin_src': os.path.abspath(immutable_inputs['builtin_pool_dir']),
             'runtime_instances': runtime_instances,
         }
-        if immutable_inputs.get('operator_pool_dir'):
-            extravars['common_plugins_operator_src'] = os.path.abspath(immutable_inputs['operator_pool_dir'])
-        ok, stdout, stderr = _run_host_ansible_playbook(host, 'install_runtime.yml', extravars=extravars)
+        operator_pool = immutable_inputs.get('operator_pool_dir')
+        if not operator_pool:
+            # Nothing captured: an empty dir, so sync_common_plugins.yml never
+            # falls back to the live data/shared-plugins/<runtime>.
+            operator_pool = empty_pool = tempfile.mkdtemp(prefix='qlsm-empty-operator-pool-')
+        extravars['common_plugins_operator_src'] = os.path.abspath(operator_pool)
+        ok, error = _run_playbook(host, 'install_runtime.yml', extravars)
         if not ok:
-            return _result(False, _failure_text(stdout, stderr), dependency_paths={})
+            return _result(False, error, dependency_paths={})
         return _result(True, dependency_paths={
             item['id']: dependency_path(operation_id, item['id']) for item in runtime_instances})
     except Exception as exc:  # never raise into the orchestrator
         log.exception('install_runtime_on_host failed for host %s', host_id)
         return _result(False, f'{type(exc).__name__}: {exc}', dependency_paths={})
+    finally:
+        if empty_pool:
+            shutil.rmtree(empty_pool, ignore_errors=True)
 
 
 # --- configure an existing instance -------------------------------------------------
@@ -221,11 +239,17 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
     target runtime before upgrading and the original runtime before rolling
     back), because the service renderer reads it.
 
-    immutable_inputs: {'config_dir': the instance's converted (or, on
-    rollback, snapshot) config tree, 'system_hooks_dir': optional, defaults
-    to ql-assets/data/system-hooks}. dependency_path: the instance's venv
-    from install_runtime_on_host, or None for the host's system Python (always
-    None for minqlx). On success it is persisted as QLInstance.python_deps_path.
+    Forward: immutable_inputs = {'config_dir': the instance's converted config
+    tree, 'system_hooks_dir': optional, defaults to ql-assets/data/system-hooks}.
+    dependency_path: the instance's venv from install_runtime_on_host, or None
+    for the host's system Python (always None for minqlx). On success it is
+    persisted as QLInstance.python_deps_path.
+
+    Rollback (restore_from_operation=<operation id>): an exact inventory
+    restore only -- backed-up files (including the original systemd unit) are
+    put back and files the forward run created are removed. Nothing is
+    re-copied from the shared runtime dir. immutable_inputs is not used and
+    dependency_path must be None; python_deps_path is cleared on success.
     """
     stage_dir = None
     try:
@@ -241,6 +265,26 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
         if host_runtime(host) != runtime:
             return _result(False, f'Host {host.name} runtime is {host_runtime(host)}, not {runtime}; '
                                   'commit the runtime before configuring its instances')
+
+        if restore_from_operation:
+            if dependency_path:
+                return _result(False, 'A rollback restores the original environment; '
+                                      'dependency_path must be None')
+            extravars = {
+                'operation_id': operation_id,
+                'fencing_token': fencing_token,
+                'terminal_operation_ids': _terminal_operation_ids(host.id),
+                'instance_id': instance.id,
+                'port': instance.port,
+                'restore_from_operation': restore_from_operation,
+            }
+            ok, error = _run_playbook(host, 'update_instance_runtime.yml', extravars)
+            if not ok:
+                return _result(False, error, instance_id=instance.id)
+            instance.python_deps_path = None
+            db.session.commit()
+            return _result(True, instance_id=instance.id, python_deps_path=None, manifest_path=None)
+
         deps = _validate_dependency_path(runtime, dependency_path)
         config_dir = immutable_inputs['config_dir']
         if not os.path.isdir(config_dir):
@@ -267,18 +311,16 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
             'runtime_artifacts': required,
             'runtime_optional_artifacts': optional,
             'stage_archive': archive,
-            'restore_from_operation': restore_from_operation or '',
-            'local_manifest_path': '' if restore_from_operation
-            else _local_manifest_path(host.id, operation_id, instance.id),
+            'restore_from_operation': '',
+            'local_manifest_path': _local_manifest_path(host.id, operation_id, instance.id),
         }
-        ok, stdout, stderr = _run_host_ansible_playbook(host, 'update_instance_runtime.yml',
-                                                        extravars=extravars)
+        ok, error = _run_playbook(host, 'update_instance_runtime.yml', extravars)
         if not ok:
-            return _result(False, _failure_text(stdout, stderr), instance_id=instance.id)
+            return _result(False, error, instance_id=instance.id)
         instance.python_deps_path = deps or None
         db.session.commit()
         return _result(True, instance_id=instance.id, python_deps_path=deps or None,
-                       manifest_path=extravars['local_manifest_path'] or None)
+                       manifest_path=extravars['local_manifest_path'])
     except Exception as exc:  # never raise into the orchestrator
         log.exception('configure_existing_instance failed for instance %s', instance_id)
         try:
@@ -302,10 +344,9 @@ def finalize_runtime_operation(host_id, *, operation_id, fencing_token):
         host = db.session.get(Host, host_id)
         if host is None:
             return _result(False, f'Host {host_id} not found')
-        ok, stdout, stderr = _run_host_ansible_playbook(
-            host, 'finalize_runtime_operation.yml',
-            extravars={'operation_id': operation_id, 'fencing_token': fencing_token})
-        return _result(True) if ok else _result(False, _failure_text(stdout, stderr))
+        ok, error = _run_playbook(host, 'finalize_runtime_operation.yml',
+                                  {'operation_id': operation_id, 'fencing_token': fencing_token})
+        return _result(True) if ok else _result(False, error)
     except Exception as exc:
         log.exception('finalize_runtime_operation failed for host %s', host_id)
         return _result(False, f'{type(exc).__name__}: {exc}')

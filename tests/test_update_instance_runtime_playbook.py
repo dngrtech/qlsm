@@ -69,17 +69,31 @@ def test_only_runtime_engine_archive_launcher_come_from_the_shared_dir():
     assert kinds == {"tree", "names", "missing_only", "file"}
 
 
-def test_rollback_mode_restores_inventory_and_does_not_re_record():
-    tasks = {t.get("name"): t for t in _flat(_play()["tasks"])}
-    restore = tasks["Restore the inventory recorded by the operation being rolled back"]
+def test_rollback_mode_is_inventory_restore_only():
+    """Rollback must be exact: restore the recorded backups (incl. the original
+    unit) and remove target-created files -- never re-copy runtime artifacts
+    from a shared dir that may have been rebuilt since."""
+    tasks = list(_flat(_play()["tasks"]))
+    by_name = {t.get("name"): t for t in tasks}
+    restore = by_name["Restore the inventory recorded by the operation being rolled back"]
     assert "restore" in restore["ansible.builtin.script"]["cmd"]
-    assert restore["when"] == "restore_from_operation | length > 0"
-    plan = tasks["Write the managed-file plan"]["vars"]["plan"]
-    assert plan["record"] == "{{ restore_from_operation | length == 0 }}"
-    assert plan["ops_dir"] == "{{ ops_dir }}"
-    assert _play()["vars"]["ops_dir"] == "{{ runtime_ops_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
     assert "--qlds-dir" in restore["ansible.builtin.script"]["cmd"]
     assert "--unit-path" in restore["ansible.builtin.script"]["cmd"]
+    assert restore["when"] == "restore_from_operation | length > 0"
+    forward = by_name["Configure forward (not a rollback)"]
+    assert forward["when"] == "restore_from_operation | length == 0"
+    forward_names = {t.get("name") for t in _flat(forward["block"])}
+    assert {"Write the managed-file plan", "Record the inventory, then install the managed files",
+            "Render the systemd unit into staging", "Unpack the instance's managed files"} <= forward_names
+    for task in tasks:  # nothing outside the forward block writes managed files
+        if task.get("name") in forward_names:
+            continue
+        cmd = str((task.get("ansible.builtin.script") or {}).get("cmd", ""))
+        assert " apply " not in cmd, task.get("name")
+    assert _play()["vars"]["ops_dir"] == "{{ runtime_ops_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
+    # Daemon reload and the still-stopped check run in both modes.
+    assert "when" not in by_name["Reload systemd without starting anything"]
+    assert "when" not in by_name["Require the service to still be stopped"]
 
 
 def test_operation_state_lives_in_the_root_owned_tree_not_under_home_ql():

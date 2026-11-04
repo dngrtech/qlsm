@@ -137,23 +137,33 @@ def test_configure_fetches_the_inventory_into_the_operation_dir(app, env):
     assert os.path.isdir(os.path.dirname(path))
 
 
-def test_rollback_configures_minqlx_with_the_legacy_launch_and_restores(app, env):
+def test_rollback_is_an_inventory_restore_only(app, env):
+    """No archive, no runtime artifacts, no re-rendered unit: the recorded
+    originals come back exactly, so a rebuilt minqlx-shared cannot leak in."""
     host = db.session.get(Host, env['host_id'])
     host.runtime = MINQLX
     inst = db.session.get(QLInstance, 1)
     inst.python_deps_path = VENV
     db.session.commit()
-    result = _configure(env, runtime=MINQLX, deps=None, restore_from_operation=OP)
-    assert result['ok'] is True
-    ev = env['calls'][0]['extravars']
-    assert ev['restore_from_operation'] == OP
-    assert ev['python_deps_path'] == ''
-    assert ev['launch_script'] == 'run_server_x64_minqlx.sh'
-    assert ev['runtime_artifacts'] == ['minqlx.x64.so', 'run_server_x64_minqlx.sh', 'minqlx']
-    assert ev['runtime_optional_artifacts'] == ['minqlx-cmd', 'quake_live.sh']
-    assert ev['local_manifest_path'] == ''
+    result = mod.configure_existing_instance(1, MINQLX, None, None, operation_id=OP,
+                                             fencing_token=5, restore_from_operation=OP)
+    assert result['ok'] is True, result['error']
+    [call] = env['calls']
+    assert call['playbook'] == 'update_instance_runtime.yml'
+    assert call['extravars'] == {
+        'operation_id': OP, 'fencing_token': 5, 'terminal_operation_ids': [OLD_OP],
+        'instance_id': 1, 'port': 27960, 'restore_from_operation': OP,
+    }
+    assert 'archive' not in call
     assert db.session.get(QLInstance, 1).python_deps_path is None
-    assert any(a.startswith('minqlx-plugins/') for a in env['calls'][0]['archive'])
+
+
+def test_rollback_refuses_a_dependency_path(app, env):
+    db.session.get(Host, env['host_id']).runtime = MINQLX
+    db.session.commit()
+    result = mod.configure_existing_instance(1, MINQLX, None, VENV, operation_id=OP,
+                                             fencing_token=5, restore_from_operation=OP)
+    assert result['ok'] is False and env['calls'] == []
 
 
 def test_configure_refuses_a_runtime_the_host_is_not_on(env):
@@ -226,7 +236,7 @@ def test_install_runs_the_minimal_installer_and_reports_dependency_paths(env):
     assert ev['terminal_operation_ids'] == [OLD_OP]
     assert ev['core_requirements_src'].endswith('target_builtin_pool/requirements.txt')
     assert ev['common_plugins_builtin_src'].endswith('target_builtin_pool')
-    assert 'common_plugins_operator_src' not in ev
+    assert os.path.basename(ev['common_plugins_operator_src']).startswith('qlsm-empty-operator-pool-')
     assert ev['runtime_instances'] == [
         {'id': 1, 'requirements_src': ev['runtime_instances'][0]['requirements_src']},
         {'id': 2, 'requirements_src': ''},
@@ -273,3 +283,48 @@ def test_remote_inventory_dir_does_not_break_snapshot_verification(app, env):
         json.dump({'schema': SNAPSHOT_SCHEMA_VERSION, 'complete': True, 'operation_id': OP,
                    'host_id': env['host_id'], 'trees': {}, 'instances': []}, handle)
     _verify_published(path, OP, env['host_id'])
+
+
+# --- fix round 1 ---------------------------------------------------------------
+
+def test_install_never_falls_back_to_the_live_operator_pool(env):
+    """No captured operator pool -> an empty staged dir, never the default
+    (live data/shared-plugins/<runtime>)."""
+    seen = {}
+
+    def runner(host, playbook_name, extravars=None, capture_output=False):
+        src = extravars.get('common_plugins_operator_src')
+        seen['src'] = src
+        seen['exists_and_empty'] = bool(src) and os.path.isdir(src) and os.listdir(src) == []
+        return True, 'ok', ''
+
+    mod_runner = mod._run_host_ansible_playbook
+    mod._run_host_ansible_playbook = runner
+    try:
+        inputs = _install_inputs(env)
+        assert inputs['operator_pool_dir'] is None
+        result = mod.install_runtime_on_host(env['host_id'], operation_id=OP, fencing_token=1,
+                                             immutable_inputs=inputs)
+    finally:
+        mod._run_host_ansible_playbook = mod_runner
+    assert result['ok'] is True
+    assert seen['exists_and_empty'] is True
+    assert 'shared-plugins' not in seen['src']
+    assert not os.path.exists(seen['src'])  # cleaned up afterwards
+
+
+def test_entry_points_handle_the_runners_two_value_early_return(app, env, monkeypatch):
+    """_run_host_ansible_playbook returns (None, error) when SSH details are
+    missing; the entry points must report that error, not raise."""
+    from ui.task_logic import ansible_runner
+    monkeypatch.setattr(mod, '_run_host_ansible_playbook', ansible_runner._run_host_ansible_playbook)
+    host = db.session.get(Host, env['host_id'])
+    host.ssh_key_path = None
+    db.session.commit()
+    configure = _configure(env)
+    assert configure['ok'] is False and 'Host details missing' in configure['error']
+    install = mod.install_runtime_on_host(env['host_id'], operation_id=OP, fencing_token=1,
+                                          immutable_inputs=_install_inputs(env))
+    assert install['ok'] is False and 'Host details missing' in install['error']
+    final = mod.finalize_runtime_operation(env['host_id'], operation_id=OP, fencing_token=1)
+    assert final['ok'] is False and 'Host details missing' in final['error']

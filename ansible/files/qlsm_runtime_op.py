@@ -17,6 +17,9 @@ Subcommands
             remove an installed package.
   apply     install planned managed files, recording an inventory and backups
             first (write-once per operation/instance).
+  apply and restore re-check the fence (record active for this exact
+  operation/token, recorded holder still alive and still holding the lock)
+  before each write phase.
   restore   put an inventory back: restore backed-up files, remove files the
             operation created (only if still exactly what it wrote).
 
@@ -155,6 +158,61 @@ def _spawn_holder(lock_fd, ttl):
     return holder
 
 
+def _process_start(pid):
+    """A stable identity for a live process: its start time ('' if gone).
+    /proc/<pid>/stat field 22 on Linux; `ps -o lstart=` elsewhere (tests)."""
+    if pid <= 0:
+        return ''
+    try:
+        with open('/proc/%d/stat' % pid) as handle:
+            return handle.read().rsplit(')', 1)[1].split()[19]
+    except (OSError, IndexError):
+        pass
+    if os.path.isdir('/proc/self'):
+        return ''  # Linux and the pid is gone
+    result = subprocess.run(['ps', '-o', 'lstart=', '-p', str(pid)], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, universal_newlines=True)
+    return result.stdout.strip() if result.returncode == 0 else ''
+
+
+def _holder_alive(record):
+    """True only if the recorded holder pid is still the process we started
+    (same start time), so a recycled pid is never mistaken for it."""
+    pid = int((record or {}).get('holder_pid') or 0)
+    start = (record or {}).get('holder_start') or ''
+    return bool(pid > 0 and start and _process_start(pid) == start)
+
+
+def _lock_is_held(base):
+    fd = os.open(os.path.join(base, LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if exc.errno in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+            return True
+        raise
+    finally:
+        os.close(fd)  # closing also drops a lock we just took
+    return False
+
+
+def check_fence(base, operation_id, token):
+    """Refuse unless this exact operation/token still owns the host: the
+    record is active for it and its holder (same process) still holds the
+    lock. Called before every write phase, so a play whose lock lapsed (TTL)
+    or was superseded by a higher token cannot keep writing."""
+    _check_identity(operation_id, token)
+    _verify_trusted_dir(base)
+    record = _read_json(os.path.join(base, TOKEN_NAME)) or {}
+    if record.get('operation_id') != operation_id or int(record.get('fencing_token', -1)) != token:
+        raise Refused('fencing: host is now owned by operation %s token %s, not %s token %d'
+                      % (record.get('operation_id'), record.get('fencing_token'), operation_id, token))
+    if record.get('state') != 'active':
+        raise Refused('fencing: operation %s is %s on this host' % (operation_id, record.get('state')))
+    if not _holder_alive(record) or not _lock_is_held(base):
+        raise Refused('fencing: the lock for operation %s token %d is no longer held' % (operation_id, token))
+
+
 def cmd_acquire(args):
     _check_identity(args.operation_id, args.fencing_token)
     terminal = set(filter(None, (args.terminal_ids or '').split(',')))
@@ -171,6 +229,7 @@ def cmd_acquire(args):
             'fencing_token': args.fencing_token,
             'state': 'active',
             'holder_pid': holder,
+            'holder_start': _process_start(holder),
             'acquired_at': int(time.time()),
             'ttl': args.ttl,
         })
@@ -187,12 +246,15 @@ def cmd_release(args):
         # A newer owner took over; its holder is not ours to stop.
         return {'released': False, 'reason': 'record belongs to another owner'}
     pid = int(record.get('holder_pid') or 0)
-    if pid > 0:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-    return {'released': True, 'holder_pid': pid}
+    if not _holder_alive(record):
+        # Gone already (TTL) or the pid now belongs to another process:
+        # never signal it.
+        return {'released': True, 'holder_pid': pid, 'signalled': False}
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    return {'released': True, 'holder_pid': pid, 'signalled': True}
 
 
 def cmd_finalize(args):
@@ -572,9 +634,9 @@ def _manifest_dest_ok(dest, qlds_dir, unit_paths):
 
 
 def cmd_apply(args):
+    check_fence(args.base, args.operation_id, args.fencing_token)
     with open(args.plan) as handle:
         plan = json.load(handle)
-    _verify_trusted_dir(args.base)
     qlds_dir = os.path.normpath(plan['qlds_dir'])
     unit_paths = {os.path.normpath(p) for p in plan.get('extra_destinations') or []}
     ops_dir = os.path.normpath(plan['ops_dir'])
@@ -631,6 +693,7 @@ def cmd_apply(args):
             entries[dest] = entry
         _write_json(manifest_path, manifest)
 
+    check_fence(args.base, args.operation_id, args.fencing_token)
     for dest, data, mode, uid, gid in payload:
         _write_file(dest, data, mode, uid, gid, create_below=qlds_dir)
     return {'applied': len(payload), 'recorded': bool(record),
@@ -638,7 +701,7 @@ def cmd_apply(args):
 
 
 def cmd_restore(args):
-    _verify_trusted_dir(args.base)
+    check_fence(args.base, args.operation_id, args.fencing_token)
     ops_dir = os.path.normpath(args.ops_dir)
     _check_ops_dir(ops_dir, args.base)
     qlds_dir = os.path.normpath(args.qlds_dir)
@@ -663,6 +726,7 @@ def cmd_restore(args):
         if not _inside(directory, qlds_dir):
             raise Refused('inventory directory %s is outside the instance directory' % directory)
 
+    check_fence(args.base, args.operation_id, args.fencing_token)
     restored, removed, kept = 0, 0, []
     for dest, entry in sorted(entries.items()):
         uid, gid, forced = _dest_class(dest, qlds_dir, unit_paths)
@@ -707,9 +771,13 @@ def main(argv=None):
     apt.add_argument('packages', nargs='+')
     apply_cmd = sub.add_parser('apply')
     apply_cmd.add_argument('--base', default=DEFAULT_BASE)
+    apply_cmd.add_argument('--operation-id', required=True)
+    apply_cmd.add_argument('--fencing-token', type=int, required=True)
     apply_cmd.add_argument('--plan', required=True)
     restore = sub.add_parser('restore')
     restore.add_argument('--base', default=DEFAULT_BASE)
+    restore.add_argument('--operation-id', required=True)
+    restore.add_argument('--fencing-token', type=int, required=True)
     restore.add_argument('--ops-dir', required=True)
     restore.add_argument('--qlds-dir', required=True)
     restore.add_argument('--unit-path', action='append')

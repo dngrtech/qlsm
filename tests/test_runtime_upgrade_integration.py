@@ -346,18 +346,23 @@ def test_upgrade_and_rollback_of_an_existing_stopped_instance(target, ctx, tmp_p
             operation_id=OP, fencing_token=0)
         assert not stale['ok'] and 'stale fencing token' in stale['error']
 
-        # --- rollback: restore the inventory, configure minqlx with its original launch
+        # --- rollback is an exact inventory restore. minqlx-shared is rebuilt
+        # in the meantime; the instance must still come back byte-identical.
+        tgt.run("printf 'REBUILT minqlx engine\\n' > /home/ql/minqlx-shared/minqlx.x64.so && "
+                "printf 'REBUILT = 1\\n' > /home/ql/minqlx-shared/minqlx/__init__.py")
         _set_runtime(ctx, 'minqlx')
         result = iru.configure_existing_instance(
-            1, 'minqlx', {'config_dir': _minqlx_config(ctx['work'])}, None,
-            operation_id=OP, fencing_token=2, restore_from_operation=OP)
+            1, 'minqlx', None, None, operation_id=OP, fencing_token=2, restore_from_operation=OP)
         assert result['ok'], result['error']
+        assert tgt.out(f'cat {QLDS}/minqlx.x64.so') == 'minqlx engine'
+        assert tgt.out(f'cat {QLDS}/minqlx/__init__.py') == 'MINQLX = 1'
+        sentinels.pop('/home/ql/minqlx-shared/minqlx.x64.so')  # deliberately rebuilt above
         assert tgt.out(f'cat /etc/systemd/system/qlds@{PORT}.service') == unit_before
         assert tgt.sha(f'{QLDS}/baseq3/server.cfg') == cfg_before
         assert tgt.run(f'test -e {QLDS}/minqlxtended.x64.so', check=False).returncode != 0
         assert tgt.run(f'test -e {QLDS}/baseq3/scripts/ffa.factories', check=False).returncode != 0
         assert _service_state(tgt) == 'inactive'
-        assert _sentinels(tgt) == sentinels
+        assert {k: v for k, v in _sentinels(tgt).items() if k in sentinels} == sentinels
         assert _global_python_state(tgt) == python_before
         assert db.session.get(QLInstance, 1).python_deps_path is None
         assert tgt.run(f'test -d {venv}', check=False).returncode == 0  # old env kept

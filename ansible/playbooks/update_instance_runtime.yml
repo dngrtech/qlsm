@@ -1,12 +1,13 @@
 ---
-# Configure an EXISTING, stopped instance for a runtime (upgrade and rollback).
+# Configure an EXISTING, stopped instance for a runtime (upgrade), or put it
+# back exactly as it was (rollback).
 #
 # Never the creation path (add_qlds_instance.yml): it does not copy the base
 # QLDS install, recreate the instance directory, run pip, touch Redis, delete
-# anything by mirroring, start, restart or enable the service. It
+# anything by mirroring, start, restart or enable the service.
+#
+# Forward (restore_from_operation == ""):
 #   - checks the instance directory exists and the service is not running,
-#   - (rollback) restores the inventory an earlier run of this operation
-#     recorded, removing only files that run created,
 #   - installs exactly the managed files: the runtime's engine .so, archive
 #     (minqlxtended.zip or the minqlx/ package) and launcher from the shared
 #     runtime dir, the instance's cfg/txt/ent configs, plugins, factories and
@@ -15,18 +16,23 @@
 #   - records an inventory + backups of every file it is about to replace
 #     under /var/lib/qlsm/runtime-ops/ops/<operation_id>/<instance_id>/ first
 #     (root-owned 0700, outside the ql-controlled /home/ql tree; write-once
-#     per operation/instance) and fetches the manifest back,
-#   - reloads systemd and re-checks the service is still not running.
+#     per operation/instance) and fetches the manifest back.
+# Rollback (restore_from_operation set): inventory restore ONLY -- every
+#   backed-up file (including the original systemd unit) is put back and
+#   files the forward run created are removed. Nothing is re-copied from a
+#   shared runtime dir, so a minqlx-shared rebuilt since cannot leak in.
+# Both: reload systemd and re-check the service is still not running.
 # Old runtime plugin dirs, venvs, baseq3 data, Redis data and plugin-owned
-# files are never removed.
+# files are never removed. apply/restore re-check the fencing record before
+# writing, so a play whose lock lapsed cannot overwrite a newer owner's work.
 #
 # Extra-vars (JSON, from ui/task_logic/instance_runtime_update.py):
 #   operation_id, fencing_token, terminal_operation_ids  -- tasks/runtime_op_lock.yml
-#   instance_id, port, runtime, runtime_plugins_dirname, runtime_shared_dir,
-#   launch_script, runtime_artifacts, qlds_args, ld_preload_paths, cpu_affinity,
-#   python_deps_path ("" for none), stage_archive (controller .tar.gz),
-#   local_manifest_path (controller path, "" to skip the fetch),
-#   restore_from_operation ("" for none)
+#   instance_id, port, restore_from_operation ("" for forward)
+#   forward only: runtime, runtime_plugins_dirname, runtime_shared_dir,
+#   launch_script, runtime_artifacts, runtime_optional_artifacts, qlds_args,
+#   ld_preload_paths, cpu_affinity, python_deps_path ("" for none),
+#   stage_archive (controller .tar.gz), local_manifest_path ("" to skip)
 
 - name: Configure an existing QLDS instance for a runtime
   hosts: "{{ target_host_name | default('all') }}"
@@ -45,7 +51,10 @@
     python_deps_path: ""
     restore_from_operation: ""
     local_manifest_path: ""
+    runtime_artifacts: []
     running_states: [active, activating, deactivating, reloading, refreshing]
+    fence_args: >-
+      --operation-id {{ operation_id | quote }} --fencing-token {{ fencing_token | int }}
 
   tasks:
     - name: Validate the instance request
@@ -53,9 +62,9 @@
         that:
           - (port | string) is match('^[0-9]+$')
           - (instance_id | string) is match('^[0-9]+$')
-          - runtime in ['minqlx', 'minqlxtended']
-          - runtime_artifacts | length > 0
           - restore_from_operation == '' or restore_from_operation is match('^[0-9a-f]{32}$')
+          - restore_from_operation != '' or runtime in ['minqlx', 'minqlxtended']
+          - restore_from_operation != '' or runtime_artifacts | length > 0
           - python_deps_path == '' or python_deps_path is match('^/home/ql/runtime-deps/[A-Za-z0-9_./-]+$')
           - "'..' not in python_deps_path"
         fail_msg: "Invalid update_instance_runtime request."
@@ -95,7 +104,7 @@
         - name: Restore the inventory recorded by the operation being rolled back
           ansible.builtin.script:
             cmd: >-
-              {{ playbook_dir }}/../files/qlsm_runtime_op.py restore
+              {{ playbook_dir }}/../files/qlsm_runtime_op.py restore {{ fence_args }}
               --ops-dir {{ (runtime_ops_root ~ '/ops/' ~ restore_from_operation ~ '/' ~ (instance_id | int)) | quote }}
               --qlds-dir {{ qlds_dir | quote }}
               --unit-path {{ unit_path | quote }}
@@ -103,91 +112,93 @@
           register: restore_result
           when: restore_from_operation | length > 0
 
-        - name: Check the dependency environment
-          ansible.builtin.stat:
-            path: "{{ python_deps_path }}/pyvenv.cfg"
-          register: python_deps_stat
-          when: python_deps_path | length > 0
+        - name: Configure forward (not a rollback)
+          when: restore_from_operation | length == 0
+          block:
+            - name: Check the dependency environment
+              ansible.builtin.stat:
+                path: "{{ python_deps_path }}/pyvenv.cfg"
+              register: python_deps_stat
+              when: python_deps_path | length > 0
 
-        - name: Require the dependency environment to exist
-          ansible.builtin.assert:
-            that:
-              - python_deps_stat.stat.exists
-            fail_msg: "{{ python_deps_path }} is not a venv on this host."
-            quiet: true
-          when: python_deps_path | length > 0
+            - name: Require the dependency environment to exist
+              ansible.builtin.assert:
+                that:
+                  - python_deps_stat.stat.exists
+                fail_msg: "{{ python_deps_path }} is not a venv on this host."
+                quiet: true
+              when: python_deps_path | length > 0
 
-        - name: Reset the private staging directory
-          ansible.builtin.file:
-            path: "{{ stage_dir }}"
-            state: absent
+            - name: Reset the private staging directory
+              ansible.builtin.file:
+                path: "{{ stage_dir }}"
+                state: absent
 
-        - name: Create the private staging directory
-          ansible.builtin.file:
-            path: "{{ item }}"
-            state: directory
-            owner: root
-            group: root
-            mode: '0700'
-          loop:
-            - "{{ runtime_ops_root }}/ops"
-            - "{{ runtime_ops_root }}/ops/{{ operation_id }}"
-            - "{{ ops_dir }}"
-            - "{{ stage_dir }}"
-            - "{{ stage_dir }}/tree"
+            - name: Create the private staging directory
+              ansible.builtin.file:
+                path: "{{ item }}"
+                state: directory
+                owner: root
+                group: root
+                mode: '0700'
+              loop:
+                - "{{ runtime_ops_root }}/ops"
+                - "{{ runtime_ops_root }}/ops/{{ operation_id }}"
+                - "{{ ops_dir }}"
+                - "{{ stage_dir }}"
+                - "{{ stage_dir }}/tree"
 
-        - name: Unpack the instance's managed files
-          ansible.builtin.unarchive:
-            src: "{{ stage_archive }}"
-            dest: "{{ stage_dir }}/tree"
+            - name: Unpack the instance's managed files
+              ansible.builtin.unarchive:
+                src: "{{ stage_archive }}"
+                dest: "{{ stage_dir }}/tree"
 
-        - name: Render the systemd unit into staging
-          ansible.builtin.template:
-            src: ../templates/qlds@.service.j2
-            dest: "{{ stage_dir }}/qlds@{{ port | int }}.service"
-            owner: root
-            group: root
-            mode: '0644'
+            - name: Render the systemd unit into staging
+              ansible.builtin.template:
+                src: ../templates/qlds@.service.j2
+                dest: "{{ stage_dir }}/qlds@{{ port | int }}.service"
+                owner: root
+                group: root
+                mode: '0644'
 
-        - name: Write the managed-file plan
-          ansible.builtin.copy:
-            dest: "{{ stage_dir }}/plan.json"
-            mode: '0600'
-            content: "{{ plan | to_nice_json }}"
-          vars:
-            plan:
-              operation_id: "{{ operation_id }}"
-              instance_id: "{{ instance_id | int }}"
-              qlds_dir: "{{ qlds_dir }}"
-              ops_dir: "{{ ops_dir }}"
-              # A rollback run must not add to the inventory it just restored.
-              record: "{{ restore_from_operation | length == 0 }}"
-              extra_destinations: ["{{ unit_path }}"]
-              sources:
-                - { kind: tree, from: "{{ stage_dir }}/tree", into: "{{ qlds_dir }}" }
-                - { kind: names, from: "{{ runtime_shared_dir }}", into: "{{ qlds_dir }}",
-                    names: "{{ runtime_artifacts }}" }
-                - { kind: names, from: "{{ runtime_shared_dir }}", into: "{{ qlds_dir }}",
-                    names: "{{ runtime_optional_artifacts | default([]) }}", optional: true }
-                - { kind: missing_only, from: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}",
-                    into: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}" }
-                - { kind: file, from: "{{ stage_dir }}/qlds@{{ port | int }}.service",
-                    to: "{{ unit_path }}", mode: '0644', owner: root }
+            - name: Write the managed-file plan
+              ansible.builtin.copy:
+                dest: "{{ stage_dir }}/plan.json"
+                mode: '0600'
+                content: "{{ plan | to_nice_json }}"
+              vars:
+                plan:
+                  operation_id: "{{ operation_id }}"
+                  instance_id: "{{ instance_id | int }}"
+                  qlds_dir: "{{ qlds_dir }}"
+                  ops_dir: "{{ ops_dir }}"
+                  record: true
+                  extra_destinations: ["{{ unit_path }}"]
+                  sources:
+                    - { kind: tree, from: "{{ stage_dir }}/tree", into: "{{ qlds_dir }}" }
+                    - { kind: names, from: "{{ runtime_shared_dir }}", into: "{{ qlds_dir }}",
+                        names: "{{ runtime_artifacts }}" }
+                    - { kind: names, from: "{{ runtime_shared_dir }}", into: "{{ qlds_dir }}",
+                        names: "{{ runtime_optional_artifacts | default([]) }}", optional: true }
+                    - { kind: missing_only, from: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}",
+                        into: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}" }
+                    - { kind: file, from: "{{ stage_dir }}/qlds@{{ port | int }}.service",
+                        to: "{{ unit_path }}", mode: '0644', owner: root }
 
-        - name: Record the inventory, then install the managed files
-          ansible.builtin.script:
-            cmd: "{{ playbook_dir }}/../files/qlsm_runtime_op.py apply --plan {{ (stage_dir ~ '/plan.json') | quote }}"
-            executable: python3
-          register: apply_result
+            - name: Record the inventory, then install the managed files
+              ansible.builtin.script:
+                cmd: >-
+                  {{ playbook_dir }}/../files/qlsm_runtime_op.py apply {{ fence_args }}
+                  --plan {{ (stage_dir ~ '/plan.json') | quote }}
+                executable: python3
+              register: apply_result
 
-        - name: Fetch the inventory manifest to the controller
-          ansible.builtin.fetch:
-            src: "{{ ops_dir }}/manifest.json"
-            dest: "{{ local_manifest_path }}"
-            flat: yes
-          when:
-            - local_manifest_path | length > 0
-            - restore_from_operation | length == 0
+            - name: Fetch the inventory manifest to the controller
+              ansible.builtin.fetch:
+                src: "{{ ops_dir }}/manifest.json"
+                dest: "{{ local_manifest_path }}"
+                flat: yes
+              when: local_manifest_path | length > 0
 
         - name: Reload systemd without starting anything
           ansible.builtin.systemd:
