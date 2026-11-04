@@ -111,7 +111,7 @@ def test_death_after_mutation_is_rolled_back_by_a_fresh_worker(world, point):
 
     assert result is False
     host, op = assert_original(world.env, world.host_id, world.orig, world.remote)
-    assert host.status == HostStatus.ERROR
+    assert host.status == HostStatus.ACTIVE
     assert 'Rolled back to minqlx.' in host.logs
     assert op.fencing_token == 2 and op.rq_job_id == 'job-2'
     assert ('start', world.ids['B']) not in deps.calls

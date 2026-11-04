@@ -260,8 +260,10 @@ def _finish(execution, reason, failures):
     execution.fence()
     op = execution.op
     host = execution.host
-    host.status = HostStatus.ERROR
     if not failures:
+        # Every instance is back on minqlx and verified: the host works, so it
+        # is ACTIVE again. The failure reason stays in the log and on the op.
+        host.status = HostStatus.ACTIVE
         execution.set_state('rolled_back', commit=False, recovery_required=False, last_error=reason)
         append_log(host, f'Upgrade failed: {reason}. Rolled back to minqlx.')
         execution.commit()
@@ -277,6 +279,7 @@ def _finish(execution, reason, failures):
         names.append(label)
         state = 'waiting to retry' if failure.pending else 'failed'
         append_log(host, f'Rollback of instance {label} {state} in {failure.phase}: {failure.error}')
+    host.status = HostStatus.ERROR  # incomplete: the reservation stays until recovery finishes
     pending = all(failure.pending for failure in failures.values())
     summary = (f'Upgrade failed: {reason}. Rollback to minqlx incomplete for {", ".join(names)}; '
                + ('the host is unreachable or busy, recovery will retry.' if pending

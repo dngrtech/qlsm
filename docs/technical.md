@@ -344,13 +344,13 @@ That hook is runtime-agnostic — it detours `SV_ClientThink` inside `qzeroded` 
 **Outcomes.**
 -   `succeeded`: host on minqlxtended, original running or stopped states restored.
 -   `failed_preparation`: failed before anything was stopped (for example a changed fingerprint or snapshot failure); host back to its prior status, nothing restored.
--   `rolled_back`: failed after mutation began; host fully back on minqlx with every instance's config and state restored.
+-   `rolled_back`: failed after mutation began; host fully back on minqlx with every instance's config and state restored, host status `ACTIVE`, and the reason logged as `Upgrade failed: <reason>. Rolled back to minqlx.`
 -   Recovery pending (`recovery_required`): rollback could not finish, the host is `ERROR` on `runtime = minqlx`, and the reservation stays. The reconciler scans every 60 s but retries a `recovery_required` operation at most every 5 minutes (`RETRY_INTERVAL_SECONDS`). Retries are not gated on reachability: an attempt against an unreachable host fails and the operation stays pending. There is no manual retry action.
 A plugin that merely fails to load inside a running server is not a failure.
 
 **Staging verification before release.** The orchestrator tests fake every remote call, so these are proven only on a staging host (an x86_64 Ubuntu 24.04 minqlx host with one RUNNING and one STOPPED instance, never production):
 -   [ ] Full UI-driven upgrade: STOPPED is probed `inactive` (not `stray_process`/`unknown`), and each RUNNING instance passes readiness (serverchecker status from the venv's `redis>=5.1`, newer than `ActiveEnterTimestamp`, within 60 s).
--   [ ] Forced rollback (for example a failing readiness): original unit, `LD_PRELOAD`, configs and RUNNING/STOPPED states return; the host ends `rolled_back`, the remote record is finalized, and a second attempt can take the lock.
+-   [ ] Forced rollback (for example a failing readiness): original unit, `LD_PRELOAD`, configs and RUNNING/STOPPED states return; the operation ends `rolled_back` with the host `ACTIVE`, the remote record is finalized, and a second attempt can take the lock.
 -   [ ] The remote flock holder survives a real SSH `script` session and is released by `runtime_op_release.yml`.
 -   [ ] The patched engine: a fresh `setup_host.yml` with `runtime=minqlxtended` and `rebuild_minqlx.yml` on an existing minqlxtended host apply `qlsm-python-deps.patch` to the real `python_embed.c`, and a server starts with `QLSM_PYTHON_DEPS` unset.
 -   [ ] `python3-config --ldflags --embed` contains `-lpython3.12` on stock Ubuntu 24.04.

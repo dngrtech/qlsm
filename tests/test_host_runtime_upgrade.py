@@ -181,7 +181,8 @@ def test_snapshot_failure_calls_neither_stop_nor_restore(world, monkeypatch):
 
 def _assert_rolled_back(env, host_id, orig, remote, deps, locks, b_id):
     host, op = assert_original(env, host_id, orig, remote)
-    assert host.status == HostStatus.ERROR
+    # A complete rollback leaves a working minqlx host: ACTIVE, reason in the log.
+    assert host.status == HostStatus.ACTIVE
     assert f'Upgrade failed: {op.last_error}. Rolled back to minqlx.' in host.logs
     assert op.recovery_required is False
     assert ('start', b_id) not in deps.calls
