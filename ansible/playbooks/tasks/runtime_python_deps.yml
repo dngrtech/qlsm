@@ -7,13 +7,17 @@
 # silently downgrade the first), followed by `pip check`; either failing
 # fails the play. Never system-wide pip, never --break-system-packages.
 #
-# Requires: operation_id, runtime_deps_root, runtime_instances
+# Requires: operation_id (or runtime_deps_dir), runtime_instances
 #           ([{"id": int, "requirements_src": controller path or ""}]),
 #           core_requirements_src (controller path or "")
 
 - name: Resolve the operation's dependency directory
   ansible.builtin.set_fact:
-    runtime_deps_op_dir: "{{ runtime_deps_root }}/minqlxtended/{{ operation_id }}"
+    # install_runtime.yml: the operation's dir. install_minqlx_deps.yml
+    # (isolated hosts) passes runtime_deps_dir: the dir holding the venv.
+    runtime_deps_op_dir: >-
+      {{ runtime_deps_dir if runtime_deps_dir is defined
+         else (runtime_deps_root | default('/home/ql/runtime-deps')) ~ '/minqlxtended/' ~ operation_id }}
     # Replace a file with stdin, refusing to follow a symlink at the target.
     runtime_write_stdin_py: >-
       import os, sys;
@@ -53,8 +57,8 @@
     state: directory
     mode: '0755'
   loop:
-    - "{{ runtime_deps_root }}"
-    - "{{ runtime_deps_root }}/minqlxtended"
+    - "{{ runtime_deps_root | default('/home/ql/runtime-deps') }}"
+    - "{{ runtime_deps_root | default('/home/ql/runtime-deps') }}/minqlxtended"
     - "{{ runtime_deps_op_dir }}"
 
 # Written by ql via stdin (no root copy into the ql tree, and no remote temp

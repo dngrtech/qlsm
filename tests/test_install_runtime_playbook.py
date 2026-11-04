@@ -117,7 +117,7 @@ def test_common_pool_is_refreshed_from_captured_inputs_by_default_paths_unchange
 
 def test_venvs_are_operation_and_instance_scoped_without_system_site_packages():
     deps = open(os.path.join(TASKS_DIR, "runtime_python_deps.yml")).read()
-    assert "{{ runtime_deps_root }}/minqlxtended/{{ operation_id }}" in deps
+    assert "'/minqlxtended/' ~ operation_id" in deps
     assert "--system-site-packages" not in deps
     assert "/usr/bin/python3, -m, venv" in deps
     assert "-lpython" in deps  # same ABI as the engine build

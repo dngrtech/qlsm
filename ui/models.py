@@ -63,6 +63,9 @@ class Host(db.Model):
     cpu_count = db.Column(db.Integer, nullable=True) # Detected/inferred Linux CPU count for affinity assignment
     redis_unix_socket = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     lan_rate_uses_hook = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = LD_PRELOAD hook mechanism; False = legacy iptables/sysctl path
+    # Set by the runtime upgrade once it succeeds: instances created or
+    # redeployed on this host get their own venv, never system pip.
+    runtime_deps_isolated = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     firewall_pool_v2 = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = firewall rendered with the current game/RCON port pool; False = narrower legacy allow-list
     # Which minqlx runtime this host builds and runs. Chosen at creation and
     # immutable thereafter -- migrating a live host is destructive, and a locked

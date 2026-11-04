@@ -380,6 +380,49 @@ def test_upgrade_and_rollback_of_an_existing_stopped_instance(target, ctx, tmp_p
         iru._run_host_ansible_playbook = real_runner
 
 
+def test_isolated_host_builds_a_new_instances_venv_without_system_pip(target, ctx, tmp_path):
+    """R11: on an upgraded host, install_minqlx_deps.yml (the dependency step of
+    instance creation/redeploy) builds the instance's own venv as ql from the
+    core + instance requirements, and never touches system pip."""
+    from ui.runtime import isolated_instance_deps_path
+
+    tgt = target
+    before = _global_python_state(tgt)
+    qlds = '/home/ql/qlds-27961'
+    tgt.run(f"mkdir -p {qlds}/minqlxtended-plugins && printf 'six\\n' > "
+            f"{qlds}/minqlxtended-plugins/requirements.txt && chown -R ql:ql {qlds}")
+    instance_reqs = tmp_path / 'requirements.txt'
+    instance_reqs.write_text('six\n')
+    core = tmp_path / 'core.txt'
+    core.write_text('redis>=5.1.0\n')
+    venv = isolated_instance_deps_path(2)
+    play = tmp_path / 'ensure-play.yml'
+    play.write_text(
+        '- hosts: %s\n  become: yes\n  gather_facts: false\n  tasks:\n'
+        '    - ansible.builtin.import_tasks: %s\n'
+        % (HOST_NAME, os.path.join(ROOT, 'ansible/playbooks/tasks/install_minqlx_deps.yml')))
+    extravars = {'qlds_dir': qlds, 'runtime_plugins_dirname': 'minqlxtended-plugins',
+                 'python_deps_path': venv, 'python_deps_ensure': True,
+                 'python_deps_core_requirements_src': str(core),
+                 'python_deps_requirements_src': str(instance_reqs)}
+    run = _sh([ANSIBLE_BIN, str(play), '-i', tgt.inventory, '-l', HOST_NAME, '-e', json.dumps(extravars)],
+              env=dict(os.environ, ANSIBLE_CONFIG=tgt.cfg, ANSIBLE_BECOME_FLAGS='-H -S -n',
+                       ANSIBLE_PIPELINING='True'))
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert 'QLSM_PIP_WARN' not in run.stdout
+    assert tgt.out(f'stat -c %U {venv} {venv}/lib') == 'ql\nql'
+    version = tgt.out(f"{venv}/bin/python -c 'import redis, six; print(redis.__version__)'", user='ql')
+    assert int(version.split('.')[0]) >= 5
+    assert tgt.out(f'cat /home/ql/runtime-deps/minqlxtended/instances/core-requirements.txt') == 'redis>=5.1.0'
+    assert _global_python_state(tgt) == before
+    # A second run (redeploy) reuses the venv and still never uses system pip.
+    again = _sh([ANSIBLE_BIN, str(play), '-i', tgt.inventory, '-l', HOST_NAME, '-e', json.dumps(extravars)],
+                env=dict(os.environ, ANSIBLE_CONFIG=tgt.cfg, ANSIBLE_BECOME_FLAGS='-H -S -n',
+                         ANSIBLE_PIPELINING='True'))
+    assert again.returncode == 0, again.stdout
+    assert _global_python_state(tgt) == before
+
+
 def test_apt_guard_rejects_an_install_that_removes_a_package(target, ctx):
     """chrony conflicts with the installed systemd-timesyncd: the simulation
     must refuse it and nothing may be installed or removed."""

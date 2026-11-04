@@ -224,6 +224,10 @@ def _setup_playbook_extra_vars(host):
         extra_vars['use_host_redis'] = 'false'
     if host.timezone:
         extra_vars['host_timezone'] = host.timezone
+    if getattr(host, 'runtime_deps_isolated', False):
+        # Upgraded host: instances use their own venvs, so the common pool
+        # sync must not pip-install into the system Python.
+        extra_vars['skip_pip_install'] = True
     return extra_vars
 
 

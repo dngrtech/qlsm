@@ -49,7 +49,10 @@ def _flatten(node):
 def test_every_import_or_include_tasks_target_exists():
     missing = []
     for playbook, target in _referenced_task_files():
-        resolved = os.path.join(PLAYBOOKS_DIR, target)
-        if not os.path.isfile(resolved):
+        # Ansible looks next to the including file first, then in the
+        # playbook's directory.
+        candidates = (os.path.join(os.path.dirname(playbook), target),
+                      os.path.join(PLAYBOOKS_DIR, target))
+        if not any(os.path.isfile(path) for path in candidates):
             missing.append(f"{playbook} -> {target}")
     assert missing == [], "Playbook references a task file that doesn't exist:\n" + "\n".join(missing)

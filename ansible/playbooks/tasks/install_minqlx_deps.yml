@@ -13,6 +13,19 @@
 # the runtime upgrade) installs into that venv through its own interpreter, as the
 # ql user, never system-wide. The global branch below runs only when it is unset.
 
+# Upgraded hosts (Host.runtime_deps_isolated): build or refresh the instance's
+# venv as ql -- core + instance requirements in one pip run, then pip check --
+# before anything else. Never system pip on such a host.
+- name: Ensure the instance's isolated dependency venv
+  ansible.builtin.include_tasks: runtime_python_deps.yml
+  vars:
+    runtime_deps_dir: "{{ python_deps_path | dirname }}"
+    runtime_instances:
+      - id: "{{ python_deps_path | basename | int }}"
+        requirements_src: "{{ python_deps_requirements_src | default('') }}"
+    core_requirements_src: "{{ python_deps_core_requirements_src | default('') }}"
+  when: python_deps_ensure | default(false) | bool
+
 - name: Get pip3 version
   command: pip3 --version
   register: pip3_version_output

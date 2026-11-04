@@ -119,13 +119,46 @@ def runtime_extravars(host):
     }
 
 
+ISOLATED_INSTANCE_DEPS_ROOT = '/home/ql/runtime-deps/minqlxtended/instances'
+# Controller-side core requirements for venvs built outside an upgrade
+# operation (new/redeployed instances on an isolated host).
+_CORE_REQUIREMENTS = ('ql-assets', 'data', 'minqlxtended-plugins', 'requirements.txt')
+
+
+def isolated_instance_deps_path(instance_id):
+    """The venv an instance gets on a host with isolated runtime deps."""
+    return f'{ISOLATED_INSTANCE_DEPS_ROOT}/{int(instance_id)}'
+
+
 def instance_runtime_extravars(instance):
     """runtime_extravars() for an instance's host, plus the instance's isolated
     dependency venv when it has one (QLInstance.python_deps_path, set by the
     runtime upgrade). With no venv the result is exactly runtime_extravars(),
-    so the playbooks render and install exactly as before."""
-    extravars = runtime_extravars(instance.host)
+    so the playbooks render and install exactly as before.
+
+    On a minqlxtended host with Host.runtime_deps_isolated (an upgraded host),
+    an instance without a venv is assigned one under
+    ISOLATED_INSTANCE_DEPS_ROOT (persisted with the caller's next commit), and
+    python_deps_ensure asks tasks/install_minqlx_deps.yml to build or refresh
+    it as ql before any pip -- system pip is never used there."""
+    import os
+
+    from ui.task_logic.ansible_instance_mgmt import CONFIGS_BASE
+
+    host = instance.host
+    extravars = runtime_extravars(host)
+    isolated = (bool(getattr(host, 'runtime_deps_isolated', False))
+                and host_runtime(host) == MINQLXTENDED)
+    if isolated and not getattr(instance, 'python_deps_path', None):
+        instance.python_deps_path = isolated_instance_deps_path(instance.id)
     deps_path = getattr(instance, 'python_deps_path', None)
     if deps_path:
         extravars['python_deps_path'] = deps_path
+    if isolated:
+        requirements = os.path.abspath(os.path.join(
+            CONFIGS_BASE, host.name, str(instance.id), 'scripts', 'requirements.txt'))
+        extravars['python_deps_ensure'] = True
+        extravars['python_deps_core_requirements_src'] = os.path.abspath(os.path.join(*_CORE_REQUIREMENTS))
+        extravars['python_deps_requirements_src'] = requirements if (
+            deps_path.startswith(ISOLATED_INSTANCE_DEPS_ROOT + '/') and os.path.isfile(requirements)) else ''
     return extravars
