@@ -363,3 +363,13 @@ def test_busy_host_cancels_before_any_change(world):
     _assert_cancelled(host.id, op.id, deps, orig, env)
     assert 'another operation is running' in _op(op.id).last_error
     assert locks.owners == {('instance', ids['B']): 'some-other-task'}
+
+
+def test_answers_with_auto_accepted_paths_succeed(env):
+    """The dialog may send combineAcceptedPaths(auto_accepted + ticked)."""
+    host = make_host(env)
+    a = next(inst for inst in host.instances if inst.name.endswith('A'))
+    op = create_operation(host, answers={str(a.id): ['balance.py', 'ban.py']})
+    result, _deps = _run(op, FakeRemote(host), FakeLocks())
+    assert result is True
+    assert db.session.get(QLInstance, a.id).qlx_plugins == 'balance, ban'

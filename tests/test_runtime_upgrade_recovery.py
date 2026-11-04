@@ -404,3 +404,29 @@ def test_rq_entry_points_are_registered_with_an_hour_timeout():
 
     assert tasks.upgrade_host_runtime.helper.timeout == 3600
     assert tasks.recover_host_runtime.helper.timeout == 3600
+
+
+def test_death_between_conversion_renames_is_rolled_back(world, monkeypatch):
+    """The live directory was renamed aside and the converted copy never
+    renamed in: the live path is missing until the rollback rebuilds it."""
+    from ui.runtime_upgrade_conversion import conversion_paths
+    from ui.task_logic import host_runtime_upgrade as orchestrator
+
+    def die_mid_swap(live, converted, tag):
+        _staged, original = conversion_paths(live, tag)
+        os.rename(live, original)
+        world.locks.release = lambda *a, **k: None
+        raise Crash('between renames')
+
+    monkeypatch.setattr(orchestrator, 'install_converted_tree', die_mid_swap)
+    with pytest.raises(Crash):
+        upgrade_host_runtime_logic(world.op_id, deps=FakeDeps(world.remote, world.locks), job_id='job-1')
+    fresh_worker()
+    restore_lock_release(world.locks)
+    live = world.env.configs / world.host_name / str(world.ids['A'])
+    assert not live.exists()
+
+    result, _deps = _recover(world)
+    assert result is False
+    assert_original(world.env, world.host_id, world.orig, world.remote)
+    _assert_exclusive_end(world)

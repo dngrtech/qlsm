@@ -147,8 +147,11 @@ def test_answers_are_validated_against_the_capture(env):
     assert parse_answers(inputs, json.dumps({str(inst.id): ['ban.py', 'ban.py']})) == {inst.id: ['ban.py']}
     with pytest.raises(AnswersInvalid):
         parse_answers(inputs, json.dumps({'999': []}))
+    # combineAcceptedPaths sends auto_accepted + ticked: the auto part is dropped.
+    assert parse_answers(inputs, json.dumps({str(inst.id): ['balance.py', 'ban.py']})) == {inst.id: ['ban.py']}
+    assert parse_answers(inputs, json.dumps({str(inst.id): ['balance.py']})) == {inst.id: []}
     with pytest.raises(AnswersInvalid):
-        parse_answers(inputs, json.dumps({str(inst.id): ['balance.py']}))  # auto, never offered
+        parse_answers(inputs, json.dumps({str(inst.id): ['motd.py']}))  # neither offered nor auto
     with pytest.raises(AnswersInvalid):
         parse_answers(inputs, json.dumps({str(inst.id): ['mine.py']}))  # no replacement exists
     with pytest.raises(AnswersInvalid):

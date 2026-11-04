@@ -10,7 +10,10 @@ the replacements they ticked, per instance:
 
     {"<instance_id>": ["balance.py", ...], ...}
 
-Instances without a decision may be omitted. The conversion accepts the
+Instances without a decision may be omitted. A list may also carry the
+instance's captured `auto_accepted` paths (what combineAcceptedPaths sends);
+they are applied regardless and dropped from the ticked set. The conversion
+accepts the
 captured `auto_accepted` replacements plus the ticked ones, the same
 `auto_accepted + ticked` set the preset-load dialog hands the draft filter
 (frontend combineAcceptedPaths), and recomputes the plugin selection the way
@@ -46,7 +49,7 @@ def parse_answers(inputs, answers_json):
     """{instance_id: sorted ticked paths} for every captured instance.
 
     Raises AnswersInvalid for an unknown instance id, a malformed value, or a
-    ticked path the dialog never offered for that instance.
+    path that is neither offered nor auto-accepted for that instance.
     """
     try:
         raw = json.loads(answers_json) if answers_json else {}
@@ -65,10 +68,12 @@ def parse_answers(inputs, answers_json):
             raise AnswersInvalid(f'Upgrade answers name instance {instance_id}, which was not captured')
         if not isinstance(ticked, list) or not all(isinstance(path, str) for path in ticked):
             raise AnswersInvalid(f'Upgrade answers for instance {instance_id} must be a list of paths')
-        unknown = sorted(set(ticked) - _offered(captured[instance_id]))
+        auto = set((captured[instance_id].get('classification') or {}).get('auto_accepted') or [])
+        ticked = set(ticked) - auto
+        unknown = sorted(ticked - _offered(captured[instance_id]))
         if unknown:
             raise AnswersInvalid(f'Instance {instance_id}: {", ".join(unknown)} was not offered a replacement')
-        answers[instance_id] = sorted(set(ticked))
+        answers[instance_id] = sorted(ticked)
     return answers
 
 
