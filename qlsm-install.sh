@@ -167,6 +167,15 @@ if [[ $UPDATE_MODE -eq 1 ]]; then
     info "Updating docker-compose.yml..."
     curl -fsSL "${REPO_RAW}/docker-compose.yml" -o docker-compose.yml
     success "docker-compose.yml updated"
+    # host-init is built locally, so pull alone never picks up init.sh changes.
+    info "Updating host-init..."
+    mkdir -p host-init
+    curl -fsSL "${REPO_RAW}/host-init/Dockerfile" -o host-init/Dockerfile
+    curl -fsSL "${REPO_RAW}/host-init/init.sh" -o host-init/init.sh
+    chmod +x host-init/init.sh
+    # Build only host-init: `up --build` would also try to build web from source.
+    ${COMPOSE} build host-init
+    success "host-init updated"
     info "Pulling latest image..."
     ${COMPOSE} pull
     info "Restarting QLSM..."
