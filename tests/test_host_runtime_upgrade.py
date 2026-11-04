@@ -191,10 +191,37 @@ def _assert_rolled_back(env, host_id, orig, remote, deps, locks, b_id):
     return host, op
 
 
-def test_failed_initial_stop_never_installs_or_switches(world):
+def _dir_identity(root):
+    """(inode, mtime_ns, bytes) of a directory and everything under it."""
+    entries = {}
+    for current, _dirs, files in os.walk(root):
+        stat_result = os.stat(current)
+        entries[current] = (stat_result.st_ino, stat_result.st_mtime_ns, None)
+        for name in files:
+            path = os.path.join(current, name)
+            stat_result = os.stat(path)
+            with open(path, 'rb') as handle:
+                entries[path] = (stat_result.st_ino, stat_result.st_mtime_ns, handle.read())
+    return entries
+
+
+def test_failed_initial_stop_never_installs_or_switches(world, monkeypatch):
     env, host, ids, op, remote, locks, orig = world
+    c_dir = env.configs / host.name / str(ids['C'])
+    before = _dir_identity(c_dir)
+    restored = []
+    real_restore = rollback_module.restore_instance
+    monkeypatch.setattr(rollback_module, 'restore_instance',
+                        lambda instance, root, **k: restored.append(instance.id) or real_restore(instance, root, **k))
     result, deps = _run(op, remote, locks, fail={('stop', ids['C'])})
     assert result is False
+    # C was never quiesced: its live directory is untouched (same inodes,
+    # mtimes and bytes) and the snapshot restore never ran for any instance,
+    # since nothing was converted.
+    assert _dir_identity(c_dir) == before
+    assert restored == []
+    outcome = json.loads(_op(op.id).instance_outcomes_json)['instances'][str(ids['C'])]
+    assert outcome['stop'] == 'failed' and outcome['forward_stop_failed'] == 'stop playbook failed'
     assert not _called(deps, 'install') and not _called(deps, 'configure')
     _host, finished = _assert_rolled_back(env, host.id, orig, remote, deps, locks, ids['B'])
     assert 'could not stop instance uh-C' in finished.last_error
@@ -314,7 +341,9 @@ def test_restore_failure_is_isolated_and_keeps_the_reservation(world, monkeypatc
         return real_restore(instance, root, **kwargs)
 
     monkeypatch.setattr(rollback_module, 'restore_instance', restore)
-    result, deps = _run(op, remote, locks, fail={'install', ('start', ids['C'])})
+    # C's configure fails, so A (converted + configured) and C (converted) roll
+    # back; C's restart then fails too.
+    result, deps = _run(op, remote, locks, fail={('configure', ids['C'], False), ('start', ids['C'])})
     assert result is False
 
     host = db.session.get(Host, host.id)
@@ -373,3 +402,14 @@ def test_answers_with_auto_accepted_paths_succeed(env):
     result, _deps = _run(op, FakeRemote(host), FakeLocks())
     assert result is True
     assert db.session.get(QLInstance, a.id).qlx_plugins == 'balance, ban'
+
+
+def test_stopped_instance_with_a_stray_server_process_aborts_the_upgrade(world):
+    """STOPPED means systemd inactive AND no server process for the port."""
+    env, host, ids, op, remote, locks, orig = world
+    result, deps = _run(op, remote, locks, fail={('stray', ids['B'])})
+    assert result is False
+    assert not _called(deps, 'install')
+    finished = _op(op.id)
+    assert 'was STOPPED but its service is stray_process' in finished.last_error
+    assert ('start', ids['B']) not in deps.calls

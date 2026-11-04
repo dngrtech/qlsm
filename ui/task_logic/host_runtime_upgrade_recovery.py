@@ -29,7 +29,7 @@ from ui.models import Host
 from ui.models_runtime_upgrade import NONTERMINAL_STATES, HostRuntimeUpgradeOperation
 from ui.task_logic.common import append_log
 
-from .host_runtime_upgrade import fail_preparation, take_ownership
+from .host_runtime_upgrade import fail_preparation, is_job_timeout, mark_recovery_required, take_ownership
 from .host_runtime_upgrade_deps import UpgradeDeps
 from .host_runtime_upgrade_state import StaleExecution, safe_error
 
@@ -140,14 +140,12 @@ def recover_host_runtime_logic(operation_id, *, deps=None, job_id=None):
         db.session.rollback()
         return f'pending: {exc}'
     except Exception as exc:
+        if is_job_timeout(exc):
+            # Stop work in this job; the reconciler hands it to a new one.
+            mark_recovery_required(execution, f'recovery worker timed out: {exc}')
+            return f'pending: recovery of runtime upgrade {operation_id} timed out'
         log.exception('Recovery of upgrade %s failed', operation_id)
-        db.session.rollback()
-        op = db.session.get(HostRuntimeUpgradeOperation, operation_id)
-        if op is not None and not op.is_terminal:
-            op.state = 'recovery_required'
-            op.recovery_required = True
-            op.last_error = safe_error(exc)
-            db.session.commit()
+        mark_recovery_required(execution, f'recovery failed: {safe_error(exc)}', state='recovery_required')
         return f'pending: recovery failed: {safe_error(exc)}'
     finally:
         execution.release_locks()

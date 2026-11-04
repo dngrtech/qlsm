@@ -115,7 +115,7 @@ def fail_preparation(execution, reason, *, cleanup_snapshot):
         if host.status == HostStatus.CONFIGURING:
             host.status = HostStatus.ACTIVE
         append_log(host, f'Upgrade to minqlxtended cancelled before any change: {safe_error(reason)}')
-    db.session.commit()
+    execution.commit()
     return False
 
 
@@ -155,7 +155,7 @@ def _validate(execution):
             original_status=captured[iid]['original_status'],
             original_python_deps_path=instance.python_deps_path)
     execution._write_outcomes(outcomes)
-    db.session.commit()
+    execution.commit()
     return inputs
 
 
@@ -312,7 +312,7 @@ def _succeed(execution, ids):
     host.status = HostStatus.ACTIVE
     append_log(host, 'Upgraded to minqlxtended; every instance is back in its original state.'
                + (f' Fallback presets: {", ".join(presets)}.' if presets else ''))
-    db.session.commit()
+    execution.commit()
     finalize_remote(execution)
     for iid in ids:
         discard_conversion_leftovers(live_config_dir(host.name, iid), conversion_tag(op.id, iid))
@@ -331,6 +331,8 @@ def _run(execution):
     except StaleExecution:
         raise
     except Exception as exc:
+        if is_job_timeout(exc):
+            raise
         log.exception('Upgrade %s failed during preparation', execution.operation_id)
         return fail_preparation(execution, f'unexpected error: {safe_error(exc)}',
                                 cleanup_snapshot=execution.op.snapshot_complete)
@@ -349,7 +351,7 @@ def _run(execution):
         db.session.rollback()
         return rollback(execution, str(exc))
     except Exception as exc:
-        if _is_job_timeout(exc):
+        if is_job_timeout(exc):
             raise
         log.exception('Upgrade %s failed unexpectedly', execution.operation_id)
         db.session.rollback()
@@ -357,7 +359,7 @@ def _run(execution):
     return _succeed(execution, ids)
 
 
-def _is_job_timeout(exc):
+def is_job_timeout(exc):
     try:
         from rq.timeouts import JobTimeoutException
     except ImportError:  # pragma: no cover
@@ -365,27 +367,30 @@ def _is_job_timeout(exc):
     return isinstance(exc, JobTimeoutException)
 
 
-def mark_recovery_required(operation_id, reason):
-    """Durably record that a rollback is owed (used when the worker is dying)."""
-    from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
-
+def mark_recovery_required(execution, reason, *, state=None):
+    """Durably (and fenced) record that a rollback is owed and leave it to the
+    reconciler/recovery job. Never raises."""
     try:
         db.session.rollback()
-        op = db.session.get(HostRuntimeUpgradeOperation, operation_id)
+        op = execution.op
         if op is not None and not op.is_terminal:
             op.recovery_required = True
             op.last_error = safe_error(reason)
-            db.session.commit()
+            if state:
+                op.state = state
+            execution.commit()
+    except StaleExecution:
+        log.warning('Upgrade %s: superseded while recording recovery_required', execution.operation_id)
     except Exception:
-        log.exception('Upgrade %s: could not record recovery_required', operation_id)
+        log.exception('Upgrade %s: could not record recovery_required', execution.operation_id)
         db.session.rollback()
 
 
 def upgrade_host_runtime_logic(operation_id, *, deps=None, job_id=None):
     """Entry point for the RQ task. Returns True on success, False on a
-    cancelled/rolled-back upgrade, or an error string. Never raises, except
-    an RQ job timeout, which is re-raised after recording recovery_required so
-    the operation's failure callback schedules recovery."""
+    cancelled/rolled-back upgrade, or an error string. Never raises: an RQ job
+    timeout (or any other escape) records recovery_required and returns; the
+    reconciler then sees the finished job and hands the operation to recovery."""
     from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
 
     from .host_runtime_upgrade_recovery import recover_host_runtime_logic
@@ -413,13 +418,12 @@ def upgrade_host_runtime_logic(operation_id, *, deps=None, job_id=None):
         db.session.rollback()
         return False
     except Exception as exc:
-        if _is_job_timeout(exc):
-            # RQ is killing this job: record the owed rollback and let the
-            # operation's failure callback hand it to a recovery job.
-            mark_recovery_required(operation_id, f'worker timed out: {exc}')
-            raise
+        if is_job_timeout(exc):
+            # Stop all work in this job; recovery resumes the rollback.
+            mark_recovery_required(execution, f'worker timed out: {exc}')
+            return f'Error: runtime upgrade {operation_id} timed out; recovery pending'
         log.exception('Upgrade %s: unexpected error outside the step handlers', operation_id)
-        mark_recovery_required(operation_id, f'unexpected error: {safe_error(exc)}')
+        mark_recovery_required(execution, f'unexpected error: {safe_error(exc)}')
         return f'Error: runtime upgrade {operation_id} needs recovery: {safe_error(exc)}'
     finally:
         execution.release_locks()

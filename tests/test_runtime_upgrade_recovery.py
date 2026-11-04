@@ -23,7 +23,7 @@ from tests.runtime_upgrade_harness import (
     restore_lock_release,
 )
 from ui import db
-from ui.models import Host, HostStatus, QLInstance
+from ui.models import Host, HostStatus, InstanceStatus, QLInstance
 from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
 from ui.runtime_upgrade_guard import active_runtime_upgrade
 from ui.task_logic.host_runtime_upgrade import upgrade_host_runtime_logic
@@ -275,7 +275,9 @@ def test_unassigned_job_row_is_recovered_after_grace(world):
     assert db.session.get(Host, world.host_id).status == HostStatus.ACTIVE
 
 
-def test_job_timeout_records_recovery_and_reraises(world):
+def test_job_timeout_records_recovery_and_returns(world):
+    """A timeout stops the job without an inline rollback; the reconciler then
+    finds the finished job and hands the operation to recovery."""
     from rq.timeouts import JobTimeoutException
 
     def timeout(name):
@@ -283,16 +285,99 @@ def test_job_timeout_records_recovery_and_reraises(world):
             raise JobTimeoutException('Task exceeded maximum timeout value (3600 seconds)')
 
     deps = FakeDeps(world.remote, world.locks, on_checkpoint=timeout)
-    with pytest.raises(JobTimeoutException):
-        upgrade_host_runtime_logic(world.op_id, deps=deps, job_id='job-1')
+    result = upgrade_host_runtime_logic(world.op_id, deps=deps, job_id='job-1')
+    assert isinstance(result, str) and 'timed out' in result
     op = _op(world.op_id)
-    assert op.recovery_required is True and not op.is_terminal
+    assert op.recovery_required is True and not op.is_terminal and op.state == 'configuring'
     assert 'timed out' in op.last_error
+    assert not [c for c in deps.calls if c[0] == 'configure']  # no further work
     assert world.locks.owners == {}
+
+    later = datetime.datetime.utcnow() + datetime.timedelta(seconds=5)
+    assert reconcile_runtime_upgrades(deps=deps, now=later) == [world.op_id]
+    (_, job_id), = deps.enqueued
+    result, _ = _recover(world, job_id=job_id)
+    assert result is False
+    assert_original(world.env, world.host_id, world.orig, world.remote)
+
+
+def test_job_timeout_during_rollback_is_recovery_pending_not_instance_error(world):
+    from rq.timeouts import JobTimeoutException
+
+    deps = FakeDeps(world.remote, world.locks, fail={('configure', world.ids['C'], False)})
+    real_ready = deps.wait_ready
+    first = {'A': True}
+
+    def ready(instance, timeout=60):
+        if instance.id == world.ids['A'] and first['A'] and \
+                db.session.get(Host, world.host_id).runtime == 'minqlx':
+            first['A'] = False
+            raise JobTimeoutException('Task exceeded maximum timeout value (3600 seconds)')
+        return real_ready(instance, timeout)
+
+    deps.wait_ready = ready
+    result = upgrade_host_runtime_logic(world.op_id, deps=deps, job_id='job-1')
+    assert isinstance(result, str) and 'timed out' in result
+    op = _op(world.op_id)
+    assert op.state == 'rolling_back' and op.recovery_required is True
+    outcomes = json.loads(op.instance_outcomes_json)['instances']
+    assert 'rollback' not in outcomes[str(world.ids['A'])] or \
+        outcomes[str(world.ids['A'])]['rollback']['phase'] != 'unexpected'
+    assert db.session.get(QLInstance, world.ids['A']).status.value != 'error'
+    # Work stopped in that job: later instances were not rolled back by it.
+    assert 'rollback' not in outcomes[str(world.ids['C'])]
 
     result, _ = _recover(world)
     assert result is False
     assert_original(world.env, world.host_id, world.orig, world.remote)
+    _assert_exclusive_end(world)
+
+
+def test_stale_executor_writes_are_rejected_after_takeover(world):
+    from ui.task_logic.host_runtime_upgrade_state import Execution, StaleExecution
+
+    token = claim_operation(world.op_id, 'job-1')
+    old = Execution(world.op_id, token, 'job-1', FakeDeps(world.remote, world.locks))
+    old.record(world.ids['A'], stop='ok')  # still the owner: accepted
+    assert claim_operation(world.op_id, 'job-2') == token + 1
+    new = Execution(world.op_id, token + 1, 'job-2', FakeDeps(world.remote, world.locks))
+    new.record(world.ids['A'], rollback={'phase': 'complete', 'ok': True})
+
+    with pytest.raises(StaleExecution):
+        old.record(world.ids['A'], stop='overwritten-by-stale')
+    instance = db.session.get(QLInstance, world.ids['A'])
+    instance.status = InstanceStatus.ERROR
+    db.session.get(Host, world.host_id).runtime = 'minqlxtended'
+    with pytest.raises(StaleExecution):
+        old.commit()
+    with pytest.raises(StaleExecution):
+        old.fence()
+    fresh_worker()
+    outcome = json.loads(_op(world.op_id).instance_outcomes_json)['instances'][str(world.ids['A'])]
+    assert outcome == {'stop': 'ok', 'rollback': {'phase': 'complete', 'ok': True}}
+    assert db.session.get(QLInstance, world.ids['A']).status == world.orig[world.ids['A']]['status']
+    assert db.session.get(Host, world.host_id).runtime == 'minqlx'
+
+
+def test_takeover_during_readiness_wait_rejects_the_stale_status_write(world):
+    """The old worker's RUNNING status and journal write after a 60 s wait
+    are rejected once a recovery execution has taken over."""
+    deps = FakeDeps(world.remote, world.locks)
+    real_ready = deps.wait_ready
+
+    def ready(instance, timeout=60):
+        ok = real_ready(instance, timeout)
+        if instance.id == world.ids['A']:
+            assert claim_operation(world.op_id, 'job-2') == 2
+        return ok
+
+    deps.wait_ready = ready
+    assert upgrade_host_runtime_logic(world.op_id, deps=deps, job_id='job-1') is False
+    fresh_worker()
+    outcome = json.loads(_op(world.op_id).instance_outcomes_json)['instances'][str(world.ids['A'])]
+    assert outcome['start'] == 'requested'  # the stale 'ok' never landed
+    assert db.session.get(QLInstance, world.ids['A']).status.value != 'running'
+    assert ('start', world.ids['C']) not in deps.calls  # side effects stopped
 
 
 def test_late_forward_job_hands_over_to_recovery(world):

@@ -20,7 +20,7 @@ from ui.runtime_upgrade_conversion import discard_conversion_leftovers
 from ui.runtime_upgrade_snapshot import restore_instance
 from ui.task_logic.common import append_log
 
-from .host_runtime_upgrade import conversion_tag, finalize_remote, live_config_dir
+from .host_runtime_upgrade import conversion_tag, finalize_remote, is_job_timeout, live_config_dir
 from .host_runtime_upgrade_deps import is_remote_pending
 from .host_runtime_upgrade_state import StaleExecution, safe_error
 
@@ -30,8 +30,15 @@ DEFAULT_REASON = 'the upgrade worker was interrupted'
 
 
 def _touched(outcome):
-    """Did the upgrade change this instance's files or service definition?"""
+    """Did the upgrade change this instance's files or service definition?
+    Conversion is the first change; it only ever follows a verified stop."""
     return any(key in outcome for key in ('convert', 'configure', 'start'))
+
+
+def _files_changed(outcome):
+    """Restore files only for an instance the forward run quiesced and converted.
+    One whose forward stop failed was never converted and keeps its running files."""
+    return 'convert' in outcome and outcome.get('stop') != 'failed'
 
 
 class _InstanceFailure(Exception):
@@ -48,7 +55,7 @@ def _quiesce(execution, iid):
     instance = execution.instance(iid)
     state = deps.service_state(instance)
     if state == 'active':
-        execution.fence()
+        # Fenced commit right before the (token-less) stop playbook.
         execution.record(iid, rollback={'phase': 'stop', 'ok': False, 'error': None, 'pending': False})
         ok, error = deps.stop(instance)
         state = deps.service_state(instance)
@@ -61,43 +68,51 @@ def _quiesce(execution, iid):
 def _restore(execution, iid, original, snapshot_root):
     deps = execution.deps
     op = execution.op
-    instance = execution.instance(iid)
+    outcome = execution.instance_outcome(iid)
 
-    execution.fence()
-    result = restore_instance(instance, snapshot_root)
-    # phase 'cleanup': the restore took effect, only removing its backup failed.
-    if not result['ok'] and result['phase'] != 'cleanup':
-        raise _InstanceFailure(f'restore:{result["phase"]}', result['error'] or 'restore failed')
-    execution.deps.checkpoint(f'rollback_restored:{iid}')
+    if _files_changed(outcome):
+        execution.fence()
+        result = restore_instance(execution.instance(iid), snapshot_root)
+        # phase 'cleanup': the restore took effect, only removing its backup failed.
+        if not result['ok'] and result['phase'] != 'cleanup':
+            raise _InstanceFailure(f'restore:{result["phase"]}', result['error'] or 'restore failed')
+        execution.deps.checkpoint(f'rollback_restored:{iid}')
+    elif outcome.get('stop') == 'failed':
+        # Not quiesced by the forward run: its files were never touched and
+        # are not overwritten now. Only its service state is verified below.
+        execution.record(iid, forward_stop_failed=outcome.get('error') or 'stop failed')
 
-    if 'configure' in execution.instance_outcome(iid):
+    if 'configure' in outcome:
         execution.fence()
         remote = deps.configure(iid, MINQLX, None, None, operation_id=op.id,
                                 fencing_token=execution.token, restore_from_operation=op.id)
         if not remote.get('ok'):
             raise _InstanceFailure('configure', remote.get('error') or 'remote restore failed',
                                    pending=is_remote_pending(remote.get('error')))
-    instance = execution.instance(iid)
-    original_deps = execution.instance_outcome(iid).get('original_python_deps_path')
-    if instance.python_deps_path != original_deps:
-        instance.python_deps_path = original_deps
-        db.session.commit()
+        instance = execution.instance(iid)
+        original_deps = outcome.get('original_python_deps_path')
+        if instance.python_deps_path != original_deps:
+            instance.python_deps_path = original_deps
+            execution.commit()
 
-    execution.fence()
+    instance = execution.instance(iid)
     state = deps.service_state(instance)
     if original == InstanceStatus.RUNNING.value:
         if state != 'active':
+            execution.fence()  # the start playbook carries no token: re-check first
             ok, error = deps.start(instance)
             if not ok:
                 raise _InstanceFailure('start', error or 'start failed', pending=is_remote_pending(error))
         ok, error = deps.wait_ready(instance, deps.ready_timeout)
         if not ok:
             raise _InstanceFailure('verify', error or 'not ready', pending=is_remote_pending(error))
+        instance = execution.instance(iid)
         instance.status = InstanceStatus.RUNNING
     else:
         if state != 'inactive':
             raise _InstanceFailure('verify', f'STOPPED instance service is {state}', pending=state == 'unknown')
         instance.status = InstanceStatus.STOPPED
+    # Fenced commit: a superseded execution cannot write this status/journal.
     execution.record(iid, rollback={'phase': 'complete', 'ok': True, 'error': None, 'pending': False})
 
 
@@ -121,7 +136,7 @@ def rollback(execution, reason=None):
         execution.record_host(commit=False, rollback_reason=reason)
         append_log(host, f'Upgrade to minqlxtended failed: {reason}. Rolling back to minqlx.')
     execution.set_state('rolling_back', commit=False, recovery_required=True)
-    db.session.commit()
+    execution.commit()
     if not op.snapshot_complete or not op.snapshot_path:
         # Mutation never starts before publication; refuse to restore anything else.
         execution.set_state('recovery_required', phase='rolling_back: no published snapshot',
@@ -158,6 +173,8 @@ def rollback(execution, reason=None):
             failures[iid] = failure
             _fail_instance(execution, iid, failure)
         except Exception as exc:
+            if is_job_timeout(exc):
+                raise  # not an instance failure: this job must stop; recovery resumes
             log.exception('Upgrade %s: rollback of instance %s failed', op.id, iid)
             failures[iid] = _InstanceFailure('unexpected', exc)
             _fail_instance(execution, iid, failures[iid])
@@ -172,7 +189,7 @@ def _finish(execution, reason, failures):
     if not failures:
         execution.set_state('rolled_back', commit=False, recovery_required=False, last_error=reason)
         append_log(host, f'Upgrade failed: {reason}. Rolled back to minqlx.')
-        db.session.commit()
+        execution.commit()
         finalize_remote(execution)
         for iid in execution.originals():
             discard_conversion_leftovers(live_config_dir(host.name, iid), conversion_tag(op.id, iid))
@@ -193,5 +210,5 @@ def _finish(execution, reason, failures):
     execution.set_state('recovery_required', phase='rolling_back: ' + ', '.join(
         f'{iid}:{failure.phase}' for iid, failure in sorted(failures.items())),
         commit=False, recovery_required=True, last_error=safe_error(summary))
-    db.session.commit()
+    execution.commit()
     return False

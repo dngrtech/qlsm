@@ -214,6 +214,8 @@ class FakeDeps(UpgradeDeps):
     def service_state(self, instance):
         if ('state', instance.id) in self.fail:
             return 'unknown'
+        if ('stray', instance.id) in self.fail and not self._service(instance)['active']:
+            return 'stray_process'  # systemd inactive, server process still there
         return 'active' if self._service(instance)['active'] else 'inactive'
 
     def wait_ready(self, instance, timeout=60):

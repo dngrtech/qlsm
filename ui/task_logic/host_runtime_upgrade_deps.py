@@ -7,7 +7,8 @@ RCON readiness signal), the Task 4 install/configure/finalize entry points,
 Redis execution locks, RQ job state and enqueueing. Return conventions:
 
     stop(instance) / start(instance)    -> (ok, error)
-    service_state(instance)             -> 'active' | 'inactive' | 'unknown'
+    service_state(instance)             -> 'active' | 'inactive' | 'stray_process' | 'unknown'
+                                           ('inactive' = systemd inactive and no server process)
     wait_ready(instance, timeout)       -> (ok, error)
     install / configure / finalize      -> Task 4 result dicts {'ok', 'error', 'details'}
     job_alive(job_id)                   -> bool (unknown counts as alive)
@@ -132,9 +133,19 @@ class UpgradeDeps:
         return ok, None if ok else str(result)
 
     def service_state(self, instance):
-        from ui.task_logic.interrupted_job_recovery import probe_service_state
+        """'active' | 'inactive' | 'stray_process' | 'unknown'. 'inactive' means
+        systemd inactive AND no engine process for the instance's port."""
+        from ui.task_logic.service_runtime import probe_host_runtime, quiescence_state
 
-        return probe_service_state(instance)
+        host = instance.host
+        password = os.environ.get('REDIS_PASSWORD') if getattr(host, 'provider', None) == 'self' else None
+        try:
+            observations = probe_host_runtime(host, [instance], redis_password=password,
+                                              with_processes=True)
+        except Exception:
+            log.exception('Quiescence probe failed for instance %s', instance.id)
+            return 'unknown'
+        return quiescence_state((observations or {}).get(str(instance.port)))
 
     def wait_ready(self, instance, timeout=READY_TIMEOUT_SECONDS):
         """systemd active and a serverchecker status published after the

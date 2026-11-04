@@ -2,9 +2,10 @@
 
 The HostRuntimeUpgradeOperation row is the source of truth. Every execution
 (the first worker, or a recovery worker) takes ownership by compare-and-set
-incrementing `fencing_token`; before each side effect it re-reads the token
-and stops (StaleExecution) if a newer execution has taken over or the
-operation went terminal. Intent is committed before each side effect and the
+incrementing `fencing_token`. Every write it makes is committed through
+Execution.commit(), which is conditional on that token (and on the operation
+being nonterminal), and every side effect is preceded by Execution.fence();
+a superseded execution gets StaleExecution and stops. Intent is committed before each side effect and the
 outcome after it is verified.
 
 instance_outcomes_json layout:
@@ -21,7 +22,7 @@ import datetime
 import json
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from ui import db
 from ui.models import Host, QLInstance
@@ -94,16 +95,34 @@ class Execution:
     def instance(self, instance_id):
         return db.session.get(QLInstance, int(instance_id))
 
-    def fence(self):
-        """Raise StaleExecution unless this execution still owns a live operation."""
-        db.session.flush()
-        row = db.session.execute(
-            select(HostRuntimeUpgradeOperation.fencing_token, HostRuntimeUpgradeOperation.state)
-            .where(HostRuntimeUpgradeOperation.id == self.operation_id)).one_or_none()
-        if row is None or row[0] != self.token:
+    def commit(self):
+        """Commit pending changes only if this execution still owns the operation.
+
+        The check is a conditional UPDATE on (id, fencing_token) inside the same
+        transaction as the changes. Its rowcount decides: 0 means a takeover
+        committed first, so everything pending is rolled back and
+        StaleExecution raised. Once this transaction has written, SQLite holds
+        the write lock, so a takeover cannot commit between the check and this
+        commit. The token alone is enough: claim_operation refuses terminal
+        operations, so another executor can only finish the operation after
+        bumping the token. Every operation-row, host and instance write the
+        executor makes goes through here.
+        """
+        table = HostRuntimeUpgradeOperation.__table__
+        result = db.session.connection().execute(
+            update(table)
+            .where(table.c.id == self.operation_id, table.c.fencing_token == self.token)
+            .values(updated_at=_now()))
+        if result.rowcount != 1:
+            db.session.rollback()
             raise StaleExecution(f'operation {self.operation_id} token {self.token} superseded')
-        if row[1] in TERMINAL_STATES:
-            raise StaleExecution(f'operation {self.operation_id} is already {row[1]}')
+        db.session.commit()
+
+    def fence(self):
+        """Commit (fenced) and re-check ownership before a side effect; renew locks."""
+        self.commit()
+        if self.op.is_terminal:
+            raise StaleExecution(f'operation {self.operation_id} is already {self.op.state}')
         if self.locked:
             try:
                 self.deps.locks.renew(self.operation_id, self.lock_token, self.op.host_id,
@@ -159,14 +178,14 @@ class Execution:
         entry.update(fields)
         self._write_outcomes(data)
         if commit:
-            db.session.commit()
+            self.commit()
 
     def record_host(self, commit=True, **fields):
         data = self.outcomes()
         data['host'].update(fields)
         self._write_outcomes(data)
         if commit:
-            db.session.commit()
+            self.commit()
 
     def set_state(self, state, phase=None, commit=True, **fields):
         op = self.op
@@ -175,4 +194,4 @@ class Execution:
         for key, value in fields.items():
             setattr(op, key, value)
         if commit:
-            db.session.commit()
+            self.commit()
