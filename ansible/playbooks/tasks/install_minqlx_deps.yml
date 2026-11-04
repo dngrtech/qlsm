@@ -25,11 +25,6 @@
     path: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/requirements.txt"
   register: minqlx_req_stat_result
 
-# Upgraded hosts (Host.runtime_deps_isolated): build or refresh the instance's
-# venv as ql -- core + the instance's synced requirements in ONE pip run, then
-# pip check -- before any other pip. Never system pip on such a host. A pip
-# failure only warns (QLSM_PIP_WARN) and the restart/apply/deploy goes on, as
-# on legacy hosts; failing to create a missing venv still fails the play.
 # A new-instance venv (instances/<id>) is keyed by an id SQLite can reuse after
 # a delete. python_deps_owner (id + creation time) is recorded in the venv; a
 # venv with a different or no marker is removed (a symlink is unlinked, never
@@ -78,11 +73,26 @@
   changed_when: python_deps_claim.stdout | trim != 'kept'
   when: python_deps_ensure | default(false) | bool and python_deps_owner | default('') | length > 0
 
+# A venv that already exists has its packages; one that does not (a new
+# instance, or one the claim above just rebuilt) is empty until pip succeeds.
+- name: Check whether the instance's venv already exists
+  ansible.builtin.stat:
+    path: "{{ python_deps_path }}/pyvenv.cfg"
+  register: python_deps_venv_stat
+  when: python_deps_ensure | default(false) | bool
+
+# Upgraded hosts (Host.runtime_deps_isolated): build or refresh the instance's
+# venv as ql -- core + the instance's synced requirements in ONE pip run, then
+# pip check -- before any other pip. Never system pip on such a host.
+# Refreshing an existing venv: a pip failure only warns (QLSM_PIP_WARN) and the
+# restart/apply/deploy goes on, as on legacy hosts. Building a missing venv:
+# any failure fails the play, since the venv (no system site-packages) would
+# otherwise lack even the core dependencies.
 - name: Ensure the instance's isolated dependency venv
   ansible.builtin.include_tasks: runtime_python_deps.yml
   vars:
     runtime_deps_dir: "{{ python_deps_path | dirname }}"
-    runtime_deps_soft_fail: true
+    runtime_deps_soft_fail: "{{ python_deps_venv_stat.stat.exists | default(false) }}"
     runtime_instances:
       - id: "{{ python_deps_path | basename | int }}"
         requirements_src: ''

@@ -273,7 +273,14 @@ def test_installer_keeps_venv_pip_failures_fatal():
 def test_instance_dependency_step_soft_fails_and_installs_once():
     tasks = _tasks('ansible/playbooks/tasks/install_minqlx_deps.yml')
     ensure = _named(tasks, "Ensure the instance's isolated dependency venv")
-    assert ensure['vars']['runtime_deps_soft_fail'] is True
+    # Soft only when refreshing a venv that already exists; building one is fatal.
+    venv_stat = _named(tasks, "Check whether the instance's venv already exists")
+    assert venv_stat['ansible.builtin.stat']['path'] == '{{ python_deps_path }}/pyvenv.cfg'
+    assert venv_stat['register'] == 'python_deps_venv_stat'
+    assert ensure['vars']['runtime_deps_soft_fail'] == \
+        '{{ python_deps_venv_stat.stat.exists | default(false) }}'
+    claim = _named(tasks, 'Claim the instance')
+    assert tasks.index(claim) < tasks.index(venv_stat) < tasks.index(ensure)
     stat = _named(tasks, 'Check if requirements.txt exists')
     # The remote instance requirements (what the old second step installed)
     # go into the ensure run, so an operation venv keeps getting them.
