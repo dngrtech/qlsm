@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 
 from ui.runtime import MINQLX, host_runtime, normalize_runtime, runtime_paths
 
@@ -342,12 +343,19 @@ def _safe_join(base, rel_path):
 
 
 def _copy_verified_tree(label, source_root, captured, dest_root, problems):
+    """Copy the captured files of `source_root` into `dest_root`.
+
+    Each file's bytes are re-hashed against `captured`; permission bits and
+    timestamps are carried over, and every source directory (empty ones too)
+    is recreated with its mode. Drift is appended to `problems`.
+    """
     live = set(_tree_digests(source_root))
     for rel_path in sorted(live - set(captured)):
         problems.append(f'{label}: {rel_path} was added')
     for rel_path, digest in sorted(captured.items()):
         try:
             with open(_safe_join(source_root, rel_path), 'rb') as handle:
+                source_stat = os.fstat(handle.fileno())
                 data = handle.read()
         except OSError:
             problems.append(f'{label}: {rel_path} is missing')
@@ -361,6 +369,27 @@ def _copy_verified_tree(label, source_root, captured, dest_root, problems):
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, 'wb') as handle:
             handle.write(data)
+        os.chmod(target, stat.S_IMODE(source_stat.st_mode))
+        os.utime(target, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+    _copy_directories(source_root, dest_root)
+
+
+def _copy_directories(source_root, dest_root):
+    """Recreate every directory of `source_root` under `dest_root` with its mode.
+
+    Modes are applied deepest first, after all files are written, so a
+    read-only source directory cannot block writing into its copy.
+    """
+    if not os.path.isdir(source_root):
+        return
+    modes = {}
+    for current, _dirs, _files in os.walk(source_root):
+        rel_dir = os.path.relpath(current, source_root)
+        target = dest_root if rel_dir == '.' else os.path.join(dest_root, rel_dir)
+        os.makedirs(target, exist_ok=True)
+        modes[target] = stat.S_IMODE(os.stat(current).st_mode)
+    for target in sorted(modes, key=lambda path: path.count(os.sep), reverse=True):
+        os.chmod(target, modes[target])
 
 
 def materialize_upgrade_inputs(host, inputs, dest_dir):

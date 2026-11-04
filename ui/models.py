@@ -532,3 +532,7 @@ class Notification(db.Model):
             'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
             'read_at': self.read_at.isoformat() if self.read_at else None,
         }
+
+
+# Imported last: it depends on db only, and must be registered for create_all().
+from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation  # noqa: E402,F401
