@@ -420,7 +420,7 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
-All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is **immutable** — there is no field or endpoint to change it after the host is created. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against).
+All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is set at creation. The only way to change it afterwards is the minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade); there is no downgrade. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against).
 
 The Python 3.12 floor for `runtime: "minqlxtended"` is enforced differently per provider, because QLSM doesn't have the same evidence available at creation time for each:
 

@@ -15,6 +15,19 @@ def _play():
         return yaml.safe_load(handle)[0]
 
 
+def test_play_defaults_match_the_runtime_table():
+    """The play's own defaults must not drift from ui.runtime, which the caller
+    also passes as extra-vars."""
+    from ui.runtime import MINQLXTENDED, runtime_paths
+
+    target = runtime_paths(MINQLXTENDED)
+    play_vars = _play()["vars"]
+    assert play_vars["minqlxtended_git_repo"] == target["git_repo"]
+    assert play_vars["minqlxtended_git_version"] == target["git_version"]
+    assert play_vars["minqlxtended_shared_dir"] == target["shared_dir"]
+    assert play_vars["runtime_plugins_dirname"] == target["plugins_dirname"]
+
+
 def _flat(tasks):
     for task in tasks:
         yield task

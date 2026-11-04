@@ -157,7 +157,7 @@ class Host(db.Model):
     ssh_port = db.Column(db.Integer, default=22)
     os_type = db.Column(db.String(50), nullable=True)  # normalized detected host OS family, e.g. 'debian', 'ubuntu'
     os_version = db.Column(db.String(50), nullable=True)  # /etc/os-release VERSION_ID, e.g. '24.04', '12'
-    runtime = db.Column(db.String(20), nullable=False, default='minqlx')  # 'minqlx' or 'minqlxtended'; set at creation, immutable
+    runtime = db.Column(db.String(20), nullable=False, default='minqlx')  # 'minqlx' or 'minqlxtended'; set at creation, changed only by the Host Runtime Upgrade (minqlx -> minqlxtended)
     is_standalone = db.Column(db.Boolean, default=False)  # user-provided host (not Terraform)
     timezone = db.Column(db.String(100), nullable=True)  # IANA timezone name
     cpu_count = db.Column(db.Integer, nullable=True)

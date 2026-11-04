@@ -11,7 +11,7 @@ import pytest
 from ui import db
 from ui.models import Host, HostStatus, InstanceStatus, QLInstance
 from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
-from ui.runtime import MINQLX, MINQLXTENDED
+from ui.runtime import MINQLX, MINQLXTENDED, runtime_paths
 from ui.task_logic import instance_runtime_update as mod
 
 OP = 'c' * 32
@@ -233,6 +233,11 @@ def test_install_runs_the_minimal_installer_and_reports_dependency_paths(env):
     assert call['playbook'] == 'install_runtime.yml'
     ev = call['extravars']
     assert ev['operation_id'] == OP and ev['fencing_token'] == 4
+    target = runtime_paths(MINQLXTENDED)
+    assert ev['minqlxtended_git_repo'] == target['git_repo']
+    assert ev['minqlxtended_git_version'] == target['git_version']
+    assert ev['minqlxtended_shared_dir'] == target['shared_dir']
+    assert ev['runtime_plugins_dirname'] == target['plugins_dirname']
     assert ev['terminal_operation_ids'] == [OLD_OP]
     assert ev['core_requirements_src'].endswith('target_builtin_pool/requirements.txt')
     assert ev['common_plugins_builtin_src'].endswith('target_builtin_pool')

@@ -139,7 +139,14 @@ def install_runtime_on_host(host_id, *, operation_id, fencing_token, immutable_i
              'requirements_src': os.path.abspath(spec['requirements']) if spec.get('requirements') else ''}
             for instance_id, spec in sorted(instances.items(), key=lambda kv: int(kv[0]))
         ]
+        target = runtime_paths(MINQLXTENDED)
         extravars = {
+            # The target runtime identity comes from ui.runtime, the single
+            # source of truth, so the play can't build a stale pin.
+            'minqlxtended_git_repo': target['git_repo'],
+            'minqlxtended_git_version': target['git_version'],
+            'minqlxtended_shared_dir': target['shared_dir'],
+            'runtime_plugins_dirname': target['plugins_dirname'],
             'operation_id': operation_id,
             'fencing_token': fencing_token,
             'terminal_operation_ids': _terminal_operation_ids(host.id),
