@@ -43,8 +43,14 @@ def baseline_hashes(runtime):
     (everything falls through to the scanner) but never raises: a preset load
     must not 500 because an asset file is absent.
     """
+    return baseline_hashes_from(_manifest_path(runtime))
+
+
+def baseline_hashes_from(manifest_path):
+    """baseline_hashes() for an explicit manifest.json (for example an
+    operation-owned copy of the baseline)."""
     try:
-        with open(_manifest_path(runtime), 'r', encoding='utf-8') as handle:
+        with open(manifest_path, 'r', encoding='utf-8') as handle:
             manifest = json.load(handle)
     except (OSError, ValueError):
         return {}
@@ -67,7 +73,11 @@ def replacement_scripts(runtime):
     highfps.py. The default preset is precisely the pickable set.
     """
     preset = default_preset_name_for_runtime(runtime)
-    directory = os.path.join(BUILTIN_PRESETS_DIR, preset, 'scripts')
+    return replacement_scripts_from(os.path.join(BUILTIN_PRESETS_DIR, preset, 'scripts'))
+
+
+def replacement_scripts_from(directory):
+    """replacement_scripts() for an explicit default-preset scripts/ directory."""
     scripts = {}
     try:
         names = os.listdir(directory)
@@ -102,7 +112,11 @@ def shipped_scripts(runtime):
     the whole failure class this gate exists to eliminate.
     """
     preset = default_preset_name_for_runtime(runtime)
-    directory = os.path.join(BUILTIN_PRESETS_DIR, preset, 'scripts')
+    return shipped_scripts_from(os.path.join(BUILTIN_PRESETS_DIR, preset, 'scripts'))
+
+
+def shipped_scripts_from(directory):
+    """shipped_scripts() for an explicit default-preset scripts/ directory."""
     scripts = {}
     for root, _dirs, filenames in os.walk(directory):
         for name in filenames:
