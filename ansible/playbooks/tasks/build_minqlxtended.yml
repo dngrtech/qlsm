@@ -6,10 +6,13 @@
 #
 # Requires: minqlx_build_dir, minqlxtended_git_repo, minqlxtended_git_version,
 #           minqlxtended_shared_dir
+# Optional: minqlxtended_patches (explicit file names under
+#           ql-assets/patches/minqlxtended/; default ['qlsm-python-deps.patch'];
+#           never globbed)
 #
 # The minqlx C patches (ql-assets/patches/*.patch) are obsolete here: `damage`
 # is a native event and reset_acc is pure Python. The only patch applied is
-# ql-assets/patches/minqlxtended/*.patch, which lets a service point the
+# ql-assets/patches/minqlxtended/qlsm-python-deps.patch, which lets a service point the
 # embedded interpreter at an isolated venv via QLSM_PYTHON_DEPS. It is a
 # strict no-op when that variable is unset. No PYTHONPATH either -- the .so
 # locates minqlxtended.zip beside itself.
@@ -44,24 +47,45 @@
     version: "{{ minqlxtended_git_version }}"
     depth: 1
 
+# A private, randomly named staging dir (0700, owned by the ql user that
+# applies the patches) and an explicit patch list: nothing another local user
+# drops into a shared /tmp path can reach the build.
+- name: Create a private patch staging directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: qlsm-minqlxtended-patches-
+  register: minqlxtended_patch_stage
+
+- name: Restrict the patch staging directory to the ql user
+  ansible.builtin.file:
+    path: "{{ minqlxtended_patch_stage.path }}"
+    state: directory
+    owner: ql
+    group: ql
+    mode: '0700'
+
 - name: Copy local minqlxtended patches to build host
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../ql-assets/patches/minqlxtended/"
-    dest: "/tmp/minqlxtended-patches/"
-    mode: '0644'
+    src: "{{ playbook_dir }}/../../ql-assets/patches/minqlxtended/{{ item }}"
+    dest: "{{ minqlxtended_patch_stage.path }}/{{ item }}"
+    owner: ql
+    group: ql
+    mode: '0600'
+  loop: "{{ minqlxtended_patches | default(['qlsm-python-deps.patch']) }}"
 
 - name: Apply local minqlxtended patches
   become: yes
   become_user: ql
-  ansible.builtin.shell: |
-    set -e
-    for patch in /tmp/minqlxtended-patches/*.patch; do
-      [ -f "$patch" ] || continue
-      patch -p1 --forward --reject-file=- < "$patch"
-    done
-  args:
+  ansible.builtin.command:
+    argv:
+      - patch
+      - -p1
+      - --forward
+      - --reject-file=-
+      - -i
+      - "{{ minqlxtended_patch_stage.path }}/{{ item }}"
     chdir: "{{ minqlx_build_dir }}"
-    executable: /bin/bash
+  loop: "{{ minqlxtended_patches | default(['qlsm-python-deps.patch']) }}"
 
 - name: Compile minqlxtended (make) as ql user
   become: yes
@@ -89,5 +113,6 @@
 
 - name: Clean up minqlxtended patch staging directory
   ansible.builtin.file:
-    path: "/tmp/minqlxtended-patches"
+    path: "{{ minqlxtended_patch_stage.path }}"
     state: absent
+  when: minqlxtended_patch_stage.path is defined

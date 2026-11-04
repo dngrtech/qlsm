@@ -113,3 +113,22 @@ def test_patched_loader_refuses_paths_outside_runtime_deps(tmp_path, value):
     result = _run_loader(tmp_path, value)
     assert result.returncode == 0, result.stderr
     assert "QLSM_PYTHON_DEPS refused" in result.stdout
+
+
+def test_patches_are_staged_privately_and_applied_by_explicit_name():
+    """No shared, predictable /tmp path and no glob: another local user must
+    not be able to plant a patch the ql build applies."""
+    tasks = _load(BUILD_TASKS)
+    raw = open(BUILD_TASKS).read()
+    assert "/tmp/minqlxtended-patches" not in raw
+    assert "*.patch" not in raw.split("\n- name:", 1)[1]
+    stage = next(t for t in tasks if "ansible.builtin.tempfile" in t)
+    assert stage["ansible.builtin.tempfile"]["state"] == "directory"
+    restrict = next(t for t in tasks if t["name"] == "Restrict the patch staging directory to the ql user")
+    assert restrict["ansible.builtin.file"]["mode"] == "0700"
+    assert restrict["ansible.builtin.file"]["owner"] == "ql"
+    apply = next(t for t in tasks if t["name"] == "Apply local minqlxtended patches")
+    assert "ansible.builtin.command" in apply and "shell" not in apply
+    assert "qlsm-python-deps.patch" in apply["loop"]
+    for name in ("qlsm-python-deps.patch",):
+        assert os.path.isfile(os.path.join("ql-assets/patches/minqlxtended", name))
