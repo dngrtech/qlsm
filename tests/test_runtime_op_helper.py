@@ -396,3 +396,22 @@ def test_apply_refuses_backing_up_a_hard_linked_destination(helper, instance, ca
     assert rc == 3 and 'hard links' in out['refused']
     assert not os.path.exists(os.path.join(instance['ops'], 'files', '000000'))
     assert _read(victim) == 'do not copy\n'
+
+
+def test_a_writable_non_sticky_ancestor_is_refused(helper, tmp_path, capsys):
+    """Only a root-owned sticky ancestor (like /tmp) may be writable by others."""
+    shared = tmp_path.resolve() / 'shared'
+    shared.mkdir()
+    os.chmod(shared, 0o777)
+    rc, out = _run(helper, capsys, 'acquire', '--base', str(shared / 'runtime-ops'),
+                   '--operation-id', OP_A, '--fencing-token', '1')
+    assert rc == 3 and 'non-writable-by-others' in out['refused'] and str(shared) in out['refused']
+
+
+def test_the_base_itself_may_never_be_writable_by_others(helper, tmp_path, capsys):
+    base = tmp_path.resolve() / 'runtime-ops'
+    base.mkdir()
+    os.chmod(base, 0o1777)
+    rc, out = _run(helper, capsys, 'acquire', '--base', str(base),
+                   '--operation-id', OP_A, '--fencing-token', '1')
+    assert rc == 3 and 'non-writable-by-others' in out['refused']

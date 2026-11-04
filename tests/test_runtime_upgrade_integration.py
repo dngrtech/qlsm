@@ -317,6 +317,29 @@ def test_upgrade_and_rollback_of_an_existing_stopped_instance(target, ctx, tmp_p
                 env={'QLSM_PROBE_OUT': '/tmp/probe-plain.json'})
         assert json.loads(tgt.out('cat /tmp/probe-plain.json'))['redis_version'].startswith('2.')
 
+        # --- R4: later dependency installs for the upgraded instance go through
+        # its venv (install_minqlx_deps.yml venv branch), never global pip.
+        play = tmp_path / 'deps-play.yml'
+        play.write_text(
+            '- hosts: %s\n  become: yes\n  gather_facts: false\n  tasks:\n'
+            '    - ansible.builtin.import_tasks: %s\n'
+            % (HOST_NAME, os.path.join(ROOT, 'ansible/playbooks/tasks/install_minqlx_deps.yml')))
+        deps_vars = {'qlds_dir': QLDS, 'runtime_plugins_dirname': 'minqlxtended-plugins',
+                     'python_deps_path': venv}
+        deps_run = _sh([ANSIBLE_BIN, str(play), '-i', tgt.inventory, '-l', HOST_NAME,
+                        '-e', json.dumps(deps_vars)],
+                       env=dict(os.environ, ANSIBLE_CONFIG=tgt.cfg, ANSIBLE_BECOME_FLAGS='-H -S -n',
+                                ANSIBLE_PIPELINING='True'))
+        assert deps_run.returncode == 0, deps_run.stdout + deps_run.stderr
+        assert 'QLSM_PIP_WARN' not in deps_run.stdout
+        venv_task = deps_run.stdout.split("isolated venv]", 1)[1].split('TASK [', 1)[0]
+        assert 'changed: [%s]' % HOST_NAME in venv_task  # the venv branch really ran
+        global_task = deps_run.stdout.split('TASK [Install plugin Python deps from requirements.txt]', 1)[1]
+        assert global_task.split('TASK [', 1)[0].strip('* \n').startswith('skipping')
+        after_deps = tgt.out(f"{venv}/bin/python -c 'import redis, six; print(redis.__version__)'", user='ql')
+        assert int(after_deps.split('.')[0]) >= 5
+        assert _global_python_state(tgt) == python_before
+
         # --- a stale fencing token is refused before any change
         stale = iru.configure_existing_instance(
             1, 'minqlxtended', {'config_dir': os.path.join(inputs, 'instances', '1')}, venv,

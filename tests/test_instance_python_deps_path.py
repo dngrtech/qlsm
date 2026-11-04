@@ -1,7 +1,6 @@
 """QLInstance.python_deps_path: an upgraded instance's isolated dependency
 venv. When set, every service render passes QLSM_PYTHON_DEPS and per-instance
 pip goes through the venv's interpreter. When NULL, nothing changes at all."""
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,6 +22,11 @@ def _render(template_text, **kwargs):
     return env.from_string(template_text).render(**kwargs)
 
 
+# qlds@.service.j2 exactly as it was before python_deps_path existed (630a82a8),
+# inlined so the comparison works in a shallow or squashed checkout.
+PRE_DEPS_PATH_TEMPLATE = "[Unit]\nDescription=Quake Live Dedicated Server Port %i\nAfter=network.target\n\n[Service]\nUser=ql\nGroup=ql\nWorkingDirectory=/home/ql/qlds-%i\n{% if cpu_affinity is defined and cpu_affinity is not none %}\nCPUAffinity={{ cpu_affinity }}\n{% endif %}\n{% if ld_preload_paths | default('') %}\nEnvironment=LD_PRELOAD={{ ld_preload_paths }}\n{% endif %}\n# The ExecStart line will include the script and the dynamic arguments passed from Ansible\n# Wrap the entire command in quotes to handle spaces/quotes in qlds_args\nExecStart=/home/ql/qlds-%i/{{ launch_script | default('run_server_x64_minqlx.sh') }} {{ qlds_args | default('') }} \nRestart=on-failure\nRestartSec=5\n# qzeroded/minqlx does not exit cleanly on SIGTERM. Treat fast hard-kill\n# restarts as intentional for QLDS config/hook applies instead of burning a\n# 10s stop timeout. Do not mark SIGKILL as a clean exit globally: external\n# kill -9/OOM exits should still be failures under Restart=on-failure.\nKillSignal=SIGKILL\nTimeoutStopSec=2\n\n# Standard output and error logging (optional, defaults to journald)\nStandardOutput=journal\nStandardError=journal\n\n[Install]\nWantedBy=multi-user.target\n"
+
+
 SERVICE_INPUTS = [
     dict(qlds_args="+set net_port 27960"),
     dict(qlds_args="+set net_port 27961", cpu_affinity=2, ld_preload_paths="/a.so:/b.so",
@@ -32,9 +36,7 @@ SERVICE_INPUTS = [
 
 @pytest.mark.parametrize("inputs", SERVICE_INPUTS)
 def test_service_unit_is_byte_identical_without_a_deps_path(inputs):
-    before = subprocess.run(
-        ["git", "show", "630a82a8:ansible/templates/qlds@.service.j2"],
-        capture_output=True, text=True, check=True).stdout
+    before = PRE_DEPS_PATH_TEMPLATE
     after = Path("ansible/templates/qlds@.service.j2").read_text()
     assert _render(after, **inputs) == _render(before, **inputs)
     assert _render(after, python_deps_path="", **inputs) == _render(before, **inputs)

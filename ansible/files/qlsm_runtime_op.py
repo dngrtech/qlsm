@@ -334,11 +334,16 @@ def _open_dir(path, create_below=None, uid=None, gid=None):
 def _verify_trusted_dir(path, create=False):
     """Require every component of `path` to be a real directory owned by root
     (or by this process's user, for unit tests) and not group/other-writable.
-    With create=True, missing components are created 0700."""
+    The one exception is an ANCESTOR that is root-owned with the sticky bit
+    (e.g. /tmp): nobody else can rename or remove entries in it that they do
+    not own. On the production path (/var/lib/...) no component is sticky, so
+    every component gets the full check. With create=True, missing
+    components are created 0700."""
     fd = os.open('/', _DIR_FLAGS)
     current = ''
+    parts = _parts(path)
     try:
-        for part in _parts(path):
+        for index, part in enumerate(parts):
             current += '/' + part
             try:
                 child = os.open(part, _DIR_FLAGS, dir_fd=fd)
@@ -354,7 +359,9 @@ def _verify_trusted_dir(path, create=False):
             os.close(fd)
             fd = child
             st = os.fstat(fd)
-            if st.st_uid not in (0, os.geteuid()) or st.st_mode & 0o022:
+            sticky_ancestor = (index < len(parts) - 1 and st.st_uid == 0
+                               and st.st_mode & stat.S_ISVTX)
+            if st.st_uid not in (0, os.geteuid()) or (st.st_mode & 0o022 and not sticky_ancestor):
                 raise Refused('%s is not a root-owned, non-writable-by-others directory' % current)
         os.fchmod(fd, 0o700)
     finally:
