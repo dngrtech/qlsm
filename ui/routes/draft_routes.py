@@ -26,6 +26,7 @@ from ui.preset_support import (
     resolve_preset_subdir,
 )
 from ui.runtime import is_valid_runtime, normalize_runtime
+from ui.runtime_upgrade_guard import host_name_block_response
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
 from ui.plugin_manifest import read_plugin_manifest
 from ui.plugin_pool import shared_plugin_nodes, shared_plugin_path
@@ -1136,6 +1137,10 @@ def commit_draft(draft_id):
     target_path = _get_commit_target_path(data)
     if target_path is None:
         return jsonify({"error": {"message": "Invalid target. Provide host + instance_id or preset name."}}), 400
+    if data.get('target') == 'instance':
+        blocked = host_name_block_response(data.get('host'))
+        if blocked:
+            return blocked
 
     draft_scripts_path = _get_draft_scripts_path(draft_id)
     draft_user_hooks_path = _get_draft_user_hooks_path(draft_id)

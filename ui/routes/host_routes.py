@@ -7,6 +7,7 @@ from ui.database import (
 )
 from ui.vultr_settings import is_vultr_configured
 from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, runtime_paths
+from ui.runtime_upgrade_guard import upgrade_block_response
 import re
 import os
 import datetime
@@ -879,6 +880,9 @@ def delete_host_api(host_id): # Renamed function
     host = get_host(host_id)
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     # Check if host has active instances (as per PRD)
     if host.instances and any(instance.status != InstanceStatus.DELETING for instance in host.instances):
@@ -931,6 +935,9 @@ def update_host_api(host_id):
     if not host:
         current_app.logger.warning(f"Update host: Host ID {host_id} not found.")
         return jsonify({"error": {"message": "Host not found"}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     data = request.get_json()
     if not data:
@@ -1041,6 +1048,9 @@ def install_qlfilter_api(host_id):
     host = get_host(host_id)
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     if host.status not in [HostStatus.ACTIVE]: # Only allow on active hosts
         return jsonify({"error": {"message": f"Host is not in a valid state for QLFilter installation (current: {host.status.value})."}}), 409
@@ -1071,6 +1081,9 @@ def uninstall_qlfilter_api(host_id):
     host = get_host(host_id)
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
     
     try:
         from ui.models import QLFilterStatus # Ensure QLFilterStatus is imported
@@ -1114,6 +1127,9 @@ def refresh_qlfilter_status_api(host_id):
     host = get_host(host_id)
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     try:
         lock_token = str(uuid.uuid4())
@@ -1140,6 +1156,9 @@ def restart_host_api(host_id):
     if not host:
         current_app.logger.warning(f"Restart host API: Host ID {host_id} not found.")
         return jsonify({"error": {"message": "Host not found"}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     # Basic validation: only allow restart if host is ACTIVE
     if host.status != HostStatus.ACTIVE:
@@ -1172,6 +1191,9 @@ def resize_host_api(host_id):
     host = get_host(host_id)
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     if host.provider != 'vultr':
         return jsonify({"error": {"message": "Resize is only supported for Vultr hosts."}}), 409
@@ -1235,6 +1257,9 @@ def rerun_setup_api(host_id):
     host = get_host(host_id)
     if not host:
         return jsonify({"error": {"message": "Host not found."}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     if host.status not in (HostStatus.ACTIVE, HostStatus.ERROR):
         return jsonify({"error": {"message": f"Host must be ACTIVE or ERROR to re-run setup. Current status: {host.status.value}"}}), 409
@@ -1307,6 +1332,9 @@ def force_update_workshop_api(host_id):
     if not host:
         current_app.logger.warning(f"Update workshop API: Host ID {host_id} not found.")
         return jsonify({"error": {"message": "Host not found"}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     # Basic validation: only allow if host is ACTIVE
     if host.status != HostStatus.ACTIVE:
@@ -1374,6 +1402,9 @@ def apply_plugin_updates_api(host_id):
     if not host:
         current_app.logger.warning(f"Apply plugin updates API: Host ID {host_id} not found.")
         return jsonify({"error": {"message": "Host not found"}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     if host.status != HostStatus.ACTIVE:
         current_app.logger.warning(f"Apply plugin updates API: Host ID {host_id} is not in ACTIVE state (current: {host.status.value}).")
@@ -1430,6 +1461,9 @@ def configure_auto_restart_api(host_id):
     if not host:
         current_app.logger.warning(f"Configure auto-restart API: Host ID {host_id} not found.")
         return jsonify({"error": {"message": "Host not found"}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     # Only allow on active hosts
     if host.status != HostStatus.ACTIVE:
@@ -1480,6 +1514,9 @@ def configure_watchdog_api(host_id):
     if not host:
         current_app.logger.warning(f"Configure watchdog API: Host ID {host_id} not found.")
         return jsonify({"error": {"message": "Host not found"}}), 404
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
 
     if host.status != HostStatus.ACTIVE:
         current_app.logger.warning(f"Configure watchdog API: Host ID {host_id} is not in ACTIVE state (current: {host.status.value}).")

@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 
 from ui import db
 from ui.models import BinaryMetadata, QLInstance
+from ui.runtime_upgrade_guard import instance_upgrade_block_response
 from ui.routes.instance_hooks_routes import _validate_filename, _is_elf_file
 from ui.task_logic.hook_paths import user_hooks_dir, CONFIGS_BASE  # noqa: F401 (CONFIGS_BASE monkeypatched in tests)
 from ui.task_lock import acquire_lock, release_lock
@@ -48,6 +49,9 @@ def upload_hook_file(instance_id):
     instance = _load_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found"}}), 404
+    blocked = instance_upgrade_block_response(instance)
+    if blocked:
+        return blocked
 
     if "file" not in request.files:
         return jsonify({"error": {"message": "No file provided"}}), 400
@@ -108,6 +112,9 @@ def replace_hook_file(instance_id, filename):
     instance = _load_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found"}}), 404
+    blocked = instance_upgrade_block_response(instance)
+    if blocked:
+        return blocked
 
     error = _validate_filename(filename)
     if error:
@@ -178,6 +185,9 @@ def rename_hook_file(instance_id, filename):
     instance = _load_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found"}}), 404
+    blocked = instance_upgrade_block_response(instance)
+    if blocked:
+        return blocked
 
     error = _validate_filename(filename)
     if error:
@@ -235,6 +245,9 @@ def delete_hook_file(instance_id, filename):
     instance = _load_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found"}}), 404
+    blocked = instance_upgrade_block_response(instance)
+    if blocked:
+        return blocked
 
     error = _validate_filename(filename)
     if error:
@@ -279,6 +292,9 @@ def set_hook_description(instance_id, filename):
     instance = _load_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found"}}), 404
+    blocked = instance_upgrade_block_response(instance)
+    if blocked:
+        return blocked
 
     error = _validate_filename(filename)
     if error:
