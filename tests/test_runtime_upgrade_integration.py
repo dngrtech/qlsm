@@ -383,7 +383,8 @@ def test_upgrade_and_rollback_of_an_existing_stopped_instance(target, ctx, tmp_p
 def test_isolated_host_builds_a_new_instances_venv_without_system_pip(target, ctx, tmp_path):
     """R11: on an upgraded host, install_minqlx_deps.yml (the dependency step of
     instance creation/redeploy) builds the instance's own venv as ql from the
-    core + instance requirements, and never touches system pip."""
+    core + the instance's synced requirements in one pip run, and never touches
+    system pip."""
     from ui.runtime import isolated_instance_deps_path
 
     tgt = target
@@ -391,8 +392,6 @@ def test_isolated_host_builds_a_new_instances_venv_without_system_pip(target, ct
     qlds = '/home/ql/qlds-27961'
     tgt.run(f"mkdir -p {qlds}/minqlxtended-plugins && printf 'six\\n' > "
             f"{qlds}/minqlxtended-plugins/requirements.txt && chown -R ql:ql {qlds}")
-    instance_reqs = tmp_path / 'requirements.txt'
-    instance_reqs.write_text('six\n')
     core = tmp_path / 'core.txt'
     core.write_text('redis>=5.1.0\n')
     venv = isolated_instance_deps_path(2)
@@ -403,8 +402,7 @@ def test_isolated_host_builds_a_new_instances_venv_without_system_pip(target, ct
         % (HOST_NAME, os.path.join(ROOT, 'ansible/playbooks/tasks/install_minqlx_deps.yml')))
     extravars = {'qlds_dir': qlds, 'runtime_plugins_dirname': 'minqlxtended-plugins',
                  'python_deps_path': venv, 'python_deps_ensure': True,
-                 'python_deps_core_requirements_src': str(core),
-                 'python_deps_requirements_src': str(instance_reqs)}
+                 'python_deps_core_requirements_src': str(core)}
     run = _sh([ANSIBLE_BIN, str(play), '-i', tgt.inventory, '-l', HOST_NAME, '-e', json.dumps(extravars)],
               env=dict(os.environ, ANSIBLE_CONFIG=tgt.cfg, ANSIBLE_BECOME_FLAGS='-H -S -n',
                        ANSIBLE_PIPELINING='True'))

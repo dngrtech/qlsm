@@ -7,8 +7,16 @@
 # silently downgrade the first), followed by `pip check`; either failing
 # fails the play. Never system-wide pip, never --break-system-packages.
 #
+# runtime_deps_soft_fail (default false): set only by install_minqlx_deps.yml
+# (restart/apply/deploy of an instance on an upgraded host). A failing
+# `pip install` or `pip check` then emits a QLSM_PIP_WARN line and the play
+# continues, as the legacy system-pip path does. Creating the venv and the
+# interpreter/ABI checks stay fatal in every mode: without a working venv
+# the instance cannot start at all. install_runtime.yml never sets it.
+#
 # Requires: operation_id (or runtime_deps_dir), runtime_instances
-#           ([{"id": int, "requirements_src": controller path or ""}]),
+#           ([{"id": int, "requirements_src": controller path or "",
+#             "remote_requirements": path on the host or "" (optional)}]),
 #           core_requirements_src (controller path or "")
 
 - name: Resolve the operation's dependency directory
@@ -115,14 +123,20 @@
           '--disable-pip-version-check', '--no-input']
          + ((core_requirements_src | length > 0) | ternary(['-r', runtime_deps_op_dir ~ '/core-requirements.txt'], []))
          + ((item.requirements_src | default('') | length > 0)
-            | ternary(['-r', runtime_deps_op_dir ~ '/' ~ (item.id | int) ~ '.requirements.txt'], [])) }}
+            | ternary(['-r', runtime_deps_op_dir ~ '/' ~ (item.id | int) ~ '.requirements.txt'], []))
+         + ((item.remote_requirements | default('') | length > 0)
+            | ternary(['-r', item.remote_requirements | default('')], [])) }}
   environment:
     PIP_CONFIG_FILE: /dev/null
     PYTHONNOUSERSITE: "1"
   loop: "{{ runtime_instances }}"
   loop_control:
     label: "{{ item.id }}"
-  when: core_requirements_src | length > 0 or item.requirements_src | default('') | length > 0
+  when: >-
+    core_requirements_src | length > 0 or item.requirements_src | default('') | length > 0
+    or item.remote_requirements | default('') | length > 0
+  ignore_errors: "{{ runtime_deps_soft_fail | default(false) | bool }}"
+  register: runtime_venv_pip_install
 
 - name: Verify each venv's dependencies are consistent
   become: yes
@@ -137,3 +151,21 @@
   loop: "{{ runtime_instances }}"
   loop_control:
     label: "{{ item.id }}"
+  ignore_errors: "{{ runtime_deps_soft_fail | default(false) | bool }}"
+  register: runtime_venv_pip_check
+
+- name: Warn if a venv pip install failed
+  ansible.builtin.debug:
+    msg: "QLSM_PIP_WARN: pip install into {{ runtime_deps_op_dir }}/{{ item.item.id | int }} failed: {{ item.stderr | default(item.stdout | default('unknown error'), true) | truncate(200) }}"
+  loop: "{{ runtime_venv_pip_install.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+  when: runtime_deps_soft_fail | default(false) | bool
+
+- name: Warn if a venv pip check failed
+  ansible.builtin.debug:
+    msg: "QLSM_PIP_WARN: pip check in {{ runtime_deps_op_dir }}/{{ item.item.id | int }} failed: {{ item.stdout | default(item.stderr | default('unknown error'), true) | truncate(200) }}"
+  loop: "{{ runtime_venv_pip_check.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+  when: runtime_deps_soft_fail | default(false) | bool

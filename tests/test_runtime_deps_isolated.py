@@ -77,8 +77,8 @@ def test_flag_on_gives_a_new_instance_its_own_venv(make_instance):
     core = extravars['python_deps_core_requirements_src']
     assert os.path.isabs(core) and core.endswith('ql-assets/data/minqlxtended-plugins/requirements.txt')
     assert os.path.isfile(core)
-    assert extravars['python_deps_requirements_src'].endswith(
-        f'{inst.host.name}/{inst.id}/scripts/requirements.txt')
+    # Instance requirements come from the copy synced to the host, not the controller.
+    assert 'python_deps_requirements_src' not in extravars
 
 
 def test_flag_on_keeps_an_upgraded_instances_operation_venv(make_instance):
@@ -86,7 +86,7 @@ def test_flag_on_keeps_an_upgraded_instances_operation_venv(make_instance):
     extravars = instance_runtime_extravars(inst)
     assert extravars['python_deps_path'] == OP_VENV
     assert extravars['python_deps_ensure'] is True
-    assert extravars['python_deps_requirements_src'] == ''
+    assert 'python_deps_requirements_src' not in extravars
 
 
 def _capture(monkeypatch):
@@ -189,8 +189,10 @@ def _tasks(path):
 
 def test_dependency_install_ensures_the_venv_before_any_pip():
     tasks = _tasks('ansible/playbooks/tasks/install_minqlx_deps.yml')
-    ensure = tasks[0]
+    ensure = next(t for t in tasks if t.get('ansible.builtin.include_tasks'))
     assert ensure['ansible.builtin.include_tasks'] == 'runtime_python_deps.yml'
+    installs = [t for t in tasks if t.get('ansible.builtin.pip') or t.get('ansible.builtin.shell')]
+    assert installs and all(tasks.index(ensure) < tasks.index(t) for t in installs)
     assert ensure['when'] == "python_deps_ensure | default(false) | bool"
     assert ensure['vars']['runtime_deps_dir'] == '{{ python_deps_path | dirname }}'
     for task in tasks:
@@ -233,3 +235,61 @@ def test_migration_adds_and_removes_the_flag(tmp_path, preserve_logging_config):
         with app.app_context():
             db.session.remove()
             db.engine.dispose()
+
+
+# --- Local review #1/#4: soft-fail outside the installer, one pip run --------------
+
+_SOFT_FAIL = "{{ runtime_deps_soft_fail | default(false) | bool }}"
+
+
+def _named(tasks, fragment):
+    matches = [t for t in tasks if fragment in t.get('name', '')]
+    assert len(matches) == 1, (fragment, [t.get('name') for t in tasks])
+    return matches[0]
+
+
+def test_venv_pip_failures_only_warn_when_soft_fail_is_set():
+    tasks = _tasks('ansible/playbooks/tasks/runtime_python_deps.yml')
+    install = _named(tasks, 'Install core and instance requirements')
+    check = _named(tasks, 'Verify each venv')
+    for task in (install, check):
+        assert task.get('ignore_errors') == _SOFT_FAIL, task['name']
+        assert task.get('register'), task['name']
+    warns = [t for t in tasks if 'QLSM_PIP_WARN:' in str(t.get('ansible.builtin.debug', ''))]
+    assert len(warns) == 2
+    for warn in warns:
+        assert 'runtime_deps_soft_fail' in str(warn.get('when', ''))
+    # Creating the venv (and the ABI checks) stays hard in every mode.
+    for name in ('Create each instance', 'Confirm each venv', 'Require the venv interpreter'):
+        assert 'ignore_errors' not in _named(tasks, name), name
+
+
+def test_installer_keeps_venv_pip_failures_fatal():
+    with open('ansible/playbooks/install_runtime.yml') as handle:
+        text = handle.read()
+    assert 'runtime_deps_soft_fail' not in text
+
+
+def test_instance_dependency_step_soft_fails_and_installs_once():
+    tasks = _tasks('ansible/playbooks/tasks/install_minqlx_deps.yml')
+    ensure = _named(tasks, "Ensure the instance's isolated dependency venv")
+    assert ensure['vars']['runtime_deps_soft_fail'] is True
+    stat = _named(tasks, 'Check if requirements.txt exists')
+    # The remote instance requirements (what the old second step installed)
+    # go into the ensure run, so an operation venv keeps getting them.
+    item = ensure['vars']['runtime_instances'][0]
+    assert item['requirements_src'] == ''
+    assert 'minqlx_req_stat_result.stat.exists' in item['remote_requirements']
+    assert "runtime_plugins_dirname ~ '/requirements.txt'" in item['remote_requirements']
+    assert tasks.index(stat) < tasks.index(ensure)
+    for task in tasks[:tasks.index(ensure)]:
+        assert 'pip' not in str(task.get('ansible.builtin.pip', '')) and 'install' not in task.get('name', '').lower()
+    second = _named(tasks, "Install plugin Python deps into the instance's isolated venv")
+    assert "not (python_deps_ensure | default(false) | bool)" in str(second['when'])
+
+
+def test_remote_requirements_join_the_single_pip_run():
+    tasks = _tasks('ansible/playbooks/tasks/runtime_python_deps.yml')
+    install = _named(tasks, 'Install core and instance requirements')
+    assert 'item.remote_requirements' in install['ansible.builtin.command']['argv']
+    assert 'item.remote_requirements' in str(install['when'])

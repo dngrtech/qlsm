@@ -13,19 +13,6 @@
 # the runtime upgrade) installs into that venv through its own interpreter, as the
 # ql user, never system-wide. The global branch below runs only when it is unset.
 
-# Upgraded hosts (Host.runtime_deps_isolated): build or refresh the instance's
-# venv as ql -- core + instance requirements in one pip run, then pip check --
-# before anything else. Never system pip on such a host.
-- name: Ensure the instance's isolated dependency venv
-  ansible.builtin.include_tasks: runtime_python_deps.yml
-  vars:
-    runtime_deps_dir: "{{ python_deps_path | dirname }}"
-    runtime_instances:
-      - id: "{{ python_deps_path | basename | int }}"
-        requirements_src: "{{ python_deps_requirements_src | default('') }}"
-    core_requirements_src: "{{ python_deps_core_requirements_src | default('') }}"
-  when: python_deps_ensure | default(false) | bool
-
 - name: Get pip3 version
   command: pip3 --version
   register: pip3_version_output
@@ -37,6 +24,25 @@
   ansible.builtin.stat:
     path: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/requirements.txt"
   register: minqlx_req_stat_result
+
+# Upgraded hosts (Host.runtime_deps_isolated): build or refresh the instance's
+# venv as ql -- core + the instance's synced requirements in ONE pip run, then
+# pip check -- before any other pip. Never system pip on such a host. A pip
+# failure only warns (QLSM_PIP_WARN) and the restart/apply/deploy goes on, as
+# on legacy hosts; failing to create a missing venv still fails the play.
+- name: Ensure the instance's isolated dependency venv
+  ansible.builtin.include_tasks: runtime_python_deps.yml
+  vars:
+    runtime_deps_dir: "{{ python_deps_path | dirname }}"
+    runtime_deps_soft_fail: true
+    runtime_instances:
+      - id: "{{ python_deps_path | basename | int }}"
+        requirements_src: ''
+        remote_requirements: >-
+          {{ (qlds_dir ~ '/' ~ runtime_plugins_dirname ~ '/requirements.txt')
+             if minqlx_req_stat_result.stat.exists else '' }}
+    core_requirements_src: "{{ python_deps_core_requirements_src | default('') }}"
+  when: python_deps_ensure | default(false) | bool
 
 - name: Install plugin Python deps from requirements.txt
   ansible.builtin.pip:
@@ -54,7 +60,7 @@
   ansible.builtin.stat:
     path: "{{ python_deps_path | dirname }}/core-requirements.txt"
   register: venv_core_req_stat
-  when: python_deps_path | default('') | length > 0
+  when: python_deps_path | default('') | length > 0 and not (python_deps_ensure | default(false) | bool)
 
 - name: Install plugin Python deps into the instance's isolated venv
   become: yes
@@ -68,7 +74,10 @@
   environment:
     PIP_CONFIG_FILE: /dev/null
     PYTHONNOUSERSITE: "1"
-  when: python_deps_path | default('') | length > 0 and minqlx_req_stat_result.stat.exists
+  # The ensure step above already installed into the venv on upgraded hosts.
+  when: >-
+    python_deps_path | default('') | length > 0 and minqlx_req_stat_result.stat.exists
+    and not (python_deps_ensure | default(false) | bool)
   ignore_errors: yes
   register: venv_pip_install_result
 

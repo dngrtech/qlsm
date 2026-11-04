@@ -141,10 +141,9 @@ def instance_runtime_extravars(instance):
     an instance without a venv is assigned one under
     ISOLATED_INSTANCE_DEPS_ROOT (persisted with the caller's next commit), and
     python_deps_ensure asks tasks/install_minqlx_deps.yml to build or refresh
-    it as ql before any pip -- system pip is never used there."""
+    it as ql before any pip -- system pip is never used there. The instance's
+    own requirements are the copy already synced to the host."""
     import os
-
-    from ui.task_logic.ansible_instance_mgmt import CONFIGS_BASE
 
     host = instance.host
     extravars = runtime_extravars(host)
@@ -156,10 +155,6 @@ def instance_runtime_extravars(instance):
     if deps_path:
         extravars['python_deps_path'] = deps_path
     if isolated:
-        requirements = os.path.abspath(os.path.join(
-            CONFIGS_BASE, host.name, str(instance.id), 'scripts', 'requirements.txt'))
         extravars['python_deps_ensure'] = True
         extravars['python_deps_core_requirements_src'] = os.path.abspath(os.path.join(*_CORE_REQUIREMENTS))
-        extravars['python_deps_requirements_src'] = requirements if (
-            deps_path.startswith(ISOLATED_INSTANCE_DEPS_ROOT + '/') and os.path.isfile(requirements)) else ''
     return extravars
