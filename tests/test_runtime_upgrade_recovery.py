@@ -515,3 +515,46 @@ def test_death_between_conversion_renames_is_rolled_back(world, monkeypatch):
     assert result is False
     assert_original(world.env, world.host_id, world.orig, world.remote)
     _assert_exclusive_end(world)
+
+
+def _die_inside_stop(world, *, took_effect):
+    """The worker dies inside the stop of A: 'requested' is recorded, the
+    outcome never is."""
+    deps = FakeDeps(world.remote, world.locks)
+
+    def stop(instance):
+        if instance.id == world.ids['A']:
+            if took_effect:
+                world.remote.services[instance.id]['active'] = False
+            world.locks.release = lambda *a, **k: None
+            raise Crash('inside stop')
+        return FakeDeps.stop(deps, instance)
+
+    deps.stop = stop
+    with pytest.raises(Crash):
+        upgrade_host_runtime_logic(world.op_id, deps=deps, job_id='job-1')
+    fresh_worker()
+    restore_lock_release(world.locks)
+    outcome = json.loads(_op(world.op_id).instance_outcomes_json)['instances'][str(world.ids['A'])]
+    assert outcome['stop'] == 'requested'
+
+
+def test_stop_requested_and_taken_effect_is_restarted_and_verified(world):
+    _die_inside_stop(world, took_effect=True)
+    result, deps = _recover(world)
+    assert result is False
+    assert ('start', world.ids['A']) in deps.calls and ('ready', world.ids['A']) in deps.calls
+    assert_original(world.env, world.host_id, world.orig, world.remote)  # A RUNNING again
+    _assert_exclusive_end(world)
+
+
+def test_stop_requested_but_still_active_is_left_running(world):
+    _die_inside_stop(world, took_effect=False)
+    result, deps = _recover(world)
+    assert result is False
+    assert ('start', world.ids['A']) not in deps.calls
+    op = _op(world.op_id)
+    rollback = json.loads(op.instance_outcomes_json)['instances'][str(world.ids['A'])]['rollback']
+    assert rollback['ok'] is True and rollback['untouched'] is True and rollback['note'] is None
+    assert_original(world.env, world.host_id, world.orig, world.remote)
+    _assert_exclusive_end(world)

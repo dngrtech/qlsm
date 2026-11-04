@@ -95,8 +95,23 @@ def _restore(execution, iid, original, snapshot_root):
             instance.python_deps_path = original_deps
             execution.commit()
 
-    if not _touched(outcome) and outcome.get('stop') != 'ok':
-        return _leave_untouched(execution, iid, original, outcome)
+    if not _touched(outcome):
+        stop = outcome.get('stop')
+        if stop in (None, 'failed', 'verified_inactive'):
+            # Never attempted, known not to have succeeded, or originally STOPPED
+            # and never touched: leave it as found.
+            return _leave_untouched(execution, iid, original, outcome)
+        if stop == 'requested':
+            # The stop was sent but its outcome was never recorded (crash or
+            # exception mid-stop): the actual state decides.
+            state = deps.service_state(execution.instance(iid))
+            if state == 'unknown':
+                raise _InstanceFailure('verify', 'service state cannot be observed', pending=True)
+            if state in ('active', 'stray_process'):
+                # Still running (the stop never took effect), or a server
+                # survived it: do not start anything over it.
+                return _leave_untouched(execution, iid, original, outcome)
+            # inactive with no process: it was stopped by us -> restart below.
 
     instance = execution.instance(iid)
     state = deps.service_state(instance)
@@ -136,7 +151,8 @@ def _leave_untouched(execution, iid, original, outcome):
     note = None
     if state != expected:
         stop = outcome.get('stop')
-        why = ('its stop failed' if stop == 'failed' else 'it was never stopped') \
+        why = ({'failed': 'its stop failed', 'requested': 'its stop did not take effect'}
+               .get(stop, 'it was never stopped')) \
             if original == InstanceStatus.RUNNING.value else 'it was never started by the upgrade'
         note = (f'left as found ({why}, files unchanged): it is {_DESCRIBE.get(state, state)}, '
                 f'expected {original.upper()}')
