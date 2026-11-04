@@ -88,11 +88,17 @@ class Host(db.Model):
     def __repr__(self):
         return f'<Host {self.name} ({self.ip_address or "No IP"})>'
 
-    def to_dict(self):
-        """Convert host to dictionary."""
+    def to_dict(self, refresh=True):
+        """Convert host to dictionary.
+
+        refresh=False is for callers that just loaded the row (and its
+        instances) fresh, like the polled hosts list: refreshing would re-query
+        every host and drop its eagerly loaded instances (one query each).
+        """
         # Ensure the instance is refreshed from the database session
         # to get the most up-to-date state, especially for enum fields.
-        db.session.refresh(self)
+        if refresh:
+            db.session.refresh(self)
         return {
             'id': self.id,
             'name': self.name,

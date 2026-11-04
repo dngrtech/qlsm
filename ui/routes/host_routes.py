@@ -187,7 +187,9 @@ def list_hosts_api():
     """Returns a list of configured host servers."""
     hosts = get_hosts()
     _enqueue_os_version_backfill(hosts)
-    host_list = [host.to_dict() for host in hosts] # Assuming Host model has a to_dict() method
+    # get_hosts() just loaded every row and its instances fresh; a per-host
+    # refresh would re-query each one (N+1 on a polled endpoint).
+    host_list = [host.to_dict(refresh=False) for host in hosts]
     return jsonify({"data": host_list})
 
 
