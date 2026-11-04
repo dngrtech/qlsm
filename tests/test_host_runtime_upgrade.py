@@ -353,3 +353,13 @@ def test_stop_failure_during_rollback_keeps_running_files(world):
     assert tree_state(env.configs / host.name / str(ids['C'])) == orig[ids['C']]['tree']
     assert finished.state == 'recovery_required'
     assert db.session.get(Host, host.id).runtime == 'minqlx'
+
+
+def test_busy_host_cancels_before_any_change(world):
+    env, host, ids, op, remote, locks, orig = world
+    locks.owners[('instance', ids['B'])] = 'some-other-task'
+    result, deps = _run(op, remote, locks)
+    assert result is False
+    _assert_cancelled(host.id, op.id, deps, orig, env)
+    assert 'another operation is running' in _op(op.id).last_error
+    assert locks.owners == {('instance', ids['B']): 'some-other-task'}

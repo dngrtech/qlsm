@@ -126,6 +126,8 @@ def recover_host_runtime_logic(operation_id, *, deps=None, job_id=None):
     execution = take_ownership(operation_id, job_id, deps)
     if execution is None:
         return f'pending: could not take ownership of runtime upgrade {operation_id}'
+    if not execution.locked:
+        return f'pending: execution locks of runtime upgrade {operation_id} are held elsewhere'
     try:
         if execution.op.state == 'preparing':
             # Quiescing intent is persisted before anything is stopped, so

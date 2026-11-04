@@ -78,14 +78,14 @@ def inputs_dir(op):
 
 
 def take_ownership(operation_id, job_id, deps):
-    """Claim the operation and its execution locks; None if either is refused."""
+    """Claim the operation (None if another execution won) and try to take its
+    execution locks; check `execution.locked` before any side effect."""
     token = claim_operation(operation_id, job_id)
     if token is None:
         return None
     execution = Execution(operation_id, token, job_id, deps)
     if not execution.acquire_locks():
         log.warning('Upgrade %s: host/instance execution locks are held elsewhere', operation_id)
-        return None
     return execution
 
 
@@ -404,6 +404,9 @@ def upgrade_host_runtime_logic(operation_id, *, deps=None, job_id=None):
     if execution is None:
         return f'Error: could not take ownership of runtime upgrade {operation_id}'
     try:
+        if not execution.locked:
+            return fail_preparation(execution, 'another operation is running on this host or one of '
+                                    'its instances; try again when it finishes', cleanup_snapshot=False)
         return _run(execution)
     except StaleExecution as exc:
         log.warning('Upgrade %s: stopping, %s', operation_id, exc)
