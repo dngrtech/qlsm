@@ -233,6 +233,7 @@ def detect_local_os(path="/etc/os-release", host_info_path="/host-ssh/host-os-ty
                 info = json.loads(f.read().strip())
             if info.get("pretty_name") or info.get("os_type"):
                 info["os_type"] = info.get("os_type") or None
+                info["version_id"] = info.get("version_id") or None
                 return info
         except (OSError, json.JSONDecodeError, ValueError):
             pass

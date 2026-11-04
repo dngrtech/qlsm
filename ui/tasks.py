@@ -17,6 +17,7 @@ from ui.task_logic.ansible_instance_mgmt import (
 from ui.task_logic.ansible_instance_hooks import apply_instance_hooks_logic
 from ui.task_logic.ansible_host_setup import setup_host_ansible_logic
 from ui.task_logic.ansible_host_restart import restart_host_ansible_logic
+from ui.task_logic.host_os_version import backfill_host_os_version_logic
 from ui.task_logic.ansible_host_rename import rename_host_logic
 from ui.task_logic.ansible_host_auto_restart import configure_host_auto_restart_logic
 from ui.task_logic.ansible_watchdog import configure_host_watchdog_logic
@@ -122,6 +123,12 @@ def provision_host(host_id, lock_token=None):
         if lock_token and not preserve_lock_for_setup:
             from ui.task_lock import release_lock
             release_lock('host', host_id, lock_token)
+
+@rq.job(timeout=60)
+@with_app_context
+def backfill_host_os_version(host_id):
+    """RQ task entry point for reading a legacy host's OS version."""
+    return backfill_host_os_version_logic(host_id)
 
 @rq.job(timeout=1200)
 @with_app_context
