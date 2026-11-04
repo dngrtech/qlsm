@@ -186,6 +186,29 @@ def test_prepare_publishes_complete_verified_snapshot(env):
         assert os.stat(copied).st_mtime_ns == 1_700_000_000_000_000_000
 
 
+def test_snapshot_directories_are_private(env, monkeypatch):
+    """instance.json holds plaintext ZMQ passwords: the staging and published
+    operation directories are 0700 whatever the process umask."""
+    old_umask = os.umask(0o022)
+    try:
+        host = _make_host(env)
+        inputs = capture_upgrade_inputs(host)
+        op = _operation(host, inputs)
+        seen = {}
+        real_rename = snap._rename
+
+        def rename(src, dst):
+            seen['staging'] = stat.S_IMODE(os.stat(src).st_mode)
+            return real_rename(src, dst)
+
+        monkeypatch.setattr(snap, '_rename', rename)
+        path = prepare_upgrade_snapshot(host, op.id, inputs)
+    finally:
+        os.umask(old_umask)
+    assert seen['staging'] == 0o700
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o700
+
+
 def test_instance_metadata_records_original_db_fields(env):
     host, _op, path = _prepared(env)
     first, second = sorted(host.instances, key=lambda inst: inst.id)

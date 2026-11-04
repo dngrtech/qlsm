@@ -57,6 +57,7 @@ from ui.runtime_upgrade_presets import (  # noqa: F401 -- re-exported
 DEFAULT_RUNTIME_UPGRADES_DIR = os.path.join('data', 'runtime-upgrades')
 SNAPSHOT_SCHEMA_VERSION = 1
 STAGING_SUFFIX = '.staging'
+SNAPSHOT_DIR_MODE = 0o700
 _OPERATION_ID = re.compile(r'^[0-9a-f]{32}$')
 
 
@@ -288,6 +289,11 @@ def prepare_upgrade_snapshot(host, operation_id, inputs):
     delete_snapshot_presets(operation_id)
     try:
         os.makedirs(os.path.dirname(staging), exist_ok=True)
+        # Private: instance.json and the captured trees hold RCON/stats
+        # passwords. chmod, not makedirs(mode=), which the umask would mask;
+        # the rename into place keeps the mode.
+        os.makedirs(staging)
+        os.chmod(staging, SNAPSHOT_DIR_MODE)
         materialize_upgrade_inputs(host, inputs, os.path.join(staging, 'inputs'))
         instances = _snapshot_instances(staging, operation_id, inputs)
         presets = save_snapshot_presets(host, operation_id)
