@@ -47,7 +47,7 @@ def env(tmp_path, monkeypatch):
 
 def _host(env, instances=(), name='h1'):
     host = SimpleNamespace(id=7, name=name, runtime='minqlx', lan_rate_uses_hook=False,
-                           instances=[])
+                           provider='vultr', redis_unix_socket=False, instances=[])
     for spec in instances:
         host.instances.append(_instance(env, host, **spec))
     return host
@@ -246,6 +246,42 @@ def test_fingerprint_changes_on_host_hook_mode(env):
     before = _fp(host)
     host.lan_rate_uses_hook = True
     assert _fp(host) != before
+
+
+@pytest.mark.parametrize('field,value', [
+    ('redis_unix_socket', True),
+    ('provider', 'self'),  # flips is_self_host(): TCP Redis instead of the socket
+])
+def test_fingerprint_changes_on_host_redis_inputs(env, field, value):
+    host = _host(env, [dict()])
+    before = capture_upgrade_inputs(host)
+    setattr(host, field, value)
+    after = capture_upgrade_inputs(host)
+    assert classification_fingerprint(after) != classification_fingerprint(before)
+    if field == 'provider':
+        assert before['host']['is_self_host'] is False
+        assert after['host']['is_self_host'] is True
+
+
+@pytest.mark.parametrize('hook', ['instance.plugins', 'instance.launch_args',
+                                  'instance.ld_preload'])
+def test_fingerprint_changes_when_addon_contribution_changes(env, monkeypatch, hook):
+    import ui.addons
+
+    contributions = {}
+
+    def fake_dispatch(name, scope_id=0, *args, **kwargs):
+        return list(contributions.get(name, []))
+
+    monkeypatch.setattr(ui.addons, 'dispatch', fake_dispatch)
+    host = _host(env, [dict()])
+    contributions[hook] = ['first']
+    before = capture_upgrade_inputs(host)
+    assert before['instances'][0]['addon_contributions'][hook] == ['first']
+    contributions[hook] = ['second']
+    after = capture_upgrade_inputs(host)
+    assert json.loads(json.dumps(after)) == after
+    assert classification_fingerprint(after) != classification_fingerprint(before)
 
 
 def test_fingerprint_ignores_logs_and_timestamps(env):

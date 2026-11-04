@@ -223,6 +223,21 @@ def _runtime_identity(runtime):
     return {field: paths[field] for field in _RUNTIME_IDENTITY_FIELDS}
 
 
+# Addon hooks whose contributions the renderer folds into the service
+# definition (ansible_instance_mgmt._build_qlds_args_string and
+# _build_ld_preload_paths). Order within each list is significant.
+_ADDON_RENDER_HOOKS = ('instance.plugins', 'instance.launch_args', 'instance.ld_preload')
+
+
+def _addon_render_inputs(instance):
+    """The effective addon contributions, filtered and stringified the way the
+    renderer consumes them, so the capture stays JSON-serializable."""
+    from ui.task_logic.ansible_instance_mgmt import _addon_contributions
+
+    return {hook: [str(item) for item in _addon_contributions(hook, instance) if item]
+            for hook in _ADDON_RENDER_HOOKS}
+
+
 def _capture_instance(instance, target_scripts):
     classification = classify_instance(instance)
     replacements = {}
@@ -242,6 +257,7 @@ def _capture_instance(instance, target_scripts):
         'ld_preload_hooks': instance.ld_preload_hooks,
         'lan_rate_enabled': bool(instance.lan_rate_enabled),
         'renderer': renderer,
+        'addon_contributions': _addon_render_inputs(instance),
         'classification': {
             'stripped': classification['stripped'],
             'replacements': replacements,
@@ -258,6 +274,8 @@ def capture_upgrade_inputs(host):
     instances' ZMQ passwords in plain text (the conversion re-renders from it),
     so the result must be stored server-side only and never returned by an API.
     """
+    from ui.task_logic.self_host_network import is_self_host
+
     trees = {key: _tree_digests(root) for key, root in _shared_tree_roots().items()}
     target = UPGRADE_TARGET_RUNTIME
     instances = sorted(host.instances, key=lambda inst: inst.id)
@@ -268,6 +286,11 @@ def capture_upgrade_inputs(host):
             'name': host.name,
             'runtime': host.runtime,
             'lan_rate_uses_hook': bool(host.lan_rate_uses_hook),
+            # _redis_args() inputs. The self-host Redis password comes from the
+            # environment, not the host, and is deliberately not captured.
+            'provider': getattr(host, 'provider', None),
+            'is_self_host': is_self_host(host),
+            'redis_unix_socket': bool(getattr(host, 'redis_unix_socket', False)),
         },
         'source_runtime': _runtime_identity(host_runtime(host)),
         'target_runtime': {
