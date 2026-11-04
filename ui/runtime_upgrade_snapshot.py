@@ -454,7 +454,7 @@ def _restore_db_fields(instance, meta):
             setattr(instance, field, meta['renderer'][field])
 
 
-def restore_instance(instance, snapshot_root, *, service_state=None):
+def restore_instance(instance, snapshot_root, *, service_state=None, commit=None):
     """Restore one instance's local config tree and DB fields from a snapshot.
 
     Never raises: returns {instance_id, ok, phase, error, status_verified}, so
@@ -463,7 +463,13 @@ def restore_instance(instance, snapshot_root, *, service_state=None):
     caller verified on the host, never one read from the snapshot. The
     snapshot and any swap backup are kept on failure; on success the backup
     (the pre-restore tree) is removed.
+
+    commit: how DB writes are committed. The rollback passes its
+    Execution.commit, so a superseded executor's writes are rolled back and
+    its StaleExecution propagates instead of being reported as a failed
+    restore. Defaults to a plain session commit for standalone use.
     """
+    commit = commit or db.session.commit
     result = {'instance_id': instance.id, 'ok': False, 'phase': 'validate',
               'error': None, 'status_verified': False}
     try:
@@ -472,7 +478,7 @@ def restore_instance(instance, snapshot_root, *, service_state=None):
 
         result['phase'] = 'database'
         _restore_db_fields(instance, meta)
-        db.session.commit()
+        commit()
 
         if service_state is not None:
             result['phase'] = 'verify_service'
@@ -480,7 +486,7 @@ def restore_instance(instance, snapshot_root, *, service_state=None):
             if not isinstance(status, InstanceStatus):
                 raise TypeError('service_state must return an InstanceStatus')
             instance.status = status
-            db.session.commit()
+            commit()
             result['status_verified'] = True
 
         if intent is not None and intent['state'] != 'complete':
@@ -490,6 +496,10 @@ def restore_instance(instance, snapshot_root, *, service_state=None):
             _write_intent(intent_path, intent)
         result.update(ok=True, phase='complete')
     except Exception as exc:  # reported per instance; the caller continues
+        from ui.task_logic.host_runtime_upgrade_state import StaleExecution
+
+        if isinstance(exc, StaleExecution):
+            raise  # a takeover: the new owner restores this instance
         db.session.rollback()
         result['error'] = _safe_error(exc)
         current_app.logger.error('Restore of instance %s failed in %s: %s',

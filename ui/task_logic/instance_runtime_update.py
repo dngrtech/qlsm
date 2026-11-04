@@ -247,8 +247,17 @@ def _local_manifest_path(host_id, operation_id, instance_id):
     return path
 
 
+def _reraise_stale(exc):
+    """A fenced commit refused by a takeover must reach the orchestrator as is."""
+    from ui.task_logic.host_runtime_upgrade_state import StaleExecution
+
+    if isinstance(exc, StaleExecution):
+        raise exc
+
+
 def configure_existing_instance(instance_id, runtime, immutable_inputs, dependency_path,
-                                *, operation_id, fencing_token, restore_from_operation=None):
+                                *, operation_id, fencing_token, restore_from_operation=None,
+                                commit=None):
     """Configure existing instance `instance_id` for `runtime` without starting it.
 
     The host row must already carry `runtime` (the orchestrator commits the
@@ -266,7 +275,13 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
     put back and files the forward run created are removed. Nothing is
     re-copied from the shared runtime dir. immutable_inputs is not used and
     dependency_path must be None; python_deps_path is cleared on success.
+
+    commit: how the DB write is committed. The orchestrator passes its
+    Execution.commit, so a superseded executor's write is rolled back and its
+    StaleExecution propagates (it is never turned into a failure result).
+    Defaults to a plain session commit for standalone use.
     """
+    commit = commit or db.session.commit
     stage_dir = None
     try:
         _check_identity(operation_id, fencing_token)
@@ -298,7 +313,7 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
             if not ok:
                 return _result(False, error, instance_id=instance.id)
             instance.python_deps_path = None
-            db.session.commit()
+            commit()
             return _result(True, instance_id=instance.id, python_deps_path=None, manifest_path=None)
 
         deps = _validate_dependency_path(runtime, dependency_path)
@@ -334,10 +349,11 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
         if not ok:
             return _result(False, error, instance_id=instance.id)
         instance.python_deps_path = deps or None
-        db.session.commit()
+        commit()
         return _result(True, instance_id=instance.id, python_deps_path=deps or None,
                        manifest_path=extravars['local_manifest_path'])
-    except Exception as exc:  # never raise into the orchestrator
+    except Exception as exc:  # never raise into the orchestrator, except a takeover
+        _reraise_stale(exc)
         log.exception('configure_existing_instance failed for instance %s', instance_id)
         try:
             db.session.rollback()

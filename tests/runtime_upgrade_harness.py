@@ -235,7 +235,7 @@ class FakeDeps(UpgradeDeps):
         return {'ok': True, 'error': None, 'details': {}}
 
     def configure(self, instance_id, runtime, immutable_inputs, dependency_path, *,
-                  operation_id, fencing_token, restore_from_operation=None):
+                  operation_id, fencing_token, restore_from_operation=None, commit=None):
         rollback = restore_from_operation is not None
         self.calls.append(('configure', instance_id, runtime, rollback))
         instance = db.session.get(QLInstance, instance_id)
@@ -261,7 +261,7 @@ class FakeDeps(UpgradeDeps):
             service.update(runtime=runtime, inventory=True, deps=dependency_path,
                            hooks=sorted(os.listdir(immutable_inputs['system_hooks_dir'])))
             instance.python_deps_path = dependency_path
-        db.session.commit()
+        (commit or db.session.commit)()
         return {'ok': True, 'error': None, 'details': {}}
 
     def finalize(self, host_id, *, operation_id, fencing_token):

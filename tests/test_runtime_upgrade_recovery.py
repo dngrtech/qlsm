@@ -601,3 +601,27 @@ def test_stop_requested_but_still_active_is_left_running(world):
     assert rollback['ok'] is True and rollback['untouched'] is True and rollback['note'] is None
     assert_original(world.env, world.host_id, world.orig, world.remote)
     _assert_exclusive_end(world)
+
+
+@pytest.mark.parametrize('rollback', [False, True])
+def test_takeover_during_configure_rejects_the_stale_db_write(world, rollback):
+    """configure_existing_instance commits through the executor's fence: after a
+    takeover, the old worker's python_deps_path write never lands (forward), and
+    neither does its rollback clear (rollback)."""
+    fail = {('ready', world.ids['A'])} if rollback else set()
+    deps = FakeDeps(world.remote, world.locks, fail=fail)
+    real_configure = deps.configure
+    seen = {}
+
+    def configure(instance_id, runtime, inputs, dependency_path, **kwargs):
+        is_rollback = kwargs.get('restore_from_operation') is not None
+        if instance_id == world.ids['A'] and is_rollback == rollback:
+            seen['before'] = db.session.get(QLInstance, instance_id).python_deps_path
+            assert claim_operation(world.op_id, 'job-2') == 2
+        return real_configure(instance_id, runtime, inputs, dependency_path, **kwargs)
+
+    deps.configure = configure
+    assert upgrade_host_runtime_logic(world.op_id, deps=deps, job_id='job-1') is False
+    fresh_worker()
+    assert db.session.get(QLInstance, world.ids['A']).python_deps_path == seen['before']
+    assert ('start', world.ids['C']) not in deps.calls or rollback

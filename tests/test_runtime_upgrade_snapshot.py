@@ -630,3 +630,37 @@ def test_recovery_restages_a_damaged_staged_copy(env, monkeypatch):
     assert result['ok'] is True, result
     assert _inventory(_live(env, host, inst)) == expected
     assert _siblings(env, host) == []
+
+
+# --- Local review #2: a restore under an operation commits through its fence ---------
+
+@pytest.mark.parametrize('verify', [False, True])
+def test_restore_db_write_is_fenced_after_a_takeover(env, verify):
+    from ui.task_logic.host_runtime_upgrade_state import Execution, StaleExecution, claim_operation
+
+    host, op, path = _prepared(env, instances=1)
+    inst = host.instances[0]
+    inst.hostname = 'changed'
+    inst.status = InstanceStatus.CONFIGURING
+    db.session.commit()
+    token = claim_operation(op.id, 'job-1')
+    stale = Execution(op.id, token, 'job-1', None)
+    assert claim_operation(op.id, 'job-2') == token + 1
+
+    calls = []
+    commit = stale.commit
+    if verify:
+        # The DB-field commit is still ours; the takeover lands before the status write.
+        def commit():
+            calls.append('commit')
+            if len(calls) == 2:
+                return stale.commit()
+            return db.session.commit()
+    with pytest.raises(StaleExecution):
+        restore_instance(inst, path, commit=commit,
+                         service_state=(lambda _inst: InstanceStatus.STOPPED) if verify else None)
+    db.session.expire_all()
+    inst = db.session.get(type(inst), inst.id)
+    assert inst.status == InstanceStatus.CONFIGURING
+    if not verify:
+        assert inst.hostname == 'changed'

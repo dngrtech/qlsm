@@ -285,7 +285,8 @@ def _configure(execution, ids):
         result = execution.deps.configure(
             iid, UPGRADE_TARGET_RUNTIME,
             {'config_dir': _converted_dir(op, iid), 'system_hooks_dir': _system_hooks_dir(op)},
-            dependency_path(op.id, iid), operation_id=op.id, fencing_token=execution.token)
+            dependency_path(op.id, iid), operation_id=op.id, fencing_token=execution.token,
+            commit=execution.commit)
         if not result.get('ok'):
             execution.record(iid, configure='failed', error=safe_error(result.get('error')))
             raise StepFailed(f'configuring instance {instance.name} failed: {safe_error(result.get("error"))}')

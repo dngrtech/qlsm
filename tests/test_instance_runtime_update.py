@@ -341,3 +341,47 @@ def test_entry_points_handle_the_runners_two_value_early_return(app, env, monkey
     assert install['ok'] is False and 'Host details missing' in install['error']
     final = mod.finalize_runtime_operation(env['host_id'], operation_id=OP, fencing_token=1)
     assert final['ok'] is False and 'Host details missing' in final['error']
+
+
+# --- Local review #2: DB writes under an operation go through its fenced commit ----
+
+def _stale_execution():
+    """An Execution for OP whose token a takeover has since bumped."""
+    from ui.task_logic.host_runtime_upgrade_state import Execution, claim_operation
+
+    op = db.session.get(HostRuntimeUpgradeOperation, OP)
+    op.fencing_token = 4
+    db.session.commit()
+    stale = Execution(OP, 4, 'job-1', None)
+    assert claim_operation(OP, 'job-2') == 5
+    return stale
+
+
+def test_configure_db_write_is_fenced_after_a_takeover(app, env):
+    from ui.task_logic.host_runtime_upgrade_state import StaleExecution
+
+    stale = _stale_execution()
+    with pytest.raises(StaleExecution):
+        _configure(env, commit=stale.commit)
+    db.session.expire_all()
+    assert db.session.get(QLInstance, 1).python_deps_path is None
+
+
+def test_rollback_restore_db_write_is_fenced_after_a_takeover(app, env):
+    from ui.task_logic.host_runtime_upgrade_state import StaleExecution
+
+    db.session.get(Host, env['host_id']).runtime = MINQLX
+    db.session.get(QLInstance, 1).python_deps_path = VENV
+    db.session.commit()
+    stale = _stale_execution()
+    with pytest.raises(StaleExecution):
+        mod.configure_existing_instance(1, MINQLX, None, None, operation_id=OP, fencing_token=4,
+                                        restore_from_operation=OP, commit=stale.commit)
+    db.session.expire_all()
+    assert db.session.get(QLInstance, 1).python_deps_path == VENV
+
+
+def test_configure_without_an_operation_commit_still_commits(app, env):
+    assert _configure(env)['ok'] is True
+    db.session.expire_all()
+    assert db.session.get(QLInstance, 1).python_deps_path == VENV

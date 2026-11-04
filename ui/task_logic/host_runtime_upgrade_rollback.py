@@ -80,7 +80,7 @@ def _restore(execution, iid, original, snapshot_root):
 
     if _files_changed(outcome):
         execution.fence()
-        result = restore_instance(execution.instance(iid), snapshot_root)
+        result = restore_instance(execution.instance(iid), snapshot_root, commit=execution.commit)
         # phase 'cleanup': the restore took effect, only removing its backup failed.
         if not result['ok'] and result['phase'] != 'cleanup':
             raise _InstanceFailure(f'restore:{result["phase"]}', result['error'] or 'restore failed')
@@ -93,7 +93,8 @@ def _restore(execution, iid, original, snapshot_root):
     if 'configure' in outcome:
         execution.fence()
         remote = deps.configure(iid, MINQLX, None, None, operation_id=op.id,
-                                fencing_token=execution.token, restore_from_operation=op.id)
+                                fencing_token=execution.token, restore_from_operation=op.id,
+                                commit=execution.commit)
         if not remote.get('ok'):
             raise _InstanceFailure('configure', remote.get('error') or 'remote restore failed',
                                    pending=is_remote_pending(remote.get('error')))
