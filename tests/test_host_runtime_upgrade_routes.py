@@ -404,3 +404,26 @@ def test_post_409_when_instance_added_while_waiting_for_locks(app, client, heade
 def test_post_missing_host_returns_404(app, client, headers, world, locks, enqueued):
     resp = _post(client, headers, 9999, {'fingerprint': 'f', 'accepted_replacements': {}})
     assert resp.status_code == 404
+
+
+def test_get_classifies_each_instance_once_with_an_identical_fingerprint(
+        app, client, headers, world, monkeypatch):
+    from ui import runtime_upgrade
+    from ui.runtime_upgrade import capture_upgrade_inputs, classification_fingerprint, classify_instance
+
+    _env, host_id, instance_ids = world
+    host = db.session.get(Host, host_id)
+    expected_rows = [classify_instance(inst) for inst in sorted(host.instances, key=lambda i: i.id)]
+    expected_fp = classification_fingerprint(capture_upgrade_inputs(host))
+    real = runtime_upgrade._classify
+    calls = []
+
+    def counting(instance):
+        calls.append(instance.id)
+        return real(instance)
+
+    monkeypatch.setattr(runtime_upgrade, '_classify', counting)
+    data = _dry_run(client, headers, host_id)
+    assert sorted(calls) == instance_ids
+    assert data['instances'] == json.loads(json.dumps(expected_rows))
+    assert data['fingerprint'] == expected_fp

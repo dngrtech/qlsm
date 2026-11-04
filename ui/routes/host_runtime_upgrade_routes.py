@@ -20,7 +20,7 @@ from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
 from ui.runtime_upgrade import (
     capture_upgrade_inputs,
     classification_fingerprint,
-    classify_instance,
+    upgrade_dry_run,
     upgrade_eligibility,
 )
 from ui.runtime_upgrade_conversion import AnswersInvalid, parse_answers
@@ -109,11 +109,11 @@ def runtime_upgrade_dry_run(host_id):
     ineligible = _ineligible_response(eligibility)
     if ineligible:
         return ineligible
-    instances = sorted(host.instances, key=lambda inst: inst.id)
+    rows, inputs = upgrade_dry_run(host)
     return jsonify({'data': {
         'eligibility': eligibility,
-        'instances': [classify_instance(inst) for inst in instances],
-        'fingerprint': classification_fingerprint(capture_upgrade_inputs(host)),
+        'instances': rows,
+        'fingerprint': classification_fingerprint(inputs),
     }})
 
 

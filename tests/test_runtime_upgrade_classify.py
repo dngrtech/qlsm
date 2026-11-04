@@ -518,3 +518,57 @@ def test_fingerprint_ignores_source_pool_plugins_nobody_enabled(env):
     before = _fp(host)
     _write(env.operator_pool / 'minqlx' / 'unrelated.py', COMPATIBLE_ANYWHERE)
     assert _fp(host) == before
+
+
+# --- Local review #8: one classification feeds both the rows and the capture -------
+
+def test_dry_run_matches_separate_classify_and_capture(env, monkeypatch):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    host = _host(env, [dict(id=1, qlx_plugins='poolmine, balance',
+                            scripts={'balance.py': _stock('balance.py')}),
+                       dict(id=2, qlx_plugins='motd')])
+    rows = [classify_instance(inst) for inst in host.instances]
+    inputs = capture_upgrade_inputs(host)
+    real = runtime_upgrade._classify
+    calls = []
+    monkeypatch.setattr(runtime_upgrade, '_classify', lambda inst: calls.append(inst.id) or real(inst))
+    dry_rows, dry_inputs = runtime_upgrade.upgrade_dry_run(host)
+    assert sorted(calls) == [1, 2]
+    assert dry_rows == rows
+    assert dry_inputs == inputs
+    assert classification_fingerprint(dry_inputs) == classification_fingerprint(inputs)
+
+
+# --- Local review #10: an unreadable enabled pool plugin is reported, never a 500 ----
+
+@pytest.fixture
+def unreadable(env):
+    path = env.operator_pool / 'minqlx' / 'poolmine.py'
+    _write(path, COMPATIBLE_ANYWHERE)
+    os.chmod(path, 0)
+    try:
+        with open(path, 'rb'):
+            pytest.skip('running with privileges that ignore file modes')
+    except OSError:
+        pass
+    yield path
+    os.chmod(path, 0o644)
+
+
+def test_unreadable_pool_plugin_is_reported_unavailable(env, unreadable):
+    host = _host(env, [dict(qlx_plugins='poolmine')])
+    result = classify_instance(host.instances[0])
+    row = _rows(result)['poolmine.py']
+    assert row['kind'] == 'unavailable' and row['originally_checked'] is True
+    assert any('could not be read' in reason for reason in row['reasons'])
+    assert result['checked_plugins'] == []
+
+
+def test_unreadable_pool_plugin_has_a_stable_digest(env, unreadable):
+    host = _host(env, [dict(qlx_plugins='poolmine')])
+    captured = capture_upgrade_inputs(host)['instances'][0]
+    assert captured['source_pool_plugins']['poolmine.py'] == {'tier': 'operator', 'sha256': 'unreadable'}
+    first = _fp(host)
+    assert _fp(host) == first
+    os.chmod(unreadable, 0o644)
+    assert _fp(host) != first  # readable again: the operator is asked again

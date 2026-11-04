@@ -152,10 +152,18 @@ def instance_plugin_snapshot(instance):
 
 
 def _read_text(data):
+    if data is None:
+        return None
     try:
         return data.decode('utf-8')
     except ValueError:
         return None
+
+
+# The capture digest of an enabled pool plugin that cannot be read. Stable, so
+# the fingerprint stays deterministic; it differs from every real digest, so
+# the file becoming readable again re-asks the operator.
+UNREADABLE_DIGEST = 'unreadable'
 
 
 def source_pool_plugins(instance):
@@ -166,6 +174,10 @@ def source_pool_plugins(instance):
     source pool resolves (the same lookup the config editor's "shared" rows use,
     so `__init__.py` and system plugins are excluded). A local file always wins:
     the host's pool backfill never overwrites it.
+
+    A pool file that cannot be read is never dropped (it is enabled, and the
+    host would still load it): it gets data None, sha256 UNREADABLE_DIGEST and
+    an 'error', and the dialog reports it like a file it cannot judge.
     """
     from ui import plugin_pool
 
@@ -178,9 +190,14 @@ def source_pool_plugins(instance):
         source = plugin_pool.shared_plugin_path(MINQLX, path)
         if source is None:
             continue
-        with open(source, 'rb') as handle:
-            data = handle.read()
         tier = 'operator' if os.path.dirname(source) == operator_root else 'builtin'
+        try:
+            with open(source, 'rb') as handle:
+                data = handle.read()
+        except OSError as exc:
+            found[path] = {'tier': tier, 'sha256': UNREADABLE_DIGEST, 'data': None,
+                           'error': exc.strerror or type(exc).__name__}
+            continue
         found[path] = {'tier': tier, 'sha256': _sha256_bytes(data), 'data': data}
     return found
 
@@ -214,7 +231,7 @@ def _classify(instance):
     pool = source_pool_plugins(instance)
     if pool:
         pooled = preset_compat.pool_plugin_compatibility(
-            {path: {'text': _read_text(item['data']), 'tier': item['tier']}
+            {path: {'text': _read_text(item['data']), 'tier': item['tier'], 'error': item.get('error')}
              for path, item in pool.items()},
             MINQLX, UPGRADE_TARGET_RUNTIME, _target_pool_scripts())
         stripped = sorted(stripped + pooled['stripped'], key=lambda entry: entry['path'])
@@ -310,8 +327,8 @@ def _addon_render_inputs(instance):
             for hook in _ADDON_RENDER_HOOKS}
 
 
-def _capture_instance(instance, target_scripts):
-    classification, pool = _classify(instance)
+def _capture_instance(instance, target_scripts, classified=None):
+    classification, pool = classified or _classify(instance)
     replacements = {}
     for path, text in classification['replacements'].items():
         # Prefer the byte digest of the file the materialized copy will hold;
@@ -343,12 +360,15 @@ def _capture_instance(instance, target_scripts):
     }
 
 
-def capture_upgrade_inputs(host):
+def capture_upgrade_inputs(host, *, classified=None):
     """Everything an upgrade confirmation depends on, as JSON-serializable digests.
 
     Holds no file bodies and no timestamps or logs. NOTE: `renderer` carries the
     instances' ZMQ passwords in plain text (the conversion re-renders from it),
     so the result must be stored server-side only and never returned by an API.
+
+    classified: optional {instance_id: _classify(instance)} computed by the
+    caller (upgrade_dry_run), so an instance is not classified twice.
     """
     from ui.task_logic.self_host_network import is_self_host
 
@@ -377,10 +397,21 @@ def capture_upgrade_inputs(host):
         },
         'trees': trees,
         'instances': [
-            _capture_instance(inst, trees['target_default_preset_scripts'])
+            _capture_instance(inst, trees['target_default_preset_scripts'],
+                              (classified or {}).get(inst.id))
             for inst in instances
         ],
     }
+
+
+def upgrade_dry_run(host):
+    """(dialog rows, capture) for the GET dry-run, classifying each instance
+    once. Both are exactly what classify_instance() per instance and
+    capture_upgrade_inputs(host) return."""
+    instances = sorted(host.instances, key=lambda inst: inst.id)
+    classified = {inst.id: _classify(inst) for inst in instances}
+    rows = [classified[inst.id][0] for inst in instances]
+    return rows, capture_upgrade_inputs(host, classified=classified)
 
 
 def _canonical_inputs(inputs):

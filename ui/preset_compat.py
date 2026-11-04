@@ -401,6 +401,7 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
 
 
 POOL_SOURCE_REASON = 'Enabled from the shared {source} plugin pool; this instance holds no copy of its own'
+POOL_UNREADABLE_REASON = 'Its shared pool file could not be read ({error}), so it cannot be checked'
 
 
 def pool_plugin_compatibility(pool_plugins, source_runtime, target_runtime, target_pool):
@@ -412,8 +413,9 @@ def pool_plugin_compatibility(pool_plugins, source_runtime, target_runtime, targ
     with nothing behind it on the target runtime, whose pool is a different
     directory. This applies the same verdict rules to those plugins:
 
-    `pool_plugins`: {path: {'text': str or None, 'tier': 'builtin'|'operator'}},
-    only root-level plugins that are enabled and have no file of their own.
+    `pool_plugins`: {path: {'text': str or None, 'tier': 'builtin'|'operator',
+    'error': optional read error}}, only root-level plugins that are enabled and
+    have no file of their own.
     `target_pool`: {path: text} of the target runtime's merged shared pool.
 
     What the target ships (its default preset, else its shared pool) decides
@@ -450,6 +452,8 @@ def pool_plugin_compatibility(pool_plugins, source_runtime, target_runtime, targ
         else:
             verdict, reasons = VERDICT_UNKNOWN, []
         reasons = [POOL_SOURCE_REASON.format(source=source)] + list(reasons)
+        if entry_source.get('error'):
+            reasons.append(POOL_UNREADABLE_REASON.format(error=entry_source['error']))
         entry = _strip_entry(path, verdict, reasons, available)
         entry['originally_checked'] = True
         # A built-in pool file is stock; an operator copy under a stock name is
