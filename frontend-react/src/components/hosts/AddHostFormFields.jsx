@@ -98,8 +98,8 @@ function AddHostFormFields({
         }}
       />
 
-      {/* Runtime -- immutable once the host is created, so nothing is
-          pre-selected: the operator picks, QLSM never picks for them. */}
+      {/* Runtime -- changes later only via the one-way minqlxtended upgrade,
+          so nothing is pre-selected: the operator picks, QLSM never picks for them. */}
       <div data-testid="runtime-picker">
         <label className={labelClass}>Server Runtime</label>
         <fieldset

@@ -108,7 +108,8 @@ def _validate_runtime(value):
 
     Returns (runtime, None) on success or (None, message) on failure. An absent
     value means the default. An unknown value is an error rather than a silent
-    default: the runtime is immutable once set, so guessing is not acceptable.
+    default: the runtime changes later only via the minqlxtended upgrade (there
+    is no downgrade), so guessing is not acceptable.
     """
     if value is None:
         return DEFAULT_RUNTIME, None
@@ -419,8 +420,8 @@ def _validate_runtime_python(detected_os, runtime):
     """Whether a detected host meets the runtime's Python floor.
 
     Only minqlxtended has one (it links -lpython3.12). Returns (ok, message).
-    An undetectable version fails closed: the runtime choice is irreversible,
-    so shipping a host we cannot verify is worse than refusing.
+    An undetectable version fails closed: a minqlxtended host cannot be moved
+    back to minqlx, so shipping a host we cannot verify is worse than refusing.
     """
     minimum = runtime_paths(runtime)['min_python']
     if minimum is None:

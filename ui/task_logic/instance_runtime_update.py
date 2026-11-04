@@ -44,11 +44,20 @@ RUNTIME_DEPS_ROOT = '/home/ql/runtime-deps'
 _DEPS_PATH = re.compile(r'^/home/ql/runtime-deps/minqlxtended/[0-9a-f]{32}/[0-9]+$')
 DEFAULT_SYSTEM_HOOKS_DIR = os.path.join('ql-assets', 'data', 'system-hooks')
 
-# Engine .so, archive (zip, or the minqlx/ package) and launcher, per runtime.
-_RUNTIME_ARTIFACTS = {
-    MINQLXTENDED: (['minqlxtended.x64.so', 'minqlxtended.zip', 'run_server_x64_minqlxtended.sh'], []),
-    MINQLX: (['minqlx.x64.so', 'run_server_x64_minqlx.sh', 'minqlx'], ['minqlx-cmd', 'quake_live.sh']),
+# Runtime artifacts that ui.runtime does not name: the Python archive (zip, or
+# the minqlx/ package) and optional extras. The engine .so and launcher come
+# from runtime_paths() so a rename there can't leave this list stale.
+_RUNTIME_ARCHIVE_AND_EXTRAS = {
+    MINQLXTENDED: ('minqlxtended.zip', []),
+    MINQLX: ('minqlx', ['minqlx-cmd', 'quake_live.sh']),
 }
+
+
+def _runtime_artifacts(runtime):
+    """(required, optional) artifact names in the runtime's shared dir."""
+    paths = runtime_paths(runtime)
+    archive, optional = _RUNTIME_ARCHIVE_AND_EXTRAS[runtime]
+    return [paths['engine_so'], archive, paths['launch_script']], list(optional)
 _CONFIG_SUFFIXES = ('.cfg', '.txt', '.ent')
 
 
@@ -267,7 +276,7 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
         if instance is None or instance.host is None:
             return _result(False, f'Instance {instance_id} not found')
         host = instance.host
-        if runtime not in _RUNTIME_ARTIFACTS:
+        if runtime not in _RUNTIME_ARCHIVE_AND_EXTRAS:
             return _result(False, f'Unknown runtime {runtime!r}')
         if host_runtime(host) != runtime:
             return _result(False, f'Host {host.name} runtime is {host_runtime(host)}, not {runtime}; '
@@ -299,7 +308,7 @@ def configure_existing_instance(instance_id, runtime, immutable_inputs, dependen
         hooks_dir = immutable_inputs.get('system_hooks_dir') or DEFAULT_SYSTEM_HOOKS_DIR
 
         paths = runtime_paths(runtime)
-        required, optional = _RUNTIME_ARTIFACTS[runtime]
+        required, optional = _runtime_artifacts(runtime)
         stage_dir = tempfile.mkdtemp(prefix='qlsm-runtime-update-')
         archive = _build_stage_archive(config_dir, hooks_dir, paths['plugins_dirname'], stage_dir)
         # Built explicitly rather than via instance_runtime_extravars(): the

@@ -101,6 +101,14 @@ def test_configure_runs_the_update_playbook_never_the_creation_path(env):
     assert '+set qlx_pluginsPath /home/ql/qlds-27960/minqlxtended-plugins' in ev['qlds_args']
 
 
+@pytest.mark.parametrize('runtime', [MINQLX, MINQLXTENDED])
+def test_runtime_artifacts_take_engine_and_launcher_from_runtime_paths(runtime):
+    required, _optional = mod._runtime_artifacts(runtime)
+    paths = runtime_paths(runtime)
+    assert paths['engine_so'] in required
+    assert paths['launch_script'] in required
+
+
 def test_configure_stages_exactly_the_managed_files(env):
     _configure(env)
     [call] = env['calls']
