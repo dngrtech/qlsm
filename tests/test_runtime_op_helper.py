@@ -367,3 +367,32 @@ def test_lock_base_must_not_be_a_symlink(helper, tmp_path, capsys):
     rc, out = _run(helper, capsys, 'acquire', '--base', str(link), '--operation-id', OP_A,
                    '--fencing-token', '1')
     assert rc == 3 and 'symlink' in out['refused']
+
+
+def test_apply_refuses_a_hard_linked_source(helper, instance, capsys):
+    secret = instance['tmp'] / 'secret'
+    secret.write_text('root only\n')
+    os.link(secret, instance['tmp'] / 'common' / 'leak.py')
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3 and 'hard links' in out['refused']
+    assert not (instance['qlds'] / 'minqlxtended-plugins/leak.py').exists()
+
+
+def test_apply_refuses_a_fifo_source_without_blocking(helper, instance, capsys):
+    os.mkfifo(instance['tmp'] / 'common' / 'pipe.py')
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3 and 'not a regular file' in out['refused']
+
+
+def test_apply_refuses_backing_up_a_hard_linked_destination(helper, instance, capsys):
+    """A ql-planted hard link at a managed path must not be copied (as root)
+    into the backup, nor overwritten in place."""
+    victim = instance['tmp'] / 'victim.txt'
+    victim.write_text('do not copy\n')
+    cfg = instance['qlds'] / 'baseq3/server.cfg'
+    cfg.unlink()
+    os.link(victim, cfg)
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3 and 'hard links' in out['refused']
+    assert not os.path.exists(os.path.join(instance['ops'], 'files', '000000'))
+    assert _read(victim) == 'do not copy\n'

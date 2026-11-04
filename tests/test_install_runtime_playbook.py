@@ -140,3 +140,19 @@ def test_every_new_playbook_references_existing_task_files():
             if target:
                 assert os.path.isfile(os.path.join("ansible/playbooks", target)), target
     assert glob.glob("ansible/files/qlsm_runtime_op.py")
+
+
+def test_everything_under_home_ql_runs_as_ql():
+    """Root must not create, chown or copy into the ql-controlled venv tree:
+    a symlink planted by ql would redirect it."""
+    with open(os.path.join(TASKS_DIR, "runtime_python_deps.yml")) as handle:
+        tasks = yaml.safe_load(handle)
+    for task in tasks:
+        text = yaml.safe_dump(task)
+        if "runtime_deps" in text and any(k in task for k in (
+                "ansible.builtin.file", "ansible.builtin.copy", "ansible.builtin.command")):
+            if "python3-config" in text or "/usr/bin/python3, -c" in text:
+                continue
+            assert task.get("become_user") == "ql", task["name"]
+            module = task.get("ansible.builtin.file") or task.get("ansible.builtin.copy") or {}
+            assert "owner" not in module, task["name"]

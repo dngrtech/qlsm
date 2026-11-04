@@ -38,12 +38,14 @@
 
 # The venv tree belongs to ql, who runs (and pip-installs into) the venvs.
 # Root-owned operation state lives in /var/lib/qlsm/runtime-ops instead.
+# Every step under /home/ql runs AS ql (no root chown/copy there), so a
+# symlink ql plants can only lead to paths ql could already write.
 - name: Ensure the operation's dependency directories exist
+  become: yes
+  become_user: ql
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: ql
-    group: ql
     mode: '0755'
   loop:
     - "{{ runtime_deps_root }}"
@@ -51,20 +53,20 @@
     - "{{ runtime_deps_op_dir }}"
 
 - name: Stage the captured core requirements
+  become: yes
+  become_user: ql
   ansible.builtin.copy:
     src: "{{ core_requirements_src }}"
     dest: "{{ runtime_deps_op_dir }}/core-requirements.txt"
-    owner: ql
-    group: ql
     mode: '0644'
   when: core_requirements_src | length > 0
 
 - name: Stage each instance's captured requirements
+  become: yes
+  become_user: ql
   ansible.builtin.copy:
     src: "{{ item.requirements_src }}"
     dest: "{{ runtime_deps_op_dir }}/{{ item.id | int }}.requirements.txt"
-    owner: ql
-    group: ql
     mode: '0644'
   loop: "{{ runtime_instances }}"
   loop_control:
@@ -82,6 +84,8 @@
     label: "{{ item.id }}"
 
 - name: Confirm each venv uses the engine's Python version
+  become: yes
+  become_user: ql
   ansible.builtin.command:
     argv: ["{{ runtime_deps_op_dir }}/{{ item.id | int }}/bin/python", -c,
            "import sys; print('%d.%d' % sys.version_info[:2], sys.prefix != sys.base_prefix)"]

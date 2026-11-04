@@ -361,12 +361,31 @@ def _verify_trusted_dir(path, create=False):
         os.close(fd)
 
 
-def _read_file(path):
-    """(bytes, stat) of a regular file, refusing symlinks anywhere in `path`."""
+def _trusted_uids():
+    """Owners allowed for files in the root-owned operation tree."""
+    return {0, os.geteuid()}
+
+
+def _ql_tree_uids():
+    """Owners allowed for files read from the ql-controlled tree."""
+    uids = _trusted_uids()
+    try:
+        import pwd
+        uids.add(pwd.getpwnam('ql').pw_uid)
+    except (ImportError, KeyError):
+        pass
+    return uids
+
+
+def _read_file(path, allowed_uids):
+    """(bytes, stat) of a regular file, refusing symlinks anywhere in `path`,
+    FIFOs/devices (opened non-blocking, then fstat'd), hard links and files
+    owned by anyone outside `allowed_uids`."""
     dfd = _open_dir(os.path.dirname(path))
     try:
         try:
-            fd = os.open(os.path.basename(path), os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
+            fd = os.open(os.path.basename(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=dfd)
         except OSError as exc:
             if exc.errno == errno.ELOOP:
                 raise Refused('%s is a symlink' % path)
@@ -375,6 +394,10 @@ def _read_file(path):
             st = os.fstat(handle.fileno())
             if not stat.S_ISREG(st.st_mode):
                 raise Refused('%s is not a regular file' % path)
+            if st.st_nlink != 1:
+                raise Refused('%s has %d hard links' % (path, st.st_nlink))
+            if st.st_uid not in allowed_uids:
+                raise Refused('%s is owned by uid %d' % (path, st.st_uid))
             return handle.read(), st
     finally:
         os.close(dfd)
@@ -558,7 +581,7 @@ def cmd_apply(args):
     # "written" is exactly what gets written.
     payload = []
     for src, dest in files:
-        data, st = _read_file(src)
+        data, st = _read_file(src, _trusted_uids() if _inside(src, args.base) else _ql_tree_uids())
         uid, gid, forced = _dest_class(dest, qlds_dir, unit_paths)
         payload.append((dest, data, forced if forced is not None else (st.st_mode & 0o777), uid, gid))
 
@@ -592,7 +615,8 @@ def cmd_apply(args):
                 raise Refused('%s exists and is not a regular file' % dest)
             entry = {'existed': current is not None, 'written_sha256': _sha256_bytes(data)}
             if current is not None:
-                original, st = _read_file(dest)
+                original, st = _read_file(
+                    dest, _trusted_uids() if dest in unit_paths else _ql_tree_uids())
                 backup = os.path.join(files_dir, '%06d' % len(entries))
                 _write_file(backup, original, 0o600, None, None)
                 entry.update({'sha256': _sha256_bytes(original), 'mode': '%04o' % (st.st_mode & 0o777),
@@ -615,7 +639,7 @@ def cmd_restore(args):
     manifest_path = os.path.join(ops_dir, 'manifest.json')
     if _lstat(manifest_path) is None:
         return {'restored': 0, 'removed': 0, 'kept': [], 'note': 'no inventory recorded'}
-    manifest = json.loads(_read_file(manifest_path)[0].decode('utf-8'))
+    manifest = json.loads(_read_file(manifest_path, _trusted_uids())[0].decode('utf-8'))
     if os.path.normpath(manifest.get('qlds_dir', '')) != qlds_dir:
         raise Refused('inventory belongs to another instance directory')
     files_dir = os.path.join(ops_dir, 'files')
@@ -636,7 +660,7 @@ def cmd_restore(args):
     for dest, entry in sorted(entries.items()):
         uid, gid, forced = _dest_class(dest, qlds_dir, unit_paths)
         if entry['existed']:
-            data, _st = _read_file(entry['backup'])
+            data, _st = _read_file(entry['backup'], _trusted_uids())
             if _sha256_bytes(data) != entry['sha256']:
                 raise Refused('backup of %s does not match its recorded sha256' % dest)
             mode = forced if forced is not None else int(entry['mode'], 8) & 0o777
@@ -646,7 +670,8 @@ def cmd_restore(args):
             current = _lstat(dest)
             if current is None:
                 continue
-            if stat.S_ISREG(current.st_mode) and _sha256_bytes(_read_file(dest)[0]) == entry.get('written_sha256'):
+            if (stat.S_ISREG(current.st_mode) and current.st_nlink == 1
+                    and _sha256_bytes(_read_file(dest, _ql_tree_uids())[0]) == entry.get('written_sha256')):
                 _unlink(dest)
                 removed += 1
             else:
