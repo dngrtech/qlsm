@@ -155,6 +155,49 @@ def test_replayed_rollback_reverifies_actual_state(world):
     _assert_exclusive_end(world)
 
 
+def test_retry_never_bounces_an_instance_whose_rollback_completed(world):
+    """One instance keeps failing across recovery runs: the instances already
+    restored are only re-verified (read-only), never stopped, reconfigured or
+    restarted again."""
+    _die_at(world, _first(world, 'configured'))
+    failing = world.ids['C']
+    result, first = _recover(world, fail={('start', failing)})
+    assert result is False and _op(world.op_id).state == 'recovery_required'
+    outcomes = json.loads(_op(world.op_id).instance_outcomes_json)['instances']
+    restored = [iid for iid in world.ids.values()
+                if iid != failing and outcomes[str(iid)].get('rollback', {}).get('ok')]
+    assert restored  # at least one instance was fully rolled back by the first run
+    assert any(c[0] in ('stop', 'configure', 'start') and c[1] in restored for c in first.calls)
+
+    result, second = _recover(world, job_id='job-3', fail={('start', failing)})
+    assert result is False and _op(world.op_id).state == 'recovery_required'
+    bounced = [c for c in second.calls if c[0] in ('stop', 'configure', 'start', 'ready') and c[1] in restored]
+    assert bounced == []
+    assert ('start', failing) in second.calls  # the failing instance is still retried
+    for iid in restored:
+        assert world.remote.services[iid]['active'] == (world.orig[iid]['status'] == InstanceStatus.RUNNING)
+        assert db.session.get(QLInstance, iid).status == world.orig[iid]['status']
+
+    _recover(world, job_id='job-4')
+    assert_original(world.env, world.host_id, world.orig, world.remote)
+    _assert_exclusive_end(world)
+
+
+def test_restored_instance_drift_is_recorded_not_acted_on(world):
+    """A restored instance whose service drifted before a retry is noted and
+    left alone: the retry never stops or starts it."""
+    _die_at(world, _first(world, 'configured'))
+    failing = world.ids['C']
+    _recover(world, fail={('start', failing)})
+    world.remote.services[world.ids['A']]['active'] = False  # someone stopped it meanwhile
+
+    _result, deps = _recover(world, job_id='job-3', fail={('start', failing)})
+    assert not [c for c in deps.calls if c[1] == world.ids['A'] and c[0] in ('stop', 'start', 'configure')]
+    outcome = json.loads(_op(world.op_id).instance_outcomes_json)['instances'][str(world.ids['A'])]
+    assert outcome['rollback']['ok'] is True and 'expected RUNNING' in outcome['rollback']['note']
+    assert 'expected RUNNING' in db.session.get(Host, world.host_id).logs
+
+
 def test_live_previous_job_delays_takeover(world):
     _die_at(world, 'runtime_committed')
     result, deps = _recover(world, alive={'job-1'})

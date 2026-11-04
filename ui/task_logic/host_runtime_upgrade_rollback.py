@@ -10,6 +10,9 @@ it back to its original RUNNING/STOPPED state. Failures are isolated per
 instance and phase. An instance that cannot be quiesced keeps its running
 files. A remote "not now" (lock still held by another play, host unreachable)
 keeps the operation pending for a retry rather than failing it.
+An instance whose rollback already completed in an earlier pass is never
+stopped, restored or restarted again by a retry: its state is only re-read
+and any drift is recorded for the operator.
 """
 import logging
 
@@ -33,6 +36,11 @@ def _touched(outcome):
     """Did the upgrade change this instance's files or service definition?
     Conversion is the first change; it only ever follows a verified stop."""
     return any(key in outcome for key in ('convert', 'configure', 'start'))
+
+
+def _rolled_back(outcome):
+    """Did an earlier pass already restore this instance and verify its state?"""
+    return bool(outcome.get('rollback', {}).get('ok'))
 
 
 def _files_changed(outcome):
@@ -161,6 +169,23 @@ def _leave_untouched(execution, iid, original, outcome):
                                     'untouched': True, 'note': note})
 
 
+def _reverify(execution, iid, original, outcome):
+    """A retry of an instance an earlier pass already restored: read its state
+    only. Drift is recorded and logged (once per distinct note), never acted on:
+    the instance is not stopped, reconfigured or restarted again."""
+    instance = execution.instance(iid)
+    state = execution.deps.service_state(instance)
+    expected = 'active' if original == InstanceStatus.RUNNING.value else 'inactive'
+    if state == expected:
+        return
+    previous = outcome['rollback']
+    note = (f'restored earlier, but it is now {_DESCRIBE.get(state, state)}, expected '
+            f'{original.upper()}; left as found')
+    if note != previous.get('note'):
+        append_log(execution.host, f'Rollback: instance {instance.name} {note}.')
+        execution.record(iid, rollback={**previous, 'note': note})
+
+
 def _fail_instance(execution, iid, failure):
     db.session.rollback()
     instance = execution.instance(iid)
@@ -190,8 +215,9 @@ def rollback(execution, reason=None):
 
     originals = execution.originals()
     failures = {}
+    restored = {iid for iid in originals if _rolled_back(execution.instance_outcome(iid))}
     for iid in sorted(originals):
-        if _touched(execution.instance_outcome(iid)):
+        if iid not in restored and _touched(execution.instance_outcome(iid)):
             try:
                 _quiesce(execution, iid)
             except StaleExecution:
@@ -211,6 +237,9 @@ def rollback(execution, reason=None):
         if iid in failures:
             continue  # never overwrite the files of an instance we could not stop
         try:
+            if iid in restored:
+                _reverify(execution, iid, original, execution.instance_outcome(iid))
+                continue
             _restore(execution, iid, original, op.snapshot_path)
         except StaleExecution:
             raise
