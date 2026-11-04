@@ -112,7 +112,7 @@ Each instance also gets a fallback preset named `pre-minqlxtended-...` in the pr
 
 If the build, a stop, a conversion or any instance's start fails, QLSM **rolls the whole host back**: the host returns to minqlx, every instance gets its previous config and plugins back, and each one is running or stopped exactly as before. If the failure came before anything was stopped, the host simply returns to Active. A plugin that merely fails to load inside a running server does not count as a failure.
 
-If a rollback cannot finish, the host shows **Error** and the log lists the instances that did not come back. The host stays on minqlx. Recovery continues automatically whenever the host is reachable again, including after a restart of QLSM itself, and other actions on the host stay blocked until it completes. There is no manual retry button.
+If a rollback cannot finish, the host shows **Error** and the log lists the instances that did not come back. The host stays on minqlx. QLSM retries automatically every few minutes until the host is reachable and the rollback completes, including after a restart of QLSM itself, and other actions on the host stay blocked until it completes. There is no manual retry button.
 
 Upgrading is one way. QLSM has no downgrade action; the old minqlx build stays on the host, which is what makes rollback possible.
 

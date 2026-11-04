@@ -345,7 +345,7 @@ That hook is runtime-agnostic — it detours `SV_ClientThink` inside `qzeroded` 
 -   `succeeded`: host on minqlxtended, original running or stopped states restored.
 -   `failed_preparation`: failed before anything was stopped (for example a changed fingerprint or snapshot failure); host back to its prior status, nothing restored.
 -   `rolled_back`: failed after mutation began; host fully back on minqlx with every instance's config and state restored.
--   Recovery pending (`recovery_required`): rollback could not finish, the host is `ERROR` on `runtime = minqlx`, and the reservation stays. The reconciler retries when the host is reachable; there is no manual retry action.
+-   Recovery pending (`recovery_required`): rollback could not finish, the host is `ERROR` on `runtime = minqlx`, and the reservation stays. The reconciler scans every 60 s but retries a `recovery_required` operation at most every 5 minutes (`RETRY_INTERVAL_SECONDS`). Retries are not gated on reachability: an attempt against an unreachable host fails and the operation stays pending. There is no manual retry action.
 A plugin that merely fails to load inside a running server is not a failure.
 
 ## Testing Framework
