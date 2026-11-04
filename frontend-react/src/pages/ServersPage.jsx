@@ -87,7 +87,14 @@ export default function ServersPage() {
     const { isAutoRestartModalOpen, hostForAutoRestart, openAutoRestartModal, closeAutoRestartModal, handleAutoRestartSubmit } = useHostAutoRestart(showSuccess, showError, () => refreshData(false));
     const { isWatchdogModalOpen, hostForWatchdog, openWatchdogModal, closeWatchdogModal, handleWatchdogSubmit } = useHostWatchdog(showSuccess, showError, () => refreshData(false));
     const { isResizeModalOpen, isResizeSubmitting, resizeError, hostForResize, openResizeModal, closeResizeModal, handleResizeSubmit } = useHostResize(showSuccess, showError, () => refreshData(false));
-    const [hostForRuntimeUpgrade, setHostForRuntimeUpgrade] = useState(null);
+    // Runtime upgrade dialog — store the host ID, re-derive the host from live data
+    const [runtimeUpgradeHostId, setRuntimeUpgradeHostId] = useState(null);
+    const hostForRuntimeUpgrade = runtimeUpgradeHostId == null
+        ? null : (serversData.find(h => h.id === runtimeUpgradeHostId) ?? null);
+    useEffect(() => {
+        // The host is gone (deleted elsewhere): close for good, never reopen on its own.
+        if (runtimeUpgradeHostId != null && !hostForRuntimeUpgrade) setRuntimeUpgradeHostId(null);
+    }, [runtimeUpgradeHostId, hostForRuntimeUpgrade]);
     const { isHostLogsModalOpen, hostForLogs, openHostLogs, closeHostLogs } = useHostLogsModal();
     const serverStatusMap = useServerStatus();
 
@@ -303,7 +310,7 @@ export default function ServersPage() {
                                     <QLFilterIndicator qlfilterStatus={host.qlfilter_status} />
                                 </div>
                                 <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
-                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenCheckForUpdates={openUpdatesModal} onOpenAutoRestart={openAutoRestartModal} onOpenWatchdog={openWatchdogModal} onOpenViewLogs={openHostLogs} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} onOpenRuntimeUpgrade={() => setHostForRuntimeUpgrade(host)} />
+                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenCheckForUpdates={openUpdatesModal} onOpenAutoRestart={openAutoRestartModal} onOpenWatchdog={openWatchdogModal} onOpenViewLogs={openHostLogs} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} onOpenRuntimeUpgrade={setRuntimeUpgradeHostId} />
                                 </div>
                             </div>
 
@@ -382,7 +389,7 @@ export default function ServersPage() {
             <ConfirmationModal isOpen={restartModal.open} onClose={closeRestartModal} onConfirm={confirmRestart} title="Restart Instance" message={restartModal.instance ? `Are you sure you want to restart "${restartModal.instance.name}"?` : ''} confirmButtonText="Restart" confirmButtonVariant="primary" />
             <AddHostModal isOpen={isAddHostModalOpen} onClose={() => setIsAddHostModalOpen(false)} onHostAdded={() => refreshData(false)} />
             <AddInstanceModal isOpen={isAddInstanceModalOpen} onClose={() => { setIsAddInstanceModalOpen(false); setAddInstanceModalHostId(null); }} onInstanceAdded={() => { setAddInstanceModalHostId(null); refreshData(false); }} initialHostId={addInstanceModalHostId} />
-            <HostDetailDrawer host={currentHostForDrawer || selectedHostId} open={isHostDrawerOpen} onClose={() => setIsHostDrawerOpen(false)} onHostUpdated={() => refreshData(false)} onHostDeleted={() => refreshData(false)} onDeleteHost={(host) => requestDeleteHost({ id: host.id, name: host.name })} onRequestRestart={handleRequestHostRestart} onQlfilterAction={handleQlfilterAction} onOpenRuntimeUpgrade={() => setHostForRuntimeUpgrade(currentHostForDrawer)} onSwitchToInstanceDrawer={(instanceId) => { setIsHostDrawerOpen(false); handleOpenInstanceDetails(instanceId); }} />
+            <HostDetailDrawer host={currentHostForDrawer || selectedHostId} open={isHostDrawerOpen} onClose={() => setIsHostDrawerOpen(false)} onHostUpdated={() => refreshData(false)} onHostDeleted={() => refreshData(false)} onDeleteHost={(host) => requestDeleteHost({ id: host.id, name: host.name })} onRequestRestart={handleRequestHostRestart} onQlfilterAction={handleQlfilterAction} onOpenRuntimeUpgrade={setRuntimeUpgradeHostId} onSwitchToInstanceDrawer={(instanceId) => { setIsHostDrawerOpen(false); handleOpenInstanceDetails(instanceId); }} />
             <InstanceDetailsModal isOpen={isInstanceDetailsOpen} onClose={() => setIsInstanceDetailsOpen(false)} instanceId={selectedInstanceId} onInstanceDeleted={() => refreshData(false)} onInstanceUpdated={() => refreshData(false)} onOpenEditConfig={handleOpenEditConfig} onOpenHostDrawer={(hostId) => { setIsInstanceDetailsOpen(false); handleOpenHostDrawer(hostId); }} serverStatus={selectedInstanceId ? serverStatusMap[String(selectedInstanceId)] : null} />
             <EditInstanceConfigModal isOpen={isEditConfigOpen} onClose={() => { setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); setEditConfigInitialTab('config'); }} instanceId={selectedInstanceForConfig?.id} instanceName={selectedInstanceForConfig?.name} initialTab={editConfigInitialTab} onConfigSaved={() => { refreshData(false); setIsEditConfigOpen(false); setSelectedInstanceForConfig(null); setEditConfigInitialTab('config'); }} />
             <ConfirmationModal isOpen={isHostRestartModalOpen} onClose={closeHostRestartModal} onConfirm={confirmHostRestart} title={`Restart Host "${hostForRestart?.name}"`} message={`Are you sure you want to restart host "${hostForRestart?.name}"? This will temporarily make the host and its instances unavailable.`} confirmButtonText="Restart" confirmButtonVariant="warning" />
@@ -396,7 +403,7 @@ export default function ServersPage() {
             <HostAutoRestartScheduleModal isOpen={isAutoRestartModalOpen} onClose={closeAutoRestartModal} onSubmit={handleAutoRestartSubmit} host={hostForAutoRestart} />
             <HostWatchdogModal isOpen={isWatchdogModalOpen} onClose={closeWatchdogModal} onSubmit={handleWatchdogSubmit} host={hostForWatchdog} />
             <ResizeHostModal isOpen={isResizeModalOpen} onClose={closeResizeModal} onSubmit={handleResizeSubmit} host={hostForResize} error={resizeError} isSubmitting={isResizeSubmitting} />
-            <RuntimeUpgradeDialog isOpen={hostForRuntimeUpgrade !== null} host={hostForRuntimeUpgrade} onClose={() => setHostForRuntimeUpgrade(null)} onStarted={() => { showSuccess('Runtime upgrade queued.'); refreshData(false); }} />
+            <RuntimeUpgradeDialog isOpen={hostForRuntimeUpgrade !== null} host={hostForRuntimeUpgrade} onClose={() => setRuntimeUpgradeHostId(null)} onStarted={() => { showSuccess('Runtime upgrade queued.'); refreshData(false); }} />
             <HostLogsModal isOpen={isHostLogsModalOpen} onClose={closeHostLogs} host={hostForLogs} />
             {rconInstance && (
                 <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />

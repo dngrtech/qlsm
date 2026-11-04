@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ServersPage from '../ServersPage';
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   noop: vi.fn(),
   NullComponent: () => null,
   RconConsole: vi.fn(() => null),
+  RuntimeUpgradeDialog: vi.fn(),
   serversData: [],
   stats: { totalHosts: 1, totalInstances: 0, runningInstances: 0 },
 }));
@@ -64,7 +65,19 @@ vi.mock('../../components/instances/SortableInstanceList', () => ({
 }));
 
 vi.mock('../../components/HostActionsMenu', () => ({
-  default: () => <button type="button">Actions</button>,
+  default: ({ host, onOpenRuntimeUpgrade }) => (
+    <>
+      <button type="button">Actions</button>
+      <button type="button" onClick={() => onOpenRuntimeUpgrade(host.id)}>{`upgrade-${host.id}`}</button>
+    </>
+  ),
+}));
+
+vi.mock('../../components/hosts/RuntimeUpgradeDialog', () => ({
+  default: (props) => {
+    mocks.RuntimeUpgradeDialog(props);
+    return props.isOpen ? <div>{`upgrade-dialog ${props.host?.name}`}</div> : null;
+  },
 }));
 
 vi.mock('../../components/StatusIndicator', () => ({
@@ -241,6 +254,50 @@ describe('ServersPage', () => {
     );
 
     expect(mocks.RconConsole).not.toHaveBeenCalled();
+  });
+
+  const renderPage = () => render(
+    <MemoryRouter>
+      <ServersPage />
+    </MemoryRouter>
+  );
+  const rerenderPage = (view) => act(() => {
+    view.rerender(
+      <MemoryRouter>
+        <ServersPage />
+      </MemoryRouter>
+    );
+  });
+
+  it('derives the runtime-upgrade host from the latest servers data', () => {
+    const view = renderPage();
+    expect(screen.queryByText(/upgrade-dialog/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('upgrade-1'));
+    expect(screen.getByText('upgrade-dialog Arena Host')).toBeInTheDocument();
+
+    // A poll replaces the host object: the dialog gets the new one, not a stale copy.
+    mocks.serversData = [{ ...mocks.serversData[0], name: 'Renamed Host' }];
+    rerenderPage(view);
+    expect(screen.getByText('upgrade-dialog Renamed Host')).toBeInTheDocument();
+    const last = mocks.RuntimeUpgradeDialog.mock.calls.at(-1)[0];
+    expect(last.host).toBe(mocks.serversData[0]);
+  });
+
+  it('closes the runtime-upgrade dialog when its host disappears', () => {
+    const view = renderPage();
+    fireEvent.click(screen.getByText('upgrade-1'));
+    expect(screen.getByText('upgrade-dialog Arena Host')).toBeInTheDocument();
+
+    const host = mocks.serversData[0];
+    mocks.serversData = [];
+    rerenderPage(view);
+    expect(screen.queryByText(/upgrade-dialog/)).not.toBeInTheDocument();
+
+    // It does not pop back open if the host shows up again later.
+    mocks.serversData = [host];
+    rerenderPage(view);
+    expect(screen.queryByText(/upgrade-dialog/)).not.toBeInTheDocument();
   });
 
 });
