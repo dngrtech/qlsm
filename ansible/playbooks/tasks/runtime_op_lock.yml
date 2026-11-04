@@ -2,6 +2,8 @@
 # Shared task: take the host's runtime-operation lock before any side effect.
 # Used by install_runtime.yml and update_instance_runtime.yml (upgrade and
 # rollback). The helper runs via `script`, so nothing is installed on the host.
+# Lock and token live in the root-owned /var/lib/qlsm/runtime-ops/ (0700); the
+# helper refuses a symlinked or non-root-owned component anywhere on that path.
 #
 # Requires: operation_id (32 lowercase hex), fencing_token (int)
 # Optional: terminal_operation_ids (list; operations the controller knows are

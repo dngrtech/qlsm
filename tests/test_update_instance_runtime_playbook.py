@@ -77,4 +77,12 @@ def test_rollback_mode_restores_inventory_and_does_not_re_record():
     plan = tasks["Write the managed-file plan"]["vars"]["plan"]
     assert plan["record"] == "{{ restore_from_operation | length == 0 }}"
     assert plan["ops_dir"] == "{{ ops_dir }}"
-    assert _play()["vars"]["ops_dir"] == "{{ runtime_deps_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
+    assert _play()["vars"]["ops_dir"] == "{{ runtime_ops_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
+    assert "--qlds-dir" in restore["ansible.builtin.script"]["cmd"]
+    assert "--unit-path" in restore["ansible.builtin.script"]["cmd"]
+
+
+def test_operation_state_lives_in_the_root_owned_tree_not_under_home_ql():
+    play_vars = _play()["vars"]
+    assert play_vars["runtime_ops_root"] == "/var/lib/qlsm/runtime-ops"
+    assert "/home/ql" not in play_vars["ops_dir"] and "/home/ql" not in play_vars["stage_dir"]

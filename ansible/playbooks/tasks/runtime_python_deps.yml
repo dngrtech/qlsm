@@ -36,14 +36,8 @@
       {{ runtime_python_ldflags.stdout | trim }}; dependency venvs would not match its ABI.
     quiet: true
 
-- name: Ensure the runtime dependency root exists (root-owned; holds the lock)
-  ansible.builtin.file:
-    path: "{{ runtime_deps_root }}"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-
+# The venv tree belongs to ql, who runs (and pip-installs into) the venvs.
+# Root-owned operation state lives in /var/lib/qlsm/runtime-ops instead.
 - name: Ensure the operation's dependency directories exist
   ansible.builtin.file:
     path: "{{ item }}"
@@ -52,6 +46,7 @@
     group: ql
     mode: '0755'
   loop:
+    - "{{ runtime_deps_root }}"
     - "{{ runtime_deps_root }}/minqlxtended"
     - "{{ runtime_deps_op_dir }}"
 

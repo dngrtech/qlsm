@@ -160,6 +160,8 @@ def _read(path):
 
 @pytest.fixture
 def instance(tmp_path):
+    tmp_path = tmp_path.resolve()  # macOS: /var is a symlink, and symlinks are refused
+    base = tmp_path / 'runtime-ops'
     qlds = tmp_path / 'qlds-27960'
     _tree(str(qlds), {
         'baseq3/server.cfg': 'old cfg\n',
@@ -168,11 +170,17 @@ def instance(tmp_path):
         'minqlx.x64.so': 'old engine\n',
         'minqlxtended-plugins/plugin_data.json': '{"owned": "by plugin"}\n',
     })
-    stage = tmp_path / 'stage'
+    ops = base / 'ops' / OP_A / '7'
+    stage = ops / 'stage'
     _tree(str(stage / 'tree'), {
         'baseq3/server.cfg': 'new cfg\n',
         'minqlxtended-plugins/balance.py': 'new plugin\n',
     })
+    _tree(str(stage), {'qlds@27960.service': 'new unit\n'})
+    for root, dirs, _files in os.walk(base):
+        os.chmod(root, 0o700)
+        for name in dirs:
+            os.chmod(os.path.join(root, name), 0o700)
     shared = tmp_path / 'minqlxtended-shared'
     _tree(str(shared), {'minqlxtended.x64.so': 'new engine\n', 'minqlxtended.zip': 'zip\n',
                         'run_server_x64_minqlxtended.sh': '#!/bin/sh\n'})
@@ -180,36 +188,39 @@ def instance(tmp_path):
     _tree(str(common), {'serverchecker.py': 'pool\n', 'balance.py': 'pool balance\n'})
     unit_dir = tmp_path / 'systemd'
     _tree(str(unit_dir), {'qlds@27960.service': 'old unit\n'})
-    _tree(str(stage), {'qlds@27960.service': 'new unit\n'})
+    unit = str(unit_dir / 'qlds@27960.service')
     plan = {
         'operation_id': OP_A, 'instance_id': 7,
-        'qlds_dir': str(qlds), 'ops_dir': str(tmp_path / 'ops' / OP_A / '7'),
+        'qlds_dir': str(qlds), 'ops_dir': str(ops),
         'record': True,
-        'extra_destinations': [str(unit_dir / 'qlds@27960.service')],
+        'extra_destinations': [unit],
         'sources': [
             {'kind': 'tree', 'from': str(stage / 'tree'), 'into': str(qlds)},
             {'kind': 'names', 'from': str(shared), 'into': str(qlds),
              'names': ['minqlxtended.x64.so', 'minqlxtended.zip', 'run_server_x64_minqlxtended.sh']},
             {'kind': 'missing_only', 'from': str(common), 'into': str(qlds / 'minqlxtended-plugins')},
-            {'kind': 'file', 'from': str(stage / 'qlds@27960.service'),
-             'to': str(unit_dir / 'qlds@27960.service'), 'mode': '0644', 'owner': 'root'},
+            {'kind': 'file', 'from': str(stage / 'qlds@27960.service'), 'to': unit},
         ],
     }
     plan_path = tmp_path / 'plan.json'
     plan_path.write_text(json.dumps(plan))
-    return {'qlds': qlds, 'plan': str(plan_path), 'ops': plan['ops_dir'],
-            'unit': unit_dir / 'qlds@27960.service', 'plan_data': plan}
+    return {'qlds': qlds, 'ops': str(ops), 'base': str(base), 'tmp': tmp_path,
+            'unit': unit_dir / 'qlds@27960.service', 'plan_data': plan,
+            'apply': ['apply', '--base', str(base), '--plan', str(plan_path)],
+            'restore': ['restore', '--base', str(base), '--ops-dir', str(ops),
+                        '--qlds-dir', str(qlds), '--unit-path', unit]}
 
 
 def test_apply_records_then_installs_and_restore_reverses_it(helper, instance, capsys):
     qlds = instance['qlds']
-    rc, out = _run(helper, capsys, 'apply', '--plan', instance['plan'])
+    rc, out = _run(helper, capsys, *instance['apply'])
     assert rc == 0, out
     assert _read(qlds / 'baseq3/server.cfg') == 'new cfg\n'
     assert _read(qlds / 'minqlxtended.x64.so') == 'new engine\n'
     assert _read(qlds / 'minqlxtended-plugins/balance.py') == 'new plugin\n'  # stage wins over pool
     assert _read(qlds / 'minqlxtended-plugins/serverchecker.py') == 'pool\n'  # backfilled
     assert _read(instance['unit']) == 'new unit\n'
+    assert os.stat(instance['unit']).st_mode & 0o777 == 0o644
     # Untouched: old runtime files, baseq3 data, plugin-owned data.
     assert _read(qlds / 'minqlx.x64.so') == 'old engine\n'
     assert _read(qlds / 'minqlx-plugins/balance.py') == 'old plugin\n'
@@ -218,9 +229,10 @@ def test_apply_records_then_installs_and_restore_reverses_it(helper, instance, c
     manifest = json.loads(_read(os.path.join(instance['ops'], 'manifest.json')))
     cfg = manifest['entries'][str(qlds / 'baseq3/server.cfg')]
     assert cfg['existed'] and cfg['mode'] and len(cfg['sha256']) == 64
+    assert cfg['backup'].startswith(os.path.join(instance['ops'], 'files') + '/')
     assert manifest['entries'][str(qlds / 'minqlxtended.x64.so')]['existed'] is False
 
-    rc, out = _run(helper, capsys, 'restore', '--ops-dir', instance['ops'])
+    rc, out = _run(helper, capsys, *instance['restore'])
     assert rc == 0, out
     assert _read(qlds / 'baseq3/server.cfg') == 'old cfg\n'
     assert _read(instance['unit']) == 'old unit\n'
@@ -231,40 +243,127 @@ def test_apply_records_then_installs_and_restore_reverses_it(helper, instance, c
 
 
 def test_replayed_apply_never_overwrites_the_recorded_originals(helper, instance, capsys):
-    _run(helper, capsys, 'apply', '--plan', instance['plan'])
-    _run(helper, capsys, 'apply', '--plan', instance['plan'])  # retry after a failure
-    _run(helper, capsys, 'restore', '--ops-dir', instance['ops'])
+    _run(helper, capsys, *instance['apply'])
+    _run(helper, capsys, *instance['apply'])  # retry after a failure
+    _run(helper, capsys, *instance['restore'])
     assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'old cfg\n'
     assert _read(instance['unit']) == 'old unit\n'
 
 
 def test_restore_keeps_a_created_file_that_changed_since(helper, instance, capsys):
-    _run(helper, capsys, 'apply', '--plan', instance['plan'])
+    _run(helper, capsys, *instance['apply'])
     changed = instance['qlds'] / 'minqlxtended-plugins/serverchecker.py'
     changed.write_text('edited by someone else\n')
-    rc, out = _run(helper, capsys, 'restore', '--ops-dir', instance['ops'])
+    rc, out = _run(helper, capsys, *instance['restore'])
     assert rc == 0 and str(changed) in out['kept']
     assert changed.exists()
 
 
-def test_unrecorded_apply_writes_no_inventory(helper, instance, capsys, tmp_path):
-    plan = dict(instance['plan_data'], record=False, ops_dir=str(tmp_path / 'other-ops'))
-    path = tmp_path / 'plan2.json'
-    path.write_text(json.dumps(plan))
-    rc, _out = _run(helper, capsys, 'apply', '--plan', str(path))
+def _replan(instance, name, **changes):
+    path = instance['tmp'] / name
+    path.write_text(json.dumps(dict(instance['plan_data'], **changes)))
+    return ['apply', '--base', instance['base'], '--plan', str(path)]
+
+
+def test_unrecorded_apply_writes_no_inventory(helper, instance, capsys):
+    rc, _out = _run(helper, capsys, *_replan(instance, 'p2.json', record=False))
     assert rc == 0
-    assert not os.path.exists(tmp_path / 'other-ops' / 'manifest.json')
+    assert not os.path.exists(os.path.join(instance['ops'], 'manifest.json'))
 
 
-def test_apply_refuses_destinations_outside_the_instance(helper, instance, capsys, tmp_path):
-    plan = dict(instance['plan_data'], extra_destinations=[])
-    path = tmp_path / 'plan3.json'
-    path.write_text(json.dumps(plan))
-    rc, out = _run(helper, capsys, 'apply', '--plan', str(path))
-    assert rc == 3 and 'outside the instance directory' in out['refused']
+def test_apply_refuses_destinations_outside_the_instance(helper, instance, capsys):
+    rc, out = _run(helper, capsys, *_replan(instance, 'p3.json', extra_destinations=[]))
+    assert rc == 3 and 'not an allowed extra destination' in out['refused']
     assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'old cfg\n'  # nothing written
 
 
-def test_restore_without_inventory_is_a_no_op(helper, tmp_path, capsys):
-    rc, out = _run(helper, capsys, 'restore', '--ops-dir', str(tmp_path / 'none'))
+def test_apply_refuses_an_ops_dir_outside_the_root_owned_base(helper, instance, capsys):
+    rc, out = _run(helper, capsys, *_replan(
+        instance, 'p4.json', ops_dir=str(instance['tmp'] / 'ops' / OP_A / '7')))
+    assert rc == 3 and 'not under' in out['refused']
+
+
+def test_apply_refuses_a_symlinked_path_component(helper, instance, capsys):
+    """The ql user controls /home/ql/qlds-<port>: a planted symlink must never
+    redirect a root write elsewhere."""
+    victim = instance['tmp'] / 'victim'
+    victim.mkdir()
+    plugins = instance['qlds'] / 'minqlxtended-plugins'
+    for child in plugins.iterdir():
+        child.unlink()
+    plugins.rmdir()
+    plugins.symlink_to(victim, target_is_directory=True)
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3 and 'symlink' in out['refused']
+    assert list(victim.iterdir()) == []
+
+
+def test_apply_refuses_a_symlinked_destination_file(helper, instance, capsys):
+    victim = instance['tmp'] / 'victim.txt'
+    victim.write_text('do not touch\n')
+    cfg = instance['qlds'] / 'baseq3/server.cfg'
+    cfg.unlink()
+    cfg.symlink_to(victim)
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3
+    assert _read(victim) == 'do not touch\n'
+
+
+def test_apply_refuses_a_symlinked_source(helper, instance, capsys):
+    secret = instance['tmp'] / 'secret'
+    secret.write_text('root only\n')
+    (instance['tmp'] / 'common' / 'leak.py').symlink_to(secret)
+    rc, out = _run(helper, capsys, *instance['apply'])
+    assert rc == 3 and 'symlink' in out['refused']
+    assert not (instance['qlds'] / 'minqlxtended-plugins/leak.py').exists()
+
+
+def _tamper(instance, change):
+    path = os.path.join(instance['ops'], 'manifest.json')
+    manifest = json.loads(_read(path))
+    change(manifest)
+    with open(path, 'w') as handle:
+        json.dump(manifest, handle)
+
+
+def test_restore_refuses_a_manifest_destination_outside_the_allowed_roots(helper, instance, capsys):
+    _run(helper, capsys, *instance['apply'])
+    outside = str(instance['tmp'] / 'elsewhere.txt')
+    _tamper(instance, lambda m: m['entries'].update({outside: {'existed': False, 'written_sha256': 'x'}}))
+    rc, out = _run(helper, capsys, *instance['restore'])
+    assert rc == 3 and 'outside the allowed roots' in out['refused']
+    assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'new cfg\n'  # nothing restored
+
+
+def test_restore_refuses_a_backup_outside_the_operation_files_dir(helper, instance, capsys):
+    _run(helper, capsys, *instance['apply'])
+    cfg = str(instance['qlds'] / 'baseq3/server.cfg')
+    _tamper(instance, lambda m: m['entries'][cfg].update({'backup': '/etc/shadow'}))
+    rc, out = _run(helper, capsys, *instance['restore'])
+    assert rc == 3 and 'outside' in out['refused']
+    assert _read(instance['qlds'] / 'baseq3/server.cfg') == 'new cfg\n'
+
+
+def test_restore_refuses_a_qlds_dir_mismatch(helper, instance, capsys):
+    _run(helper, capsys, *instance['apply'])
+    args = list(instance['restore'])
+    args[args.index('--qlds-dir') + 1] = str(instance['tmp'] / 'qlds-27961')
+    rc, out = _run(helper, capsys, *args)
+    assert rc == 3 and 'another instance directory' in out['refused']
+
+
+def test_restore_without_inventory_is_a_no_op(helper, instance, capsys):
+    args = list(instance['restore'])
+    args[args.index('--ops-dir') + 1] = os.path.join(instance['base'], 'ops', OP_B, '7')
+    rc, out = _run(helper, capsys, *args)
     assert rc == 0 and out['restored'] == 0
+
+
+def test_lock_base_must_not_be_a_symlink(helper, tmp_path, capsys):
+    real = tmp_path.resolve() / 'real'
+    real.mkdir(mode=0o700)
+    link = tmp_path.resolve() / 'link'
+    link.symlink_to(real, target_is_directory=True)
+    rc, out = _run(helper, capsys, 'acquire', '--base', str(link), '--operation-id', OP_A,
+                   '--fencing-token', '1')
+    assert rc == 3 and 'symlink' in out['refused']

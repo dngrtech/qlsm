@@ -13,8 +13,9 @@
 #     user hooks from the operation's immutable inputs, built-in system hooks,
 #     missing common-pool plugins, and the rendered systemd unit,
 #   - records an inventory + backups of every file it is about to replace
-#     under /home/ql/runtime-deps/ops/<operation_id>/<instance_id>/ first
-#     (write-once per operation/instance) and fetches the manifest back,
+#     under /var/lib/qlsm/runtime-ops/ops/<operation_id>/<instance_id>/ first
+#     (root-owned 0700, outside the ql-controlled /home/ql tree; write-once
+#     per operation/instance) and fetches the manifest back,
 #   - reloads systemd and re-checks the service is still not running.
 # Old runtime plugin dirs, venvs, baseq3 data, Redis data and plugin-owned
 # files are never removed.
@@ -35,8 +36,10 @@
   vars:
     qlds_dir: "/home/ql/qlds-{{ port | int }}"
     unit_path: "/etc/systemd/system/qlds@{{ port | int }}.service"
-    runtime_deps_root: "/home/ql/runtime-deps"
-    ops_dir: "{{ runtime_deps_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
+    # Root-owned operation state (lock, token, inventories, backups, staging).
+    # The venvs stay under /home/ql/runtime-deps because the ql user runs them.
+    runtime_ops_root: "/var/lib/qlsm/runtime-ops"
+    ops_dir: "{{ runtime_ops_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
     stage_dir: "{{ ops_dir }}/stage"
     common_assets_dir: "/home/ql/assets/common"
     python_deps_path: ""
@@ -93,7 +96,9 @@
           ansible.builtin.script:
             cmd: >-
               {{ playbook_dir }}/../files/qlsm_runtime_op.py restore
-              --ops-dir {{ (runtime_deps_root ~ '/ops/' ~ restore_from_operation ~ '/' ~ (instance_id | int)) | quote }}
+              --ops-dir {{ (runtime_ops_root ~ '/ops/' ~ restore_from_operation ~ '/' ~ (instance_id | int)) | quote }}
+              --qlds-dir {{ qlds_dir | quote }}
+              --unit-path {{ unit_path | quote }}
             executable: python3
           register: restore_result
           when: restore_from_operation | length > 0
@@ -119,26 +124,22 @@
 
         - name: Create the private staging directory
           ansible.builtin.file:
-            path: "{{ stage_dir }}/tree"
+            path: "{{ item }}"
             state: directory
             owner: root
             group: root
             mode: '0700'
-
-        - name: Restrict the operation directory to root
-          ansible.builtin.file:
-            path: "{{ ops_dir }}"
-            state: directory
-            owner: root
-            group: root
-            mode: '0700'
+          loop:
+            - "{{ runtime_ops_root }}/ops"
+            - "{{ runtime_ops_root }}/ops/{{ operation_id }}"
+            - "{{ ops_dir }}"
+            - "{{ stage_dir }}"
+            - "{{ stage_dir }}/tree"
 
         - name: Unpack the instance's managed files
           ansible.builtin.unarchive:
             src: "{{ stage_archive }}"
             dest: "{{ stage_dir }}/tree"
-            owner: ql
-            group: ql
 
         - name: Render the systemd unit into staging
           ansible.builtin.template:

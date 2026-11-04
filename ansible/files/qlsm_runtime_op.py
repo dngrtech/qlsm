@@ -30,15 +30,17 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
 
-DEFAULT_BASE = '/home/ql/runtime-deps'
-LOCK_NAME = '.qlsm-runtime-op.lock'
-TOKEN_NAME = '.qlsm-runtime-op.token'
+# Root-owned operation state: lock, token record and per-operation
+# inventories/backups/staging. Never under the ql-controlled /home/ql tree.
+DEFAULT_BASE = '/var/lib/qlsm/runtime-ops'
+LOCK_NAME = '.lock'
+TOKEN_NAME = '.token'
 OPERATION_ID = re.compile(r'^[0-9a-f]{32}$')
 
 
@@ -75,14 +77,6 @@ def _read_json(path):
         return None
 
 
-def _sha256(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 # --- lock and fencing -----------------------------------------------------------
 
 def token_decision(record, operation_id, token, terminal_ids):
@@ -114,7 +108,7 @@ def _check_identity(operation_id, token):
 
 
 def _open_lock(base):
-    os.makedirs(base, exist_ok=True)
+    _verify_trusted_dir(base, create=True)
     fd = os.open(os.path.join(base, LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -281,31 +275,204 @@ def cmd_apt_check(args):
     return result
 
 
-# --- managed files: plan, inventory, apply, restore ----------------------------------
+# --- no-follow filesystem primitives ------------------------------------------------
+#
+# This helper runs as root but writes into /home/ql/qlds-<port>, a tree the
+# ql user controls. Every path is therefore resolved one component at a time
+# from `/` with O_NOFOLLOW directory descriptors, files are created with
+# O_CREAT|O_EXCL|O_NOFOLLOW in the verified parent and renamed into place, and
+# ownership/mode are set on the descriptor. A symlink anywhere in a path is a
+# refusal, never something to follow.
+
+_DIR_FLAGS = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | os.O_NOFOLLOW
+
+
+def _parts(path):
+    if not os.path.isabs(path):
+        raise Refused('path %s is not absolute' % path)
+    parts = [part for part in path.split('/') if part]
+    if any(part in ('.', '..') for part in parts):
+        raise Refused('path %s is not normalized' % path)
+    return parts
+
 
 def _inside(path, root):
     path, root = os.path.normpath(path), os.path.normpath(root)
-    return path.startswith(root + os.sep)
+    return path.startswith(root.rstrip('/') + '/')
 
+
+def _open_dir(path, create_below=None, uid=None, gid=None):
+    """An O_NOFOLLOW descriptor for directory `path`. Missing components
+    strictly inside `create_below` are created (0755, uid/gid)."""
+    fd = os.open('/', _DIR_FLAGS)
+    current = ''
+    try:
+        for part in _parts(path):
+            current += '/' + part
+            try:
+                child = os.open(part, _DIR_FLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                if not (create_below and _inside(current, create_below)):
+                    raise Refused('directory %s does not exist' % current)
+                os.mkdir(part, 0o755, dir_fd=fd)
+                child = os.open(part, _DIR_FLAGS, dir_fd=fd)
+                os.fchmod(child, 0o755)
+                if os.geteuid() == 0 and uid is not None:
+                    os.fchown(child, uid, gid)
+            except OSError as exc:
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR, errno.EMLINK):
+                    raise Refused('%s is a symlink or not a directory' % current)
+                raise
+            os.close(fd)
+            fd = child
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _verify_trusted_dir(path, create=False):
+    """Require every component of `path` to be a real directory owned by root
+    (or by this process's user, for unit tests) and not group/other-writable.
+    With create=True, missing components are created 0700."""
+    fd = os.open('/', _DIR_FLAGS)
+    current = ''
+    try:
+        for part in _parts(path):
+            current += '/' + part
+            try:
+                child = os.open(part, _DIR_FLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    raise Refused('directory %s does not exist' % current)
+                os.mkdir(part, 0o700, dir_fd=fd)
+                child = os.open(part, _DIR_FLAGS, dir_fd=fd)
+            except OSError as exc:
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR, errno.EMLINK):
+                    raise Refused('%s is a symlink or not a directory' % current)
+                raise
+            os.close(fd)
+            fd = child
+            st = os.fstat(fd)
+            if st.st_uid not in (0, os.geteuid()) or st.st_mode & 0o022:
+                raise Refused('%s is not a root-owned, non-writable-by-others directory' % current)
+        os.fchmod(fd, 0o700)
+    finally:
+        os.close(fd)
+
+
+def _read_file(path):
+    """(bytes, stat) of a regular file, refusing symlinks anywhere in `path`."""
+    dfd = _open_dir(os.path.dirname(path))
+    try:
+        try:
+            fd = os.open(os.path.basename(path), os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dfd)
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise Refused('%s is a symlink' % path)
+            raise
+        with os.fdopen(fd, 'rb') as handle:
+            st = os.fstat(handle.fileno())
+            if not stat.S_ISREG(st.st_mode):
+                raise Refused('%s is not a regular file' % path)
+            return handle.read(), st
+    finally:
+        os.close(dfd)
+
+
+def _lstat(path):
+    """lstat of `path` with no-follow parents; None if it does not exist."""
+    try:
+        dfd = _open_dir(os.path.dirname(path))
+    except Refused:
+        if os.path.lexists(os.path.dirname(path)):
+            raise
+        return None
+    try:
+        return os.stat(os.path.basename(path), dir_fd=dfd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    finally:
+        os.close(dfd)
+
+
+def _write_file(path, data, mode, uid, gid, create_below=None):
+    """Atomically replace `path` with `data`, never following a symlink."""
+    dfd = _open_dir(os.path.dirname(path), create_below, uid, gid)
+    name = os.path.basename(path)
+    tmp = '.qlsm-tmp-%d-%s' % (os.getpid(), os.urandom(6).hex())
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dfd)
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fchmod(fd, mode & 0o777)
+            if os.geteuid() == 0 and uid is not None:
+                os.fchown(fd, uid, gid)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.rename(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+    except BaseException:
+        try:
+            os.unlink(tmp, dir_fd=dfd)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(dfd)
+
+
+def _unlink(path):
+    dfd = _open_dir(os.path.dirname(path))
+    try:
+        os.unlink(os.path.basename(path), dir_fd=dfd)
+    finally:
+        os.close(dfd)
+
+
+def _rmdir(path):
+    dfd = _open_dir(os.path.dirname(path))
+    try:
+        os.rmdir(os.path.basename(path), dir_fd=dfd)
+    finally:
+        os.close(dfd)
+
+
+def _sha256_bytes(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def _ql_ids():
+    if os.geteuid() != 0:
+        return None, None
+    import grp
+    import pwd
+    return pwd.getpwnam('ql').pw_uid, grp.getgrnam('ql').gr_gid
+
+
+# --- managed files: plan, inventory, apply, restore ----------------------------------
 
 def expand_plan(plan):
-    """[(src, dest, mode, owner)] for every file the plan installs.
+    """[(src, dest)] for every file the plan installs.
 
     Sources: `tree` (every file under `from`, relative layout kept),
     `names` (named files or directories from `from`), `missing_only` trees
     (files whose destination does not exist yet and no other source covers),
-    and single `file` entries with an explicit destination.
+    and single `file` entries whose destination must be an explicit
+    extra destination (the systemd unit).
     """
     qlds_dir = plan['qlds_dir']
     allowed_extra = set(plan.get('extra_destinations') or [])
     files = {}
     deferred = []
 
-    def add(src, dest, mode, owner):
+    def add(src, dest):
         dest = os.path.normpath(dest)
         if not (_inside(dest, qlds_dir) or dest in allowed_extra):
             raise Refused('destination %s is outside the instance directory' % dest)
-        files[dest] = (src, mode, owner)
+        files[dest] = src
 
     def walk(root, into, sink):
         for current, dirs, names in os.walk(root):
@@ -318,24 +485,25 @@ def expand_plan(plan):
 
     for source in plan.get('sources') or []:
         kind = source['kind']
-        owner = source.get('owner', 'ql')
         if kind == 'tree':
             if os.path.isdir(source['from']):
-                walk(source['from'], source['into'], lambda s, d: add(s, d, None, owner))
+                walk(source['from'], source['into'], add)
         elif kind == 'names':
             for name in source['names']:
                 src = os.path.join(source['from'], name)
                 dest = os.path.join(source['into'], name)
-                if os.path.isdir(src):
-                    walk(src, dest, lambda s, d: add(s, d, None, owner))
-                elif os.path.isfile(src):
-                    add(src, dest, None, owner)
+                if os.path.isdir(src) and not os.path.islink(src):
+                    walk(src, dest, add)
+                elif os.path.lexists(src):
+                    add(src, dest)
                 elif not source.get('optional'):
                     raise Refused('runtime artifact %s is missing' % src)
         elif kind == 'missing_only':
             deferred.append(source)
         elif kind == 'file':
-            add(source['from'], source['to'], int(source['mode'], 8) if source.get('mode') else None, owner)
+            if os.path.normpath(source['to']) not in allowed_extra:
+                raise Refused('file destination %s is not an allowed extra destination' % source['to'])
+            add(source['from'], source['to'])
         else:
             raise Refused('unknown plan source kind %r' % kind)
 
@@ -343,120 +511,150 @@ def expand_plan(plan):
         if not os.path.isdir(source['from']):
             continue
 
-        def maybe(src, dest, owner=source.get('owner', 'ql')):
+        def maybe(src, dest):
             dest = os.path.normpath(dest)
-            if dest not in files and not os.path.lexists(dest):
-                add(src, dest, None, owner)
+            if dest not in files and _lstat(dest) is None:
+                add(src, dest)
         walk(source['from'], source['into'], maybe)
-    return [(src, dest, mode, owner) for dest, (src, mode, owner) in sorted(files.items())]
+    return sorted((src, dest) for dest, src in files.items())
 
 
-def _owner_ids(owner):
-    import grp
-    import pwd
-    return pwd.getpwnam(owner).pw_uid, grp.getgrnam(owner).gr_gid
+def _dest_class(dest, qlds_dir, unit_paths):
+    """(uid, gid, forced_mode) for a destination, or a refusal."""
+    dest = os.path.normpath(dest)
+    if dest in unit_paths:
+        return 0, 0, 0o644
+    if _inside(dest, qlds_dir):
+        uid, gid = _ql_ids()
+        return uid, gid, None
+    raise Refused('destination %s is outside the instance directory' % dest)
 
 
-def _chown(path, owner):
-    if os.geteuid() == 0 and owner:
-        uid, gid = _owner_ids(owner)
-        os.chown(path, uid, gid)
+def _check_ops_dir(ops_dir, base):
+    if not OPERATION_ID.match(os.path.basename(os.path.dirname(os.path.normpath(ops_dir)))) \
+            or not _inside(ops_dir, os.path.join(base, 'ops')):
+        raise Refused('operation directory %s is not under %s/ops' % (ops_dir, base))
 
 
-def _install(src, dest, mode, owner):
-    tmp = '%s.qlsm-tmp' % dest
-    shutil.copyfile(src, tmp)
-    os.chmod(tmp, mode if mode is not None else (os.stat(src).st_mode & 0o7777))
-    _chown(tmp, owner)
-    with open(tmp, 'rb') as handle:
-        os.fsync(handle.fileno())
-    os.rename(tmp, dest)
-
-
-def _missing_parents(dest, stop):
-    missing = []
-    current = os.path.dirname(dest)
-    while current != stop and not os.path.isdir(current) and _inside(current, stop):
-        missing.append(current)
-        current = os.path.dirname(current)
-    return list(reversed(missing))
+def _manifest_dest_ok(dest, qlds_dir, unit_paths):
+    dest = os.path.normpath(dest)
+    return dest in unit_paths or _inside(dest, qlds_dir)
 
 
 def cmd_apply(args):
     with open(args.plan) as handle:
         plan = json.load(handle)
+    _verify_trusted_dir(args.base)
+    qlds_dir = os.path.normpath(plan['qlds_dir'])
+    unit_paths = {os.path.normpath(p) for p in plan.get('extra_destinations') or []}
+    ops_dir = os.path.normpath(plan['ops_dir'])
+    _check_ops_dir(ops_dir, args.base)
     files = expand_plan(plan)
-    qlds_dir = plan['qlds_dir']
-    ops_dir = plan['ops_dir']
     record = plan.get('record', True) in (True, 'true', 'True')
     manifest_path = os.path.join(ops_dir, 'manifest.json')
+    files_dir = os.path.join(ops_dir, 'files')
+
+    # Read every source up front, no-follow, so what is recorded as
+    # "written" is exactly what gets written.
+    payload = []
+    for src, dest in files:
+        data, st = _read_file(src)
+        uid, gid, forced = _dest_class(dest, qlds_dir, unit_paths)
+        payload.append((dest, data, forced if forced is not None else (st.st_mode & 0o777), uid, gid))
 
     if record:
-        os.makedirs(os.path.join(ops_dir, 'files'), mode=0o700, exist_ok=True)
-        os.chmod(ops_dir, 0o700)
+        _verify_trusted_dir(files_dir, create=True)
         manifest = _read_json(manifest_path) or {
             'schema': 1, 'operation_id': plan['operation_id'],
             'instance_id': plan['instance_id'], 'qlds_dir': qlds_dir,
-            'entries': {}, 'created_dirs': [],
+            'unit_paths': sorted(unit_paths), 'entries': {}, 'created_dirs': [],
         }
+        if os.path.normpath(manifest.get('qlds_dir', '')) != qlds_dir:
+            raise Refused('inventory belongs to another instance directory')
         entries = manifest['entries']
         created_dirs = manifest['created_dirs']
         # Inventory first, write-once: a replay only adds paths it has not
         # seen, so the originals are never replaced by already-converted files.
-        for src, dest, _mode, _owner in files:
-            for parent in _missing_parents(dest, qlds_dir):
-                if parent not in created_dirs:
-                    created_dirs.append(parent)
+        for dest, data, _mode, _uid, _gid in payload:
+            parent = os.path.dirname(dest)
+            missing = []
+            while _inside(parent, qlds_dir) and _lstat(parent) is None:
+                missing.append(parent)
+                parent = os.path.dirname(parent)
+            for directory in reversed(missing):
+                if directory not in created_dirs:
+                    created_dirs.append(directory)
             if dest in entries:
-                entries[dest]['written_sha256'] = _sha256(src)
+                entries[dest]['written_sha256'] = _sha256_bytes(data)
                 continue
-            entry = {'existed': os.path.isfile(dest), 'written_sha256': _sha256(src)}
-            if entry['existed']:
-                st = os.stat(dest)
-                backup = os.path.join(ops_dir, 'files', '%06d' % len(entries))
-                shutil.copy2(dest, backup)
-                entry.update({'sha256': _sha256(dest), 'mode': '%04o' % (st.st_mode & 0o7777),
-                              'uid': st.st_uid, 'gid': st.st_gid, 'backup': backup})
+            current = _lstat(dest)
+            if current is not None and not stat.S_ISREG(current.st_mode):
+                raise Refused('%s exists and is not a regular file' % dest)
+            entry = {'existed': current is not None, 'written_sha256': _sha256_bytes(data)}
+            if current is not None:
+                original, st = _read_file(dest)
+                backup = os.path.join(files_dir, '%06d' % len(entries))
+                _write_file(backup, original, 0o600, None, None)
+                entry.update({'sha256': _sha256_bytes(original), 'mode': '%04o' % (st.st_mode & 0o777),
+                              'backup': backup})
             entries[dest] = entry
         _write_json(manifest_path, manifest)
 
-    for src, dest, mode, owner in files:
-        for parent in _missing_parents(dest, qlds_dir):
-            os.mkdir(parent, 0o755)
-            _chown(parent, owner)
-        _install(src, dest, mode, owner)
-    return {'applied': len(files), 'recorded': bool(record),
+    for dest, data, mode, uid, gid in payload:
+        _write_file(dest, data, mode, uid, gid, create_below=qlds_dir)
+    return {'applied': len(payload), 'recorded': bool(record),
             'manifest': manifest_path if record else None}
 
 
 def cmd_restore(args):
-    manifest_path = os.path.join(args.ops_dir, 'manifest.json')
-    manifest = _read_json(manifest_path)
-    if manifest is None:
+    _verify_trusted_dir(args.base)
+    ops_dir = os.path.normpath(args.ops_dir)
+    _check_ops_dir(ops_dir, args.base)
+    qlds_dir = os.path.normpath(args.qlds_dir)
+    unit_paths = {os.path.normpath(p) for p in args.unit_path or []}
+    manifest_path = os.path.join(ops_dir, 'manifest.json')
+    if _lstat(manifest_path) is None:
         return {'restored': 0, 'removed': 0, 'kept': [], 'note': 'no inventory recorded'}
+    manifest = json.loads(_read_file(manifest_path)[0].decode('utf-8'))
+    if os.path.normpath(manifest.get('qlds_dir', '')) != qlds_dir:
+        raise Refused('inventory belongs to another instance directory')
+    files_dir = os.path.join(ops_dir, 'files')
+    entries = manifest.get('entries') or {}
+    # Validate everything before changing anything.
+    for dest, entry in entries.items():
+        if not _manifest_dest_ok(dest, qlds_dir, unit_paths):
+            raise Refused('inventory destination %s is outside the allowed roots' % dest)
+        if entry.get('existed'):
+            backup = os.path.normpath(entry.get('backup') or '')
+            if os.path.dirname(backup) != files_dir or not re.match(r'^[0-9]{6}$', os.path.basename(backup)):
+                raise Refused('inventory backup %s is outside %s' % (backup, files_dir))
+    for directory in manifest.get('created_dirs') or []:
+        if not _inside(directory, qlds_dir):
+            raise Refused('inventory directory %s is outside the instance directory' % directory)
+
     restored, removed, kept = 0, 0, []
-    for dest, entry in sorted(manifest['entries'].items()):
+    for dest, entry in sorted(entries.items()):
+        uid, gid, forced = _dest_class(dest, qlds_dir, unit_paths)
         if entry['existed']:
-            tmp = '%s.qlsm-tmp' % dest
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copyfile(entry['backup'], tmp)
-            os.chmod(tmp, int(entry['mode'], 8))
-            if os.geteuid() == 0:
-                os.chown(tmp, entry['uid'], entry['gid'])
-            os.rename(tmp, dest)
-            if _sha256(dest) != entry['sha256']:
-                raise Refused('restored %s does not match its recorded sha256' % dest)
+            data, _st = _read_file(entry['backup'])
+            if _sha256_bytes(data) != entry['sha256']:
+                raise Refused('backup of %s does not match its recorded sha256' % dest)
+            mode = forced if forced is not None else int(entry['mode'], 8) & 0o777
+            _write_file(dest, data, mode, uid, gid, create_below=qlds_dir)
             restored += 1
-        elif os.path.isfile(dest):
-            if _sha256(dest) == entry.get('written_sha256'):
-                os.unlink(dest)
+        else:
+            current = _lstat(dest)
+            if current is None:
+                continue
+            if stat.S_ISREG(current.st_mode) and _sha256_bytes(_read_file(dest)[0]) == entry.get('written_sha256'):
+                _unlink(dest)
                 removed += 1
             else:
                 kept.append(dest)  # changed since we wrote it: not ours to delete
     for directory in sorted(manifest.get('created_dirs') or [], key=len, reverse=True):
         try:
-            os.rmdir(directory)
-        except OSError:
+            _rmdir(directory)
+        except (OSError, Refused):
             pass  # not empty (plugin-owned data) or already gone
     return {'restored': restored, 'removed': removed, 'kept': kept}
 
@@ -476,9 +674,13 @@ def main(argv=None):
     apt.add_argument('--simulate', action='store_true')
     apt.add_argument('packages', nargs='+')
     apply_cmd = sub.add_parser('apply')
+    apply_cmd.add_argument('--base', default=DEFAULT_BASE)
     apply_cmd.add_argument('--plan', required=True)
     restore = sub.add_parser('restore')
+    restore.add_argument('--base', default=DEFAULT_BASE)
     restore.add_argument('--ops-dir', required=True)
+    restore.add_argument('--qlds-dir', required=True)
+    restore.add_argument('--unit-path', action='append')
     args = parser.parse_args(argv)
     handlers = {'acquire': cmd_acquire, 'release': cmd_release, 'finalize': cmd_finalize,
                 'apt-check': cmd_apt_check, 'apply': cmd_apply, 'restore': cmd_restore}
