@@ -1,6 +1,6 @@
 import React, { Fragment, useState, useEffect, useRef } from 'react';
 import { Transition } from '@headlessui/react';
-import { X, Zap, Copy, Check, PowerIcon, ShieldCheck, ShieldOff, Loader2, Pencil, LoaderCircle } from 'lucide-react';
+import { X, Zap, Copy, Check, PowerIcon, ShieldCheck, ShieldOff, Loader2, Pencil, LoaderCircle, ArrowUpCircle } from 'lucide-react';
 import { getHostById, deleteHost as apiDeleteHost, updateHost } from '../../services/api';
 import ConfirmationModal from '../ConfirmationModal';
 import { useNotification } from '../NotificationProvider';
@@ -53,7 +53,7 @@ const OS_TYPE_LABELS = {
 
 export default function HostDetailDrawer({
   host, open, onClose, onDeleteHost, onHostDeleted, onHostUpdated,
-  onSwitchToInstanceDrawer, onRequestRestart, onQlfilterAction
+  onSwitchToInstanceDrawer, onRequestRestart, onQlfilterAction, onOpenRuntimeUpgrade
 }) {
   const [internalHost, setInternalHost] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -397,6 +397,20 @@ export default function HostDetailDrawer({
                       className={`btn ${qlBtn.variant === 'primary' ? 'btn-primary' : 'btn-secondary'} gap-1.5`}>
                       <qlBtn.Icon size={14} className={qlBtn.loading ? 'animate-spin' : ''} /> {qlBtn.text}
                     </button>
+                    {internalHost?.runtime_upgrade?.visible && (() => {
+                      const upgradeDisabled = !internalHost.runtime_upgrade.enabled;
+                      return (
+                        <button type="button"
+                          onClick={() => { if (!upgradeDisabled) onOpenRuntimeUpgrade?.(internalHost.id); }}
+                          aria-disabled={upgradeDisabled}
+                          className={`btn btn-secondary gap-1.5 ${upgradeDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                          <ArrowUpCircle size={14} /> Upgrade to minqlxtended
+                          {upgradeDisabled && internalHost.runtime_upgrade.reason && (
+                            <InfoTooltip text={internalHost.runtime_upgrade.reason} size={13} />
+                          )}
+                        </button>
+                      );
+                    })()}
                     <button type="button" onClick={handleDeleteClick} disabled={internalHost?.status === 'deleting'} className="btn btn-danger gap-1.5">
                       {internalHost?.is_standalone ? 'Remove' : 'Delete'}
                     </button>
