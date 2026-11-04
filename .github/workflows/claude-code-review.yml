@@ -145,7 +145,7 @@ jobs:
             The change under review is PR #${{ env.PR }} against `${{ env.BASE }}`.
             Its diff is `.review-context/diff.patch`.
           claude_args: >-
-            --model claude-sonnet-5-5 --effort high --max-turns 40
+            --model claude-sonnet-5-5 --effort high --max-turns 100
             --allowedTools "Read,Glob,Grep"
             --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
             --json-schema '{"type":"object","required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","required":["file","line","title","failure_scenario","evidence","severity","confidence"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"failure_scenario":{"type":"string"},"evidence":{"type":"string"},"severity":{"type":"string","enum":["critical","high","medium","low"]},"confidence":{"type":"number"}}}}}}'
@@ -227,7 +227,7 @@ jobs:
             Its diff is `.review-context/diff.patch`.
             The finders' output is in `.review-findings/`.
           claude_args: >-
-            --model ${{ env.VERIFIER_MODEL }} --effort high --max-turns 50
+            --model ${{ env.VERIFIER_MODEL }} --effort high --max-turns 80
             --allowedTools "Read,Glob,Grep"
             --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
             --json-schema '{"type":"object","required":["accepted","filtered"],"properties":{"accepted":{"type":"array","items":{"type":"object","required":["file","line","severity","title","what_breaks","fix"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["critical","high","medium","low"]},"title":{"type":"string"},"what_breaks":{"type":"string"},"fix":{"type":"string"}}}},"filtered":{"type":"array","items":{"type":"object","required":["file","line","title","decision","reason"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"decision":{"type":"string","enum":["reject","acknowledge"]},"reason":{"type":"string"}}}}}}'

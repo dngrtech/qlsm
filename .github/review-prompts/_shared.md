@@ -41,6 +41,11 @@ finding.
   elsewhere. A bug in untouched code is out of scope unless this PR makes it
   reachable or worse.
 - Read surrounding code freely to understand the change.
+- Review code before tests. Work through the changes under `ui/`, `ansible/`,
+  `terraform/` and `frontend-react/src/` first. Open test files only to check a
+  specific claim, or when the PR changes nothing but tests.
+- Your turns are limited, and running out returns no findings at all. On a large
+  PR, cover the riskiest code first and finish with what you have.
 
 ## Tools
 
