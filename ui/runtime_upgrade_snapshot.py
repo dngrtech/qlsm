@@ -271,8 +271,14 @@ def prepare_upgrade_snapshot(host, operation_id, inputs):
         raise UpgradeInputsChanged('Inputs do not match the operation fingerprint')
 
     published = snapshot_dir(host.id, operation_id)
-    if operation.snapshot_complete and os.path.isdir(published):
-        _verify_published(published, operation_id, host.id)
+    if operation.snapshot_complete:
+        # Mutation may already have begun: a published snapshot and its
+        # presets are now recovery data. Verify and return, or raise; never
+        # fall through to the preparation-only cleanup below.
+        try:
+            _verify_published(published, operation_id, host.id)
+        except (OSError, ValueError) as exc:
+            raise SnapshotInvalid(f'Published snapshot {published} is unreadable: {exc}') from exc
         return published
 
     staging = published + STAGING_SUFFIX

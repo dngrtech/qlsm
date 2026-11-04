@@ -7,6 +7,7 @@ are read in place; nothing under the real configs/ or data/ is touched.
 import json
 import os
 import re
+import shutil
 import stat
 import uuid
 from pathlib import Path
@@ -226,6 +227,19 @@ def test_prepare_discards_orphan_publication_from_crashed_attempt(env):
     with open(os.path.join(path, 'manifest.json')) as handle:
         assert json.load(handle)['operation_id'] == op.id
     assert not os.path.exists(path + '.staging')
+
+
+def test_completed_snapshot_is_never_discarded_by_a_repeat_prepare(env):
+    host, op, path = _prepared(env, instances=1)
+    inputs = json.loads(op.inputs_json)
+    assert prepare_upgrade_snapshot(host, op.id, inputs) == path  # idempotent
+
+    shutil.rmtree(path)
+    with pytest.raises(snap.SnapshotInvalid):
+        prepare_upgrade_snapshot(host, op.id, inputs)
+    names = [row.name for row in ConfigPreset.query.all()]
+    assert len(names) == 1
+    assert (env.presets / names[0]).is_dir()
 
 
 # --- fallback presets ----------------------------------------------------------
