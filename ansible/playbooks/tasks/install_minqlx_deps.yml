@@ -8,12 +8,17 @@
 # Packages are installed system-wide, which matches current QLSM practice. If
 # venv-per-instance support is ever needed, revisit this file and add_qlds_instance.yml
 # together.
+#
+# Exception: an instance with an isolated dependency venv (python_deps_path, set by
+# the runtime upgrade) installs into that venv through its own interpreter, as the
+# ql user, never system-wide. The global branch below runs only when it is unset.
 
 - name: Get pip3 version
   command: pip3 --version
   register: pip3_version_output
   changed_when: false
   failed_when: false
+  when: python_deps_path | default('') | length == 0
 
 - name: Check if requirements.txt exists in the runtime plugins directory
   ansible.builtin.stat:
@@ -25,9 +30,39 @@
     requirements: "{{ qlds_dir }}/{{ runtime_plugins_dirname }}/requirements.txt"
     executable: pip3
     extra_args: "{{ '--break-system-packages' if (pip3_version_output.stdout.split()[1] is version('22.1', '>=')) else '' }}"
-  when: minqlx_req_stat_result.stat.exists and (pip3_version_output.rc | default(1)) == 0
+  when: python_deps_path | default('') | length == 0 and minqlx_req_stat_result.stat.exists and (pip3_version_output.rc | default(1)) == 0
   ignore_errors: yes
   register: pip_install_result
+
+# The venv's core requirements (staged beside it by install_runtime.yml) go
+# into the same pip run, so instance requirements cannot silently downgrade
+# what the runtime needs; `pip check` then catches any remaining conflict.
+- name: Check for the venv's captured core requirements
+  ansible.builtin.stat:
+    path: "{{ python_deps_path | dirname }}/core-requirements.txt"
+  register: venv_core_req_stat
+  when: python_deps_path | default('') | length > 0
+
+- name: Install plugin Python deps into the instance's isolated venv
+  become: yes
+  become_user: ql
+  ansible.builtin.shell: >-
+    {{ (python_deps_path ~ '/bin/python') | quote }} -m pip install
+    --disable-pip-version-check --no-input
+    {% if venv_core_req_stat.stat.exists %}-r {{ (python_deps_path | dirname ~ '/core-requirements.txt') | quote }}{% endif %}
+    -r {{ (qlds_dir ~ '/' ~ runtime_plugins_dirname ~ '/requirements.txt') | quote }}
+    && {{ (python_deps_path ~ '/bin/python') | quote }} -m pip check --disable-pip-version-check
+  environment:
+    PIP_CONFIG_FILE: /dev/null
+    PYTHONNOUSERSITE: "1"
+  when: python_deps_path | default('') | length > 0 and minqlx_req_stat_result.stat.exists
+  ignore_errors: yes
+  register: venv_pip_install_result
+
+- name: Warn if venv pip install failed
+  ansible.builtin.debug:
+    msg: "QLSM_PIP_WARN: pip install into {{ python_deps_path }} failed: {{ venv_pip_install_result.stderr | default(venv_pip_install_result.stdout | default('unknown error')) | truncate(200) }}"
+  when: venv_pip_install_result is defined and venv_pip_install_result.failed | default(false)
 
 - name: Warn if pip install failed
   ansible.builtin.debug:

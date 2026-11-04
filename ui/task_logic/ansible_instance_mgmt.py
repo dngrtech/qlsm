@@ -15,7 +15,7 @@ from ui import db
 from ui.constants import resolve_redis_db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from ui.lan_rate_policy import effective_lan_rate
-from ui.runtime import host_runtime, log_filename_pattern, runtime_extravars, runtime_paths
+from ui.runtime import host_runtime, instance_runtime_extravars, log_filename_pattern, runtime_paths
 from .common import append_log # Import from the common module
 from . import service_runtime
 from .ansible_runner import _run_ansible_playbook
@@ -298,7 +298,7 @@ def deploy_instance_logic(instance_id, admin_levels=None):
             'lan_rate_enabled': instance.lan_rate_enabled # Pass for conditional iptables/sysctl
         }
         deploy_extravars = with_self_host_network_extravars(instance, deploy_extravars)
-        deploy_extravars.update(runtime_extravars(instance.host))
+        deploy_extravars.update(instance_runtime_extravars(instance))
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -427,7 +427,7 @@ def restart_instance_logic(instance_id):
             'cpu_affinity': cpu_affinity
         }
         restart_extravars = with_self_host_network_extravars(instance, restart_extravars)
-        restart_extravars.update(runtime_extravars(instance.host))
+        restart_extravars.update(instance_runtime_extravars(instance))
 
         # Pass the instance object directly to the helper
         runner_result, error_msg = _run_ansible_playbook(
@@ -659,7 +659,7 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
             'restart_service': restart     # Pass restart flag
         }
         apply_config_extravars = with_self_host_network_extravars(instance, apply_config_extravars)
-        apply_config_extravars.update(runtime_extravars(instance.host))
+        apply_config_extravars.update(instance_runtime_extravars(instance))
 
         # Run the new playbook: sync_instance_configs_and_restart.yml
         runner_result, error_msg = _run_ansible_playbook(
@@ -943,7 +943,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
             'lan_rate_enabled': instance.lan_rate_enabled
         }
         reconfigure_extravars = with_self_host_network_extravars(instance, reconfigure_extravars)
-        reconfigure_extravars.update(runtime_extravars(instance.host))
+        reconfigure_extravars.update(instance_runtime_extravars(instance))
 
         # Run the LAN rate update playbook
         runner_result, error_msg = _run_ansible_playbook(

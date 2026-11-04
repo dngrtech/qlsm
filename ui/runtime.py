@@ -117,3 +117,15 @@ def runtime_extravars(host):
         'runtime_shared_dir': paths['shared_dir'],
         'launch_script': paths['launch_script'],
     }
+
+
+def instance_runtime_extravars(instance):
+    """runtime_extravars() for an instance's host, plus the instance's isolated
+    dependency venv when it has one (QLInstance.python_deps_path, set by the
+    runtime upgrade). With no venv the result is exactly runtime_extravars(),
+    so the playbooks render and install exactly as before."""
+    extravars = runtime_extravars(instance.host)
+    deps_path = getattr(instance, 'python_deps_path', None)
+    if deps_path:
+        extravars['python_deps_path'] = deps_path
+    return extravars

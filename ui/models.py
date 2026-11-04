@@ -146,6 +146,8 @@ class QLInstance(db.Model):
     cpu_affinity = db.Column(db.Integer, nullable=True) # Optional Linux CPU index assigned to this service
     redis_db = db.Column(db.Integer, nullable=True)  # Chosen Redis logical DB; NULL = derive from port
     runtime_invocation_id = db.Column(db.String(64), nullable=True)
+    # Isolated dependency venv (runtime upgrade); NULL = the host's system Python.
+    python_deps_path = db.Column(db.String(255), nullable=True)
     status = db.Column(db.Enum(InstanceStatus), default=InstanceStatus.IDLE, nullable=False) # Status of the QL instance itself
     logs = db.Column(db.Text, nullable=True) # Stores logs from background tasks (e.g., Ansible)
     
