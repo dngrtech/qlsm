@@ -10,7 +10,7 @@ load is byte-identical to what QLSM returned before this gate existed.
 import json
 import os
 
-from ui.plugin_compat import VERDICT_COMPATIBLE, baseline_digest, classify
+from ui.plugin_compat import VERDICT_COMPATIBLE, VERDICT_UNKNOWN, baseline_digest, classify
 from ui.preset_support import BUILTIN_PRESETS_DIR, default_preset_name_for_runtime
 from ui.runtime import normalize_runtime, runtime_paths
 
@@ -398,3 +398,63 @@ def apply_compatibility(response_data, preset_runtime, target_runtime):
         'auto_accepted': sorted(set(auto_accepted)),
     }
     return result
+
+
+POOL_SOURCE_REASON = 'Enabled from the shared {source} plugin pool; this instance holds no copy of its own'
+
+
+def pool_plugin_compatibility(pool_plugins, source_runtime, target_runtime, target_pool):
+    """Report enabled plugins that load from the SOURCE runtime's shared pool.
+
+    `apply_compatibility` only sees files that are present in a scripts map. A
+    plugin ticked from the shared pool has no such file -- the host backfills
+    it from the source runtime's pool -- so it would pass through as checked
+    with nothing behind it on the target runtime, whose pool is a different
+    directory. This applies the same verdict rules to those plugins:
+
+    `pool_plugins`: {path: {'text': str or None, 'tier': 'builtin'|'operator'}},
+    only root-level plugins that are enabled and have no file of their own.
+    `target_pool`: {path: text} of the target runtime's merged shared pool.
+
+    What the target ships (its default preset, else its shared pool) decides
+    carry-over, NOT the scanner verdict: a pool plugin is never kept on a
+    "compatible" verdict alone, because no copy of it travels with the
+    instance. Every name ends up either auto-accepted (an untouched stock
+    plugin, or byte-identical to the target's version) or in a reported row:
+    `replaceable` when the target ships a version, `unavailable` otherwise.
+    Returns {'stripped', 'replacements', 'auto_accepted'} in apply_compatibility's
+    row shape.
+    """
+    source = normalize_runtime(source_runtime)
+    target = normalize_runtime(target_runtime)
+    hashes = baseline_hashes(target)
+    # The default preset copy wins: the conversion writes it into scripts/,
+    # and the host's pool backfill never overwrites a file that is there.
+    available = {**(target_pool or {}), **replacement_scripts(target)}
+    source_catalog = source_catalog_digests(source)
+    source_hashes = baseline_hashes(source)
+
+    stripped = []
+    offered = {}
+    auto_accepted = []
+    for path, entry_source in sorted((pool_plugins or {}).items()):
+        text = entry_source.get('text')
+        target_text = available.get(path)
+        if isinstance(text, str) and target_text is not None and (
+                is_untouched_source_file(path, text, source_catalog, source_hashes)
+                or baseline_digest(text) == baseline_digest(target_text)):
+            auto_accepted.append(path)
+            continue
+        if isinstance(text, str):
+            verdict, reasons = classify(text, target, baseline_sha256=hashes.get(path))
+        else:
+            verdict, reasons = VERDICT_UNKNOWN, []
+        reasons = [POOL_SOURCE_REASON.format(source=source)] + list(reasons)
+        entry = _strip_entry(path, verdict, reasons, available)
+        entry['originally_checked'] = True
+        entry['from_catalog'] = entry_source.get('tier') == 'builtin'
+        entry['kind'] = _report_kind(entry)
+        if entry['replacement']:
+            offered[path] = target_text
+        stripped.append(entry)
+    return {'stripped': stripped, 'replacements': offered, 'auto_accepted': sorted(auto_accepted)}

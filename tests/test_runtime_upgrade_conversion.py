@@ -187,3 +187,60 @@ def test_install_converted_tree_finishes_after_crash_between_renames(tmp_path):
     os.rename(live, original)  # died after moving live aside
     install_converted_tree(str(live), str(converted), 'x')
     assert same_tree(str(live), str(converted))
+
+
+# --- plugins enabled from the shared pool -------------------------------------
+
+def _pool_host(env, qlx_plugins):
+    host, inst = _host(env, qlx_plugins=qlx_plugins, hooks=None)
+    return host, inst
+
+
+def test_pool_plugins_follow_the_classification(env):
+    """autokick (minqlx built-in pool only) and an operator-pool plugin with no
+    minqlxtended version are dropped; reset_acc (stock, shipped by the target
+    preset) is auto-accepted and written; a plugin identical in both operator
+    pools keeps its tick and is left to the host's pool backfill."""
+    pool = env.tmp / 'shared-plugins'
+    for runtime in ('minqlx', 'minqlxtended'):
+        (pool / runtime).mkdir(exist_ok=True)
+    (pool / 'minqlx' / 'gone.py').write_text(CUSTOM)
+    (pool / 'minqlx' / 'both.py').write_text(CUSTOM)
+    (pool / 'minqlxtended' / 'both.py').write_text(CUSTOM)
+    host, _inst = _pool_host(env, 'balance, autokick, gone, reset_acc, both')
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    rows = {row['path']: row['kind'] for row in captured['classification']['stripped']}
+    assert rows == {'autokick.py': 'unavailable', 'gone.py': 'unavailable', 'ban.py': 'replaceable',
+                    'mine.py': 'unavailable'}
+    assert parse_answers(inputs, json.dumps({str(captured['instance_id']): []}))
+
+    dest = str(env.tmp / 'converted')
+    fields = build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs), dest)
+
+    assert fields['qlx_plugins'] == 'balance, reset_acc, both'
+    scripts = os.path.join(dest, 'scripts')
+    assert sorted(os.listdir(scripts)) == ['balance.py', 'reset_acc.py']
+    assert _read(os.path.join(scripts, 'reset_acc.py')) == _read(os.path.join(TARGET, 'reset_acc.py'))
+
+
+def test_ticked_pool_replacement_keeps_the_plugin(env):
+    pool = env.tmp / 'shared-plugins' / 'minqlx'
+    pool.mkdir(parents=True, exist_ok=True)
+    (pool / 'motd.py').write_text(_read(os.path.join(STOCK, 'motd.py')) + '\n# pool edit\n')
+    host, _inst = _pool_host(env, 'balance, motd')
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    assert 'motd.py' in {row['path'] for row in captured['classification']['stripped']
+                         if row['kind'] == 'replaceable'}
+    answers = parse_answers(inputs, json.dumps({str(captured['instance_id']): ['motd.py']}))
+
+    dest = str(env.tmp / 'converted')
+    ticked = answers[captured['instance_id']]
+    fields = build_converted_tree(inputs_dir, captured, ticked, excluded_hooks(inputs), dest)
+    assert fields['qlx_plugins'] == 'balance, motd'
+    assert _read(os.path.join(dest, 'scripts', 'motd.py')) == _read(os.path.join(TARGET, 'motd.py'))
+
+    unticked = build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs),
+                                    str(env.tmp / 'converted-2'))
+    assert unticked['qlx_plugins'] == 'balance'

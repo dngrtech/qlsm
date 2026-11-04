@@ -410,3 +410,111 @@ def test_materialize_refuses_a_non_empty_destination(env):
     _write(dest / 'leftover', 'x')
     with pytest.raises(ValueError):
         materialize_upgrade_inputs(host, inputs, str(dest))
+
+
+# --- plugins enabled from the shared pool (no copy in scripts/) ---------------
+
+COMPATIBLE_ANYWHERE = 'import minqlx\n\nclass poolmine(minqlx.Plugin):\n    pass\n'
+
+
+def _rows(result):
+    return {row['path']: row for row in result['stripped']}
+
+
+def test_operator_pool_plugin_without_target_version_is_unavailable(env):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    host = _host(env, [dict(qlx_plugins='poolmine')])
+    result = classify_instance(host.instances[0])
+    row = _rows(result)['poolmine.py']
+    assert row['kind'] == 'unavailable' and row['replacement'] is None
+    assert row['originally_checked'] is True and row['from_catalog'] is False
+    assert result['checked_plugins'] == []
+    assert 'poolmine.py' not in result['auto_accepted']
+
+
+def test_builtin_pool_plugin_without_target_version_is_unavailable(env):
+    host = _host(env, [dict(qlx_plugins='autokick')])
+    result = classify_instance(host.instances[0])
+    row = _rows(result)['autokick.py']
+    assert row['kind'] == 'unavailable' and row['from_catalog'] is True
+    assert result['checked_plugins'] == []
+
+
+def test_stock_builtin_pool_plugin_the_target_ships_is_auto_accepted(env):
+    # reset_acc.py is in the minqlx built-in pool (and manifest) but not in the
+    # minqlx default preset; minqlxtended's default preset ships it.
+    host = _host(env, [dict(qlx_plugins='reset_acc')])
+    result = classify_instance(host.instances[0])
+    assert result['stripped'] == []
+    assert result['auto_accepted'] == ['reset_acc.py']
+    assert result['checked_plugins'] == ['reset_acc.py']
+
+
+def test_edited_operator_pool_copy_of_a_target_plugin_is_replaceable(env):
+    _write(env.operator_pool / 'minqlx' / 'motd.py', _stock('motd.py') + '\n# pool edit\n')
+    host = _host(env, [dict(qlx_plugins='motd')])
+    result = classify_instance(host.instances[0])
+    row = _rows(result)['motd.py']
+    assert row['kind'] == 'replaceable' and row['replacement'] == 'motd.py'
+    assert row['from_catalog'] is False and row['originally_checked'] is True
+    assert 'motd.py' in result['replacements']
+    assert result['checked_plugins'] == []
+
+
+def test_operator_pool_plugin_identical_in_the_target_pool_is_auto_accepted(env):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    _write(env.operator_pool / 'minqlxtended' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    host = _host(env, [dict(qlx_plugins='poolmine')])
+    result = classify_instance(host.instances[0])
+    assert result['stripped'] == []
+    assert result['auto_accepted'] == ['poolmine.py']
+    assert result['checked_plugins'] == ['poolmine.py']
+
+
+def test_different_target_pool_version_is_replaceable_with_its_text(env):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    _write(env.operator_pool / 'minqlxtended' / 'poolmine.py', COMPATIBLE_ANYWHERE + '# xt\n')
+    host = _host(env, [dict(qlx_plugins='poolmine')])
+    result = classify_instance(host.instances[0])
+    assert _rows(result)['poolmine.py']['kind'] == 'replaceable'
+    assert result['replacements']['poolmine.py'] == COMPATIBLE_ANYWHERE + '# xt\n'
+
+
+def test_local_scripts_copy_wins_over_the_pool(env):
+    _write(env.operator_pool / 'minqlx' / 'balance.py', 'import minqlx\n# pool\n')
+    host = _host(env, [dict(scripts={'balance.py': _stock('balance.py')}, qlx_plugins='balance')])
+    result = classify_instance(host.instances[0])
+    assert result['stripped'] == [] and result['auto_accepted'] == ['balance.py']
+
+
+def test_unchecked_pool_plugins_are_not_reported(env):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    host = _host(env, [dict(qlx_plugins='')])
+    result = classify_instance(host.instances[0])
+    assert result['stripped'] == [] and result['auto_accepted'] == []
+
+
+def test_capture_records_source_pool_digests(env):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    host = _host(env, [dict(qlx_plugins='poolmine, autokick')])
+    captured = capture_upgrade_inputs(host)['instances'][0]
+    pool = captured['source_pool_plugins']
+    assert set(pool) == {'poolmine.py', 'autokick.py'}
+    assert pool['poolmine.py']['tier'] == 'operator' and pool['autokick.py']['tier'] == 'builtin'
+    assert len(pool['poolmine.py']['sha256']) == 64
+    assert COMPATIBLE_ANYWHERE not in json.dumps(captured)
+
+
+def test_fingerprint_changes_when_an_enabled_source_pool_plugin_changes(env):
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE)
+    host = _host(env, [dict(qlx_plugins='poolmine')])
+    before = _fp(host)
+    _write(env.operator_pool / 'minqlx' / 'poolmine.py', COMPATIBLE_ANYWHERE + '# v2\n')
+    assert _fp(host) != before
+
+
+def test_fingerprint_ignores_source_pool_plugins_nobody_enabled(env):
+    host = _host(env, [dict(qlx_plugins='balance', scripts={'balance.py': _stock('balance.py')})])
+    before = _fp(host)
+    _write(env.operator_pool / 'minqlx' / 'unrelated.py', COMPATIBLE_ANYWHERE)
+    assert _fp(host) == before

@@ -468,3 +468,19 @@ def test_untouched_instance_never_blocks_rollback_completion(world):
     assert outcome['untouched'] is True and 'never started by the upgrade' in outcome['note']
     assert db.session.get(QLInstance, ids['B']).status == InstanceStatus.STOPPED
     assert ('start', ids['B']) not in deps.calls
+
+
+def test_plugin_enabled_from_the_source_pool_without_a_target_version_is_switched_off(env):
+    """autokick lives only in the minqlx built-in pool: the upgrade drops it
+    from the selection instead of leaving it enabled with no file behind it."""
+    host = make_host(env)
+    a = next(inst for inst in host.instances if inst.name.endswith('A'))
+    a.qlx_plugins = 'balance, ban, autokick, reset_acc'
+    db.session.commit()
+    op = create_operation(host, answers={str(a.id): ['ban.py']})
+    captured = next(item for item in json.loads(_op(op.id).inputs_json)['instances']
+                    if item['instance_id'] == a.id)
+    assert 'autokick.py' in {row['path'] for row in captured['classification']['stripped']}
+    result, _deps = _run(op, FakeRemote(host), FakeLocks())
+    assert result is True, (_op(op.id).state, _op(op.id).last_error)
+    assert db.session.get(QLInstance, a.id).qlx_plugins == 'balance, ban, reset_acc'

@@ -151,22 +151,93 @@ def instance_plugin_snapshot(instance):
     return {'scripts': scripts, 'checked_plugins': _checked_plugins(instance.qlx_plugins)}
 
 
-def classify_instance(instance):
-    """The dialog rows for one instance: `apply_compatibility`'s verdicts for
-    loading its current scripts onto the upgrade target."""
+def _read_text(data):
+    try:
+        return data.decode('utf-8')
+    except ValueError:
+        return None
+
+
+def source_pool_plugins(instance):
+    """Enabled plugins this instance loads from the source runtime's shared pool.
+
+    {path: {'tier': 'builtin'|'operator', 'sha256': ..., 'data': bytes}} for each
+    checked root plugin with no file of its own in scripts/ that the merged
+    source pool resolves (the same lookup the config editor's "shared" rows use,
+    so `__init__.py` and system plugins are excluded). A local file always wins:
+    the host's pool backfill never overwrites it.
+    """
+    from ui import plugin_pool
+
+    scripts_dir = os.path.join(_instance_config_dir(instance.host.name, instance.id), 'scripts')
+    operator_root = plugin_pool.operator_pool_dir(MINQLX)
+    found = {}
+    for path in _checked_plugins(instance.qlx_plugins) or []:
+        if os.path.lexists(os.path.join(scripts_dir, path)):
+            continue
+        source = plugin_pool.shared_plugin_path(MINQLX, path)
+        if source is None:
+            continue
+        with open(source, 'rb') as handle:
+            data = handle.read()
+        tier = 'operator' if os.path.dirname(source) == operator_root else 'builtin'
+        found[path] = {'tier': tier, 'sha256': _sha256_bytes(data), 'data': data}
+    return found
+
+
+def _target_pool_scripts():
+    """{path: text} of the target runtime's merged shared pool (root plugins)."""
+    from ui import plugin_pool
+
+    scripts = {}
+    for name, path in plugin_pool.list_shared_plugins(UPGRADE_TARGET_RUNTIME).items():
+        try:
+            with open(path, 'r', encoding='utf-8') as handle:
+                scripts[name] = handle.read()
+        except (OSError, ValueError):
+            continue
+    return scripts
+
+
+def _classify(instance):
+    """(dialog rows, source pool plugins) for one instance."""
     from ui import preset_compat
 
     result = preset_compat.apply_compatibility(
         instance_plugin_snapshot(instance), MINQLX, UPGRADE_TARGET_RUNTIME)
     compat = result['compatibility']
+    stripped = list(compat['stripped'])
+    replacements = dict(compat['replacements'])
+    auto_accepted = list(compat['auto_accepted'])
+    checked = result['checked_plugins']
+
+    pool = source_pool_plugins(instance)
+    if pool:
+        pooled = preset_compat.pool_plugin_compatibility(
+            {path: {'text': _read_text(item['data']), 'tier': item['tier']}
+             for path, item in pool.items()},
+            MINQLX, UPGRADE_TARGET_RUNTIME, _target_pool_scripts())
+        stripped = sorted(stripped + pooled['stripped'], key=lambda entry: entry['path'])
+        replacements.update(pooled['replacements'])
+        auto_accepted = sorted(set(auto_accepted) | set(pooled['auto_accepted']))
+        dropped = {entry['path'] for entry in pooled['stripped']}
+        checked = [path for path in checked if path not in dropped]
     return {
         'instance_id': instance.id,
         'instance_name': instance.name,
-        'stripped': compat['stripped'],
-        'replacements': compat['replacements'],
-        'auto_accepted': compat['auto_accepted'],
-        'checked_plugins': result['checked_plugins'],
-    }
+        'stripped': stripped,
+        'replacements': replacements,
+        'auto_accepted': auto_accepted,
+        'checked_plugins': checked,
+    }, pool
+
+
+def classify_instance(instance):
+    """The dialog rows for one instance: `apply_compatibility`'s verdicts for
+    loading its current scripts onto the upgrade target, plus
+    `pool_plugin_compatibility`'s for the plugins it has enabled from the
+    source runtime's shared pool."""
+    return _classify(instance)[0]
 
 
 def _sha256_bytes(data):
@@ -240,7 +311,7 @@ def _addon_render_inputs(instance):
 
 
 def _capture_instance(instance, target_scripts):
-    classification = classify_instance(instance)
+    classification, pool = _classify(instance)
     replacements = {}
     for path, text in classification['replacements'].items():
         # Prefer the byte digest of the file the materialized copy will hold;
@@ -259,6 +330,10 @@ def _capture_instance(instance, target_scripts):
         'lan_rate_enabled': bool(instance.lan_rate_enabled),
         'renderer': renderer,
         'addon_contributions': _addon_render_inputs(instance),
+        # Enabled plugins with no copy in scripts/, loaded from the source pool:
+        # their verdicts depend on these bytes, so a change re-asks.
+        'source_pool_plugins': {path: {'tier': item['tier'], 'sha256': item['sha256']}
+                                for path, item in sorted(pool.items())},
         'classification': {
             'stripped': classification['stripped'],
             'replacements': replacements,

@@ -91,7 +91,10 @@ def converted_plugin_selection(captured, ticked):
     NULL (and '') selections are kept as they are: neither means "the operator
     picked nothing". Otherwise, in the original order: a plugin keeps its tick
     unless the dialog reported it stripped and the operator did not tick its
-    replacement (mergeReplacements semantics).
+    replacement (mergeReplacements semantics). That rule also covers plugins
+    enabled from the source runtime's shared pool: the capture reports each one
+    either auto-accepted (kept; the file comes from the target preset via the
+    filter, or from the target pool via the host's backfill) or as a row.
     """
     effective = captured.get('qlx_plugins_effective')
     if effective is None:
