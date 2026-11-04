@@ -77,7 +77,12 @@ def _terminal_operation_ids(host_id):
 
 
 def _failure_text(stdout, stderr):
-    text = (stderr or '').strip() or (stdout or '').strip()
+    """The failing task lines from ansible-playbook stdout (where Ansible
+    reports them), else the tail of stderr/stdout."""
+    lines = (stdout or '').splitlines()
+    failures = [line.strip() for line in lines
+                if line.lstrip().startswith(('fatal:', 'failed:')) or 'FAILED!' in line]
+    text = '\n'.join(failures) or (stderr or '').strip() or (stdout or '').strip()
     return text[-2000:] if text else 'ansible-playbook failed'
 
 

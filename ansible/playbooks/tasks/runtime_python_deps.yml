@@ -14,6 +14,11 @@
 - name: Resolve the operation's dependency directory
   ansible.builtin.set_fact:
     runtime_deps_op_dir: "{{ runtime_deps_root }}/minqlxtended/{{ operation_id }}"
+    # Replace a file with stdin, refusing to follow a symlink at the target.
+    runtime_write_stdin_py: >-
+      import os, sys;
+      fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644);
+      os.write(fd, sys.stdin.buffer.read()); os.close(fd)
 
 - name: Read the system interpreter version
   ansible.builtin.command:
@@ -52,22 +57,23 @@
     - "{{ runtime_deps_root }}/minqlxtended"
     - "{{ runtime_deps_op_dir }}"
 
+# Written by ql via stdin (no root copy into the ql tree, and no remote temp
+# file that an unprivileged become would need ACLs for).
 - name: Stage the captured core requirements
   become: yes
   become_user: ql
-  ansible.builtin.copy:
-    src: "{{ core_requirements_src }}"
-    dest: "{{ runtime_deps_op_dir }}/core-requirements.txt"
-    mode: '0644'
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -c, "{{ runtime_write_stdin_py }}", "{{ runtime_deps_op_dir }}/core-requirements.txt"]
+    stdin: "{{ lookup('ansible.builtin.file', core_requirements_src) }}"
   when: core_requirements_src | length > 0
 
 - name: Stage each instance's captured requirements
   become: yes
   become_user: ql
-  ansible.builtin.copy:
-    src: "{{ item.requirements_src }}"
-    dest: "{{ runtime_deps_op_dir }}/{{ item.id | int }}.requirements.txt"
-    mode: '0644'
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -c, "{{ runtime_write_stdin_py }}",
+           "{{ runtime_deps_op_dir }}/{{ item.id | int }}.requirements.txt"]
+    stdin: "{{ lookup('ansible.builtin.file', item.requirements_src) }}"
   loop: "{{ runtime_instances }}"
   loop_control:
     label: "{{ item.id }}"
