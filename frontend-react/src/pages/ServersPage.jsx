@@ -44,6 +44,7 @@ import ForceUpdateWorkshopModal from '../components/hosts/ForceUpdateWorkshopMod
 import CheckForUpdatesModal from '../components/hosts/CheckForUpdatesModal';
 import HostAutoRestartScheduleModal from '../components/hosts/HostAutoRestartScheduleModal';
 import HostWatchdogModal from '../components/hosts/HostWatchdogModal';
+import RuntimeUpgradeDialog from '../components/hosts/RuntimeUpgradeDialog';
 import ResizeHostModal from '../components/hosts/ResizeHostModal';
 import HostLogsModal from '../components/hosts/HostLogsModal';
 import { useHostLogsModal } from '../hooks/useHostLogsModal';
@@ -86,6 +87,7 @@ export default function ServersPage() {
     const { isAutoRestartModalOpen, hostForAutoRestart, openAutoRestartModal, closeAutoRestartModal, handleAutoRestartSubmit } = useHostAutoRestart(showSuccess, showError, () => refreshData(false));
     const { isWatchdogModalOpen, hostForWatchdog, openWatchdogModal, closeWatchdogModal, handleWatchdogSubmit } = useHostWatchdog(showSuccess, showError, () => refreshData(false));
     const { isResizeModalOpen, isResizeSubmitting, resizeError, hostForResize, openResizeModal, closeResizeModal, handleResizeSubmit } = useHostResize(showSuccess, showError, () => refreshData(false));
+    const [hostForRuntimeUpgrade, setHostForRuntimeUpgrade] = useState(null);
     const { isHostLogsModalOpen, hostForLogs, openHostLogs, closeHostLogs } = useHostLogsModal();
     const serverStatusMap = useServerStatus();
 
@@ -301,7 +303,7 @@ export default function ServersPage() {
                                     <QLFilterIndicator qlfilterStatus={host.qlfilter_status} />
                                 </div>
                                 <div className="host-actions-cell flex justify-end" onClick={(e) => e.stopPropagation()}>
-                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenCheckForUpdates={openUpdatesModal} onOpenAutoRestart={openAutoRestartModal} onOpenWatchdog={openWatchdogModal} onOpenViewLogs={openHostLogs} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} />
+                                    <HostActionsMenu host={host} handleDelete={(id, name) => requestDeleteHost(id, name)} onOpenDrawer={handleOpenHostDrawer} onInstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'install')} onUninstallQlfilter={(hostId) => handleQlfilterAction(hostId, 'uninstall')} onRequestRestart={handleRequestHostRestart} onOpenUpdateWorkshop={openWorkshopModal} onOpenCheckForUpdates={openUpdatesModal} onOpenAutoRestart={openAutoRestartModal} onOpenWatchdog={openWatchdogModal} onOpenViewLogs={openHostLogs} onOpenResize={openResizeModal} onRerunSetup={handleRerunSetup} onOpenRuntimeUpgrade={() => setHostForRuntimeUpgrade(host)} />
                                 </div>
                             </div>
 
@@ -394,6 +396,7 @@ export default function ServersPage() {
             <HostAutoRestartScheduleModal isOpen={isAutoRestartModalOpen} onClose={closeAutoRestartModal} onSubmit={handleAutoRestartSubmit} host={hostForAutoRestart} />
             <HostWatchdogModal isOpen={isWatchdogModalOpen} onClose={closeWatchdogModal} onSubmit={handleWatchdogSubmit} host={hostForWatchdog} />
             <ResizeHostModal isOpen={isResizeModalOpen} onClose={closeResizeModal} onSubmit={handleResizeSubmit} host={hostForResize} error={resizeError} isSubmitting={isResizeSubmitting} />
+            <RuntimeUpgradeDialog isOpen={hostForRuntimeUpgrade !== null} host={hostForRuntimeUpgrade} onClose={() => setHostForRuntimeUpgrade(null)} onStarted={() => { showSuccess('Runtime upgrade queued.'); refreshData(false); }} />
             <HostLogsModal isOpen={isHostLogsModalOpen} onClose={closeHostLogs} host={hostForLogs} />
             {rconInstance && (
                 <RconConsoleModal isOpen={isRconConsoleOpen} onClose={handleCloseRconConsole} instance={rconInstance} />
