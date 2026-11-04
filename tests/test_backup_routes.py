@@ -94,6 +94,32 @@ class TestImportBackup:
         )
         assert resp.status_code == 409
 
+    @patch('ui.task_lock.acquire_maintenance_lock', return_value=True)
+    def test_import_blocked_while_a_runtime_upgrade_is_nonterminal(self, _lock, app, client, app_root):
+        from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
+
+        make_user(app, 'admin', 'pw')
+        headers = auth_headers(app, 'admin')
+        blob = client.post('/api/settings/backup/export', headers=headers, json={}).data
+        with app.app_context():
+            host = Host(name='upgrading', provider='vultr')
+            db.session.add(host)
+            db.session.flush()
+            db.session.add(HostRuntimeUpgradeOperation(host_id=host.id, state='recovery_required'))
+            db.session.commit()
+        with patch('ui.routes.backup_routes.restore_backup_archive') as restore:
+            resp = client.post(
+                '/api/settings/backup/import',
+                headers=headers,
+                data={'file': (io.BytesIO(blob), 'backup.qlsmbak')},
+                content_type='multipart/form-data',
+            )
+        assert resp.status_code == 409
+        assert 'runtime upgrade' in resp.get_json()['error']['message']
+        restore.assert_not_called()
+        with app.app_context():
+            assert HostRuntimeUpgradeOperation.query.count() == 1
+
     def test_import_requires_a_file(self, app, client, app_root):
         make_user(app, 'admin', 'pw')
         headers = auth_headers(app, 'admin')

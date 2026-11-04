@@ -204,7 +204,7 @@ def test_runtime_python_deps_accepts_an_explicit_directory():
     assert 'runtime_deps_dir if runtime_deps_dir is defined' in resolve
 
 
-def test_migration_adds_and_removes_the_flag(tmp_path):
+def test_migration_adds_and_removes_the_flag(tmp_path, preserve_logging_config):
     from flask_migrate import downgrade, stamp, upgrade
 
     db_path = tmp_path / 'migrated.db'

@@ -92,7 +92,7 @@ def test_other_hosts_are_independent(app):
         _op(_host('b'), state='installing')
 
 
-def test_migration_creates_table_and_partial_index(tmp_path):
+def test_migration_creates_table_and_partial_index(tmp_path, preserve_logging_config):
     """Applies only this migration: the oldest revisions assume `flask init-db`
     tables, so the chain cannot run from an empty database."""
     from flask_migrate import stamp, upgrade

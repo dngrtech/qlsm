@@ -171,7 +171,7 @@ def test_deps_install_global_branch_only_runs_without_a_deps_path():
             assert "python_deps_path | default('') | length == 0" in str(task.get("when", "")), task["name"]
 
 
-def test_migration_adds_and_removes_the_column(tmp_path):
+def test_migration_adds_and_removes_the_column(tmp_path, preserve_logging_config):
     """Applies only this migration on top of its parent revision."""
     import os
     import sqlite3

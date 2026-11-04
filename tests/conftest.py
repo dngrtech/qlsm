@@ -165,3 +165,28 @@ def _reset_minqlxtended_stub_state():
         stub.logged_exceptions.clear()
         stub.Plugin.game = None
         stub.Plugin.db = None
+
+
+@pytest.fixture
+def preserve_logging_config():
+    """Undo what a migration run does to logging.
+
+    migrations/env.py calls logging.config.fileConfig(), which by default
+    disables every logger that already exists (ui.cli among them) and swaps the
+    root handlers and level. A later test asserting on caplog text from such a
+    logger then sees nothing. Use this in any test that runs flask_migrate.
+    """
+    import logging
+
+    root = logging.getLogger()
+    root_state = (root.level, list(root.handlers))
+    disabled = {name: logger.disabled for name, logger in logging.root.manager.loggerDict.items()
+                if isinstance(logger, logging.Logger)}
+    try:
+        yield
+    finally:
+        root.setLevel(root_state[0])
+        root.handlers[:] = root_state[1]
+        for name, logger in logging.root.manager.loggerDict.items():
+            if isinstance(logger, logging.Logger):
+                logger.disabled = disabled.get(name, False)
