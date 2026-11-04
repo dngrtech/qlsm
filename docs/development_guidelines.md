@@ -8,6 +8,32 @@ This document outlines the version control strategy and coding practices for the
 *   **Repository:** Central repository recommended (e.g., named `qlds-ui`).
 *   **Branching:** Feature branching workflow (e.g., `feature/list-instances`, `feature/edit-config`, `fix/auth-bug`).
 
+## Automated PR Review
+
+`.github/workflows/claude-code-review.yml` reviews each PR when it is opened, reopened or marked ready for review. It doesn't run on new pushes. To review again, toggle the PR to draft and back, or run the workflow manually with the PR number (**Actions → Claude Code Review → Run workflow**).
+
+The pipeline has four stages. The prompts live in `.github/review-prompts/`.
+
+1. **Triage** (no model). A PR that only touches `docs/`, `README.md` or `VERSION` gets a "Not reviewed" notice and nothing else runs. The notice is not an approval. Fork PRs are skipped. Every other PR gets all three finders.
+2. **Finders** (Sonnet, run in parallel). Each one reviews the diff through a single lens and returns JSON findings with a failure scenario, evidence, severity and confidence. The finders are tuned for coverage: they report everything they find and leave the filtering to the verifier.
+3. **Verifier** (Opus, fresh context). It reads the code to check every finding, merges duplicates, and accepts or rejects each one using the same rules as the `/assess-review` skill. It returns its decisions as JSON and has no GitHub tools.
+4. **Post** (no model). `.github/scripts/post_claude_review.py` decides the verdict: "Review incomplete" if a finder or the verifier failed, "Fix N items before merge" if anything was accepted, otherwise "Ready to merge". It posts one review, with an inline comment for each accepted finding, and lists the rejected findings in a collapsed section so you can check how the verifier filtered them.
+
+Lenses are split by concern (correctness, security, project rules), not by layer. Bugs between the Flask API and the React client would be missed by a frontend-only or backend-only reviewer.
+
+The finders read `docs/development_guidelines.md`, `docs/architecture.md`, `docs/design-system.md` and `docs/security/threat_model.md`, because `CLAUDE.md` isn't in the repo. A convention that should be enforced in review needs to be written in one of these docs.
+
+Trust boundary:
+- **Fork PRs are skipped**, because a manual run would put untrusted code next to the OAuth token.
+- **The reviewed commit is pinned.** Every job checks out the head SHA that triage saw.
+- **Prompts and the post script load from the base branch.** So editing either in a PR doesn't change how that PR gets reviewed.
+- **PR-supplied agent config is deleted** before Claude runs: `CLAUDE.md`, `CLAUDE.local.md`, `.claude/` and `.mcp.json` at any depth.
+- **Claude only reads.** It has Read, Glob and Grep, and no shell: even `git log` and `git diff` can write files through `--output`. The workflow writes the diff and per-file history to `.review-context/` for it. It has no GitHub access and no git credentials (`persist-credentials: false`). PR content can't make it post anything, and a forged verdict can't get through the script.
+- **The post script runs from a fresh copy.** The Post step extracts it from the base branch into `$RUNNER_TEMP` right before running it.
+- **Actions are pinned to commit SHAs.**
+
+GitHub validates a workflow change against the default branch, so a PR that edits this workflow can't review itself. Merge it first, then test it with a manual run on an existing PR.
+
 ## Coding Practices & Principles
 
 *   **Descriptive Naming:** Clear, purpose-indicating names for files, variables, functions.

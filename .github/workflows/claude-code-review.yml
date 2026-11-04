@@ -1,85 +1,248 @@
+# Multi-agent PR review: parallel finders (coverage) -> one verifier (precision)
+# -> a script that sets the verdict and posts the review.
+#
+# Trust boundary:
+# - Fork PRs are skipped.
+# - Every job reviews the head SHA that triage pinned.
+# - Prompts and the post script load from the base branch.
+# - Agent config the PR adds (CLAUDE.md, .claude/, .mcp.json) is deleted.
+# - Claude gets Read/Glob/Grep only (no shell); only the script posts to GitHub.
+#
+# Keep the workflow name and the github-actions[bot] review: the local skills
+# assess-review, auto-pr-merge and review-pr depend on both.
 name: Claude Code Review
 
 on:
   pull_request:
     types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to review
+        required: true
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+env:
+  PR: ${{ github.event.pull_request.number || inputs.pr }}
 
 jobs:
-  claude-review:
+  triage:
     runs-on: ubuntu-latest
-    env:
-      PR_BASE: ${{ github.event.pull_request.base.ref }}
+    if: github.event.pull_request.draft != true
     permissions:
       contents: read
       pull-requests: write
-      issues: read
-      id-token: write
-
+    outputs:
+      skip: ${{ steps.t.outputs.skip }}
+      lenses: ${{ steps.t.outputs.lenses }}
+      head_sha: ${{ steps.t.outputs.head_sha }}
+      base: ${{ steps.t.outputs.base }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Fetch base branch
-        run: git fetch origin "${PR_BASE}:${PR_BASE}"
+      - name: Pick reviewers
+        id: t
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "PR must be a number, got: $PR"; exit 1; }
+          FORK=$(gh pr view "$PR" --json isCrossRepository -q .isCrossRepository)
+          HEAD_SHA=$(gh pr view "$PR" --json headRefOid -q .headRefOid)
+          BASE=$(gh pr view "$PR" --json baseRefName -q .baseRefName)
+          # Fail closed: anything other than an explicit same-repo PR is skipped.
+          # A fork PR on a manual dispatch would run untrusted code next to the
+          # OAuth token, and on pull_request it gets no secrets anyway.
+          if [ "$FORK" != "false" ]; then
+            echo "::notice::PR #$PR is from a fork or could not be checked; Claude review skipped."
+            echo "skip=fork" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad head SHA: $HEAD_SHA"; exit 1; }
+          [[ "$BASE" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "bad base ref: $BASE"; exit 1; }
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          git fetch origin "$HEAD_SHA" "$BASE"
+          FILES=$(git diff --name-only "origin/$BASE...$HEAD_SHA")
+          CODE=$(echo "$FILES" | grep -vE '^(docs/|README\.md$|VERSION$)' || true)
+          if [ -z "$CODE" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo 'lenses=["correctness","conventions","security"]' >> "$GITHUB_OUTPUT"
 
+      - name: Post skip notice for docs-only PRs
+        if: steps.t.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr review "$PR" --comment --body "## Claude Code Review
 
-      - name: Run Claude Code Review
-        id: claude-review
-        uses: anthropics/claude-code-action@v1
+          **Verdict:** Not reviewed
+
+          Docs-only change (docs/, README.md, VERSION), so the code review was skipped. This is not an approval."
+
+  find:
+    needs: triage
+    if: needs.triage.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        lens: ${{ fromJSON(needs.triage.outputs.lenses) }}
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      HEAD_SHA: ${{ needs.triage.outputs.head_sha }}
+      BASE: ${{ needs.triage.outputs.base }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the pinned PR head
+        run: |
+          git fetch origin "$HEAD_SHA" "$BASE"
+          git checkout --detach "$HEAD_SHA"
+          # Base-branch prompts only. Remove anything the PR could plant first:
+          # a fake .review-base/ and agent config at any depth.
+          rm -rf .review-base
+          find . -path ./.git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name .claude -o -name .mcp.json \) -prune -exec rm -rf {} +
+          mkdir .review-base
+          git archive "origin/$BASE" .github/review-prompts | tar -x -C .review-base --strip-components=1
+
+      - name: Build review context
+        # The agents get no shell (git log/diff/show can write files with
+        # --output), so the diff and history they need are prepared here.
+        run: |
+          rm -rf .review-context
+          mkdir .review-context
+          git diff "origin/$BASE...$HEAD_SHA" > .review-context/diff.patch
+          git diff --name-only "origin/$BASE...$HEAD_SHA" > .review-context/files.txt
+          while IFS= read -r f; do
+            echo "=== $f"
+            git log -n 10 --date=short --format='%h %ad %s%n%w(0,4,4)%b' "origin/$BASE" -- "$f" | head -n 80
+          done < .review-context/files.txt > .review-context/history.txt
+
+      - name: Find issues (${{ matrix.lens }})
+        id: find
+        uses: anthropics/claude-code-action@4845bacbb38b3c4b15d948f035349786f678e068 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: '--model claude-sonnet-5-5 --max-turns 30 --allowedTools "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(gh pr:*)" "Read" "Glob" "Grep" "Write"'
-          show_full_output: true
           prompt: |
-            Review this PR and post your review as follows:
-            1. Run `git diff ${{ env.PR_BASE }}...HEAD` to read the changes
-            2. Write the full review to `review.md` using the Write tool
-            3. Post it: `gh pr review --body-file review.md`
+            Read `.review-base/review-prompts/_shared.md` and then
+            `.review-base/review-prompts/${{ matrix.lens }}.md`, and follow them.
+            The change under review is PR #${{ env.PR }} against `${{ env.BASE }}`.
+            Its diff is `.review-context/diff.patch`.
+          claude_args: >-
+            --model claude-sonnet-5-5 --effort high --max-turns 40
+            --allowedTools "Read,Glob,Grep"
+            --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
+            --json-schema '{"type":"object","required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","required":["file","line","title","failure_scenario","evidence","severity","confidence"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"failure_scenario":{"type":"string"},"evidence":{"type":"string"},"severity":{"type":"string","enum":["critical","high","medium","low"]},"confidence":{"type":"number"}}}}}}'
 
-            Use `git diff ${{ env.PR_BASE }}...HEAD` to read the changes, then review against this checklist:
+      - name: Save findings
+        env:
+          OUT: ${{ steps.find.outputs.structured_output }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/findings"
+          F="$RUNNER_TEMP/findings/${{ matrix.lens }}.json"
+          printf '%s' "$OUT" > "$F"
+          python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d['findings']), 'findings')" "$F"
 
-            **Code Quality:** Separation of concerns, error handling, DRY, edge cases
-            **Architecture:** Design decisions, scalability, performance, security
-            **Testing:** Real logic tests, edge cases, integration tests
-            **Production Readiness:** Migrations, backward compatibility, no obvious bugs
-            **Security (OWASP Top 10):** Check for:
-            - A01 Broken Access Control: missing authz checks, IDOR, path traversal
-            - A02 Cryptographic Failures: hardcoded secrets, weak algorithms, unencrypted sensitive data
-            - A03 Injection: SQL/NoSQL/command/LDAP injection, unsanitized inputs
-            - A04 Insecure Design: missing rate limiting, no threat modeling for sensitive flows
-            - A05 Security Misconfiguration: debug flags, default creds, overly permissive CORS/headers
-            - A06 Vulnerable Components: new dependencies added — flag for review
-            - A07 Auth Failures: broken session management, weak passwords, missing MFA hooks
-            - A08 Software/Data Integrity: unsigned artifacts, unsafe deserialization
-            - A09 Logging Failures: sensitive data in logs, missing audit trail for critical actions
-            - A10 SSRF: user-controlled URLs used in server-side requests
-            ## Output Format
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: findings-${{ matrix.lens }}
+          path: ${{ runner.temp }}/findings/
+          retention-days: 7
 
-            ### Strengths
-            [What's well done? file:line references.]
+  judge:
+    needs: [triage, find]
+    if: always() && needs.triage.outputs.skip == 'false' && needs.find.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      HEAD_SHA: ${{ needs.triage.outputs.head_sha }}
+      BASE: ${{ needs.triage.outputs.base }}
+      VERIFIER_MODEL: claude-opus-5-5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-            ### Issues
+      - name: Check out the pinned PR head
+        run: |
+          git fetch origin "$HEAD_SHA" "$BASE"
+          git checkout --detach "$HEAD_SHA"
+          # Remove anything the PR could plant: fake findings, a fake
+          # .review-base/, and agent config at any depth.
+          rm -rf .review-base .review-findings
+          find . -path ./.git -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name .claude -o -name .mcp.json \) -prune -exec rm -rf {} +
+          mkdir .review-base
+          git archive "origin/$BASE" .github/review-prompts | tar -x -C .review-base --strip-components=1
 
-            #### Critical (Must Fix)
-            [Bugs, security issues, data loss risks]
+      - name: Build review context
+        # The agents get no shell (git log/diff/show can write files with
+        # --output), so the diff and history they need are prepared here.
+        run: |
+          rm -rf .review-context
+          mkdir .review-context
+          git diff "origin/$BASE...$HEAD_SHA" > .review-context/diff.patch
+          git diff --name-only "origin/$BASE...$HEAD_SHA" > .review-context/files.txt
+          while IFS= read -r f; do
+            echo "=== $f"
+            git log -n 10 --date=short --format='%h %ad %s%n%w(0,4,4)%b' "origin/$BASE" -- "$f" | head -n 80
+          done < .review-context/files.txt > .review-context/history.txt
 
-            #### Important (Should Fix)
-            [Architecture problems, missing error handling, test gaps]
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          pattern: findings-*
+          path: .review-findings
+          merge-multiple: true
 
-            #### Minor (Nice to Have)
-            [Style, optimizations, docs]
+      - name: Verify findings
+        id: verify
+        continue-on-error: true
+        uses: anthropics/claude-code-action@4845bacbb38b3c4b15d948f035349786f678e068 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Follow `.review-base/review-prompts/judge.md`.
+            The change under review is PR #${{ env.PR }} against `${{ env.BASE }}`.
+            Its diff is `.review-context/diff.patch`.
+            The finders' output is in `.review-findings/`.
+          claude_args: >-
+            --model ${{ env.VERIFIER_MODEL }} --effort high --max-turns 50
+            --allowedTools "Read,Glob,Grep"
+            --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
+            --json-schema '{"type":"object","required":["accepted","filtered"],"properties":{"accepted":{"type":"array","items":{"type":"object","required":["file","line","severity","title","what_breaks","fix"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"severity":{"type":"string","enum":["critical","high","medium","low"]},"title":{"type":"string"},"what_breaks":{"type":"string"},"fix":{"type":"string"}}}},"filtered":{"type":"array","items":{"type":"object","required":["file","line","title","decision","reason"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"decision":{"type":"string","enum":["reject","acknowledge"]},"reason":{"type":"string"}}}}}}'
 
-            For each issue: file:line, what's wrong, why it matters, how to fix.
-
-            ### Assessment
-            **Ready to merge?** [Yes/No/With fixes]
-            **Reasoning:** [1-2 sentences]
-
-            ## Rules
-            - Categorize by actual severity
-            - Be specific (file:line, not vague)
-            - Explain WHY issues matter
-            - Give a clear verdict
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          LENSES: ${{ needs.triage.outputs.lenses }}
+          FINDINGS_DIR: .review-findings
+          VERDICT_JSON: ${{ steps.verify.outputs.structured_output }}
+          MODEL: ${{ env.VERIFIER_MODEL }}
+        # Extract a fresh copy outside the workspace, so nothing the agents
+        # could reach is executed with the token.
+        run: |
+          D=$(mktemp -d "$RUNNER_TEMP/post.XXXXXX")
+          git archive "origin/$BASE" .github/scripts/post_claude_review.py | tar -x -C "$D"
+          python3 -I "$D/.github/scripts/post_claude_review.py"

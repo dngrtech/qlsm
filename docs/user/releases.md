@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.51.1` | 2026-11-03 | [#265](https://github.com/dngrtech/qlsm/pull/265) | Pull request reviews now run several specialised Claude reviewers in parallel, and a verifier checks their findings before anything is posted. This is a development-only change with no effect on the running app. |
 | `v1.51.0` | 2026-11-01 | [#264](https://github.com/dngrtech/qlsm/pull/264) | The host drawer now shows **OS** with the version (for example Ubuntu 24.04) instead of **OS Type**. Hosts created before this release show the distribution only. |
 | `v1.50.4` | 2026-10-25 | [#262](https://github.com/dngrtech/qlsm/pull/262) | `setup-worktree.sh` now lists the default plugin repositories on new worktrees. |
 | `v1.50.3` | 2026-10-23 | [#261](https://github.com/dngrtech/qlsm/pull/261) | Fixed the `lgacc` plugin's accuracy messages leaving players stuck or glitching after a death, and its numbers going wrong when `reset_acc` auto-reset is on. |
