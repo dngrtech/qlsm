@@ -49,6 +49,7 @@ from ui import rq
 RERUN_CLOUD_SETUP_TIMEOUT = 3600
 RERUN_STANDALONE_SETUP_TIMEOUT = 1200
 RERUN_SETUP_LOCK_RELEASE_BUFFER = 60
+RUNTIME_UPGRADE_TIMEOUT = 3600
 
 
 def enqueue_task(task_func, *args, on_failure=None, **kwargs):
@@ -376,7 +377,7 @@ def _current_job_id():
     return job.id if job else None
 
 
-@rq.job(timeout=3600)
+@rq.job(timeout=RUNTIME_UPGRADE_TIMEOUT)
 @with_app_context
 def upgrade_host_runtime(operation_id):
     """RQ task entry point for upgrading a host minqlx -> minqlxtended."""

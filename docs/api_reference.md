@@ -39,6 +39,8 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 | `/hosts/<id>/plugin-updates/apply` | POST | Apply selected plugin updates, optionally restarting instances |
 | `/hosts/<id>/auto-restart` | POST | Configure host auto-restart schedule |
 | `/hosts/<id>/watchdog` | POST | Enable/disable and tune the ql-watchdog add-on |
+| `/hosts/<id>/runtime-upgrade` | GET | Compatibility dry-run for upgrading the host from minqlx to minqlxtended |
+| `/hosts/<id>/runtime-upgrade` | POST | Confirm and queue the minqlx -> minqlxtended upgrade (see [Runtime Upgrade](#runtime-upgrade)) |
 
 ### Configure Watchdog
 
@@ -185,6 +187,89 @@ host lock; `500` enqueue failure.
 
 If the common pool refresh fails, the task sets the host to `ERROR` and stops
 before copying any instance files.
+
+### Runtime Upgrade
+
+```
+GET  /api/hosts/<id>/runtime-upgrade
+POST /api/hosts/<id>/runtime-upgrade
+```
+
+Upgrades every instance on a minqlx host to minqlxtended in one operation, with
+a whole-host rollback if any step fails. The host must run minqlx, be `ACTIVE`,
+run Ubuntu 24.04 or newer, and have every instance `RUNNING` or `STOPPED`.
+
+**GET: dry-run (200)**
+
+```json
+{
+  "data": {
+    "eligibility": {"visible": true, "enabled": true, "reason": null},
+    "instances": [
+      {
+        "instance_id": 1,
+        "instance_name": "ca-1",
+        "stripped": [{"path": "ban.py", "kind": "replaceable", "replacement": "ban.py", "...": "..."}],
+        "replacements": {"ban.py": "<target file text>"},
+        "auto_accepted": ["balance.py"],
+        "checked_plugins": ["balance.py", "ban.py"]
+      }
+    ],
+    "fingerprint": "<sha256 hex>"
+  }
+}
+```
+
+Each `instances` entry is that instance's cross-runtime compatibility report,
+with the same `stripped` entry fields as a preset load (see
+[Per-entry fields](#per-entry-fields)). `fingerprint` identifies everything the
+upgrade depends on: instance fields, config and script files, plugin selection,
+hooks, and the target runtime's shipped files.
+
+Errors: `404` host not found; `409` with `eligibility.reason` as the message if
+the host is not eligible, or if an upgrade is already in progress.
+
+**POST: confirm (202)**
+
+```json
+{
+  "fingerprint": "<value from the GET>",
+  "accepted_replacements": {"1": ["ban.py"]}
+}
+```
+
+- `fingerprint`: the GET's value, echoed back unchanged.
+- `accepted_replacements`: object keyed by instance id, each a list of the
+  plugin paths whose minqlxtended replacement the operator ticked. A path is
+  accepted only if it was offered for that instance: a `stripped` entry with
+  `kind: "replaceable"`, or a path in `auto_accepted` (auto-accepted paths are
+  applied anyway). Missing instances and empty lists mean nothing ticked.
+
+```json
+{"data": {"status": "configuring"}, "message": "Runtime upgrade queued."}
+```
+
+The route takes the host and instance locks, re-checks eligibility, recaptures
+the inputs, and refuses if their fingerprint no longer matches. It then
+records the operation and sets the host to `CONFIGURING`. It releases the locks
+before queueing; the background job takes them again. From then on, every
+mutation of the host and its instances, and a backup import, returns `409`
+until the operation ends.
+
+Errors:
+
+- `400` malformed body: a non-string `fingerprint`, a non-object
+  `accepted_replacements`, a non-numeric instance id, a non-list value, a
+  non-string or duplicate path, an instance not on the host, or a path that was
+  not offered.
+- `404` host not found.
+- `409` host not eligible, an upgrade already in progress, the host or an
+  instance locked by another operation, a backup export or import running,
+  instances added or removed during the request, or a stale `fingerprint`
+  (anything changed since the GET: run the dry-run again).
+- `500` the job could not be confirmed as queued. If it did not start, the
+  operation is cancelled automatically within a few minutes and the host
+  returns to `ACTIVE`.
 
 ### Resize Host
 

@@ -1,0 +1,212 @@
+"""One-click minqlx -> minqlxtended host upgrade: the compatibility dry-run the
+dialog shows, and the confirmation that reserves the host and queues the job.
+
+The confirmation runs its checks, the capture and the reservation insert under
+the host and instance Redis locks, then releases them BEFORE enqueueing: the
+worker takes them again under its own fencing token, and the committed
+reservation row keeps every other mutation (and a backup restore) out in
+between. The capture holds ZMQ passwords and is never returned or logged.
+"""
+import json
+import uuid
+
+from flask import Blueprint, current_app, jsonify, request
+from flask_jwt_extended import jwt_required
+from sqlalchemy.exc import IntegrityError
+
+from ui import db
+from ui.models import Host, HostStatus
+from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation
+from ui.runtime_upgrade import (
+    capture_upgrade_inputs,
+    classification_fingerprint,
+    classify_instance,
+    upgrade_eligibility,
+)
+from ui.runtime_upgrade_conversion import AnswersInvalid, parse_answers
+from ui.runtime_upgrade_guard import active_runtime_upgrade, blocked_message, upgrade_block_response
+from ui.task_lock import MAINTENANCE_LOCK_KEY, acquire_lock, acquire_locks, release_lock, release_locks
+from ui.task_logic.common import append_log
+from ui.task_logic.host_runtime_upgrade_recovery import start_upgrade_job
+from ui.tasks import RUNTIME_UPGRADE_TIMEOUT
+
+host_runtime_upgrade_bp = Blueprint('host_runtime_upgrade_routes', __name__)
+
+LOCK_TTL = RUNTIME_UPGRADE_TIMEOUT + 300
+
+NOT_ELIGIBLE = 'This host cannot be upgraded to minqlxtended.'
+STALE = ('The host or its instances changed since the compatibility check was shown; '
+         'review the upgrade again.')
+INSTANCES_CHANGED = 'The host\'s instances changed while the upgrade was starting; review it again.'
+BUSY = ('The host or one of its instances is busy with another operation; '
+        'try again when it finishes.')
+BACKUP_RUNNING = 'Cannot start the upgrade while a backup export or import is running. Try again shortly.'
+ENQUEUE_FAILED = ('The runtime upgrade could not be queued. If it did not start, it is cancelled '
+                  'automatically within a few minutes and the host returns to ACTIVE.')
+
+
+def _error(message, status):
+    return jsonify({'error': {'message': message}}), status
+
+
+class _Rejected(Exception):
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.response = _error(message, status)
+
+
+def _ineligible_response(eligibility):
+    if eligibility['enabled']:
+        return None
+    return _error(eligibility['reason'] or NOT_ELIGIBLE, 409)
+
+
+def _backup_maintenance_active():
+    try:
+        return bool(current_app.extensions['redis'].exists(MAINTENANCE_LOCK_KEY))
+    except Exception:
+        return False
+
+
+def _parse_body(body):
+    """(fingerprint, {instance_id: [paths]}) or raise _Rejected(400). Type and
+    shape only; membership and offers are checked against the capture."""
+    if not isinstance(body, dict):
+        raise _Rejected('Request body must be a JSON object.', 400)
+    fingerprint = body.get('fingerprint')
+    if not isinstance(fingerprint, str) or not fingerprint:
+        raise _Rejected('fingerprint must be a non-empty string.', 400)
+    raw = body.get('accepted_replacements', {})
+    if not isinstance(raw, dict):
+        raise _Rejected('accepted_replacements must be an object keyed by instance id.', 400)
+    answers = {}
+    for key, paths in raw.items():
+        if not isinstance(key, str) or not key.isdigit():
+            raise _Rejected(f'accepted_replacements has an invalid instance id {key!r}.', 400)
+        instance_id = int(key)
+        if instance_id in answers:
+            raise _Rejected(f'accepted_replacements names instance {instance_id} twice.', 400)
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            raise _Rejected(f'accepted_replacements for instance {instance_id} must be a list of paths.', 400)
+        if len(set(paths)) != len(paths):
+            raise _Rejected(f'accepted_replacements for instance {instance_id} lists a path twice.', 400)
+        answers[instance_id] = paths
+    return fingerprint, answers
+
+
+@host_runtime_upgrade_bp.route('/<int:host_id>/runtime-upgrade', methods=['GET'])
+@jwt_required()
+def runtime_upgrade_dry_run(host_id):
+    """The compatibility dialog: eligibility, per-instance verdicts and the
+    fingerprint the client echoes back on confirm."""
+    host = db.session.get(Host, host_id)
+    if host is None:
+        return _error('Host not found.', 404)
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
+    eligibility = upgrade_eligibility(host)
+    ineligible = _ineligible_response(eligibility)
+    if ineligible:
+        return ineligible
+    instances = sorted(host.instances, key=lambda inst: inst.id)
+    return jsonify({'data': {
+        'eligibility': eligibility,
+        'instances': [classify_instance(inst) for inst in instances],
+        'fingerprint': classification_fingerprint(capture_upgrade_inputs(host)),
+    }})
+
+
+def _reserve(host_id, fingerprint, answers, instance_ids):
+    """The critical section, run under the locks: re-check, capture, validate,
+    and commit the reservation with the host in CONFIGURING. Returns the
+    operation id or raises _Rejected."""
+    db.session.expire_all()  # everything read before the locks may be stale
+    host = db.session.get(Host, host_id)
+    if host is None:
+        raise _Rejected('Host not found.', 404)
+    if active_runtime_upgrade(host.id) is not None:
+        raise _Rejected(blocked_message(host.name), 409)
+    eligibility = upgrade_eligibility(host)
+    if not eligibility['enabled']:
+        raise _Rejected(eligibility['reason'] or NOT_ELIGIBLE, 409)
+    if sorted(inst.id for inst in host.instances) != instance_ids:
+        raise _Rejected(INSTANCES_CHANGED, 409)
+
+    inputs = capture_upgrade_inputs(host)
+    if classification_fingerprint(inputs) != fingerprint:
+        raise _Rejected(STALE, 409)
+    raw_answers = {str(instance_id): paths for instance_id, paths in answers.items()}
+    try:
+        ticked = parse_answers(inputs, json.dumps(raw_answers))
+    except AnswersInvalid as exc:
+        raise _Rejected(str(exc), 400) from None
+
+    op = HostRuntimeUpgradeOperation(
+        host_id=host.id,
+        state='preparing',
+        inputs_json=json.dumps(inputs),
+        fingerprint=fingerprint,
+        answers_json=json.dumps({str(instance_id): paths for instance_id, paths in ticked.items()}),
+        original_runtime=host.runtime,
+        original_host_status=HostStatus.ACTIVE.value,
+    )
+    db.session.add(op)
+    host.status = HostStatus.CONFIGURING
+    append_log(host, 'Upgrade to minqlxtended queued.')
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Another request inserted this host's nonterminal operation first.
+        db.session.rollback()
+        raise _Rejected(f'Host {host.name} is already being upgraded to minqlxtended.', 409) from None
+    return op.id
+
+
+@host_runtime_upgrade_bp.route('/<int:host_id>/runtime-upgrade', methods=['POST'])
+@jwt_required()
+def start_runtime_upgrade(host_id):
+    """Confirm the dialog: reserve the host and queue upgrade_host_runtime."""
+    host = db.session.get(Host, host_id)
+    if host is None:
+        return _error('Host not found.', 404)
+    try:
+        fingerprint, answers = _parse_body(request.get_json(silent=True))
+    except _Rejected as rejected:
+        return rejected.response
+    blocked = upgrade_block_response(host.id, host.name)
+    if blocked:
+        return blocked
+
+    instance_ids = sorted(inst.id for inst in host.instances)
+    token = str(uuid.uuid4())
+    host_locked = False
+    instances_locked = False
+    try:
+        host_locked = acquire_lock('host', host.id, token, LOCK_TTL)
+        if host_locked:
+            instances_locked = acquire_locks('instance', instance_ids, token, LOCK_TTL)
+        if not instances_locked:
+            return _error(BACKUP_RUNNING if _backup_maintenance_active() else BUSY, 409)
+        operation_id = _reserve(host.id, fingerprint, answers, instance_ids)
+    except _Rejected as rejected:
+        db.session.rollback()
+        return rejected.response
+    finally:
+        if instances_locked:
+            release_locks('instance', instance_ids, token)
+        if host_locked:
+            release_lock('host', host.id, token)
+
+    try:
+        start_upgrade_job(operation_id)
+    except Exception:
+        # start_upgrade_job records the job id before it pushes, so whether the
+        # push landed is unknown here. Reverting from the route could race a
+        # worker that did start; the reconciler owns this row instead and ends
+        # it failed_preparation (host ACTIVE) if no job is alive.
+        current_app.logger.exception('Runtime upgrade %s for host %s could not be queued',
+                                     operation_id, host_id)
+        return _error(ENQUEUE_FAILED, 500)
+
+    return jsonify({'data': {'status': 'configuring'}, 'message': 'Runtime upgrade queued.'}), 202
