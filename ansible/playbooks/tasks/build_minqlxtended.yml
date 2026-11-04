@@ -1,0 +1,93 @@
+---
+# Shared task: build minqlxtended into {{ minqlxtended_shared_dir }}.
+# Imported by setup_host.yml and rebuild_minqlx.yml (when runtime ==
+# 'minqlxtended') and by install_runtime.yml, so every path installs the same
+# engine. Never touches the minqlx shared directory.
+#
+# Requires: minqlx_build_dir, minqlxtended_git_repo, minqlxtended_git_version,
+#           minqlxtended_shared_dir
+#
+# The minqlx C patches (ql-assets/patches/*.patch) are obsolete here: `damage`
+# is a native event and reset_acc is pure Python. The only patch applied is
+# ql-assets/patches/minqlxtended/*.patch, which lets a service point the
+# embedded interpreter at an isolated venv via QLSM_PYTHON_DEPS. It is a
+# strict no-op when that variable is unset. No PYTHONPATH either -- the .so
+# locates minqlxtended.zip beside itself.
+
+- name: Clean up old minqlxtended build directory
+  ansible.builtin.file:
+    path: "{{ minqlx_build_dir }}"
+    state: absent
+
+- name: Create fresh minqlxtended build directory
+  ansible.builtin.file:
+    path: "{{ minqlx_build_dir }}"
+    state: directory
+    owner: ql
+    group: ql
+    mode: '0755'
+
+- name: Ensure minqlxtended shared directory exists
+  ansible.builtin.file:
+    path: "{{ minqlxtended_shared_dir }}"
+    state: directory
+    owner: ql
+    group: ql
+    mode: '0755'
+
+- name: Clone minqlxtended repo as ql user
+  become: yes
+  become_user: ql
+  ansible.builtin.git:
+    repo: "{{ minqlxtended_git_repo }}"
+    dest: "{{ minqlx_build_dir }}"
+    version: "{{ minqlxtended_git_version }}"
+    depth: 1
+
+- name: Copy local minqlxtended patches to build host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../ql-assets/patches/minqlxtended/"
+    dest: "/tmp/minqlxtended-patches/"
+    mode: '0644'
+
+- name: Apply local minqlxtended patches
+  become: yes
+  become_user: ql
+  ansible.builtin.shell: |
+    set -e
+    for patch in /tmp/minqlxtended-patches/*.patch; do
+      [ -f "$patch" ] || continue
+      patch -p1 --forward --reject-file=- < "$patch"
+    done
+  args:
+    chdir: "{{ minqlx_build_dir }}"
+    executable: /bin/bash
+
+- name: Compile minqlxtended (make) as ql user
+  become: yes
+  become_user: ql
+  community.general.make:
+    chdir: "{{ minqlx_build_dir }}"
+
+- name: Copy minqlxtended compiled files to shared location
+  ansible.builtin.copy:
+    src: "{{ minqlx_build_dir }}/{{ item.src }}"
+    dest: "{{ minqlxtended_shared_dir }}/{{ item.dest }}"
+    remote_src: yes
+    owner: ql
+    group: ql
+    mode: '0755'
+  loop:
+    - { src: "bin/minqlxtended.x64.so", dest: "minqlxtended.x64.so" }
+    - { src: "bin/minqlxtended.zip", dest: "minqlxtended.zip" }
+    - { src: "bin/run_server_x64_minqlxtended.sh", dest: "run_server_x64_minqlxtended.sh" }
+
+- name: Clean up minqlxtended build directory
+  ansible.builtin.file:
+    path: "{{ minqlx_build_dir }}"
+    state: absent
+
+- name: Clean up minqlxtended patch staging directory
+  ansible.builtin.file:
+    path: "/tmp/minqlxtended-patches"
+    state: absent

@@ -35,10 +35,16 @@ def test_setup_playbook_gates_both_build_paths():
     the wrong engine over the right one."""
     play = _load_playbook("ansible/playbooks/setup_host.yml")[0]
     clones = [t for t in play["tasks"] if "git" in t]
-    assert len(clones) == 2, "expected one clone task per runtime"
-    whens = " ".join(str(t.get("when", "")) for t in clones)
-    assert "runtime == 'minqlx'" in whens
-    assert "runtime == 'minqlxtended'" in whens
+    assert len(clones) == 1, "minqlx clones inline; minqlxtended is imported"
+    assert "runtime == 'minqlx'" in str(clones[0].get("when", ""))
+    # The minqlxtended build (and its clone) lives in the shared task file,
+    # imported only for minqlxtended hosts.
+    build_imports = [t for t in play["tasks"]
+                     if t.get("ansible.builtin.import_tasks") == "tasks/build_minqlxtended.yml"]
+    assert len(build_imports) == 1
+    assert build_imports[0]["when"] == "runtime == 'minqlxtended'"
+    build_tasks = _load_playbook("ansible/playbooks/tasks/build_minqlxtended.yml")
+    assert len([t for t in build_tasks if "ansible.builtin.git" in t]) == 1
 
 
 def test_minqlx_patches_never_apply_to_minqlxtended():
