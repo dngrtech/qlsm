@@ -5,6 +5,7 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
 from ui.runtime import DEFAULT_RUNTIME, normalize_runtime
+from ui.runtime_upgrade import upgrade_eligibility
 
 class HostStatus(enum.Enum):
     """Enum for Host status."""
@@ -109,6 +110,7 @@ class Host(db.Model):
             'lan_rate_uses_hook': bool(self.lan_rate_uses_hook),
             'firewall_pool_v2': bool(self.firewall_pool_v2),
             'runtime': normalize_runtime(self.runtime),
+            'runtime_upgrade': upgrade_eligibility(self),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,
