@@ -164,3 +164,20 @@ def host_job_failure_handler(job: Job, connection, type, value, traceback):
 
     except Exception as e:
         log.exception(f"Error in job failure handler for host {host_id}: {e}")
+
+
+def runtime_upgrade_job_failure_handler(job: Job, connection, type, value, traceback):
+    """Called by RQ when a host runtime upgrade (or its recovery) job fails,
+    times out or is abandoned by a dead worker. Durably requests recovery and
+    enqueues recover_host_runtime; if that enqueue fails, the periodic
+    reconciler finds the operation and retries. Never raises."""
+    from ui import create_app
+    from ui.task_logic.host_runtime_upgrade_recovery import handle_upgrade_job_failure
+
+    log.warning(f"Runtime upgrade job {job.id} failed: {getattr(type, '__name__', type)}: {value}")
+    try:
+        app = create_app()
+        with app.app_context():
+            handle_upgrade_job_failure(job, type, value)
+    except Exception as e:
+        log.error(f"Runtime upgrade failure handler error for job {job.id}: {e}", exc_info=True)
