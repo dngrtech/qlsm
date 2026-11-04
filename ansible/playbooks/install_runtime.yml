@@ -1,0 +1,122 @@
+---
+# Minimal minqlxtended installer for an existing minqlx host (runtime upgrade).
+#
+# Deliberately NOT setup_host.yml: firewall, networking, hostname, SSH, Redis,
+# lan_rate_uses_hook and the minqlx runtime's own Python environment are left
+# exactly as they are. It only
+#   1. asserts Python >= 3.12,
+#   2. adds missing build prerequisites, refusing any apt transaction that
+#      would upgrade, downgrade or remove an installed package,
+#   3. builds the patched minqlxtended into /home/ql/minqlxtended-shared and
+#      refreshes the target common plugin pool from the operation's immutable
+#      inputs (never global pip),
+#   4. creates one isolated venv per instance under
+#      /home/ql/runtime-deps/minqlxtended/<operation_id>/<instance_id>/ and
+#      installs the captured core + instance requirements into it together.
+# Additive apt packages stay after a rollback.
+#
+# Extra-vars (JSON, from ui/task_logic/instance_runtime_update.py):
+#   operation_id, fencing_token, terminal_operation_ids  -- see tasks/runtime_op_lock.yml
+#   core_requirements_src      controller path of the captured core requirements.txt
+#   common_plugins_builtin_src controller path of the captured built-in pool
+#   common_plugins_operator_src controller path of the captured operator pool (optional)
+#   runtime_instances          [{"id": int, "requirements_src": path or ""}]
+
+- name: Install the minqlxtended runtime beside minqlx
+  hosts: "{{ target_host_name | default('all') }}"
+  become: yes
+  gather_facts: true
+  gather_subset: ['!all', 'min']
+
+  vars:
+    runtime: "minqlxtended"
+    runtime_plugins_dirname: "minqlxtended-plugins"
+    common_assets_dir: "/home/ql/assets/common"
+    minqlx_build_dir: "/tmp/minqlx-build"
+    minqlxtended_git_repo: "https://github.com/tjone270/minqlxtended.git"
+    minqlxtended_git_version: "411591a2f6f8ad26949ee4c83758149d5b95f7ab"
+    minqlxtended_shared_dir: "/home/ql/minqlxtended-shared"
+    runtime_deps_root: "/home/ql/runtime-deps"
+    runtime_build_packages: [build-essential, git, python3-dev, python3-pip, python3-venv]
+    runtime_instances: []
+    core_requirements_src: ""
+    # The common pool is refreshed from the captured copies only.
+    skip_pip_install: true
+
+  tasks:
+    - name: Fail early if the host cannot run minqlxtended
+      ansible.builtin.assert:
+        that:
+          - ansible_python_version is version('3.12', '>=')
+        fail_msg: >-
+          This host runs Python {{ ansible_python_version }}, but minqlxtended
+          requires Python 3.12 or newer.
+        success_msg: "Python {{ ansible_python_version }} satisfies the minqlxtended floor."
+
+    - ansible.builtin.import_tasks: tasks/runtime_op_lock.yml
+
+    - name: Install under the runtime operation lock
+      block:
+        ###################################################################
+        # 1. Additive build prerequisites only
+        ###################################################################
+        - name: Find missing build prerequisites
+          ansible.builtin.script:
+            cmd: "{{ playbook_dir }}/../files/qlsm_runtime_op.py apt-check {{ runtime_build_packages | map('quote') | join(' ') }}"
+            executable: python3
+          register: apt_missing_raw
+          changed_when: false
+
+        - name: Parse missing build prerequisites
+          ansible.builtin.set_fact:
+            apt_missing: "{{ (apt_missing_raw.stdout | from_json).missing }}"
+
+        - name: Refresh apt package lists (no upgrade)
+          ansible.builtin.apt:
+            update_cache: yes
+            cache_valid_time: 3600
+          when: apt_missing | length > 0
+
+        - name: Refuse an apt transaction that would change installed packages
+          ansible.builtin.script:
+            cmd: "{{ playbook_dir }}/../files/qlsm_runtime_op.py apt-check --simulate {{ runtime_build_packages | map('quote') | join(' ') }}"
+            executable: python3
+          changed_when: false
+          when: apt_missing | length > 0
+
+        - name: Install only the missing build prerequisites
+          ansible.builtin.apt:
+            name: "{{ apt_missing }}"
+            state: present
+            install_recommends: false
+            update_cache: false
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+          when: apt_missing | length > 0
+
+        ###################################################################
+        # 2. Runtime artifacts and common plugin pool (minqlx untouched)
+        ###################################################################
+        - name: Build the shared minqlxtended runtime
+          ansible.builtin.import_tasks: tasks/build_minqlxtended.yml
+
+        - name: Ensure the target common plugin pool directory exists
+          ansible.builtin.file:
+            path: "{{ common_assets_dir }}/{{ runtime_plugins_dirname }}"
+            state: directory
+            owner: ql
+            group: ql
+            mode: '0755'
+
+        - name: Refresh the target common plugin pool from captured inputs
+          ansible.builtin.import_tasks: tasks/sync_common_plugins.yml
+
+        ###################################################################
+        # 3. Isolated per-instance dependency environments
+        ###################################################################
+        - name: Create isolated dependency environments
+          ansible.builtin.import_tasks: tasks/runtime_python_deps.yml
+          when: runtime_instances | length > 0
+
+      always:
+        - ansible.builtin.import_tasks: tasks/runtime_op_release.yml

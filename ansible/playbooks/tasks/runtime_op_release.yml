@@ -1,0 +1,15 @@
+---
+# Shared task: release the lock taken by tasks/runtime_op_lock.yml. Safe to
+# run when acquisition failed: the helper only stops a holder recorded for
+# this exact operation and fencing token.
+
+- name: Release the runtime operation lock
+  ansible.builtin.script:
+    cmd: >-
+      {{ playbook_dir }}/../files/qlsm_runtime_op.py release
+      --operation-id {{ operation_id | quote }}
+      --fencing-token {{ fencing_token | int }}
+    executable: python3
+  changed_when: false
+  failed_when: false
+  when: runtime_op_lock is defined and runtime_op_lock is succeeded

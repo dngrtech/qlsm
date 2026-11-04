@@ -1,0 +1,130 @@
+---
+# Shared task (install_runtime.yml): one isolated venv per instance under
+# {{ runtime_deps_root }}/minqlxtended/<operation_id>/<instance_id>/, built
+# with the same interpreter the minqlxtended build links against, without
+# system site-packages. Core and instance requirements are installed by ONE
+# `pip install` (installing them one after the other would let the second
+# silently downgrade the first), followed by `pip check`; either failing
+# fails the play. Never system-wide pip, never --break-system-packages.
+#
+# Requires: operation_id, runtime_deps_root, runtime_instances
+#           ([{"id": int, "requirements_src": controller path or ""}]),
+#           core_requirements_src (controller path or "")
+
+- name: Resolve the operation's dependency directory
+  ansible.builtin.set_fact:
+    runtime_deps_op_dir: "{{ runtime_deps_root }}/minqlxtended/{{ operation_id }}"
+
+- name: Read the system interpreter version
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -c, "import sys; print('%d.%d' % sys.version_info[:2])"]
+  register: runtime_python_abi
+  changed_when: false
+
+- name: Read the Python the minqlxtended build links against
+  ansible.builtin.command:
+    argv: [python3-config, --ldflags, --embed]
+  register: runtime_python_ldflags
+  changed_when: false
+
+- name: Require the venv interpreter to match the engine's libpython
+  ansible.builtin.assert:
+    that:
+      - ("-lpython" ~ runtime_python_abi.stdout | trim) in runtime_python_ldflags.stdout
+    fail_msg: >-
+      /usr/bin/python3 is {{ runtime_python_abi.stdout | trim }} but the engine links
+      {{ runtime_python_ldflags.stdout | trim }}; dependency venvs would not match its ABI.
+    quiet: true
+
+- name: Ensure the runtime dependency root exists (root-owned; holds the lock)
+  ansible.builtin.file:
+    path: "{{ runtime_deps_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure the operation's dependency directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: ql
+    group: ql
+    mode: '0755'
+  loop:
+    - "{{ runtime_deps_root }}/minqlxtended"
+    - "{{ runtime_deps_op_dir }}"
+
+- name: Stage the captured core requirements
+  ansible.builtin.copy:
+    src: "{{ core_requirements_src }}"
+    dest: "{{ runtime_deps_op_dir }}/core-requirements.txt"
+    owner: ql
+    group: ql
+    mode: '0644'
+  when: core_requirements_src | length > 0
+
+- name: Stage each instance's captured requirements
+  ansible.builtin.copy:
+    src: "{{ item.requirements_src }}"
+    dest: "{{ runtime_deps_op_dir }}/{{ item.id | int }}.requirements.txt"
+    owner: ql
+    group: ql
+    mode: '0644'
+  loop: "{{ runtime_instances }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: item.requirements_src | default('') | length > 0
+
+- name: Create each instance's venv (no system site-packages)
+  become: yes
+  become_user: ql
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -m, venv, "{{ runtime_deps_op_dir }}/{{ item.id | int }}"]
+    creates: "{{ runtime_deps_op_dir }}/{{ item.id | int }}/pyvenv.cfg"
+  loop: "{{ runtime_instances }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Confirm each venv uses the engine's Python version
+  ansible.builtin.command:
+    argv: ["{{ runtime_deps_op_dir }}/{{ item.id | int }}/bin/python", -c,
+           "import sys; print('%d.%d' % sys.version_info[:2], sys.prefix != sys.base_prefix)"]
+  register: runtime_venv_versions
+  changed_when: false
+  failed_when: runtime_venv_versions.stdout | trim != (runtime_python_abi.stdout | trim) ~ ' True'
+  loop: "{{ runtime_instances }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Install core and instance requirements together into each venv
+  become: yes
+  become_user: ql
+  ansible.builtin.command:
+    argv: >-
+      {{ [runtime_deps_op_dir ~ '/' ~ (item.id | int) ~ '/bin/python', '-m', 'pip', 'install',
+          '--disable-pip-version-check', '--no-input']
+         + ((core_requirements_src | length > 0) | ternary(['-r', runtime_deps_op_dir ~ '/core-requirements.txt'], []))
+         + ((item.requirements_src | default('') | length > 0)
+            | ternary(['-r', runtime_deps_op_dir ~ '/' ~ (item.id | int) ~ '.requirements.txt'], [])) }}
+  environment:
+    PIP_CONFIG_FILE: /dev/null
+    PYTHONNOUSERSITE: "1"
+  loop: "{{ runtime_instances }}"
+  loop_control:
+    label: "{{ item.id }}"
+  when: core_requirements_src | length > 0 or item.requirements_src | default('') | length > 0
+
+- name: Verify each venv's dependencies are consistent
+  become: yes
+  become_user: ql
+  ansible.builtin.command:
+    argv: ["{{ runtime_deps_op_dir }}/{{ item.id | int }}/bin/python", -m, pip, check,
+           --disable-pip-version-check]
+  environment:
+    PIP_CONFIG_FILE: /dev/null
+    PYTHONNOUSERSITE: "1"
+  changed_when: false
+  loop: "{{ runtime_instances }}"
+  loop_control:
+    label: "{{ item.id }}"
