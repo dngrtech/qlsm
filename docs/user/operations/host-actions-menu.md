@@ -92,9 +92,14 @@ The action only appears on hosts that run minqlx. It is greyed out, with an info
 
 Hover the info icon to see the reason for your host.
 
+![Upgrade to minqlxtended greyed out on a Debian 12 host, with the reason shown](../images/host-actions-upgrade-disabled.png)
+
 ### What you see before anything happens
 
-Clicking the action opens a dialog straight away. Nothing is stopped until you confirm. For each instance on the host the dialog lists what happens to its plugins:
+Clicking the action opens a dialog straight away. Nothing is stopped until you confirm.
+
+![Upgrade to minqlxtended dialog listing plugin decisions per instance](../images/host-actions-upgrade-dialog.png)
+ For each instance on the host the dialog lists what happens to its plugins:
 
 - standard plugins you have not changed are swapped for minqlxtended's version silently;
 - a plugin you edited or that is outdated, where minqlxtended has its own version, has a checkbox: tick it to use minqlxtended's version, leave it unticked to drop the plugin;
