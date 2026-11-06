@@ -25,6 +25,19 @@ const mocks = vi.hoisted(() => ({
   useDraftWorkspace: vi.fn(),
   uploadDraftHook: vi.fn(),
   deleteDraftHook: vi.fn(),
+  addonMounts: [],
+  addonRequest: vi.fn(),
+}));
+
+vi.mock('../../../contexts/AddonsContext', () => ({
+  useAddonMounts: () => mocks.addonMounts,
+}));
+
+vi.mock('../../../services/addons', () => ({
+  addonRequest: mocks.addonRequest,
+  addonAssetUrl: vi.fn(),
+  addonDownload: vi.fn(),
+  saveBlob: vi.fn(),
 }));
 
 vi.mock('../../../hooks/useDraftWorkspace', () => ({
@@ -325,6 +338,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     mocks.fileManagerProps = [];
     mocks.draftAdapterPresets = [];
     mocks.draftAdapterAcceptedReplacementsByPreset = {};
+    mocks.addonMounts = [];
     if (!AddInstanceForm) {
       ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
     }
@@ -2306,6 +2320,95 @@ describe('AddInstanceForm draft lifecycle', () => {
 
       await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
       expect(onSubmit.mock.calls[0][0].admins).toEqual([{ steam_id64: '76561198012345678', level: 2 }]);
+    });
+  });
+
+  describe('addon add_instance_tabs', () => {
+    const statsHubMount = () => {
+      const panel = {
+        kind: 'form',
+        load: 'GET add-instance?host_id={host_id}',
+        fields: [
+          { key: 'telemetry', type: 'bool', label: 'Send telemetry' },
+          { key: 'server_id', type: 'string', label: 'Server ID' },
+        ],
+      };
+      const addon = { id: 'stats-addon', name: 'Stats', ui: { panels: { tab: panel } } };
+      return {
+        key: 'stats-addon:add_instance_tabs:stats',
+        addon,
+        entry: { id: 'stats', label: 'Stats Hub', panel: 'tab' },
+        panel,
+        scope: 'host',
+        label: 'Stats Hub',
+        icon: 'radio',
+      };
+    };
+
+    const renderForm = (onSubmit) => render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+          },
+        }}
+        initialHostId={null}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    it('prefills the tab for the picked host and sends it as addon_options', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.addonRequest.mockResolvedValue({ telemetry: true, server_id: '' });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(mocks.addonRequest).toHaveBeenCalledWith(
+        'stats-addon', 'GET', 'add-instance?host_id=1',
+      ));
+
+      fireEvent.click(screen.getByRole('button', { name: /stats hub/i }));
+      await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
+      fireEvent.change(screen.getByLabelText('Server ID'), { target: { value: '77' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].addon_options).toEqual({
+        'stats-addon': { telemetry: true, server_id: '77' },
+      });
+    });
+
+    it('sends the defaults of a tab the operator never opened', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(mocks.addonRequest).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].addon_options).toEqual({
+        'stats-addon': { telemetry: true, server_id: '' },
+      });
+    });
+
+    it('sends no addon_options when no addon contributes a tab', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('addon_options');
     });
   });
 });

@@ -219,6 +219,38 @@ Saving writes each edited cvar as a `set <cvar> "<value>"` line into `server.cfg
 This is available both when editing an existing instance's config and when deploying a new instance.
 
 
+## Load Preset
+
+**Load preset** in the config editor fills the form with a preset's configs, factories and plugin selection. A few values belong to the server, not to the preset, so the server keeps its own for them:
+
+- everything QLSM sets on the server's launch line: `sv_hostname`, the ports, the `zmq_` and Redis settings and the rest of the [managed cvars](#managed-servercfg-cvars). `qlx_plugins` is not among them: the plugin list comes from the preset.
+- cvars an addon reserves for the server. An addon declares them through the `preset.keep_cvars` hook (see the addons README).
+- plugin cvars the plugin's manifest marks `"per_server": true`, for settings that must differ on every server:
+
+```json
+{ "cvar": "qlx_myServerId", "label": "Server id", "type": "string", "default": "", "per_server": true }
+```
+
+For each of these cvars the server keeps the `set` lines it has in its own `server.cfg`; a cvar the server has no line for gets none from the preset. Only plugins enabled on the server or ticked in the preset are read for `per_server`.
+
+A hostname you typed into the **Hostname** field before loading is kept as well.
+
+A preset saved before QLSM recorded its plugin selection has no plugin list to load, so the server's plugins are left as they are.
+
+## Bulk actions: Apply preset
+
+**Bulk actions** in the header of the **Servers** page, tab **Apply preset**, loads one preset into many servers at once. It works like [Load Preset](#load-preset) for each server, with a preview before anything is changed.
+
+1. Choose a preset, then tick the servers. A host box selects all of its servers. Only servers on **Active** hosts can be ticked.
+2. **Keep each server's own value of** lists the cvars each server keeps instead of taking the preset's value, with the source next to each name (for example an addon or a plugin manifest with `"per_server": true`; see [Load Preset](#load-preset) for the rules). The list is the union over the ticked servers. If a server's list cannot be read, its row says why and **Preview** stays off until **Retry** reads it. Untick a cvar to let the preset overwrite it, or type a name and click **Add** to keep one more. `qlx_plugins` is never kept.
+3. Click **Preview**. QLSM builds the result for each server and shows what would change: plugins and hooks added or removed, admins, 99k LAN rate, and changed files. A server the preset would not change says **no changes** and is skipped.
+4. If some of the preset's plugins can't run on a server's runtime, QLSM asks the compatibility question once for each runtime, not once per server, and lists every such plugin of that runtime's servers, also the ones with no replacement that would be dropped. Those servers say **needs decision** until it is answered. Cancelling it leaves them unapplied, and they show why.
+5. Tick or untick **Restart servers to apply** (it starts off when **Defer restarts** is on in Settings; stopped servers are never started), then click **Apply**.
+
+Changing the preset, the ticked servers or the kept cvars discards the previews, so preview again before applying. Up to four servers are previewed or applied at a time.
+
+Each server reports on its own row, and a failure on one does not stop the others: **queued** means the change was sent, **busy** means the server is already being changed, and **preview again** means the preset or the server changed after the preview, so no changes were made and **Apply** does not send it again. Run **Preview** again, then **Apply**. **Close** is off while an apply is running.
+
 ## Factories
 
 The **Factories** tab controls factory files included in the deployment bundle.

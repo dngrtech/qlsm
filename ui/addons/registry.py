@@ -241,6 +241,23 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
     per-addon return values otherwise. A handler that raises is logged and
     skipped: an addon must not be able to abort a deploy it merely decorates.
     """
+    return dispatch_each(hook, scope_id, lambda addon_id: (args, kwargs))
+
+
+def dispatch_each(hook, scope_id, args_for, on_error=None):
+    """dispatch(), but every addon's handlers get arguments of their own.
+
+    `args_for(addon_id)` returns the `(args, kwargs)` that addon's handlers
+    are called with. For a hook that carries per-addon input -- the values an
+    addon's own add-instance tab collected, say -- where handing every addon
+    everyone's input would leak one addon's form data (a secret field
+    included) into another's handler.
+
+    `on_error(addon_id, exc)` runs after a handler raised and was logged, so
+    the caller can undo what it left half done (e.g. roll back a session the
+    handler broke) before the next addon runs. Its own failure is logged and
+    swallowed.
+    """
     if hook not in HOOK_SCOPES:
         raise ValueError(f'unknown hook "{hook}"')
     results = []
@@ -253,6 +270,7 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
         if not _gates_open(addon, hook, scope_id):
             continue
         slow_after = SLOW_HANDLER_SECONDS.get(hook)
+        args, kwargs = args_for(addon.id)
         for handler in handlers:
             started = time.monotonic()
             try:
@@ -260,6 +278,12 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
             except Exception as e:
                 log.error('Addon %s hook %s failed: %s\n%s',
                           addon.id, hook, e, traceback.format_exc())
+                if on_error is not None:
+                    try:
+                        on_error(addon.id, e)
+                    except Exception as cleanup_error:
+                        log.error('Addon %s hook %s cleanup failed: %s',
+                                  addon.id, hook, cleanup_error)
                 continue
             finally:
                 elapsed = time.monotonic() - started
@@ -272,6 +296,36 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
             else:
                 results.append(value)
     return results
+
+
+def dispatch_by_addon(hook, scope_id, *args):
+    """dispatch_each() for a caller that needs to know which addon said what.
+
+    Returns `(addon_id, value)` pairs in alphabetical addon order, one per
+    handler call that did not raise. Unlike dispatch(), list values are not
+    flattened into one list: the pairing is the point. Same gates, same
+    logging of a raising handler (skipped, never propagated).
+    """
+    if hook not in HOOK_SCOPES:
+        raise ValueError(f'unknown hook "{hook}"')
+    pairs = []
+    for addon in sorted(get_addons().values(), key=lambda a: a.id):
+        if not addon.loaded or addon.ctx is None:
+            continue
+        handlers = addon.ctx.handlers.get(hook) or []
+        if not handlers:
+            continue
+        if not _gates_open(addon, hook, scope_id):
+            continue
+        for handler in handlers:
+            try:
+                value = handler(*args)
+            except Exception as e:
+                log.error('Addon %s hook %s failed: %s\n%s',
+                          addon.id, hook, e, traceback.format_exc())
+                continue
+            pairs.append((addon.id, value))
+    return pairs
 
 
 def cleanup_scope(scope, scope_id, commit=False):

@@ -55,7 +55,7 @@ def test_restart_instance_success(
     mock_prep_zmq.assert_called_once_with(mock_instance)
     mock_run_playbook.assert_called_once()
     assert mock_instance.status == InstanceStatus.RUNNING
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
     assert mock_append_log.called, "append_log should be called during restart"
     assert result == 'Instance 11 restart successful. Status: RUNNING'
 
@@ -107,7 +107,7 @@ def test_restart_instance_ansible_failure(
     result = restart_instance(11)
 
     assert mock_instance.status == InstanceStatus.ERROR
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
     assert result == 'Error: Instance 11 restart failed. RC: 2'
 
 
@@ -168,7 +168,8 @@ def test_restart_instance_exception(
     result = restart_instance(11)
 
     assert mock_instance.status == InstanceStatus.ERROR
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
+    mock_session.rollback.assert_called_once()
     assert 'Ansible internal error' in result
 
 

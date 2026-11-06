@@ -7,6 +7,7 @@ from flask import current_app
 from ui import rq
 from ui.models import HostStatus, InstanceStatus
 from ui.database import get_host, update_host, get_instance, update_instance
+from ui.pending_changes import SOURCE_WORKSHOP_UPDATE, record_pending_change
 from . import service_runtime
 from .ansible_runner import _run_host_ansible_playbook
 
@@ -106,6 +107,13 @@ def force_update_workshop_logic(host_id, workshop_id, restart_instance_ids):
                     )
                     restart_instance.queue(instance.id)
                 else:
+                    # update_instance below commits this record too.
+                    record_pending_change(
+                        instance.id,
+                        SOURCE_WORKSHOP_UPDATE,
+                        [],
+                        [{'field': 'workshop_item', 'before': None, 'after': str(workshop_id)}],
+                    )
                     update_instance(
                         instance.id,
                         status=InstanceStatus.UPDATED,

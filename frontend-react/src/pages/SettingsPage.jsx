@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Copy, KeyRound, Loader2, AlertCircle, Trash2 } from 'lucide-react';
-import { getApiKey, regenerateApiKey, revokeApiKey, getVultrKeySetting, setVultrKeySetting } from '../services/api';
+import { getApiKey, regenerateApiKey, revokeApiKey, getVultrKeySetting, setVultrKeySetting, getDeferRestartsSetting, setDeferRestartsSetting } from '../services/api';
 import { useNotification } from '../components/NotificationProvider';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { formatDateTime } from '../utils/uiUtils';
@@ -16,6 +16,9 @@ function SettingsPage() {
   const [vultrKey, setVultrKey] = useState('');
   const [vultrKeyInput, setVultrKeyInput] = useState('');
   const [savingVultrKey, setSavingVultrKey] = useState(false);
+
+  const [deferRestarts, setDeferRestarts] = useState(false);
+  const [savingDeferRestarts, setSavingDeferRestarts] = useState(false);
 
   const { showSuccess, showError } = useNotification();
 
@@ -45,6 +48,25 @@ function SettingsPage() {
   }, []);
 
   useEffect(() => { fetchVultrKey(); }, [fetchVultrKey]);
+
+  useEffect(() => {
+    getDeferRestartsSetting()
+      .then((data) => setDeferRestarts(Boolean(data?.enabled)))
+      .catch(() => {}); // Non-fatal, like the Vultr key above.
+  }, []);
+
+  const handleToggleDeferRestarts = async () => {
+    setSavingDeferRestarts(true);
+    try {
+      const data = await setDeferRestartsSetting(!deferRestarts);
+      setDeferRestarts(Boolean(data?.enabled));
+      showSuccess(data?.enabled ? 'Restarts are now deferred by default.' : 'Saves now restart by default.');
+    } catch (err) {
+      showError(err.response?.data?.error?.message || err.error?.message || 'Failed to update the restart setting.');
+    } finally {
+      setSavingDeferRestarts(false);
+    }
+  };
 
   const handleSaveVultrKey = async () => {
     setSavingVultrKey(true);
@@ -215,6 +237,40 @@ function SettingsPage() {
             {savingVultrKey ? <Loader2 size={16} className="animate-spin" /> : null}
             <span>Save Vultr Key</span>
           </button>
+        </div>
+      </div>
+
+      {/* Deferred restarts */}
+      <div className="users-page-header" style={{ marginTop: '2rem' }}>
+        <div className="users-page-title-row">
+          <div className="users-page-title-wrapper">
+            <h2 className="users-page-title" style={{ fontSize: '20px' }}>Instance Restarts</h2>
+          </div>
+        </div>
+      </div>
+      <div className="users-table-container">
+        <div style={{ display: 'flex', gap: '0.75rem', padding: '16px 20px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={handleToggleDeferRestarts}
+            disabled={savingDeferRestarts}
+            className="neu-toggle"
+            aria-pressed={deferRestarts}
+          >
+            <span className="sr-only">Toggle Defer restarts</span>
+            <span className={`neu-toggle__track ${deferRestarts ? 'neu-toggle__track--on' : 'neu-toggle__track--off'}`}>
+              <span className={`neu-toggle__knob ${deferRestarts ? 'neu-toggle__knob--on' : 'neu-toggle__knob--off'}`} />
+            </span>
+          </button>
+          <div>
+            <div className="text-sm font-medium text-theme-primary">Defer restarts</div>
+            <div className="text-xs text-theme-secondary">
+              Saving a config or applying plugin updates no longer restarts the instance by default.
+              Files are synced to the host right away; the instance shows Updated with a list of
+              pending changes until it restarts. Changes that require a restart (hooks, 99k LAN rate)
+              still restart.
+            </div>
+          </div>
         </div>
       </div>
 

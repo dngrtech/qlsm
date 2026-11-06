@@ -152,6 +152,31 @@ describe('useDraftWorkspace', () => {
     await waitFor(() => expect(mocks.createDraft).toHaveBeenCalledTimes(1));
   });
 
+  it('adopts an existing draft instead of creating one, and discards it when replaced', async () => {
+    mocks.createDraft.mockResolvedValue({ draft_id: 'draft-instance' });
+    mocks.getDraftTree.mockResolvedValue([{ type: 'file', name: 'a.py', path: 'a.py' }]);
+    mocks.discardDraft.mockResolvedValue(undefined);
+
+    const { result, rerender } = renderHook(
+      ({ existingDraftId }) => useDraftWorkspace({
+        source: 'instance', host: 'h', instanceId: 1, active: true, existingDraftId,
+      }),
+      { initialProps: { existingDraftId: undefined } }
+    );
+    await waitFor(() => expect(result.current.draftId).toBe('draft-instance'));
+
+    rerender({ existingDraftId: 'draft-server' });
+    await waitFor(() => expect(result.current.draftId).toBe('draft-server'));
+    expect(mocks.createDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.discardDraft).toHaveBeenCalledWith('draft-instance');
+    expect(mocks.getDraftTree).toHaveBeenLastCalledWith('draft-server');
+    await waitFor(() => expect(result.current.tree).toEqual([{ type: 'file', name: 'a.py', path: 'a.py' }]));
+
+    rerender({ existingDraftId: 'draft-server-2' });
+    await waitFor(() => expect(result.current.draftId).toBe('draft-server-2'));
+    expect(mocks.discardDraft).toHaveBeenCalledWith('draft-server');
+  });
+
   it('downloads a raw draft file without marking the workspace dirty', async () => {
     const blob = new Blob([new Uint8Array([0, 255, 128])]);
     mocks.createDraft.mockResolvedValue({ draft_id: 'draft-1' });

@@ -1,12 +1,27 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { getPresets, deletePreset } from '../services/api'; // Import API functions
+import { getPresets, deletePreset, checkAllPresetPluginUpdates } from '../services/api'; // Import API functions
 import { useNavigate } from 'react-router-dom';
+import PresetPluginUpdatesModal from '../components/presetManager/PresetPluginUpdatesModal';
 
 function PresetsPage() {
   const [presets, setPresets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // { [presetId]: number of outdated plugin files }; empty until the check returns.
+  const [pluginUpdateCounts, setPluginUpdateCounts] = useState({});
+  const [pluginUpdatesPreset, setPluginUpdatesPreset] = useState(null);
   const navigate = useNavigate();
+
+  const fetchPluginUpdateCounts = useCallback(async () => {
+    try {
+      const results = await checkAllPresetPluginUpdates();
+      const counts = {};
+      (results || []).forEach(r => { counts[r.preset_id] = (r.plugin_changes || []).length; });
+      setPluginUpdateCounts(counts);
+    } catch {
+      // Non-fatal: the presets list works without the update badges.
+    }
+  }, []);
 
   const fetchPresets = useCallback(async () => {
     setLoading(true);
@@ -24,7 +39,8 @@ function PresetsPage() {
 
   useEffect(() => {
     fetchPresets();
-  }, [fetchPresets]);
+    fetchPluginUpdateCounts();
+  }, [fetchPresets, fetchPluginUpdateCounts]);
 
   const handleDeletePreset = async (presetId, presetName) => {
     if (window.confirm(`Are you sure you want to delete the preset "${presetName}"?`)) {
@@ -71,6 +87,15 @@ function PresetsPage() {
                 ) : (
                   <>
                     <button
+                      onClick={() => setPluginUpdatesPreset({ id: preset.id, name: preset.name })}
+                      className="text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded"
+                      title="Compare this preset's plugin files with the plugin pool"
+                    >
+                      {pluginUpdateCounts[preset.id] > 0
+                        ? `Plugin Updates (${pluginUpdateCounts[preset.id]})`
+                        : 'Plugin Updates'}
+                    </button>
+                    <button
                       onClick={() => navigate(`/presets/edit/${preset.id}`)}
                       className="text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-1 px-3 rounded"
                     >
@@ -89,6 +114,13 @@ function PresetsPage() {
           ))}
         </div>
       )}
+
+      <PresetPluginUpdatesModal
+        isOpen={pluginUpdatesPreset !== null}
+        onClose={() => setPluginUpdatesPreset(null)}
+        preset={pluginUpdatesPreset}
+        onApplied={fetchPluginUpdateCounts}
+      />
     </div>
   );
 }

@@ -57,7 +57,7 @@ def test_apply_instance_config_success(
     mock_prep_zmq.assert_called_once_with(mock_instance)
     mock_run_playbook.assert_called_once()
     assert mock_instance.status == InstanceStatus.RUNNING
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
     assert mock_append_log.called, "append_log should be called during config apply"
     assert result == 'Instance 12 config application successful. Status: running'
 
@@ -156,7 +156,7 @@ def test_apply_instance_config_ansible_failure(
     result = apply_instance_config(12)
 
     assert mock_instance.status == InstanceStatus.ERROR
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
     assert result == 'Error: Instance 12 config application failed. RC: 1'
 
 
@@ -217,7 +217,8 @@ def test_apply_instance_config_exception(
     result = apply_instance_config(12)
 
     assert mock_instance.status == InstanceStatus.ERROR
-    assert mock_session.commit.call_count == 2
+    assert mock_session.commit.call_count == 3
+    mock_session.rollback.assert_called_once()
     assert 'Error during instance 12 config application: Config apply error' in result
 
 

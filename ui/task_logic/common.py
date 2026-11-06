@@ -1,8 +1,16 @@
 import datetime
 import logging
+import time
+
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.attributes import flag_modified
 
 log = logging.getLogger(__name__)
+
+# SQLite already waits busy_timeout (30s) inside each attempt; these retries
+# only cover a writer that holds the lock longer than that.
+DB_LOCKED_RETRY_ATTEMPTS = 3
+DB_LOCKED_RETRY_BACKOFF_SECONDS = 1.0
 
 
 def record_host_error(host_id, message, attempts=3):
@@ -95,3 +103,51 @@ def _reconcile_host_instances_after_setup(host):
             append_log(host, f"instance id={instance_id} reconciliation failed")
 
     return ok, failed
+
+
+def is_db_locked_error(exc):
+    """True for SQLite's "database is locked" (another writer holds the lock)."""
+    return isinstance(exc, OperationalError) and 'database is locked' in str(exc).lower()
+
+
+def commit_with_retry(apply_changes, attempts=DB_LOCKED_RETRY_ATTEMPTS,
+                      backoff=DB_LOCKED_RETRY_BACKOFF_SECONDS):
+    """Apply changes and commit, retrying while SQLite reports a locked database.
+
+    A failed commit needs a rollback, and the rollback drops the pending
+    changes, so they are passed in as `apply_changes` and re-applied before
+    every attempt. Any other error, or a lock that outlasts the last attempt,
+    is raised after the rollback, leaving the session usable.
+    """
+    from ui import db
+
+    for attempt in range(1, attempts + 1):
+        apply_changes()
+        try:
+            db.session.commit()
+            return
+        except OperationalError as exc:
+            db.session.rollback()
+            if not is_db_locked_error(exc) or attempt >= attempts:
+                raise
+            log.warning(
+                "Commit hit a locked database (attempt %s/%s), retrying",
+                attempt, attempts,
+            )
+            time.sleep(backoff * attempt)
+
+
+def record_task_failure(apply_changes):
+    """Persist a task's failure state from its except path.
+
+    The exception that got us here may have been the session itself (a
+    failed flush or commit), so roll back first: otherwise the next commit
+    fails with "transaction has been rolled back" and the status is lost.
+    If the failure state still cannot be committed, this raises, so RQ marks
+    the job failed and the job's on_failure handler gets its own chance to
+    move the record out of its transitional status.
+    """
+    from ui import db
+
+    db.session.rollback()
+    commit_with_retry(apply_changes)

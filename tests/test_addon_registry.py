@@ -426,3 +426,87 @@ def test_a_slow_poller_tick_handler_is_logged_by_addon_id(addon_app):
 def test_a_fast_poller_tick_handler_logs_no_warning(addon_app):
     warning = _dispatch_tick(_slow_tick_app(addon_app), [100.0, 100.5])
     warning.assert_not_called()
+
+
+# ---- dispatch_each ------------------------------------------------------
+
+def test_dispatch_each_gives_every_addon_its_own_arguments(addon_app):
+    """instance.created carries per-addon input (an add-instance tab's
+    values): each addon must see its own part, never another addon's."""
+    build, packages, _ = addon_app
+    for addon_id in ('alpha', 'beta'):
+        write_addon(packages, addon_id, manifest={'id': addon_id, 'version': '1.0.0'}, backend='''
+            def register(ctx):
+                @ctx.on('instance.created')
+                def created(instance_id, options):
+                    return (ctx.addon_id, instance_id, options)
+        ''')
+    app = build()
+    options = {'alpha': {'token': 'a-secret'}, 'beta': {'on': True}}
+    with app.app_context():
+        results = registry.dispatch_each(
+            'instance.created', 7, lambda addon_id: ((7, options.get(addon_id, {})), {}),
+        )
+    assert results == [('alpha', 7, {'token': 'a-secret'}), ('beta', 7, {'on': True})]
+
+
+def test_dispatch_by_addon_pairs_each_result_with_its_addon(addon_app):
+    build, packages, _ = addon_app
+    for addon_id in ('alpha', 'beta'):
+        write_addon(packages, addon_id, manifest={'id': addon_id, 'version': '1.0.0'}, backend='''
+            def register(ctx):
+                @ctx.on('preset.keep_cvars')
+                def keep(instance):
+                    return [ctx.addon_id + "_cvar", "second"]
+        ''')
+    write_addon(packages, 'angry', manifest={'id': 'angry', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('preset.keep_cvars')
+            def boom(instance):
+                raise RuntimeError("hook exploded")
+    ''')
+    app = build()
+    with app.app_context(), patch.object(registry, '_gates_open', return_value=True):
+        results = registry.dispatch_by_addon('preset.keep_cvars', 1, object())
+    assert results == [('alpha', ['alpha_cvar', 'second']), ('beta', ['beta_cvar', 'second'])]
+
+
+def test_dispatch_each_reports_a_raising_handler_and_carries_on(addon_app):
+    build, packages, _ = addon_app
+    write_addon(packages, 'angry', manifest={'id': 'angry', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('instance.created')
+            def boom(instance_id, options):
+                raise RuntimeError("hook exploded")
+    ''')
+    write_addon(packages, 'calm', manifest={'id': 'calm', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('instance.created')
+            def fine(instance_id, options):
+                return 'ok'
+    ''')
+    app = build()
+    failed = []
+    with app.app_context():
+        results = registry.dispatch_each(
+            'instance.created', 1, lambda addon_id: ((1, {}), {}),
+            on_error=lambda addon_id, exc: failed.append((addon_id, str(exc))),
+        )
+    assert results == ['ok']
+    assert failed == [('angry', 'hook exploded')]
+
+
+def test_instance_created_fires_for_a_globally_disabled_addon(addon_app):
+    """Ungated on purpose: a new instance has no instance-layer row yet, and
+    whether to switch itself on for it is the addon's own decision."""
+    build, packages, _ = addon_app
+    write_addon(packages, 'quiet', manifest={'id': 'quiet', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('instance.created')
+            def created(instance_id, options):
+                return instance_id
+    ''')
+    app = build()
+    with app.app_context():
+        assert registry.get_addon('quiet').globally_enabled is False
+        assert registry.dispatch('instance.created', 3, 3, {}) == [3]

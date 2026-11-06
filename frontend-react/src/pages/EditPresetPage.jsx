@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getPresetById, updatePreset } from '../services/api';
 import OwnerAdminEditor from '../components/operators/OwnerAdminEditor';
+import PresetPluginUpdatesModal from '../components/presetManager/PresetPluginUpdatesModal';
 
 function EditPresetPage() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ function EditPresetPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [originalName, setOriginalName] = useState('');
+  const [showPluginUpdates, setShowPluginUpdates] = useState(false);
 
   const fetchPreset = useCallback(async () => {
     setLoading(true);
@@ -131,6 +133,19 @@ function EditPresetPage() {
           />
         </div>
 
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Plugin files saved in this preset are copied to every new instance built from it.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowPluginUpdates(true)}
+            className="text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded whitespace-nowrap"
+          >
+            Plugins &amp; Updates
+          </button>
+        </div>
+
         <OwnerAdminEditor
           serverCfgContent={serverCfg}
           onServerCfgChange={setServerCfg}
@@ -172,6 +187,12 @@ function EditPresetPage() {
           </button>
         </div>
       </form>
+
+      <PresetPluginUpdatesModal
+        isOpen={showPluginUpdates}
+        onClose={() => setShowPluginUpdates(false)}
+        preset={{ id: presetId, name: originalName }}
+      />
     </div>
   );
 }

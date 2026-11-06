@@ -48,7 +48,31 @@ HOOK_SCOPES = {
     # operator edited by hand, which by definition happens without anyone
     # flipping an enable switch.
     'instance.config_applied': None,
+    # Fires once from POST /api/instances/ (instance_routes.py), after the
+    # instance row is committed and its config files are on disk, and before
+    # the first deploy is queued. Each handler gets (instance_id, options):
+    # `options` is that addon's own part of the request's `addon_options`
+    # (what its `add_instance_tabs` entry collected, {} when nothing was
+    # sent), never another addon's -- see dispatch_each(). Lets an addon
+    # prepare its per-instance state (enable layers, an id it reserves) so
+    # its instance.launch_args already reach the first deploy instead of
+    # needing a second apply + restart.
+    # Ungated: a brand-new instance has no instance-layer enable row yet, so
+    # gating on 'instance' would never fire, and the addon is exactly the one
+    # that decides whether to switch itself on for it (an "enable for new
+    # instances" setting, the operator's tab values). Runs synchronously in
+    # the request: handlers must be quick and must not enqueue deploys of
+    # their own; a handler that raises is logged and dropped and the instance
+    # is still created.
+    'instance.created': None,
     'instance.delete': None,   # cleanup must run even for a disabled addon
+    # Asked by the server-side preset apply (ui/preset_keep_cvars.py) with the
+    # instance: returns the names of cvars that are this server's own and a
+    # preset must not overwrite (an id the addon reserved for it, say). Core
+    # dispatches it per addon (dispatch_by_addon) so the preview can say which
+    # addon asked for each one. Gated at 'instance' like the other
+    # instance-level contributions: a disabled addon keeps nothing.
+    'preset.keep_cvars': 'instance',
     # backup: one hook, not two -- backup_files.backup_file_trees() feeds both
     # the export and the restore, so a tree contributed once is handled in
     # both directions.
@@ -110,6 +134,7 @@ LIST_HOOKS = frozenset({
     'instance.launch_args',
     'instance.plugins',
     'instance.ld_preload',
+    'preset.keep_cvars',
     'backup.export',
     'demo_management.file_kinds',
     'demo_management.match_groups',

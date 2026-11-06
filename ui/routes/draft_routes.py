@@ -617,28 +617,29 @@ def _resolve_source_runtime(data):
     return None
 
 
-@draft_api_bp.route('/', methods=['POST'])
-@jwt_required()
-def create_draft():
-    """Create a new draft workspace seeded from a preset or instance."""
-    data = request.get_json()
+def create_draft_workspace(data):
+    """Create a draft workspace seeded from a preset or instance.
+
+    Returns (draft_id, None) on success, or (None, (response, status)) on a
+    validation or OS error. Needs an app context (jsonify, logger).
+    """
     if not data or 'source' not in data:
-        return jsonify({"error": {"message": "source is required (preset or instance)"}}), 400
+        return None, (jsonify({"error": {"message": "source is required (preset or instance)"}}), 400)
 
     source_path = _get_source_path(data)
     if source_path is None:
-        return jsonify({"error": {"message": "Invalid source. Provide preset name or host + instance_id."}}), 400
+        return None, (jsonify({"error": {"message": "Invalid source. Provide preset name or host + instance_id."}}), 400)
 
     target_runtime = data.get('target_runtime')
     if target_runtime is not None and not is_valid_runtime(target_runtime):
-        return jsonify({"error": {"message": "Invalid target_runtime."}}), 400
+        return None, (jsonify({"error": {"message": "Invalid target_runtime."}}), 400)
 
     accepted = data.get('accepted_replacements')
     if accepted is not None and (
         not isinstance(accepted, list)
         or not all(isinstance(name, str) for name in accepted)
     ):
-        return jsonify({"error": {"message": "accepted_replacements must be a list of strings."}}), 400
+        return None, (jsonify({"error": {"message": "accepted_replacements must be a list of strings."}}), 400)
 
     _cleanup_stale_drafts()
 
@@ -692,10 +693,20 @@ def create_draft():
             _record_effective_runtime(_get_draft_base_path(draft_id), effective_runtime)
     except OSError as e:
         current_app.logger.error(f"Failed to create draft {draft_id}: {e}")
-        return jsonify({"error": {"message": "Failed to create draft workspace"}}), 500
+        return None, (jsonify({"error": {"message": "Failed to create draft workspace"}}), 500)
 
     _write_draft_source(draft_id, data.get('source'))
     current_app.logger.info(f"Created draft {draft_id} from {source_path}")
+    return draft_id, None
+
+
+@draft_api_bp.route('/', methods=['POST'])
+@jwt_required()
+def create_draft():
+    """Create a new draft workspace seeded from a preset or instance."""
+    draft_id, error = create_draft_workspace(request.get_json())
+    if error:
+        return error
     return jsonify({"data": {"draft_id": draft_id}}), 201
 
 
