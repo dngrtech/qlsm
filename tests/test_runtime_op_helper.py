@@ -86,6 +86,46 @@ def test_acquire_holds_the_lock_until_release(helper, tmp_path, capsys):
     os.kill(out['holder_pid'], signal.SIGTERM)
 
 
+def _gone(pid):
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def test_acquire_stops_the_holder_a_terminal_operation_left_behind(helper, tmp_path, capsys):
+    base = str(tmp_path)
+    rc, out = _run(helper, capsys, 'acquire', '--base', base, '--operation-id', OP_A,
+                   '--fencing-token', '1', '--ttl', '60')
+    stale = out['holder_pid']
+    # OP_A's worker died; the controller recovered it to a terminal state.
+    rc, out = _run(helper, capsys, 'acquire', '--base', base, '--operation-id', OP_B,
+                   '--fencing-token', '1', '--ttl', '60', '--terminal-ids', OP_A)
+    try:
+        assert rc == 0 and out['acquired'] and out['holder_pid'] != stale
+        assert _gone(stale)
+    finally:
+        _run(helper, capsys, 'release', '--base', base, '--operation-id', OP_B,
+             '--fencing-token', '1')
+
+
+def test_acquire_never_stops_a_holder_of_a_nonterminal_operation(helper, tmp_path, capsys):
+    base = str(tmp_path)
+    rc, out = _run(helper, capsys, 'acquire', '--base', base, '--operation-id', OP_A,
+                   '--fencing-token', '1', '--ttl', '60')
+    live = out['holder_pid']
+    try:
+        rc, out = _run(helper, capsys, 'acquire', '--base', base, '--operation-id', OP_B,
+                       '--fencing-token', '1', '--terminal-ids', 'f' * 32)
+        assert rc == 3 and 'still running' in out['refused']
+        os.kill(live, 0)  # still alive
+    finally:
+        os.kill(live, signal.SIGTERM)
+
+
 def test_finalize_lets_the_next_operation_in(helper, tmp_path, capsys):
     base = str(tmp_path)
     token = os.path.join(base, helper.TOKEN_NAME)

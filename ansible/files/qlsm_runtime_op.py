@@ -110,20 +110,44 @@ def _check_identity(operation_id, token):
         raise Refused('fencing_token must be a non-negative integer')
 
 
-def _open_lock(base):
+def _stop_terminal_holder(base, terminal):
+    """Stop the lock holder left behind by an operation the controller says is
+    terminal (e.g. its worker was killed mid-play, then recovery rolled it
+    back). Only the process we recorded is signalled (pid + start time), and
+    only for a terminal operation, so a live owner is never touched."""
+    record = _read_json(os.path.join(base, TOKEN_NAME)) or {}
+    if record.get('operation_id') not in terminal or not _holder_alive(record):
+        return False
+    try:
+        os.kill(int(record['holder_pid']), signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    return True
+
+
+def _open_lock(base, terminal=frozenset()):
     _verify_trusted_dir(base, create=True)
     fd = os.open(os.path.join(base, LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError as exc:
-        os.close(fd)
-        if exc.errno in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+    stopped = False
+    deadline = time.time() + 5
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except OSError as exc:
+            if exc.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+                os.close(fd)
+                raise
+            if not stopped:
+                stopped = _stop_terminal_holder(base, terminal)
+            if stopped and time.time() < deadline:
+                time.sleep(0.1)
+                continue
+            os.close(fd)
             record = _read_json(os.path.join(base, TOKEN_NAME)) or {}
             raise Refused('another runtime operation play is still running on this host '
                           '(operation %s, holder pid %s)' % (record.get('operation_id'),
                                                              record.get('holder_pid')))
-        raise
-    return fd
 
 
 def _spawn_holder(lock_fd, ttl):
@@ -216,7 +240,7 @@ def check_fence(base, operation_id, token):
 def cmd_acquire(args):
     _check_identity(args.operation_id, args.fencing_token)
     terminal = set(filter(None, (args.terminal_ids or '').split(',')))
-    fd = _open_lock(args.base)
+    fd = _open_lock(args.base, terminal)
     try:
         token_path = os.path.join(args.base, TOKEN_NAME)
         reason = token_decision(_read_json(token_path), args.operation_id,
