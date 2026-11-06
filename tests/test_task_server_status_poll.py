@@ -1,4 +1,6 @@
 import json
+
+import pytest
 from unittest.mock import MagicMock, patch
 
 from ui.database import create_host, create_instance, get_host
@@ -7,6 +9,15 @@ from ui.task_logic.service_runtime import RuntimeObservation
 
 
 POLL_MODULE = "ui.task_logic.server_status_poll"
+
+
+@pytest.fixture(autouse=True)
+def _no_runtime_upgrade_reservations():
+    """Most tests here mock Host on a bare Flask app with no database, so the
+    upgrade-reservation lookup is stubbed; the real lookup is exercised in
+    tests/test_host_runtime_upgrade.py."""
+    with patch(f"{POLL_MODULE}.reserved_host_ids", return_value=set()):
+        yield
 
 
 def _make_host(id=1, ip="10.0.0.1", ssh_user="ql", ssh_key="/key.pem", ssh_port=22):

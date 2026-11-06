@@ -317,8 +317,8 @@ describe('AddHostModal runtime selection', () => {
   });
 
   it('opens with no runtime selected', async () => {
-    // The runtime is immutable once the host exists, so QLSM refuses to make
-    // the irreversible pick for an operator who never looked at the field.
+    // The runtime changes later only via the one-way minqlxtended upgrade, so
+    // QLSM refuses to make the pick for an operator who never looked at the field.
     render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
 
     await waitFor(() => expect(mocks.getHosts).toHaveBeenCalledTimes(1));

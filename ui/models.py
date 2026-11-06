@@ -5,6 +5,7 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
 from ui.runtime import DEFAULT_RUNTIME, normalize_runtime
+from ui.runtime_upgrade import upgrade_eligibility
 
 class HostStatus(enum.Enum):
     """Enum for Host status."""
@@ -62,10 +63,13 @@ class Host(db.Model):
     cpu_count = db.Column(db.Integer, nullable=True) # Detected/inferred Linux CPU count for affinity assignment
     redis_unix_socket = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     lan_rate_uses_hook = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = LD_PRELOAD hook mechanism; False = legacy iptables/sysctl path
+    # Set by the runtime upgrade once it succeeds: instances created or
+    # redeployed on this host get their own venv, never system pip.
+    runtime_deps_isolated = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
     firewall_pool_v2 = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # True = firewall rendered with the current game/RCON port pool; False = narrower legacy allow-list
     # Which minqlx runtime this host builds and runs. Chosen at creation and
-    # immutable thereafter -- migrating a live host is destructive, and a locked
-    # column can never drift from what is actually installed on the box.
+    # changed only by the Upgrade to minqlxtended action (minqlx -> minqlxtended,
+    # with whole-host rollback), so it can never drift from what is installed.
     runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
                         server_default=DEFAULT_RUNTIME)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
@@ -84,11 +88,17 @@ class Host(db.Model):
     def __repr__(self):
         return f'<Host {self.name} ({self.ip_address or "No IP"})>'
 
-    def to_dict(self):
-        """Convert host to dictionary."""
+    def to_dict(self, refresh=True):
+        """Convert host to dictionary.
+
+        refresh=False is for callers that just loaded the row (and its
+        instances) fresh, like the polled hosts list: refreshing would re-query
+        every host and drop its eagerly loaded instances (one query each).
+        """
         # Ensure the instance is refreshed from the database session
         # to get the most up-to-date state, especially for enum fields.
-        db.session.refresh(self)
+        if refresh:
+            db.session.refresh(self)
         return {
             'id': self.id,
             'name': self.name,
@@ -109,6 +119,7 @@ class Host(db.Model):
             'lan_rate_uses_hook': bool(self.lan_rate_uses_hook),
             'firewall_pool_v2': bool(self.firewall_pool_v2),
             'runtime': normalize_runtime(self.runtime),
+            'runtime_upgrade': upgrade_eligibility(self),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status
             'auto_restart_schedule': self.auto_restart_schedule,
@@ -144,6 +155,8 @@ class QLInstance(db.Model):
     cpu_affinity = db.Column(db.Integer, nullable=True) # Optional Linux CPU index assigned to this service
     redis_db = db.Column(db.Integer, nullable=True)  # Chosen Redis logical DB; NULL = derive from port
     runtime_invocation_id = db.Column(db.String(64), nullable=True)
+    # Isolated dependency venv (runtime upgrade); NULL = the host's system Python.
+    python_deps_path = db.Column(db.String(255), nullable=True)
     status = db.Column(db.Enum(InstanceStatus), default=InstanceStatus.IDLE, nullable=False) # Status of the QL instance itself
     logs = db.Column(db.Text, nullable=True) # Stores logs from background tasks (e.g., Ansible)
     
@@ -530,3 +543,7 @@ class Notification(db.Model):
             'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
             'read_at': self.read_at.isoformat() if self.read_at else None,
         }
+
+
+# Imported last: it depends on db only, and must be registered for create_all().
+from ui.models_runtime_upgrade import HostRuntimeUpgradeOperation  # noqa: E402,F401

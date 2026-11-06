@@ -18,6 +18,27 @@ from ui.addons.hooks import validate_hook_name
 from ui.addons.settings import AddonSettings
 
 
+def _runtime_upgrade_refusal(lock_scope, args):
+    """Refusal text when a host/instance-scoped addon task targets a host
+    under a runtime upgrade reservation, else None."""
+    if lock_scope not in ('host', 'instance') or not args:
+        return None
+    from ui import db
+    from ui.models import QLInstance
+    from ui.runtime_upgrade_guard import active_runtime_upgrade, blocked_message
+
+    host_id, host_name = args[0], None
+    if lock_scope == 'instance':
+        instance = db.session.get(QLInstance, args[0])
+        if instance is None:
+            return None
+        host_id = instance.host_id
+        host_name = instance.host.name if instance.host is not None else None
+    if active_runtime_upgrade(host_id) is None:
+        return None
+    return blocked_message(host_name or host_id)
+
+
 class AddonContext:
     """Handed to `register(ctx)` in an addon's backend.py."""
 
@@ -77,8 +98,14 @@ class AddonContext:
         an absolute path for exactly this purpose. Returns
         (success, stdout, stderr).
         """
+        from ui.runtime_upgrade_guard import active_runtime_upgrade, blocked_message
         from ui.task_logic.ansible_runner import _run_host_ansible_playbook
 
+        # A host under a runtime upgrade reservation is off limits to addons too.
+        if active_runtime_upgrade(getattr(host, 'id', None)) is not None:
+            self.logger.warning('Addon %s playbook %s refused: host %s is being upgraded',
+                                self.addon_id, relative_path, host.name)
+            return False, '', blocked_message(host.name)
         return _run_host_ansible_playbook(
             host, self.path('playbooks', relative_path), extravars=extravars,
         )
@@ -134,6 +161,10 @@ class AddonContext:
             @wraps(fn)
             def with_lock_release(*args, lock_token=None, **kwargs):
                 try:
+                    blocked = _runtime_upgrade_refusal(lock_scope, args)
+                    if blocked:
+                        self.logger.warning('Addon task %s refused: %s', fn.__name__, blocked)
+                        return blocked
                     return fn(*args, **kwargs)
                 finally:
                     if lock_token and lock_scope:

@@ -97,10 +97,17 @@ def test_shared_sync_task_stages_built_in_then_operator_plugins():
         if t.get("ansible.builtin.command", {}).get("argv", [None])[0] == "rsync"
     ]
     sources = [t["ansible.builtin.command"]["argv"][2] for t in rsyncs]
-    assert sources == [
-        "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/",
-        "{{ playbook_dir }}/../../data/shared-plugins/{{ runtime }}/",
+    # Overridable (install_runtime.yml points them at captured inputs), and
+    # by default exactly the live paths they always were.
+    from jinja2 import Environment
+    env = Environment()
+    context = {"playbook_dir": "/pb", "runtime_plugins_dirname": "minqlx-plugins", "runtime": "minqlx"}
+    assert [env.from_string(src).render(**context) for src in sources] == [
+        "/pb/../../ql-assets/data/minqlx-plugins/",
+        "/pb/../../data/shared-plugins/minqlx/",
     ]
+    overridden = dict(context, common_plugins_builtin_src="/in/b", common_plugins_operator_src="/in/o")
+    assert [env.from_string(src).render(**overridden) for src in sources] == ["/in/b/", "/in/o/"]
     for t in rsyncs:
         assert t["ansible.builtin.command"]["argv"][3] == "{{ merged_pool_stage.path }}/"
         assert t["delegate_to"] == "localhost"

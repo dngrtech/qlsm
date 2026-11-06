@@ -5,6 +5,7 @@ from uuid import uuid4
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 
+from ui.runtime_upgrade_guard import reserved_host_ids
 from ui.task_lock import backup_maintenance_lock
 from ui.task_logic.backup_db_import import BackupImportError
 from ui.task_logic.backup_export import build_backup_archive
@@ -72,6 +73,12 @@ def import_backup():
     with backup_maintenance_lock(str(uuid4())) as acquired:
         if not acquired:
             return _locked_response()
+        # A restore replaces configs/ and the whole database, including the
+        # upgrade operation row that is the host's reservation and rollback
+        # journal, so it must wait until every runtime upgrade is terminal.
+        if reserved_host_ids():
+            return jsonify({'error': {'message': 'Cannot restore a backup while a host runtime upgrade '
+                                                 'or its rollback is in progress.'}}), 409
 
         try:
             summary = restore_backup_archive(blob, password)

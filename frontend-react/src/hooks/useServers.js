@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { useHosts, POLLABLE_HOST_STATUSES } from './useHosts';
 import { useInstances, POLLABLE_INSTANCE_STATUSES } from './useInstances';
 import { useExpandState } from './useExpandState';
@@ -52,6 +52,31 @@ export function useServers() {
     }, [hosts, initExpanded]);
 
     const expandAll = () => expandAllHosts(hosts.map((h) => h.id));
+
+    // Host rows carry server-computed fields that depend on their instances
+    // (runtime_upgrade eligibility needs every instance RUNNING or STOPPED),
+    // but the hosts list only polls while a host itself is transitional.
+    // Refetch hosts whenever any instance's status or membership changes so
+    // those fields never go stale.
+    const instanceStatusKey = useMemo(
+        () => instances
+            .map((i) => `${i.id}:${i.host_id ?? i.host?.id}:${i.status}`)
+            .sort()
+            .join('|'),
+        [instances]
+    );
+    const lastInstanceStatusKey = useRef(null);
+    useEffect(() => {
+        if (instancesLoading) return;
+        if (lastInstanceStatusKey.current === null) {
+            lastInstanceStatusKey.current = instanceStatusKey;
+            return;
+        }
+        if (lastInstanceStatusKey.current !== instanceStatusKey) {
+            lastInstanceStatusKey.current = instanceStatusKey;
+            refreshHosts(false);
+        }
+    }, [instanceStatusKey, instancesLoading, refreshHosts]);
 
     // Combined stats
     const stats = useMemo(() => {

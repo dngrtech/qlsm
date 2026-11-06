@@ -12,6 +12,9 @@ CPUAffinity={{ cpu_affinity }}
 {% if ld_preload_paths | default('') %}
 Environment=LD_PRELOAD={{ ld_preload_paths }}
 {% endif %}
+{% if python_deps_path | default('') %}
+Environment=QLSM_PYTHON_DEPS={{ python_deps_path }}
+{% endif %}
 # The ExecStart line will include the script and the dynamic arguments passed from Ansible
 # Wrap the entire command in quotes to handle spaces/quotes in qlds_args
 ExecStart=/home/ql/qlds-%i/{{ launch_script | default('run_server_x64_minqlx.sh') }} {{ qlds_args | default('') }} 

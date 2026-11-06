@@ -39,6 +39,8 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 | `/hosts/<id>/plugin-updates/apply` | POST | Apply selected plugin updates, optionally restarting instances |
 | `/hosts/<id>/auto-restart` | POST | Configure host auto-restart schedule |
 | `/hosts/<id>/watchdog` | POST | Enable/disable and tune the ql-watchdog add-on |
+| `/hosts/<id>/runtime-upgrade` | GET | Compatibility dry-run for upgrading the host from minqlx to minqlxtended |
+| `/hosts/<id>/runtime-upgrade` | POST | Confirm and queue the minqlx -> minqlxtended upgrade (see [Runtime Upgrade](#runtime-upgrade)) |
 
 ### Configure Watchdog
 
@@ -185,6 +187,89 @@ host lock; `500` enqueue failure.
 
 If the common pool refresh fails, the task sets the host to `ERROR` and stops
 before copying any instance files.
+
+### Runtime Upgrade
+
+```
+GET  /api/hosts/<id>/runtime-upgrade
+POST /api/hosts/<id>/runtime-upgrade
+```
+
+Upgrades every instance on a minqlx host to minqlxtended in one operation, with
+a whole-host rollback if any step fails. The host must run minqlx, be `ACTIVE`,
+run Ubuntu 24.04 or newer, and have every instance `RUNNING` or `STOPPED`.
+
+**GET: dry-run (200)**
+
+```json
+{
+  "data": {
+    "eligibility": {"visible": true, "enabled": true, "reason": null},
+    "instances": [
+      {
+        "instance_id": 1,
+        "instance_name": "ca-1",
+        "stripped": [{"path": "ban.py", "kind": "replaceable", "replacement": "ban.py", "...": "..."}],
+        "replacements": {"ban.py": "<target file text>"},
+        "auto_accepted": ["balance.py"],
+        "checked_plugins": ["balance.py", "ban.py"]
+      }
+    ],
+    "fingerprint": "<sha256 hex>"
+  }
+}
+```
+
+Each `instances` entry is that instance's cross-runtime compatibility report,
+with the same `stripped` entry fields as a preset load (see
+[Per-entry fields](#per-entry-fields)). `fingerprint` identifies everything the
+upgrade depends on: instance fields, config and script files, plugin selection,
+hooks, and the target runtime's shipped files.
+
+Errors: `404` host not found; `409` with `eligibility.reason` as the message if
+the host is not eligible, or if an upgrade is already in progress.
+
+**POST: confirm (202)**
+
+```json
+{
+  "fingerprint": "<value from the GET>",
+  "accepted_replacements": {"1": ["ban.py"]}
+}
+```
+
+- `fingerprint`: the GET's value, echoed back unchanged.
+- `accepted_replacements`: object keyed by instance id, each a list of the
+  plugin paths whose minqlxtended replacement the operator ticked. A path is
+  accepted only if it was offered for that instance: a `stripped` entry with
+  `kind: "replaceable"`, or a path in `auto_accepted` (auto-accepted paths are
+  applied anyway). Missing instances and empty lists mean nothing ticked.
+
+```json
+{"data": {"status": "configuring"}, "message": "Runtime upgrade queued."}
+```
+
+The route takes the host and instance locks, re-checks eligibility, recaptures
+the inputs, and refuses if their fingerprint no longer matches. It then
+records the operation and sets the host to `CONFIGURING`. It releases the locks
+before queueing; the background job takes them again. From then on, every
+mutation of the host and its instances, and a backup import, returns `409`
+until the operation ends.
+
+Errors:
+
+- `400` malformed body: a non-string `fingerprint`, a non-object
+  `accepted_replacements`, a non-numeric instance id, a non-list value, a
+  non-string or duplicate path, an instance not on the host, or a path that was
+  not offered.
+- `404` host not found.
+- `409` host not eligible, an upgrade already in progress, the host or an
+  instance locked by another operation, a backup export or import running,
+  instances added or removed during the request, or a stale `fingerprint`
+  (anything changed since the GET: run the dry-run again).
+- `500` the job could not be confirmed as queued. If it did not start, the
+  operation is cancelled automatically within a few minutes and the host
+  returns to `ACTIVE`.
 
 ### Resize Host
 
@@ -335,7 +420,7 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
-All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is **immutable** — there is no field or endpoint to change it after the host is created. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against).
+All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is set at creation. The only way to change it afterwards is the minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade); there is no downgrade. For cloud hosts, `runtime` also selects the Terraform OS image (minqlx provisions Debian 12; minqlxtended provisions Ubuntu 24.04, the only image with the Python 3.12 the build links against).
 
 The Python 3.12 floor for `runtime: "minqlxtended"` is enforced differently per provider, because QLSM doesn't have the same evidence available at creation time for each:
 
@@ -467,7 +552,7 @@ Example success response:
 
 `firewall_pool_v2: false` means the host's firewall allow-list was rendered before the game/RCON port pool was widened, so the higher instance slots may not be reachable. A successful host setup run — initial or "Re-run Host Setup" — sets it to `true`.
 
-`runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and never changed afterward. `NULL`/legacy rows normalize to `"minqlx"`.
+`runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and changed afterwards only by the minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade). `NULL`/legacy rows normalize to `"minqlx"`.
 
 `os_version` is the host's `/etc/os-release` `VERSION_ID` (e.g. `"24.04"`), or `null` when unknown. Hosts created before this field existed are filled in by a background task that `GET /api/hosts/` starts for ACTIVE hosts (at most once per host per hour; self deployments get it after updating with `qlsm-install.sh --update`), so the value appears on a later request.
 

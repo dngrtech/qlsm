@@ -15,7 +15,7 @@ For **standalone** hosts, the target machine's OS is auto-detected during connec
 
 For a **self** host, there's no equivalent inline check: QLSM has no way to detect the local machine's Python version before creating the host record. The form accepts the submission, the host is created, and setup runs in the background — if the machine's Python turns out to be older than 3.12, setup fails and the host lands in **Error** status instead of **Active**. If you're creating a minqlxtended self host, confirm `python3 --version` is 3.12 or newer on that machine yourself before you submit the form.
 
-**This choice is permanent.** There is no setting to change it later. Moving a host to the other runtime means saving a preset from the existing host and deploying a brand-new host with the other runtime selected.
+**This choice is fixed at creation.** The only way to change it afterwards is the [Upgrade to minqlxtended](../operations/host-actions-menu.md#upgrade-to-minqlxtended) action, which moves a minqlx host on Ubuntu 24.04 or newer to minqlxtended and cannot be undone from the UI. To move a host back, save a preset from it and deploy a new host with minqlx selected.
 
 **Presets carry across runtimes.** A preset saved from a minqlx instance can be loaded onto a minqlxtended host, and vice versa: your server config, map pool, and other settings come across intact, while plugins that can't run on the target runtime are removed — with a replacement offered where one exists — before you confirm the load. See [Presets And Default Config](../presets/overview.md) for the details.
 

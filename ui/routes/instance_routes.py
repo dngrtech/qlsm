@@ -17,6 +17,7 @@ from ui.preset_support import (
     resolve_preset_subdir,
 )
 from ui.runtime import host_runtime, log_filename_pattern, runtime_paths
+from ui.runtime_upgrade_guard import upgrade_block_response
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
     get_host,
@@ -49,6 +50,12 @@ ALLOWED_FACTORY_EXTENSIONS = {'.factories'}
 
 
 def _reject_mutation_while_host_configuring(host):
+    if host is not None:
+        # A runtime upgrade reservation outlives CONFIGURING (an incomplete
+        # rollback leaves the host ERROR), so it is checked on its own.
+        blocked = upgrade_block_response(host.id, host.name)
+        if blocked:
+            return blocked
     if host and host.status == HostStatus.CONFIGURING:
         return jsonify({
             "error": {

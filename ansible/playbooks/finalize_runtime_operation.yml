@@ -1,0 +1,30 @@
+---
+# Mark a terminal runtime-upgrade operation finished on the host, so the
+# remote token record (tasks/runtime_op_lock.yml) no longer blocks the next
+# operation. Changes nothing else. Refuses while a play still holds the lock
+# or when the fencing token is stale.
+#
+# Extra-vars: operation_id, fencing_token
+
+- name: Finalize a runtime operation on the host
+  hosts: "{{ target_host_name | default('all') }}"
+  become: yes
+  gather_facts: false
+
+  tasks:
+    - name: Validate runtime operation identity
+      ansible.builtin.assert:
+        that:
+          - operation_id is string
+          - operation_id is match('^[0-9a-f]{32}$')
+          - (fencing_token | string) is match('^[0-9]+$')
+        quiet: true
+
+    - name: Mark the operation finalized in the host's token record
+      ansible.builtin.script:
+        cmd: >-
+          {{ playbook_dir }}/../files/qlsm_runtime_op.py finalize
+          --operation-id {{ operation_id | quote }}
+          --fencing-token {{ fencing_token | int }}
+        executable: python3
+      changed_when: false

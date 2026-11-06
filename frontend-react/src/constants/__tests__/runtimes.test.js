@@ -60,7 +60,8 @@ describe('defaultPresetNameForRuntime', () => {
 });
 
 describe('runtimeTooltipTail', () => {
-  // The runtime choice is irreversible, so the tooltip has to be accurate about
+  // The runtime choice is hard to undo (only a one-way upgrade to minqlxtended
+  // exists), so the tooltip has to be accurate about
   // what the operator is committing to -- and that differs by provider. On a
   // cloud host QLSM picks the OS image; on the operator's own machine it does
   // not, and only minqlxtended has a floor to miss.

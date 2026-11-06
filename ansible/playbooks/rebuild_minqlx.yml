@@ -110,63 +110,6 @@
         state: absent
       when: runtime == 'minqlx'
 
-    - name: Clean up old minqlxtended build directory
-      file:
-        path: "{{ minqlx_build_dir }}"
-        state: absent
-      when: runtime == 'minqlxtended'
-
-    - name: Create fresh minqlxtended build directory
-      file:
-        path: "{{ minqlx_build_dir }}"
-        state: directory
-        owner: ql
-        group: ql
-        mode: '0755'
-      when: runtime == 'minqlxtended'
-
-    - name: Ensure minqlxtended shared directory exists
-      file:
-        path: "{{ minqlxtended_shared_dir }}"
-        state: directory
-        owner: ql
-        group: ql
-        mode: '0755'
-      when: runtime == 'minqlxtended'
-
-    - name: Clone minqlxtended repo as ql user
-      become: yes
-      become_user: ql
-      git:
-        repo: "{{ minqlxtended_git_repo }}"
-        dest: "{{ minqlx_build_dir }}"
-        version: "{{ minqlxtended_git_version }}"
-        depth: 1
-      when: runtime == 'minqlxtended'
-
-    - name: Compile minqlxtended (make) as ql user
-      become: yes
-      become_user: ql
-      make:
-        chdir: "{{ minqlx_build_dir }}"
-      when: runtime == 'minqlxtended'
-
-    - name: Copy minqlxtended compiled files to shared location
-      copy:
-        src: "{{ minqlx_build_dir }}/{{ item.src }}"
-        dest: "{{ minqlxtended_shared_dir }}/{{ item.dest }}"
-        remote_src: yes
-        owner: ql
-        group: ql
-        mode: '0755'
-      loop:
-        - { src: "bin/minqlxtended.x64.so", dest: "minqlxtended.x64.so" }
-        - { src: "bin/minqlxtended.zip", dest: "minqlxtended.zip" }
-        - { src: "bin/run_server_x64_minqlxtended.sh", dest: "run_server_x64_minqlxtended.sh" }
-      when: runtime == 'minqlxtended'
-
-    - name: Clean up minqlxtended build directory
-      file:
-        path: "{{ minqlx_build_dir }}"
-        state: absent
+    - name: Build the shared minqlxtended runtime
+      ansible.builtin.import_tasks: tasks/build_minqlxtended.yml
       when: runtime == 'minqlxtended'

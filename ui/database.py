@@ -2,6 +2,7 @@ import click
 import datetime
 from flask import current_app
 from flask.cli import with_appcontext
+from sqlalchemy.orm import selectinload
 from ui import db
 # Import models and status enums
 from ui.models import QLInstance, Host, HostStatus, ConfigPreset
@@ -109,7 +110,8 @@ def get_hosts():
     # Expire all Host instances from the session to force a refresh from the DB
     # This helps ensure that changes made by other processes (e.g., RQ workers) are reflected.
     db.session.expire_all() 
-    return Host.query.order_by(Host.name).all()
+    # Instances in one query: the hosts list reads them for every host.
+    return Host.query.options(selectinload(Host.instances)).order_by(Host.name).all()
 
 def get_host(host_id):
     """Get a specific Host by ID."""

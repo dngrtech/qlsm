@@ -1,0 +1,38 @@
+---
+# Shared task: take the host's runtime-operation lock before any side effect.
+# Used by install_runtime.yml and update_instance_runtime.yml (upgrade and
+# rollback). The helper runs via `script`, so nothing is installed on the host.
+# Lock and token live in the root-owned /var/lib/qlsm/runtime-ops/ (0700); the
+# helper refuses a symlinked or non-root-owned component anywhere on that path.
+#
+# Requires: operation_id (32 lowercase hex), fencing_token (int)
+# Optional: terminal_operation_ids (list; operations the controller knows are
+#           terminal, so their stale record may be taken over),
+#           runtime_op_lock_ttl (seconds the holder keeps the lock if the play
+#           dies without releasing it; default 4200)
+#
+# Refuses when another play of any operation still holds the lock, when a
+# different non-terminal operation owns the host, or when this operation has
+# already seen a higher fencing token. Pair with tasks/runtime_op_release.yml
+# in an `always:` block.
+
+- name: Validate runtime operation identity
+  ansible.builtin.assert:
+    that:
+      - operation_id is string
+      - operation_id is match('^[0-9a-f]{32}$')
+      - (fencing_token | string) is match('^[0-9]+$')
+    fail_msg: "operation_id must be 32 lowercase hex characters and fencing_token a non-negative integer."
+    quiet: true
+
+- name: Acquire the runtime operation lock and check the fencing token
+  ansible.builtin.script:
+    cmd: >-
+      {{ playbook_dir }}/../files/qlsm_runtime_op.py acquire
+      --operation-id {{ operation_id | quote }}
+      --fencing-token {{ fencing_token | int }}
+      --terminal-ids {{ (terminal_operation_ids | default([])) | join(',') | quote }}
+      --ttl {{ runtime_op_lock_ttl | default(4200) | int }}
+    executable: python3
+  register: runtime_op_lock
+  changed_when: false

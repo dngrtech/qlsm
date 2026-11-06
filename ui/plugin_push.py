@@ -17,6 +17,7 @@ import uuid
 from ui.database import get_hosts
 from ui.models import HostStatus
 from ui.runtime import host_runtime
+from ui.runtime_upgrade_guard import active_runtime_upgrade
 from ui.task_lock import acquire_lock, release_lock
 from ui.task_logic.job_failure_handlers import host_job_failure_handler
 from ui.tasks import apply_plugin_updates_task, enqueue_task
@@ -42,6 +43,9 @@ def push_pool_to_hosts(runtimes):
             continue
         if host.status != HostStatus.ACTIVE:
             result["skipped"].append({"id": host.id, "name": host.name, "reason": f"status: {host.status.name}"})
+            continue
+        if active_runtime_upgrade(host.id) is not None:
+            result["skipped"].append({"id": host.id, "name": host.name, "reason": "runtime upgrade in progress"})
             continue
 
         token = str(uuid.uuid4())

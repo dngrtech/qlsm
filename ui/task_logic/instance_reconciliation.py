@@ -2,7 +2,7 @@ import logging
 
 from ui import db
 from ui.models import InstanceStatus, QLInstance
-from ui.runtime import runtime_extravars
+from ui.runtime import instance_runtime_extravars
 from ui.task_logic.ansible_instance_mgmt import (
     _build_ld_preload_paths,
     _build_qlds_args_string,
@@ -66,7 +66,7 @@ def reconcile_instance_after_host_setup(
             "keep_service_stopped": not restart_service,
         }
         extravars = with_self_host_network_extravars(instance, extravars)
-        extravars.update(runtime_extravars(instance.host))
+        extravars.update(instance_runtime_extravars(instance))
         runner_result, error_msg = _run_ansible_playbook(
             instance,
             "sync_instance_configs_and_restart.yml",

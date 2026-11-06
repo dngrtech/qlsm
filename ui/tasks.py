@@ -39,6 +39,8 @@ from ui.task_logic.ansible_qlfilter_mgmt import (
 )
 from ui.task_logic.ansible_workshop_update import force_update_workshop_logic
 from ui.task_logic.ansible_plugin_update import apply_plugin_updates_logic
+from ui.task_logic.host_runtime_upgrade import upgrade_host_runtime_logic
+from ui.task_logic.host_runtime_upgrade_recovery import recover_host_runtime_logic
 
 # Import RQ library
 from ui import rq
@@ -47,6 +49,7 @@ from ui import rq
 RERUN_CLOUD_SETUP_TIMEOUT = 3600
 RERUN_STANDALONE_SETUP_TIMEOUT = 1200
 RERUN_SETUP_LOCK_RELEASE_BUFFER = 60
+RUNTIME_UPGRADE_TIMEOUT = 3600
 
 
 def enqueue_task(task_func, *args, on_failure=None, **kwargs):
@@ -361,6 +364,31 @@ def apply_plugin_updates_task(host_id, apply_common_pool, instance_selections, r
         if lock_token:
             from ui.task_lock import release_lock
             release_lock('host', host_id, lock_token)
+
+# --- Host Runtime Upgrade Tasks ---
+# Enqueue with on_failure=runtime_upgrade_job_failure_handler (see
+# host_runtime_upgrade_recovery.start_upgrade_job). Execution locks and the
+# host reservation are owned by the operation row, not by a lock_token kwarg.
+
+def _current_job_id():
+    from rq import get_current_job
+
+    job = get_current_job()
+    return job.id if job else None
+
+
+@rq.job(timeout=RUNTIME_UPGRADE_TIMEOUT)
+@with_app_context
+def upgrade_host_runtime(operation_id):
+    """RQ task entry point for upgrading a host minqlx -> minqlxtended."""
+    return upgrade_host_runtime_logic(operation_id, job_id=_current_job_id())
+
+
+@rq.job(timeout=3600)
+@with_app_context
+def recover_host_runtime(operation_id):
+    """RQ task entry point for resuming an interrupted runtime upgrade's rollback."""
+    return recover_host_runtime_logic(operation_id, job_id=_current_job_id())
 
 # --- Standalone Host Tasks ---
 
