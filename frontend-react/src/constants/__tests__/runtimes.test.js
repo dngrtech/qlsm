@@ -66,7 +66,7 @@ describe('runtimeTooltipTail', () => {
   // cloud host QLSM picks the OS image; on the operator's own machine it does
   // not, and only minqlxtended has a floor to miss.
   it('tells cloud operators QLSM provisions the OS for them', () => {
-    expect(runtimeTooltipTail('minqlx', 'vultr')).toBe('QLSM provisions Debian 12.');
+    expect(runtimeTooltipTail('minqlx', 'vultr')).toBe('QLSM provisions Ubuntu 24.04.');
     expect(runtimeTooltipTail('minqlxtended', 'vultr')).toBe('QLSM provisions Ubuntu 24.04.');
   });
 
@@ -108,6 +108,6 @@ describe('runtimeTooltipTail', () => {
   });
 
   it('falls back to minqlx copy for an unknown runtime', () => {
-    expect(runtimeTooltipTail('garbage', 'vultr')).toBe('QLSM provisions Debian 12.');
+    expect(runtimeTooltipTail('garbage', 'vultr')).toBe('QLSM provisions Ubuntu 24.04.');
   });
 });

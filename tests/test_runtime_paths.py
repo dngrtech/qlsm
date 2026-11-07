@@ -50,8 +50,10 @@ def test_every_path_key_differs_between_runtimes():
     a = runtime_paths(MINQLX)
     b = runtime_paths(MINQLXTENDED)
     for key in ("plugins_dirname", "shared_dir", "engine_so", "launch_script",
-                "log_filename", "git_repo", "git_version", "os_name"):
+                "log_filename", "git_repo", "git_version"):
         assert a[key] != b[key], f"{key} is identical across runtimes"
+    # os_name is deliberately not in this list: it is not an on-disk path, and
+    # both runtimes provision Ubuntu 24.04 on new cloud hosts.
 
 
 def test_minqlx_paths_match_what_is_deployed_today():
@@ -64,8 +66,12 @@ def test_minqlx_paths_match_what_is_deployed_today():
     assert paths["launch_script"] == "run_server_x64_minqlx.sh"
     assert paths["log_filename"] == "minqlx.log"
     assert paths["git_version"] == "fbdd915185337791d8e209dc4b686a1ee60d3721"
-    assert paths["os_name"] == "Debian 12 x64 (bookworm)"
-    assert paths["os_type"] == "debian"
+    # What a NEW minqlx cloud host gets: Ubuntu, so it can be upgraded to
+    # minqlxtended. Existing Debian hosts are resolved per host, not from here.
+    assert paths["os_name"] == "Ubuntu 24.04 LTS x64"
+    assert paths["os_family"] == "ubuntu"
+    assert paths["os_type"] == "ubuntu"
+    assert paths["os_version"] == "24.04"
     assert paths["min_python"] is None
     assert paths["excluded_system_hooks"] == frozenset()
 

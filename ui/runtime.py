@@ -38,10 +38,14 @@ _RUNTIME_PATHS = {
         'log_filename': 'minqlx.log',
         'git_repo': 'https://github.com/MinoMino/minqlx.git',
         'git_version': 'fbdd915185337791d8e209dc4b686a1ee60d3721',
-        'os_name': 'Debian 12 x64 (bookworm)',
-        'os_family': 'debian',
-        'os_type': 'debian',
-        'os_version': '12',
+        # What a NEW cloud host gets. Ubuntu 24.04 so every new minqlx host is
+        # eligible for the minqlxtended upgrade (runtime_upgrade.py requires
+        # Ubuntu 24.04+). Existing Debian hosts are unaffected: terraform
+        # resolves their image from the host row via vultr_image_for_host().
+        'os_name': 'Ubuntu 24.04 LTS x64',
+        'os_family': 'ubuntu',
+        'os_type': 'ubuntu',
+        'os_version': '24.04',
         # No Python floor: existing hosts run whatever they already run, and
         # inventing a gate here would break them on the next setup re-run.
         'min_python': None,
@@ -101,6 +105,32 @@ def runtime_paths(runtime):
 def host_runtime(host):
     """The runtime of a Host row, tolerant of None and of detached objects."""
     return normalize_runtime(getattr(host, 'runtime', None))
+
+
+# Vultr images QLSM has ever provisioned, keyed by the Host.os_type recorded at
+# creation. Debian 12 is what every minqlx cloud host got before new minqlx
+# hosts moved to Ubuntu 24.04.
+_VULTR_IMAGES = {
+    'debian': {'os_name': 'Debian 12 x64 (bookworm)', 'os_family': 'debian'},
+    'ubuntu': {'os_name': 'Ubuntu 24.04 LTS x64', 'os_family': 'ubuntu'},
+}
+# Rows with no recorded OS (created before os_type was stored) keep the image
+# their runtime got at the time, so a resize or destroy never resolves to a
+# different image than the one the server is running.
+_LEGACY_VULTR_IMAGE_BY_RUNTIME = {MINQLX: 'debian', MINQLXTENDED: 'ubuntu'}
+
+
+def vultr_image_for_host(host):
+    """The Vultr image (os_name, os_family) an existing host was built from.
+
+    Read from the host's recorded OS, not from the runtime table: the table
+    describes what a NEW host gets and has changed since older hosts were
+    created. Terraform runs this on every provision, resize and destroy, and an
+    image that differs from the running one makes Vultr reinstall the OS.
+    """
+    os_type = (getattr(host, 'os_type', None) or '').strip().lower()
+    key = os_type if os_type in _VULTR_IMAGES else _LEGACY_VULTR_IMAGE_BY_RUNTIME[host_runtime(host)]
+    return dict(_VULTR_IMAGES[key])
 
 
 def log_filename_pattern(runtime):
