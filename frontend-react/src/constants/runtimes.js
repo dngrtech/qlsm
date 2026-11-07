@@ -38,7 +38,7 @@ export const runtimeLabel = (value) => (KNOWN.has(value) ? value : DEFAULT_RUNTI
 // 3.12" is a dead end and "use Ubuntu 24.04" is the actionable instruction.
 const TOOLTIP_TAILS = {
   minqlx: {
-    provisioned: 'QLSM provisions Debian 12.',
+    provisioned: 'QLSM provisions Ubuntu 24.04.',
     // min_python is None for minqlx -- it runs on whatever python3 ships.
     operatorOwned: "Runs on the distro's own python3 — no version floor.",
   },
