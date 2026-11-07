@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.53.0` | 2026-11-07 | [#268](https://github.com/dngrtech/qlsm/pull/268) | New minqlx hosts on Vultr are now deployed on Ubuntu 24.04, so they can be upgraded to minqlxtended. |
 | `v1.52.0` | 2026-11-04 | [#267](https://github.com/dngrtech/qlsm/pull/267) | Existing minqlx hosts on Ubuntu 24.04 or newer can now be upgraded to minqlxtended from the host actions menu, with automatic rollback if anything fails. |
 | `v1.51.2` | 2026-11-03 | [#266](https://github.com/dngrtech/qlsm/pull/266) | Hosts created before v1.51.0 now show their OS version too. Self deployments get it after updating with `qlsm-install.sh --update`. |
 | `v1.51.1` | 2026-11-03 | [#265](https://github.com/dngrtech/qlsm/pull/265) | Pull request reviews now run several specialised Claude reviewers in parallel, and a verifier checks their findings before anything is posted. This is a development-only change with no effect on the running app. |
