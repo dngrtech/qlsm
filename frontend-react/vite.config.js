@@ -31,6 +31,8 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.js'],
   },
   server: {
+    // Optional: comma-separated extra hostnames (e.g. a Tailscale Serve name).
+    allowedHosts: (process.env.VITE_ALLOWED_HOSTS || '').split(',').map((h) => h.trim()).filter(Boolean),
     proxy: {
       // Proxy /api requests to the Flask backend
       '/api': {
