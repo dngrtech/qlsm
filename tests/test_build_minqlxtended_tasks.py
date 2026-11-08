@@ -130,5 +130,6 @@ def test_patches_are_staged_privately_and_applied_by_explicit_name():
     apply = next(t for t in tasks if t["name"] == "Apply local minqlxtended patches")
     assert "ansible.builtin.command" in apply and "shell" not in apply
     assert "qlsm-python-deps.patch" in apply["loop"]
-    for name in ("qlsm-python-deps.patch",):
+    assert "qlsm-demo-capture.patch" in apply["loop"]
+    for name in ("qlsm-python-deps.patch", "qlsm-demo-capture.patch"):
         assert os.path.isfile(os.path.join("ql-assets/patches/minqlxtended", name))

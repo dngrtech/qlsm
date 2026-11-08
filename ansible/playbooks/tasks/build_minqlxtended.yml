@@ -7,15 +7,19 @@
 # Requires: minqlx_build_dir, minqlxtended_git_repo, minqlxtended_git_version,
 #           minqlxtended_shared_dir
 # Optional: minqlxtended_patches (explicit file names under
-#           ql-assets/patches/minqlxtended/; default ['qlsm-python-deps.patch'];
-#           never globbed)
+#           ql-assets/patches/minqlxtended/; default ['qlsm-python-deps.patch',
+#           'qlsm-demo-capture.patch']; never globbed)
 #
 # The minqlx C patches (ql-assets/patches/*.patch) are obsolete here: `damage`
-# is a native event and reset_acc is pure Python. The only patch applied is
-# ql-assets/patches/minqlxtended/qlsm-python-deps.patch, which lets a service point the
-# embedded interpreter at an isolated venv via QLSM_PYTHON_DEPS. It is a
-# strict no-op when that variable is unset. No PYTHONPATH either -- the .so
-# locates minqlxtended.zip beside itself.
+# is a native event and reset_acc is pure Python. Two patches are applied:
+# - qlsm-python-deps.patch lets a service point the embedded interpreter at an
+#   isolated venv via QLSM_PYTHON_DEPS. It is a strict no-op when that variable
+#   is unset. No PYTHONPATH either -- the .so locates minqlxtended.zip beside itself.
+# - qlsm-demo-capture.patch is tjone270/minqlxtended PR #8 (server-side demo
+#   capture) plus the one-line demo_cvars_ensure() fix from RemyTek's dev-branch
+#   (eb926d84), as a diff against the pinned commit. When PR #8 is merged and the
+#   pin moves past it, REMOVE it from the list: `patch --forward` would skip the
+#   already-applied hunks, exit 1 and fail the build.
 
 - name: Clean up old minqlxtended build directory
   ansible.builtin.file:
@@ -71,7 +75,7 @@
     owner: ql
     group: ql
     mode: '0600'
-  loop: "{{ minqlxtended_patches | default(['qlsm-python-deps.patch']) }}"
+  loop: "{{ minqlxtended_patches | default(['qlsm-python-deps.patch', 'qlsm-demo-capture.patch']) }}"
 
 - name: Apply local minqlxtended patches
   become: yes
@@ -85,7 +89,7 @@
       - -i
       - "{{ minqlxtended_patch_stage.path }}/{{ item }}"
     chdir: "{{ minqlx_build_dir }}"
-  loop: "{{ minqlxtended_patches | default(['qlsm-python-deps.patch']) }}"
+  loop: "{{ minqlxtended_patches | default(['qlsm-python-deps.patch', 'qlsm-demo-capture.patch']) }}"
 
 - name: Compile minqlxtended (make) as ql user
   become: yes

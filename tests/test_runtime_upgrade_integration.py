@@ -242,7 +242,9 @@ def test_upgrade_and_rollback_of_an_existing_stopped_instance(target, ctx, tmp_p
 
     tgt = target
     build_vars = {'minqlxtended_git_repo': 'file:///srv/stub-minqlxtended',
-                  'minqlxtended_git_version': tgt.stub_commit}
+                  'minqlxtended_git_version': tgt.stub_commit,
+                  # The stub tree has no demo sources, so only the deps patch applies to it.
+                  'minqlxtended_patches': ['qlsm-python-deps.patch']}
     real_runner = iru._run_host_ansible_playbook
 
     def runner(host, playbook, extravars=None, capture_output=False):
