@@ -2,7 +2,7 @@
 
 **Settings → Repositories** lets you add third-party sources and install their contents: plugins go into QLSM's shared plugin folder, addons onto the addon packages volume.
 
-A new QLSM install already lists two repositories, **Doomsday's Plugins Repository** (`https://github.com/D00MSDAYDEVICE/minqlx`) and **ark-ql Plugins Repository** (`https://github.com/ark-ql/minqlx-plugins`). None of their plugins are downloaded until you pick them. You can delete either; it won't come back when QLSM restarts or updates.
+A new QLSM install already lists one repository, **Doomsday's Plugins Repository** (`https://github.com/D00MSDAYDEVICE/minqlx`). None of its plugins are downloaded until you pick them. You can delete it; it won't come back when QLSM restarts or updates.
 
 ## Add A Repository
 
