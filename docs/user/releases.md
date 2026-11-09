@@ -6,7 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
-| `v1.54.0` | 2026-11-08 | [#269](https://github.com/dngrtech/qlsm/pull/269) | minqlxtended hosts are now built with server-side demo capture (minqlxtended PR #8, with a one-line fix) applied on top of the pinned minqlxtended release. Hosts pick it up the next time they are set up or rebuilt. |
+| `v1.54.0` | 2026-11-08 | [#269](https://github.com/dngrtech/qlsm/pull/269) | minqlxtended hosts are now built with server-side demo capture (minqlxtended PR #8, with a one-line fix) applied on top of the pinned minqlxtended release, plus a guard that stops the server crashing when a bot sends a command while a match restarts. Hosts pick it up the next time they are set up or rebuilt. |
 | `v1.53.0` | 2026-11-07 | [#268](https://github.com/dngrtech/qlsm/pull/268) | New minqlx hosts on Vultr are now deployed on Ubuntu 24.04, so they can be upgraded to minqlxtended. |
 | `v1.52.0` | 2026-11-04 | [#267](https://github.com/dngrtech/qlsm/pull/267) | Existing minqlx hosts on Ubuntu 24.04 or newer can now be upgraded to minqlxtended from the host actions menu, with automatic rollback if anything fails. |
 | `v1.51.2` | 2026-11-03 | [#266](https://github.com/dngrtech/qlsm/pull/266) | Hosts created before v1.51.0 now show their OS version too. Self deployments get it after updating with `qlsm-install.sh --update`. |
