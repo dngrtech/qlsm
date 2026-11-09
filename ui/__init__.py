@@ -18,6 +18,18 @@ import sqlite3 as _sqlite3
 # Initialize extensions
 db = SQLAlchemy()
 
+# WAL needs shared memory that works across processes. Some filesystems do not
+# provide it (WSL1, network mounts): every connection then fails with
+# "locking protocol". SQLITE_JOURNAL_MODE lets such installs pick a rollback
+# journal instead. Only these values are ever put into the PRAGMA.
+_SQLITE_JOURNAL_MODES = {'WAL', 'DELETE', 'TRUNCATE', 'PERSIST'}
+
+
+def _sqlite_journal_mode():
+    mode = os.environ.get('SQLITE_JOURNAL_MODE', 'WAL').strip().upper()
+    return mode if mode in _SQLITE_JOURNAL_MODES else 'WAL'
+
+
 # Class-level listener fires for every SQLite connection from every engine,
 # regardless of when the engine was created or how many workers are running.
 @event.listens_for(Engine, "connect")
@@ -25,7 +37,7 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):
     if isinstance(dbapi_connection, _sqlite3.Connection):
         cursor = dbapi_connection.cursor()
         try:
-            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute(f"PRAGMA journal_mode={_sqlite_journal_mode()}")
             cursor.execute("PRAGMA busy_timeout=30000")
         finally:
             cursor.close()
