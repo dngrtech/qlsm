@@ -110,4 +110,24 @@ describe('RuntimeUpgradeDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Plugins changed; review again.');
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('labels disabled plugins and lists them after enabled ones', async () => {
+    getRuntimeUpgrade.mockResolvedValue({
+      ...plan,
+      instances: [{
+        instance_id: 1, instance_name: 'alpha',
+        stripped: [
+          row('a_off.py', 'unavailable', { originally_checked: false }),
+          row('b_on.py', 'unavailable'),
+        ],
+        replacements: {}, auto_accepted: [], checked_plugins: ['b_on.py'],
+      }],
+    });
+    renderDialog();
+    const alpha = await screen.findByRole('region', { name: 'alpha' });
+    const items = within(alpha).getAllByRole('listitem').filter((li) => li.parentElement.parentElement === alpha);
+    expect(items.map((li) => li.querySelector('.text-sm').textContent)).toEqual(['b_on.py', 'a_off.py']);
+    expect(within(items[1]).getByText('Not enabled')).toBeInTheDocument();
+    expect(within(items[0]).queryByText('Not enabled')).not.toBeInTheDocument();
+  });
 });
