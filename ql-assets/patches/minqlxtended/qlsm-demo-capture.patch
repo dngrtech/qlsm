@@ -7929,7 +7929,7 @@ index 4d77170..d8c0e0a 100644
 +    return ret;
 +}
 diff --git a/src/python/python_embed.c b/src/python/python_embed.c
-index 750dede..e3c4d5c 100644
+index 750dede..6d370d4 100644
 --- a/src/python/python_embed.c
 +++ b/src/python/python_embed.c
 @@ -53,6 +53,8 @@ PyObject* kamikaze_use_handler     = NULL;
@@ -7966,7 +7966,21 @@ index 750dede..e3c4d5c 100644
  
      {NULL, NULL}};
  
-@@ -1309,6 +1315,42 @@ static PyObject* PyMinqlxtended_PlayerStats(PyObject* self, PyObject* args) {
+@@ -675,6 +681,13 @@ static PyObject* PyMinqlxtended_PlayerInfo(PyObject* self, PyObject* args) {
+         return NULL;
+     }
+ 
++    // makePlayerTuple reads g_entities, which My_G_ShutdownGame NULLs before the game's own
++    // shutdown runs. That shutdown still executes bot client commands, so a client_command
++    // handler building a Player gets here with no game module.
++    if (!qlx_vm_ready()) {
++        return NULL;
++    }
++
+     if (allow_free_client != i && svs->clients[i].state == CS_FREE) {
+ #ifndef NDEBUG
+         DebugPrint("WARNING: PyMinqlxtended_PlayerInfo called for CS_FREE client %d.\n", i);
+@@ -1309,6 +1322,42 @@ static PyObject* PyMinqlxtended_PlayerStats(PyObject* self, PyObject* args) {
      return stats;
  }
  
@@ -8009,7 +8023,7 @@ index 750dede..e3c4d5c 100644
  // drop_holdable
  
  void __cdecl Switch_Touch_Item(gentity_t* ent) {
-@@ -1530,6 +1572,54 @@ static PyObject* PyMinqlxtended_DropItem(PyObject* self, PyObject* args) {
+@@ -1530,6 +1579,54 @@ static PyObject* PyMinqlxtended_DropItem(PyObject* self, PyObject* args) {
      return PyLong_FromLong((long)(dropped - g_entities));
  }
  
@@ -8064,7 +8078,7 @@ index 750dede..e3c4d5c 100644
  // remove_entity/spawn_entity/link_entity/unlink_entity
  // Map entity surgery: freeing a slot, spawning through the engine's own machinery, and
  // relinking into the area grid. Verified against qagame/qzeroded 1069.
-@@ -2648,6 +2738,13 @@ static PyMethodDef minqlxtendedMethods[] = {
+@@ -2648,6 +2745,13 @@ static PyMethodDef minqlxtendedMethods[] = {
       "from the player, returning the new entity's id, or None if nothing spawned.\n\n"
       "The player's inventory is untouched: a drop that should also take the item away "
       "clears the matching GameClient field itself."},
@@ -8078,7 +8092,7 @@ index 750dede..e3c4d5c 100644
      {"remove_entity", PyMinqlxtended_RemoveEntity, METH_VARARGS,
       "remove_entity(entity_id) -- free a map entity's slot, as G_FreeEntity does.\n\n"
       "Client slots, the world, never_free entities and already-freed slots are refused. "
-@@ -2675,6 +2772,10 @@ static PyMethodDef minqlxtendedMethods[] = {
+@@ -2675,6 +2779,10 @@ static PyMethodDef minqlxtendedMethods[] = {
       "does.\n\n"
       "Unlinked entities stop colliding and stop being sent to clients; r.linked reads "
       "back False. Game thread only."},
@@ -8137,7 +8151,7 @@ index c55bc6d..44add24 100644
          DebugPrint("Exiting.\n");
          exit(1);
 diff --git a/src/server/hooks.c b/src/server/hooks.c
-index 9a0d41f..2c7ea57 100644
+index 9a0d41f..a83d47d 100644
 --- a/src/server/hooks.c
 +++ b/src/server/hooks.c
 @@ -31,12 +31,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
@@ -8182,7 +8196,19 @@ index 9a0d41f..2c7ea57 100644
      Demo_CloseAll(); // map change: finalise open demos; each client re-primes with a fresh gamestate
      Stream_CloseAll();
  
-@@ -432,10 +443,16 @@ static void DispatchFinishedDemos(void) {
+@@ -292,7 +303,10 @@ void __cdecl My_SV_UpdateUserinfo_f(client_t* cl) {
+ 
+ void __cdecl My_SV_ExecuteClientCommand(client_t* cl, char* s, qboolean clientOK) {
+     char* res = s;
+-    if (clientOK && cl->gentity) {
++    // No dispatch while the game module is going away: G_ShutdownGame still runs bot client
++    // commands after My_G_ShutdownGame has NULLed g_entities, and every handler builds a
++    // Player from it. See vm_rehooking in common.h.
++    if (clientOK && cl->gentity && !atomic_load_explicit(&vm_rehooking, memory_order_acquire)) {
+         res = ClientCommandDispatcher(cl - svs->clients, s);
+         if (!res) {
+             return;
+@@ -432,10 +446,16 @@ static void DispatchFinishedDemos(void) {
  
      demo_finished_t done;
      while (Demo_PollFinished(&done)) {
@@ -8201,7 +8227,7 @@ index 9a0d41f..2c7ea57 100644
      }
  
      unsigned dropped = Demo_TakeDroppedCount();
-@@ -460,7 +477,15 @@ char* __cdecl My_ClientConnect(int clientNum, qboolean firstTime, qboolean isBot
+@@ -460,7 +480,15 @@ char* __cdecl My_ClientConnect(int clientNum, qboolean firstTime, qboolean isBot
          }
      }
  
@@ -8218,7 +8244,7 @@ index 9a0d41f..2c7ea57 100644
  }
  
  // Deaths. G_Damage reaches player_die through ent->die, but Cmd_Kill_f and ExecuteTeamChange
-@@ -492,12 +517,26 @@ void __cdecl My_ClientSpawn(gentity_t* ent) {
+@@ -492,12 +520,26 @@ void __cdecl My_ClientSpawn(gentity_t* ent) {
  // Touch_Item runs for every touch of an item trigger and most are rejected before pickupCount is
  // bumped, so diffing pickupCount separates a pickup from a touch. SVF_NOCLIENT will not serve:
  // with g_itemTimers on, Touch_Item sets and clears it for any item carrying a timer.
@@ -8245,7 +8271,7 @@ index 9a0d41f..2c7ea57 100644
      int picked_up_before = ent->pickupCount;
  
      Touch_Item(ent, other, trace);
-@@ -656,6 +695,7 @@ void __cdecl My_G_RunFrame(int time) {
+@@ -656,6 +698,7 @@ void __cdecl My_G_RunFrame(int time) {
          FrameDispatcher();
  
          PROF_BEGIN(t_demos);
@@ -8253,7 +8279,7 @@ index 9a0d41f..2c7ea57 100644
          DispatchFinishedDemos();
          PROF_END(PROF_DEMO_DISPATCH, t_demos);
  
-@@ -665,6 +705,8 @@ void __cdecl My_G_RunFrame(int time) {
+@@ -665,6 +708,8 @@ void __cdecl My_G_RunFrame(int time) {
          PROF_BEGIN(t_stream);
          Stream_Frame();
          PROF_END(PROF_STREAM_FRAME, t_stream);
