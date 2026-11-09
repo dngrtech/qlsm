@@ -14,6 +14,11 @@ const TARGET_RUNTIME = 'minqlxtended';
 
 const errorMessage = (err, fallback) => err?.response?.data?.error?.message || err?.message || fallback;
 const isReplaceable = (row) => row.kind === 'replaceable' || Boolean(row.replacement);
+// Plugins the instance has enabled first: those are what can break a running
+// server. Disabled ones follow, toned down by CompatibilityRow. Stable sort, so
+// each group keeps the backend's path order.
+const enabledFirst = (rows) => [...rows].sort(
+  (a, b) => Number(!a.originally_checked) - Number(!b.originally_checked));
 
 const tickedDefaults = (instances) => {
   const ticked = {};
@@ -126,11 +131,12 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
                     <section key={inst.instance_id} aria-label={inst.instance_name}>
                       <h4 className="mb-2 text-sm font-semibold text-theme-primary">{inst.instance_name}</h4>
                       <ul className="space-y-2">
-                        {inst.stripped.map((row) => (
+                        {enabledFirst(inst.stripped).map((row) => (
                           <CompatibilityRow
                             key={row.path}
                             entry={row}
                             sourceNoun="instance"
+                            showEnablement
                             sourceRuntime={SOURCE_RUNTIME}
                             targetRuntime={TARGET_RUNTIME}
                             checked={Boolean(ticked[inst.instance_id]?.has(row.path))}

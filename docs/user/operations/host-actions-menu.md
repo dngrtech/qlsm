@@ -105,6 +105,8 @@ Clicking the action opens a dialog straight away. Nothing is stopped until you c
 - a plugin you edited or that is outdated, where minqlxtended has its own version, has a checkbox: tick it to use minqlxtended's version, leave it unticked to drop the plugin;
 - an enabled plugin minqlxtended has no version of is listed without a checkbox. It will be dropped and switched off.
 
+Plugins the instance has enabled come first. A plugin you wrote or edited that is **not enabled** is still listed, because its file won't be carried over either. It's marked **Not enabled** and greyed out, since nothing running today depends on it.
+
 If nothing needs a decision, the dialog is a plain confirmation. **Cancel** changes nothing. If you or someone else edits an instance while the dialog is open, the upgrade refuses to start and asks you to reopen it, so what you approved is what gets applied.
 
 ### What happens when you confirm
