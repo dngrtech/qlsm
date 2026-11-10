@@ -179,6 +179,7 @@ def test_requires_jwt(app, client, world):
     {'fingerprint': 'f', 'accepted_replacements': {'1': [3]}},
     {'fingerprint': 'f', 'accepted_replacements': {'1': ['ban.py', 'ban.py']}},
     {'fingerprint': 'f', 'accepted_replacements': {'1': [], '01': []}},
+    {'fingerprint': 'f', 'accepted_replacements': {'\u00b2': []}},
 ])
 def test_post_rejects_malformed_body(app, client, headers, world, locks, enqueued, body):
     _env, host_id, _ids = world
@@ -427,3 +428,214 @@ def test_get_classifies_each_instance_once_with_an_identical_fingerprint(
     assert sorted(calls) == instance_ids
     assert data['instances'] == json.loads(json.dumps(expected_rows))
     assert data['fingerprint'] == expected_fp
+
+
+# --- plugin uploads ---------------------------------------------------------------
+
+GOOD_PLUGIN = 'import minqlxtended\n\nclass mine(minqlxtended.Plugin):\n    pass\n'
+BAD_PLUGIN = 'import minqlx\n\nclass mine(minqlx.Plugin):\n    pass\n'
+
+
+def _validate_url(host_id):
+    return f'/api/hosts/{host_id}/runtime-upgrade/validate-plugin'
+
+
+def test_validate_plugin_accepts_a_ported_file(app, client, headers, world):
+    _env, host_id, _ids = world
+    resp = client.post(_validate_url(host_id), headers=headers,
+                       json={'path': 'mine.py', 'text': GOOD_PLUGIN})
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json() == {'data': {'path': 'mine.py', 'verdict': 'unknown'}}
+    assert _ops() == []
+
+
+def test_validate_plugin_rejects_minqlx_code_with_reasons(app, client, headers, world):
+    _env, host_id, _ids = world
+    resp = client.post(_validate_url(host_id), headers=headers,
+                       json={'path': 'mine.py', 'text': BAD_PLUGIN})
+    assert resp.status_code == 400
+    error = resp.get_json()['error']
+    assert error['message'] and error['reasons']
+
+
+def test_validate_plugin_rejects_a_lone_surrogate_with_400(app, client, headers, world):
+    _env, host_id, _ids = world
+    resp = client.post(_validate_url(host_id), headers=headers,
+                       json={'path': 'mine.py', 'text': '\ud800'})
+    assert resp.status_code == 400
+    assert resp.get_json()['error']['message']
+
+
+@pytest.mark.parametrize('raw', [
+    b'[]', b'null', b'not json', b'', b'{"path": 1, "text": "x"}',
+    b'{"path": "mine.py"}', b'{"path": "\\ud800", "text": "x"}',
+    b'[' * 100000,
+])
+def test_validate_plugin_malformed_bodies_return_400(app, client, headers, world, raw):
+    _env, host_id, _ids = world
+    resp = client.post(_validate_url(host_id), headers=headers, data=raw,
+                       content_type='application/json')
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()['error']['message']
+
+
+@pytest.mark.parametrize('path', ['../mine.py', 'sub/mine.py', 'mine.PY'])
+def test_validate_plugin_rejects_bad_names(app, client, headers, world, path):
+    _env, host_id, _ids = world
+    resp = client.post(_validate_url(host_id), headers=headers,
+                       json={'path': path, 'text': GOOD_PLUGIN})
+    assert resp.status_code == 400, resp.get_json()
+
+
+def test_validate_plugin_requires_jwt(app, client, world):
+    _env, host_id, _ids = world
+    assert client.post(_validate_url(host_id),
+                       json={'path': 'mine.py', 'text': GOOD_PLUGIN}).status_code == 401
+
+
+def test_validate_plugin_missing_host_returns_404(app, client, headers, world):
+    resp = client.post(_validate_url(99999), headers=headers,
+                       json={'path': 'mine.py', 'text': GOOD_PLUGIN})
+    assert resp.status_code == 404
+
+
+def _upload_body(fp, ids, **extra):
+    body = {
+        'fingerprint': fp,
+        'accepted_replacements': {},
+        'uploaded_files': {'f1': {'path': 'mine.py', 'text': GOOD_PLUGIN}},
+        'uploaded_file_ids': {str(ids[0]): {'mine.py': 'f1'}},
+    }
+    body.update(extra)
+    return body
+
+
+def test_post_with_an_upload_stores_it_on_the_operation(app, client, headers, world, locks, enqueued):
+    _env, host_id, ids = world
+    fp = _dry_run(client, headers, host_id)['fingerprint']
+    resp = _post(client, headers, host_id, _upload_body(fp, ids))
+    assert resp.status_code == 202, resp.get_json()
+    [op] = _ops()
+    uploads = json.loads(op.uploads_json)
+    assert uploads[str(ids[0])] == {'mine.py': GOOD_PLUGIN}
+    assert json.loads(op.answers_json) == {str(i): [] for i in ids}
+
+
+def test_post_shares_one_upload_between_instances(app, client, headers, world, locks, enqueued):
+    from ui.models import QLInstance
+    _env, host_id, ids = world
+    # make mine.py enabled (hence unavailable) on a second instance too
+    db.session.get(QLInstance, ids[1]).qlx_plugins = 'balance, mine'
+    db.session.commit()
+    fp = _dry_run(client, headers, host_id)['fingerprint']
+    body = _upload_body(fp, ids, uploaded_file_ids={
+        str(ids[0]): {'mine.py': 'f1'}, str(ids[1]): {'mine.py': 'f1'}})
+    resp = _post(client, headers, host_id, body)
+    assert resp.status_code == 202, resp.get_json()
+    [op] = _ops()
+    uploads = json.loads(op.uploads_json)
+    assert uploads[str(ids[0])] == uploads[str(ids[1])] == {'mine.py': GOOD_PLUGIN}
+
+
+BAD_NAMES = ['MINE.py', '../mine.py', 'sub/mine.py', 'mine.PY']
+
+
+def _bad_upload(name):
+    big = 'import minqlxtended\n\nclass mine(minqlxtended.Plugin):\n    pass\n' + '#' * (500 * 1024)
+    return {
+        'missing_file_id': {'uploaded_file_ids': {'IDS0': {'mine.py': 'nope'}}},
+        'path_mismatch': {'uploaded_files': {'f1': {'path': 'other.py', 'text': GOOD_PLUGIN}}},
+        'replaceable_path': {
+            'uploaded_files': {'f1': {'path': 'ban.py', 'text': GOOD_PLUGIN}},
+            'uploaded_file_ids': {'IDS0': {'ban.py': 'f1'}}},
+        'path_not_in_rows': {
+            'uploaded_files': {'f1': {'path': 'zzz.py', 'text': GOOD_PLUGIN}},
+            'uploaded_file_ids': {'IDS0': {'zzz.py': 'f1'}}},
+        'unknown_instance': {'uploaded_file_ids': {'9999': {'mine.py': 'f1'}}},
+        'too_big_total': {
+            'uploaded_files': {f'f{i}': {'path': 'mine.py', 'text': big} for i in range(5)}},
+        'files_not_dict': {'uploaded_files': []},
+        'ids_not_dict': {'uploaded_file_ids': []},
+        'file_entry_not_dict': {'uploaded_files': {'f1': 'x'}},
+        'ids_entry_not_dict': {'uploaded_file_ids': {'IDS0': ['mine.py']}},
+        'file_id_not_str': {'uploaded_file_ids': {'IDS0': {'mine.py': 5}}},
+        'bad_instance_key': {'uploaded_file_ids': {'x': {'mine.py': 'f1'}}},
+        'lone_surrogate_text': {'uploaded_files': {'f1': {'path': 'mine.py', 'text': '\ud800'}}},
+        'lone_surrogate_unreferenced': {
+            'uploaded_files': {'f1': {'path': 'mine.py', 'text': GOOD_PLUGIN},
+                               'f2': {'path': 'mine.py', 'text': '\ud800'}}},
+        'lone_surrogate_path': {
+            'uploaded_files': {'f1': {'path': 'mine\ud800.py', 'text': GOOD_PLUGIN}},
+            'uploaded_file_ids': {'IDS0': {'mine\ud800.py': 'f1'}}},
+        'lone_surrogate_accepted_path': {'accepted_replacements': {'IDS0': ['\ud800']}},
+        'invalid_plugin': {'uploaded_files': {'f1': {'path': 'mine.py', 'text': BAD_PLUGIN}}},
+        **{f'bad_name_{n}': {
+            'uploaded_files': {'f1': {'path': n, 'text': GOOD_PLUGIN}},
+            'uploaded_file_ids': {'IDS0': {n: 'f1'}}}
+           for n in BAD_NAMES},
+    }[name]
+
+
+@pytest.mark.parametrize('name', [
+    'missing_file_id', 'path_mismatch', 'replaceable_path', 'path_not_in_rows',
+    'unknown_instance', 'too_big_total', 'files_not_dict', 'ids_not_dict',
+    'file_entry_not_dict', 'ids_entry_not_dict', 'file_id_not_str', 'bad_instance_key',
+    'lone_surrogate_text', 'lone_surrogate_unreferenced', 'lone_surrogate_path',
+    'lone_surrogate_accepted_path', 'invalid_plugin',
+    *[f'bad_name_{n}' for n in BAD_NAMES],
+])
+def test_post_rejects_bad_uploads(app, client, headers, world, locks, enqueued, name):
+    _env, host_id, ids = world
+    fp = _dry_run(client, headers, host_id)['fingerprint']
+    override = json.loads(json.dumps(_bad_upload(name)).replace('IDS0', str(ids[0])))
+    resp = _post(client, headers, host_id, _upload_body(fp, ids, **override))
+    assert resp.status_code == 400, resp.get_json()
+    assert locks.held == {}
+    assert _ops() == [] and enqueued == []
+    assert db.session.get(Host, host_id).status == HostStatus.ACTIVE
+
+
+def test_post_malformed_raw_bodies_return_400(app, client, headers, world, locks, enqueued):
+    _env, host_id, _ids = world
+    for raw in (b'not json', b'', b'[' * 100000, b'{"fingerprint": "\\ud800"}'):
+        resp = client.post(_url(host_id), headers=headers, data=raw,
+                           content_type='application/json')
+        assert resp.status_code == 400, (raw[:20], resp.data)
+
+
+def test_post_validates_a_file_shared_by_two_instances_once(
+        app, client, headers, world, locks, enqueued, monkeypatch):
+    from ui import runtime_upgrade_conversion as conv
+    _env, host_id, ids = world
+    db.session.get(QLInstance, ids[1]).qlx_plugins = 'balance, mine'
+    db.session.commit()
+    fp = _dry_run(client, headers, host_id)['fingerprint']
+    calls = []
+    real = conv.validate_plugin_upload
+
+    def spy(path, text):
+        calls.append(path)
+        return real(path, text)
+
+    monkeypatch.setattr(conv, 'validate_plugin_upload', spy)
+    body = _upload_body(fp, ids, uploaded_file_ids={
+        str(ids[0]): {'mine.py': 'f1'}, str(ids[1]): {'mine.py': 'f1'}})
+    resp = _post(client, headers, host_id, body)
+    assert resp.status_code == 202, resp.get_json()
+    assert calls == ['mine.py']
+
+
+def test_post_rejects_fake_upload_instances_before_taking_locks(
+        app, client, headers, world, locks, enqueued, monkeypatch):
+    _env, host_id, ids = world
+    fp = _dry_run(client, headers, host_id)['fingerprint']
+    taken = []
+    real = locks.acquire_lock
+    monkeypatch.setattr(routes, 'acquire_lock',
+                        lambda *a, **k: taken.append(a) or real(*a, **k))
+    body = _upload_body(fp, ids, uploaded_file_ids={
+        str(i): {'mine.py': 'f1'} for i in range(9000, 9050)})
+    resp = _post(client, headers, host_id, body)
+    assert resp.status_code == 400
+    assert taken == [] and locks.held == {}
+    assert _ops() == [] and enqueued == []

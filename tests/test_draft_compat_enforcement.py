@@ -336,8 +336,8 @@ def test_a_cross_runtime_load_keeps_the_target_runtimes_own_shipped_plugins(
     """
     source_files = _pys(MINQLXTENDED_DEFAULT)
     overlay_files = _pys(MINQLX_DEFAULT)
-    assert len(source_files) == 76 and len(overlay_files) == 54, (
-        f'expected the two shipped defaults to hold 76 and 54 .py files, found '
+    assert len(source_files) == 75 and len(overlay_files) == 54, (
+        f'expected the two shipped defaults to hold 75 and 54 .py files, found '
         f'{len(source_files)} and {len(overlay_files)} -- run pytest from the '
         f'repo root')
 

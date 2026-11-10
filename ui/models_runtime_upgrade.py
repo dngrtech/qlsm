@@ -48,6 +48,8 @@ class HostRuntimeUpgradeOperation(db.Model):
     inputs_json = db.Column(db.Text, nullable=True)
     fingerprint = db.Column(db.String(64), nullable=True)
     answers_json = db.Column(db.Text, nullable=True)  # accepted replacements
+    # {"<instance_id>": {"<path>": "<text>"}}: plugin files the operator uploaded
+    uploads_json = db.Column(db.Text, nullable=True)
 
     original_runtime = db.Column(db.String(20), nullable=True)
     original_host_status = db.Column(db.String(32), nullable=True)

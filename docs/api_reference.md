@@ -40,6 +40,7 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 | `/hosts/<id>/auto-restart` | POST | Configure host auto-restart schedule |
 | `/hosts/<id>/watchdog` | POST | Enable/disable and tune the ql-watchdog add-on |
 | `/hosts/<id>/runtime-upgrade` | GET | Compatibility dry-run for upgrading the host from minqlx to minqlxtended |
+| `/hosts/<id>/runtime-upgrade/validate-plugin` | POST | Check one plugin file picked in the upgrade dialog; stores nothing (see [Runtime Upgrade](#runtime-upgrade)) |
 | `/hosts/<id>/runtime-upgrade` | POST | Confirm and queue the minqlx -> minqlxtended upgrade (see [Runtime Upgrade](#runtime-upgrade)) |
 
 ### Configure Watchdog
@@ -244,6 +245,29 @@ the host is not eligible, or if an upgrade is already in progress.
   accepted only if it was offered for that instance: a `stripped` entry with
   `kind: "replaceable"`, or a path in `auto_accepted` (auto-accepted paths are
   applied anyway). Missing instances and empty lists mean nothing ticked.
+- `uploaded_files` (optional): object keyed by an arbitrary file id, each
+  `{"path": "old_stats.py", "text": "<file text>"}`. The same file used by several
+  instances is sent once.
+- `uploaded_file_ids` (optional): object keyed by instance id, each a map of
+  `path` to a file id from `uploaded_files`. The path must equal that file's
+  `path`. An upload is accepted only for a path that is an `unavailable` row of
+  that instance (a plugin minqlxtended has no version of). It is applied after
+  the minqlxtended filter, so the file replaces whatever the filter left and the
+  plugin stays enabled.
+
+Each uploaded file is checked again by the same rules as `validate-plugin`.
+Limits: 512 KiB per file and 2 MiB of `text` per request. Missing or empty
+upload fields mean nothing uploaded. A bad upload gets a `400` and nothing is
+queued.
+
+```json
+{
+  "fingerprint": "<value from the GET>",
+  "accepted_replacements": {},
+  "uploaded_files": {"f1": {"path": "old_stats.py", "text": "class old_stats: ..."}},
+  "uploaded_file_ids": {"1": {"old_stats.py": "f1"}}
+}
+```
 
 ```json
 {"data": {"status": "configuring"}, "message": "Runtime upgrade queued."}
@@ -261,7 +285,9 @@ Errors:
 - `400` malformed body: a non-string `fingerprint`, a non-object
   `accepted_replacements`, a non-numeric instance id, a non-list value, a
   non-string or duplicate path, an instance not on the host, or a path that was
-  not offered.
+  not offered. Also malformed uploads: an `uploaded_file_ids` entry that names
+  an unknown file id or a different path, an upload for a path that is not an
+  `unavailable` row, a file that fails validation, or more than 2 MiB in total.
 - `404` host not found.
 - `409` host not eligible, an upgrade already in progress, the host or an
   instance locked by another operation, a backup export or import running,
@@ -270,6 +296,35 @@ Errors:
 - `500` the job could not be confirmed as queued. If it did not start, the
   operation is cancelled automatically within a few minutes and the host
   returns to `ACTIVE`.
+
+**POST `/api/hosts/<id>/runtime-upgrade/validate-plugin`: check one file**
+
+Used by the dialog when the operator picks a file for a plugin that
+minqlxtended has no version of. It writes nothing; the file travels again in the
+confirming POST.
+
+```json
+{"path": "old_stats.py", "text": "<file text>"}
+```
+
+Success (`200`): `{"data": {"path": "old_stats.py", "verdict": "unknown"}}`.
+`unknown` means the file passed every check but is not part of the minqlxtended
+baseline, so QLSM cannot confirm it will run there. A file that is explicitly
+incompatible is rejected instead.
+
+Rules, in order. A leading BOM is stripped first.
+
+- text only: no NUL byte, not blank, valid UTF-8;
+- at most 512 KiB;
+- `path` must be an ASCII identifier plus `.py` (`old_stats.py`), no directory,
+  matched with exact case (`myFun.py` is not `myfun.py`);
+- the text must parse as Python;
+- it must define a top-level class with the same name as the file;
+- the minqlxtended compatibility check must not flag it.
+
+Errors: `404` host not found; `400` with
+`{"error": {"message": "...", "reasons": ["line 3: imports the minqlx module"]}}`.
+`reasons` is non-empty only for the compatibility failure.
 
 ### Resize Host
 

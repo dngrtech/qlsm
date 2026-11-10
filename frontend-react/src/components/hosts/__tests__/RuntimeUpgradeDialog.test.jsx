@@ -4,11 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RuntimeUpgradeDialog from '../RuntimeUpgradeDialog';
-import { getRuntimeUpgrade, startRuntimeUpgrade } from '../../../services/runtimeUpgradeApi';
+import { getRuntimeUpgrade, startRuntimeUpgrade, validateRuntimeUploadPlugin } from '../../../services/runtimeUpgradeApi';
 
 vi.mock('../../../services/runtimeUpgradeApi', () => ({
   getRuntimeUpgrade: vi.fn(),
   startRuntimeUpgrade: vi.fn(),
+  validateRuntimeUploadPlugin: vi.fn(),
 }));
 
 const row = (path, kind, extra = {}) => ({
@@ -49,6 +50,7 @@ describe('RuntimeUpgradeDialog', () => {
     vi.clearAllMocks();
     getRuntimeUpgrade.mockResolvedValue(plan);
     startRuntimeUpgrade.mockResolvedValue({ data: { status: 'configuring' } });
+    validateRuntimeUploadPlugin.mockResolvedValue({ path: 'x76admin.py', verdict: 'unknown' });
   });
 
   it('renders rows grouped per instance', async () => {
@@ -129,5 +131,135 @@ describe('RuntimeUpgradeDialog', () => {
     expect(items.map((li) => li.querySelector('.text-sm').textContent)).toEqual(['b_on.py', 'a_off.py']);
     expect(within(items[1]).getByText('Not enabled')).toBeInTheDocument();
     expect(within(items[0]).queryByText('Not enabled')).not.toBeInTheDocument();
+  });
+
+  const uploadPlan = {
+    ...plan,
+    instances: [
+      { ...plan.instances[0], stripped: [row('x76admin.py', 'unavailable'), row('sub/deep.py', 'unavailable'), row('x76-bad.py', 'unavailable')] },
+      { ...plan.instances[1], stripped: [row('x76admin.py', 'unavailable')] },
+    ],
+  };
+  const pyFile = (text = 'code') => new File([text], 'x76admin.py', { type: 'text/x-python' });
+  const uploadIn = async (user, instanceName, file = pyFile()) => {
+    const region = screen.getByRole('region', { name: instanceName });
+    await user.upload(within(region).getByTestId('upload-input-x76admin.py'), file);
+  };
+
+  it('mirrors an upload into other instances and sends the payload', async () => {
+    getRuntimeUpgrade.mockResolvedValue(uploadPlan);
+    const user = userEvent.setup();
+    renderDialog();
+    await screen.findByRole('region', { name: 'alpha' });
+    await uploadIn(user, 'alpha');
+    const beta = screen.getByRole('region', { name: 'beta' });
+    expect(await within(beta).findByRole('button', { name: 'Replace x76admin.py' })).toBeInTheDocument();
+    expect(within(beta).getByText(/Your uploaded version will be installed\./)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /upgrade$/i }));
+    await waitFor(() => expect(startRuntimeUpgrade).toHaveBeenCalledWith(5, {
+      fingerprint: 'fp-1',
+      accepted_replacements: { 1: [], 2: [] },
+      uploaded_files: { f1: { path: 'x76admin.py', text: 'code' } },
+      uploaded_file_ids: { 1: { 'x76admin.py': 'f1' }, 2: { 'x76admin.py': 'f1' } },
+    }));
+  });
+
+  it('offers no upload for nested or non-identifier paths', async () => {
+    getRuntimeUpgrade.mockResolvedValue(uploadPlan);
+    renderDialog();
+    const alpha = await screen.findByRole('region', { name: 'alpha' });
+    expect(within(alpha).queryByRole('button', { name: 'Upload sub/deep.py' })).toBeNull();
+    expect(within(alpha).queryByRole('button', { name: 'Upload x76-bad.py' })).toBeNull();
+    expect(within(alpha).getByRole('button', { name: 'Upload x76admin.py' })).toBeInTheDocument();
+    expect(within(alpha).getAllByText(/won't be installed/)).toHaveLength(3);
+  });
+
+  it('drops uploads when the dialog is closed and reopened', async () => {
+    getRuntimeUpgrade.mockResolvedValue(uploadPlan);
+    const user = userEvent.setup();
+    const { rerender } = render(<RuntimeUpgradeDialog isOpen host={host} onClose={vi.fn()} onStarted={vi.fn()} />);
+    await screen.findByRole('region', { name: 'alpha' });
+    await uploadIn(user, 'alpha');
+    await within(screen.getByRole('region', { name: 'beta' })).findByRole('button', { name: 'Replace x76admin.py' });
+    rerender(<RuntimeUpgradeDialog isOpen={false} host={host} onClose={vi.fn()} onStarted={vi.fn()} />);
+    rerender(<RuntimeUpgradeDialog isOpen host={host} onClose={vi.fn()} onStarted={vi.fn()} />);
+    await screen.findByRole('region', { name: 'alpha' });
+    await user.click(screen.getByRole('button', { name: /upgrade$/i }));
+    await waitFor(() => expect(startRuntimeUpgrade).toHaveBeenCalled());
+    expect(startRuntimeUpgrade.mock.calls[0][1]).not.toHaveProperty('uploaded_files');
+    expect(startRuntimeUpgrade.mock.calls[0][1]).not.toHaveProperty('uploaded_file_ids');
+  });
+
+  it('disables Upgrade while a check runs, and a close mid-check does not leak the counter', async () => {
+    getRuntimeUpgrade.mockResolvedValue(uploadPlan);
+    let resolve;
+    validateRuntimeUploadPlugin.mockReturnValue(new Promise((r) => { resolve = r; }));
+    const user = userEvent.setup();
+    const { rerender } = render(<RuntimeUpgradeDialog isOpen host={host} onClose={vi.fn()} onStarted={vi.fn()} />);
+    await screen.findByRole('region', { name: 'alpha' });
+    await uploadIn(user, 'alpha');
+    await waitFor(() => expect(screen.getByRole('button', { name: /upgrade$/i })).toBeDisabled());
+    rerender(<RuntimeUpgradeDialog isOpen={false} host={host} onClose={vi.fn()} onStarted={vi.fn()} />);
+    rerender(<RuntimeUpgradeDialog isOpen host={host} onClose={vi.fn()} onStarted={vi.fn()} />);
+    await screen.findByRole('region', { name: 'alpha' });
+    expect(screen.getByRole('button', { name: /upgrade$/i })).not.toBeDisabled();
+    resolve({ path: 'x76admin.py', verdict: 'unknown' });
+    await new Promise((r) => { setTimeout(r, 20); });
+    expect(screen.getByRole('button', { name: /upgrade$/i })).not.toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Upload x76admin.py' })).toHaveLength(2);
+  });
+
+  it('reloads the plan, resets uploads and shows a note after a 409', async () => {
+    getRuntimeUpgrade.mockResolvedValueOnce(uploadPlan)
+      .mockResolvedValue({ ...uploadPlan, fingerprint: 'fp-2' });
+    startRuntimeUpgrade.mockRejectedValue({ response: { status: 409, data: { error: { message: 'Plan changed.' } } } });
+    const user = userEvent.setup();
+    renderDialog();
+    await screen.findByRole('region', { name: 'alpha' });
+    await uploadIn(user, 'alpha');
+    await within(screen.getByRole('region', { name: 'beta' })).findByRole('button', { name: 'Replace x76admin.py' });
+    await user.click(screen.getByRole('button', { name: /upgrade$/i }));
+    expect(await screen.findByText(/Uploads were reset because the plan changed/)).toBeInTheDocument();
+    await waitFor(() => expect(getRuntimeUpgrade).toHaveBeenCalledTimes(2));
+    const alpha = await screen.findByRole('region', { name: 'alpha' });
+    expect(await within(alpha).findByRole('button', { name: 'Upload x76admin.py' })).toBeInTheDocument();
+  });
+
+  it('keeps uploads after a 409 when the reloaded plan is unchanged', async () => {
+    getRuntimeUpgrade.mockResolvedValue(uploadPlan);
+    startRuntimeUpgrade.mockRejectedValueOnce({ response: { status: 409, data: { error: { message: 'Busy.' } } } });
+    const user = userEvent.setup();
+    renderDialog();
+    await screen.findByRole('region', { name: 'alpha' });
+    await uploadIn(user, 'alpha');
+    await within(screen.getByRole('region', { name: 'beta' })).findByRole('button', { name: 'Replace x76admin.py' });
+    await user.click(screen.getByRole('button', { name: /upgrade$/i }));
+    await waitFor(() => expect(getRuntimeUpgrade).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Busy.');
+    expect(screen.queryByText(/Uploads were reset/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: /upgrade$/i }));
+    await waitFor(() => expect(startRuntimeUpgrade).toHaveBeenCalledTimes(2));
+    expect(startRuntimeUpgrade.mock.calls[1][1].uploaded_files).toEqual({ f1: { path: 'x76admin.py', text: 'code' } });
+  });
+
+  it('keeps each instance its own file when two validations resolve in order', async () => {
+    getRuntimeUpgrade.mockResolvedValue(uploadPlan);
+    const resolvers = [];
+    validateRuntimeUploadPlugin.mockImplementation(() => new Promise((r) => { resolvers.push(r); }));
+    const user = userEvent.setup();
+    renderDialog();
+    await screen.findByRole('region', { name: 'alpha' });
+    await uploadIn(user, 'alpha', pyFile('X'));
+    await uploadIn(user, 'beta', pyFile('Y'));
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+    resolvers[0]({ path: 'x76admin.py', verdict: 'unknown' });
+    resolvers[1]({ path: 'x76admin.py', verdict: 'unknown' });
+    await waitFor(() => expect(screen.getByRole('button', { name: /upgrade$/i })).not.toBeDisabled());
+    await user.click(screen.getByRole('button', { name: /upgrade$/i }));
+    await waitFor(() => expect(startRuntimeUpgrade).toHaveBeenCalled());
+    const body = startRuntimeUpgrade.mock.calls[0][1];
+    const textFor = (id) => body.uploaded_files[body.uploaded_file_ids[id]['x76admin.py']].text;
+    expect(textFor(1)).toBe('X');
+    expect(textFor(2)).toBe('Y');
   });
 });

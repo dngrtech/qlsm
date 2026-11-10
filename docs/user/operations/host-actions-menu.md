@@ -107,6 +107,17 @@ Clicking the action opens a dialog straight away. Nothing is stopped until you c
 
 Plugins the instance has enabled come first. A plugin you wrote or edited that is **not enabled** is still listed, because its file won't be carried over either. It's marked **Not enabled** and greyed out, since nothing running today depends on it.
 
+#### Supplying your own file for a dropped plugin
+
+For an enabled plugin that minqlxtended has no version of, the row has an **Upload** button. Use it if you have a minqlxtended-ready copy of the plugin: pick the file and it is installed on the host in place of the old one, and the plugin stays enabled instead of being switched off.
+
+- The file must be named exactly like the plugin, including capitals: `old_stats.py` for the row `old_stats.py`. Names use letters, digits and underscores only. A different name is refused straight away.
+- It must be a text file of at most **512 KiB** (all uploads together at most **2 MiB**), with valid Python, and it must define a class with the same name as the file.
+- QLSM checks the file as soon as you pick it. If it is explicitly written for minqlx only, the row shows the reasons (for example "line 3: imports the minqlx module") and the file is not used.
+- A file that passes is accepted, but **QLSM cannot verify it will run on minqlxtended**, because the plugin is not part of minqlxtended's baseline. A plugin that fails to load does not fail the upgrade, so test it afterwards.
+- If several instances list the same plugin, one upload covers them all. You can use **Replace** on one instance to give it a different file, or **Remove** to go back to dropping the plugin there.
+- Nothing is saved until you press **Upgrade**. Closing the dialog, or reopening it after a change on the host, clears your uploads.
+
 If nothing needs a decision, the dialog is a plain confirmation. **Cancel** changes nothing. If you or someone else edits an instance while the dialog is open, the upgrade refuses to start and asks you to reopen it, so what you approved is what gets applied.
 
 ### What happens when you confirm

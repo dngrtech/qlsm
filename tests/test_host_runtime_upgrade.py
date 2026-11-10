@@ -269,10 +269,10 @@ def test_stopped_instance_conversion_failure_rolls_back(world, monkeypatch):
     env, host, ids, op, remote, locks, orig = world
     real = orchestrator.build_converted_tree
 
-    def convert(inputs_dir, captured, ticked, excluded, dest):
+    def convert(inputs_dir, captured, ticked, excluded, dest, uploads=None):
         if captured['instance_id'] == ids['B']:
             raise RuntimeError('cannot convert B')
-        return real(inputs_dir, captured, ticked, excluded, dest)
+        return real(inputs_dir, captured, ticked, excluded, dest, uploads=uploads)
 
     monkeypatch.setattr(orchestrator, 'build_converted_tree', convert)
     result, deps = _run(op, remote, locks)
@@ -485,3 +485,39 @@ def test_plugin_enabled_from_the_source_pool_without_a_target_version_is_switche
     result, _deps = _run(op, FakeRemote(host), FakeLocks())
     assert result is True, (_op(op.id).state, _op(op.id).last_error)
     assert db.session.get(QLInstance, a.id).qlx_plugins == 'balance, ban, reset_acc'
+
+
+def test_a_stored_upload_that_fails_revalidation_ends_in_failed_preparation_with_the_host_active(env):
+    host = make_host(env)
+    a = next(inst for inst in host.instances if inst.name.endswith('A'))
+    op = create_operation(host, answers={})
+    op.uploads_json = json.dumps({str(a.id): {'mine.py': 'def ('}})
+    db.session.commit()
+    remote, locks = FakeRemote(host), FakeLocks()
+    result, _deps = _run(op, remote, locks)
+    assert result is False
+    assert _op(op.id).state == 'failed_preparation'
+    assert 'mine.py' in (_op(op.id).last_error or '')
+    assert db.session.get(Host, host.id).status == HostStatus.ACTIVE
+
+
+def test_a_stored_upload_is_applied_end_to_end(env):
+    host = make_host(env)
+    a = next(inst for inst in host.instances if inst.name.endswith('A'))
+    text = 'import minqlxtended\n\nclass mine(minqlxtended.Plugin):\n    pass\n'
+    op = create_operation(host, answers={})
+    op.uploads_json = json.dumps({str(a.id): {'mine.py': text}})
+    db.session.commit()
+    result, _deps = _run(op, FakeRemote(host), FakeLocks())
+    assert result is True, (_op(op.id).state, _op(op.id).last_error)
+    live = env.configs / host.name / str(a.id) / 'scripts' / 'mine.py'
+    assert live.read_text() == text
+    assert 'mine' in db.session.get(QLInstance, a.id).qlx_plugins
+
+
+def test_a_null_uploads_column_upgrades_as_before(env):
+    host = make_host(env)
+    op = create_operation(host, answers={})
+    assert op.uploads_json is None
+    result, _deps = _run(op, FakeRemote(host), FakeLocks())
+    assert result is True

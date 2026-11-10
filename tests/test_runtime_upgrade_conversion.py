@@ -6,12 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from ui import runtime_upgrade_conversion as conversion
 from ui import db, plugin_pool, preset_compat, runtime_upgrade
 from ui.models import Host, HostStatus, InstanceStatus, QLInstance
 from ui.runtime_upgrade import capture_upgrade_inputs, materialize_upgrade_inputs
 from ui.runtime_upgrade_conversion import (
     AnswersInvalid,
     build_converted_tree,
+    accepted_replacements,
     build_target_system_hooks,
     conversion_paths,
     converted_ld_preload_hooks,
@@ -19,6 +21,7 @@ from ui.runtime_upgrade_conversion import (
     excluded_hooks,
     install_converted_tree,
     parse_answers,
+    parse_uploads,
     same_tree,
 )
 
@@ -244,3 +247,134 @@ def test_ticked_pool_replacement_keeps_the_plugin(env):
     unticked = build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs),
                                     str(env.tmp / 'converted-2'))
     assert unticked['qlx_plugins'] == 'balance'
+
+
+# --- uploaded plugins ----------------------------------------------------------
+
+UPLOAD = 'import minqlxtended\n\nclass mine(minqlxtended.Plugin):\n    pass\n# uploaded\r\n'
+
+
+def _uploads(inst, **by_path):
+    return json.dumps({str(inst.id): by_path})
+
+
+def test_parse_uploads_accepts_an_unavailable_row(env):
+    host, inst = _host(env)
+    inputs, _ = _materialized(env, host)
+    assert parse_uploads(inputs, _uploads(inst, **{'mine.py': UPLOAD})) == {inst.id: {'mine.py': UPLOAD}}
+
+
+def test_parse_uploads_rejects_a_replaceable_row(env):
+    host, inst = _host(env)
+    inputs, _ = _materialized(env, host)
+    with pytest.raises(AnswersInvalid):
+        parse_uploads(inputs, _uploads(inst, **{'ban.py': UPLOAD.replace('mine', 'ban')}))
+
+
+def test_parse_uploads_rejects_an_unknown_instance(env):
+    host, inst = _host(env)
+    inputs, _ = _materialized(env, host)
+    with pytest.raises(AnswersInvalid):
+        parse_uploads(inputs, json.dumps({'999': {'mine.py': UPLOAD}}))
+
+
+def test_parse_uploads_rejects_incompatible_text(env):
+    host, inst = _host(env)
+    inputs, _ = _materialized(env, host)
+    with pytest.raises(AnswersInvalid, match='mine.py'):
+        parse_uploads(inputs, _uploads(inst, **{'mine.py': 'def ('}))
+
+
+def test_parse_uploads_treats_a_null_column_as_empty(env):
+    host, inst = _host(env)
+    inputs, _ = _materialized(env, host)
+    assert parse_uploads(inputs, None) == {inst.id: {}}
+
+
+def test_build_converted_tree_writes_the_upload_and_keeps_the_plugin_enabled(env):
+    host, _inst = _host(env)
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    assert 'mine.py' in {row['path'] for row in captured['classification']['stripped']
+                         if row['kind'] == 'unavailable'}
+    dest = str(env.tmp / 'converted')
+    fields = build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs), dest,
+                                  uploads={'mine.py': UPLOAD})
+    with open(os.path.join(dest, 'scripts', 'mine.py'), 'r', encoding='utf-8', newline='') as handle:
+        assert handle.read() == UPLOAD
+    assert fields['qlx_plugins'] == 'balance, mine'
+
+
+def test_upload_for_a_plugin_that_was_not_enabled_is_carried_but_stays_disabled(env):
+    host, _inst = _host(env, qlx_plugins='balance')
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    dest = str(env.tmp / 'converted')
+    fields = build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs), dest,
+                                  uploads={'mine.py': UPLOAD})
+    assert os.path.isfile(os.path.join(dest, 'scripts', 'mine.py'))
+    assert fields['qlx_plugins'] == 'balance'
+
+
+def test_upload_for_a_pooled_row_without_a_scripts_dir_creates_a_local_copy(env):
+    pool = env.tmp / 'shared-plugins' / 'minqlx'
+    pool.mkdir(parents=True, exist_ok=True)
+    (pool / 'gone.py').write_text(CUSTOM.replace('mine', 'gone'))
+    host, inst = _host(env, qlx_plugins='gone', hooks=None)
+    import shutil
+    shutil.rmtree(env.configs / host.name / str(inst.id) / 'scripts')
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    assert 'gone.py' in {row['path'] for row in captured['classification']['stripped']
+                         if row['kind'] == 'unavailable'}
+    dest = str(env.tmp / 'converted')
+    text = CUSTOM.replace('mine', 'gone').replace('minqlx', 'minqlxtended')
+    fields = build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs), dest,
+                                  uploads={'gone.py': text})
+    assert _read(os.path.join(dest, 'scripts', 'gone.py')) == text
+    assert fields['qlx_plugins'] == 'gone'
+
+
+def test_upload_replaces_a_symlink_without_writing_outside_dest(env, monkeypatch):
+    host, _inst = _host(env)
+    outside = env.tmp / 'outside.py'
+    outside.write_text('ORIGINAL')
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    real = conversion.filter_scripts_for_target
+
+    def filter_then_link(scripts, *args, **kwargs):
+        real(scripts, *args, **kwargs)
+        link = os.path.join(scripts, 'mine.py')
+        if os.path.lexists(link):
+            os.unlink(link)
+        os.symlink(outside, link)
+
+    monkeypatch.setattr(conversion, 'filter_scripts_for_target', filter_then_link)
+    dest = str(env.tmp / 'converted')
+    build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs), dest,
+                         uploads={'mine.py': UPLOAD})
+    target = os.path.join(dest, 'scripts', 'mine.py')
+    assert not os.path.islink(target)
+    with open(target, 'r', encoding='utf-8', newline='') as handle:
+        assert handle.read() == UPLOAD
+    assert outside.read_text() == 'ORIGINAL'
+
+
+def test_uploaded_path_does_not_change_accepted_replacements(env, monkeypatch):
+    host, _inst = _host(env)
+    inputs, inputs_dir = _materialized(env, host)
+    captured = inputs['instances'][0]
+    seen = []
+    real = conversion.filter_scripts_for_target
+
+    def spy(scripts, *args, **kwargs):
+        seen.append(kwargs['accepted_replacements'])
+        return real(scripts, *args, **kwargs)
+
+    monkeypatch.setattr(conversion, 'filter_scripts_for_target', spy)
+    build_converted_tree(inputs_dir, captured, ['ban.py'], excluded_hooks(inputs),
+                         str(env.tmp / 'c1'))
+    build_converted_tree(inputs_dir, captured, ['ban.py'], excluded_hooks(inputs),
+                         str(env.tmp / 'c2'), uploads={'mine.py': UPLOAD})
+    assert seen[0] == seen[1] and 'mine.py' not in seen[1]

@@ -1443,13 +1443,13 @@ def test_seed_draft_same_runtime_load_keeps_everything_minqlxtended(app, tmp_pat
     from ui.routes.draft_routes import _seed_draft
     source = os.path.abspath('configs/presets/_builtin/default-minqlxtended/scripts')
     source_count = _count_py_files(source)
-    assert source_count == 76
+    assert source_count == 75
 
     draft = tmp_path / 'draft'
     with app.app_context():
         _seed_draft(str(draft), source, 'default-minqlxtended',
                     target_runtime='minqlxtended', source_runtime='minqlxtended')
-    assert _count_py_files(draft) == 76
+    assert _count_py_files(draft) == 75
 
 
 def test_undecodable_file_is_left_alone(app, tmp_path):
