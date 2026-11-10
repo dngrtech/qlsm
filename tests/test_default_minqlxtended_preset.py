@@ -249,7 +249,7 @@ PRESET_ONLY = {
     # unattributed
     'block.py', 'kickban.py', 'linodefw.py', 'playerpings.py', 'uberstats.py',
     # X76-preset plugins, ported at the operator's request
-    'improved_timer.py', 'protected_flag.py', 'ranked.py', 'spec_switch_guard.py',
+    'improved_timer.py', 'protected_flag.py', 'spec_switch_guard.py',
 }
 
 
