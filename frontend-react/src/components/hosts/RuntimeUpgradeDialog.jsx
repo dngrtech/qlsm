@@ -1,8 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { ArrowUpCircle, Loader2 } from 'lucide-react';
 import CompatibilityRow from '../presetManager/CompatibilityRow';
 import { getRuntimeUpgrade, startRuntimeUpgrade } from '../../services/runtimeUpgradeApi';
+import PluginUploadControl from './PluginUploadControl';
+import {
+  addUpload, buildUploadPayload, effectiveUpload, emptyUploads, isUploadablePath,
+  removeRowUpload, replaceRowUpload,
+} from './runtimeUploads';
 
 // Confirmation (and, when needed, compatibility) dialog for upgrading a host
 // from minqlx to minqlxtended. Replaceable rows start ticked, matching the
@@ -34,6 +39,13 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState(null);
   const [ticked, setTicked] = useState({});
+  const [uploads, setUploads] = useState(emptyUploads);
+  const [pendingChecks, setPendingChecks] = useState(0);
+  const [resetNote, setResetNote] = useState(false);
+  // Bumped whenever the plan or the dialog's open session changes. Upload
+  // callbacks capture the epoch they were rendered in and are ignored once it
+  // is stale, so a late answer cannot leak into the next plan or opening.
+  const epochRef = useRef(0);
 
   const hostId = host?.id;
   const hostName = host?.name || 'this host';
@@ -41,8 +53,12 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
   useEffect(() => {
     if (!isOpen || hostId == null) return undefined;
     let cancelled = false;
+    epochRef.current += 1;
     setPlan(null);
     setError(null);
+    setUploads(emptyUploads());
+    setPendingChecks(0);
+    setResetNote(false);
     setLoading(true);
     getRuntimeUpgrade(hostId)
       .then((data) => {
@@ -54,7 +70,11 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
         if (!cancelled) setError(errorMessage(err, 'Could not check this host for upgrade.'));
       })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      epochRef.current += 1;
+      setPendingChecks(0);
+    };
   }, [isOpen, hostId]);
 
   const instancesWithRows = (plan?.instances || []).filter((inst) => (inst.stripped || []).length > 0);
@@ -65,6 +85,47 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
       if (next.has(path)) next.delete(path); else next.add(path);
       return { ...prev, [instanceId]: next };
     });
+  };
+
+  // The plan changed under us (409): reload it, drop the uploads with it.
+  const reloadPlan = async () => {
+    epochRef.current += 1;
+    const epoch = epochRef.current;
+    setUploads(emptyUploads());
+    setPendingChecks(0);
+    try {
+      const data = await getRuntimeUpgrade(hostId);
+      if (epoch !== epochRef.current) return;
+      setPlan(data);
+      setTicked(tickedDefaults(data.instances || []));
+    } catch {
+      if (epoch === epochRef.current) setPlan(null);
+    }
+  };
+
+  const renderUploadFor = (inst) => {
+    const epoch = epochRef.current;
+    const live = (fn) => (...args) => { if (epoch === epochRef.current) fn(...args); };
+    return (row) => {
+      if (!isUploadablePath(row.path)) return null;
+      const instanceId = inst.instance_id;
+      const current = effectiveUpload(uploads, instanceId, row.path);
+      const hostWide = Boolean(uploads.files[row.path]);
+      return (
+        <PluginUploadControl
+          hostId={hostId}
+          path={row.path}
+          upload={current}
+          disabled={submitting}
+          onUploaded={live((file) => setUploads((prev) => (
+            current || hostWide
+              ? replaceRowUpload(prev, instanceId, row.path, file)
+              : addUpload(prev, row.path, file))))}
+          onRemove={() => setUploads((prev) => removeRowUpload(prev, instanceId, row.path))}
+          onPendingChange={live((pending) => setPendingChecks((n) => Math.max(0, n + (pending ? 1 : -1))))}
+        />
+      );
+    };
   };
 
   const handleUpgrade = async () => {
@@ -78,11 +139,22 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
     setSubmitting(true);
     setError(null);
     try {
-      await startRuntimeUpgrade(hostId, { fingerprint: plan.fingerprint, accepted_replacements: accepted });
+      const { uploaded_files, uploaded_file_ids } = buildUploadPayload(plan, uploads);
+      const hasUploads = Object.keys(uploaded_files).length > 0;
+      await startRuntimeUpgrade(hostId, {
+        fingerprint: plan.fingerprint,
+        accepted_replacements: accepted,
+        ...(hasUploads ? { uploaded_files, uploaded_file_ids } : {}),
+      });
       if (onStarted) onStarted(hostId);
       onClose();
     } catch (err) {
       setError(errorMessage(err, 'Could not start the upgrade.'));
+      if (err?.response?.status === 409) {
+        const hadUploads = Object.keys(buildUploadPayload(plan, uploads).uploaded_files).length > 0;
+        setResetNote(hadUploads);
+        await reloadPlan();
+      }
     } finally {
       setSubmitting(false);
     }
@@ -141,6 +213,9 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
                             targetRuntime={TARGET_RUNTIME}
                             checked={Boolean(ticked[inst.instance_id]?.has(row.path))}
                             onToggle={() => toggle(inst.instance_id, row.path)}
+                            renderUpload={renderUploadFor(inst)}
+                            uploaded={Boolean(effectiveUpload(uploads, inst.instance_id, row.path))
+                              && isUploadablePath(row.path)}
                           />
                         ))}
                       </ul>
@@ -148,6 +223,12 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
                   ))}
                 </div>
               </>
+            )}
+
+            {resetNote && (
+              <p role="status" className="mt-3 text-sm text-theme-secondary">
+                Uploads were reset because the plan changed. Upload your files again if you still need them.
+              </p>
             )}
 
             {error && (
@@ -162,7 +243,7 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleUpgrade}
-                disabled={!plan || loading || submitting}
+                disabled={!plan || loading || submitting || pendingChecks > 0}
               >
                 {submitting
                   ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />

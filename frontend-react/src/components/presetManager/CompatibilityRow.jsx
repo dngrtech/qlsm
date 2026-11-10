@@ -16,7 +16,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 // would mislabel all of them.
 
 function CompatibilityRow({
-  entry, sourceRuntime, targetRuntime, checked, onToggle, sourceNoun = 'preset', showEnablement = false,
+  entry, sourceRuntime, targetRuntime, checked, onToggle, sourceNoun = 'preset', showEnablement = false, renderUpload = null, uploaded = false,
 }) {
   const replaceable = Boolean(entry.replacement) || entry.kind === 'replaceable';
   const reasons = entry.reasons || [];
@@ -63,9 +63,11 @@ function CompatibilityRow({
                 + 'from the standard one — either edited, or saved before the plugin '
                 + 'was last updated.'
               : `Not a standard ${sourceRuntime} plugin — this one was added to the ${sourceNoun}.`}
-            {entry.kind === 'unavailable'
+            {entry.kind === 'unavailable' && !uploaded
               && ` ${targetRuntime} has no version of it, so it won't be installed`
                  + `${entry.originally_checked ? ' and will be switched off' : ''}.`}
+            {entry.kind === 'unavailable' && uploaded
+              && ` ${targetRuntime} has no version of it. Your uploaded version will be installed.`}
             {entry.kind === 'replaceable' && !entry.from_catalog
               && ` ${targetRuntime} ships a plugin under this same name.`}
           </p>
@@ -86,6 +88,7 @@ function CompatibilityRow({
               ))}
             </ul>
           )}
+          {entry.kind === 'unavailable' && renderUpload && renderUpload(entry)}
           {replaceable && (
             <label className="mt-2 flex items-start gap-2 text-theme-primary">
               <input
