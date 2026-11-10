@@ -41,6 +41,7 @@ from ui.runtime_upgrade_conversion import (
     excluded_hooks,
     install_converted_tree,
     parse_answers,
+    parse_uploads,
 )
 from ui.runtime_upgrade_snapshot import (
     STAGING_SUFFIX,
@@ -140,6 +141,7 @@ def _validate(execution):
         raise PreparationFailed('The host changed after the upgrade was confirmed; review it again')
     try:
         parse_answers(inputs, op.answers_json)
+        parse_uploads(inputs, op.uploads_json)
     except UpgradeInputsChanged as exc:
         raise PreparationFailed(str(exc)) from exc
 
@@ -250,12 +252,14 @@ def _convert(execution, inputs):
     op = execution.op
     host = execution.host
     answers = parse_answers(inputs, op.answers_json)
+    uploads = parse_uploads(inputs, op.uploads_json)
     excluded = excluded_hooks(inputs)
     build_target_system_hooks(inputs_dir(op), excluded, _system_hooks_dir(op))
     for captured in sorted(inputs.get('instances') or [], key=lambda item: item['instance_id']):
         iid = int(captured['instance_id'])
         dest = _converted_dir(op, iid)
-        fields = build_converted_tree(inputs_dir(op), captured, answers[iid], excluded, dest)
+        fields = build_converted_tree(inputs_dir(op), captured, answers[iid], excluded, dest,
+                                    uploads=uploads[iid])
         execution.fence()
         execution.record(iid, convert='swapping')
         install_converted_tree(live_config_dir(host.name, iid), dest, conversion_tag(op.id, iid))

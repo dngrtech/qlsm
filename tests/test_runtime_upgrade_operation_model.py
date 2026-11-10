@@ -45,6 +45,7 @@ def test_defaults(app):
 def test_every_orchestrator_column_exists(app):
     expected = {
         'id', 'host_id', 'state', 'phase', 'inputs_json', 'fingerprint', 'answers_json',
+        'uploads_json',
         'original_runtime', 'original_host_status', 'original_instance_states_json',
         'snapshot_path', 'snapshot_complete', 'instance_outcomes_json', 'last_error',
         'rq_job_id', 'fencing_token', 'recovery_required', 'created_at', 'updated_at',
@@ -137,3 +138,13 @@ def test_migration_creates_table_and_partial_index(tmp_path, preserve_logging_co
         assert row == (0, 0, 0)
     finally:
         conn.close()
+
+
+def test_uploads_json_defaults_to_none_and_stores_json(app):
+    with app.app_context():
+        op = _op(_host())
+        assert op.uploads_json is None
+        op.uploads_json = '{"1": {"mine.py": "x"}}'
+        db.session.commit()
+        db.session.refresh(op)
+        assert op.uploads_json == '{"1": {"mine.py": "x"}}'

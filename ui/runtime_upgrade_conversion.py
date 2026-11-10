@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 
+from ui.plugin_upload_validation import UploadRejected, validate_plugin_upload
 from ui.preset_compat import baseline_hashes_from, replacement_scripts_from, shipped_scripts_from
 from ui.runtime_conversion import filter_scripts_for_target
 from ui.runtime_upgrade import UPGRADE_TARGET_RUNTIME, UpgradeInputsChanged
@@ -77,6 +78,47 @@ def parse_answers(inputs, answers_json):
     return answers
 
 
+def _unavailable(captured):
+    rows = (captured.get('classification') or {}).get('stripped') or []
+    return {row['path'] for row in rows if row.get('kind') == 'unavailable'}
+
+
+def parse_uploads(inputs, uploads_json):
+    """{instance_id: {path: cleaned text}} for every captured instance.
+
+    A NULL column (operations created before uploads existed) means no uploads.
+    Raises AnswersInvalid for an unknown instance, a path that is not an
+    `unavailable` row of that instance, or text that fails validation.
+    """
+    try:
+        raw = json.loads(uploads_json) if uploads_json else {}
+    except ValueError as exc:
+        raise AnswersInvalid('Upgrade uploads are not valid JSON') from exc
+    if not isinstance(raw, dict):
+        raise AnswersInvalid('Upgrade uploads must be an object keyed by instance id')
+    captured = _captured_by_id(inputs)
+    uploads = {instance_id: {} for instance_id in captured}
+    for key, files in raw.items():
+        try:
+            instance_id = int(key)
+        except (TypeError, ValueError):
+            raise AnswersInvalid(f'Upgrade uploads name an invalid instance id {key!r}') from None
+        if instance_id not in captured:
+            raise AnswersInvalid(f'Upgrade uploads name instance {instance_id}, which was not captured')
+        if not isinstance(files, dict):
+            raise AnswersInvalid(f'Upgrade uploads for instance {instance_id} must be an object of files')
+        allowed = _unavailable(captured[instance_id])
+        for path, text in files.items():
+            if path not in allowed:
+                raise AnswersInvalid(
+                    f'Instance {instance_id}: {path} is not a plugin that needs an upload')
+            try:
+                uploads[instance_id][path] = validate_plugin_upload(path, text)
+            except UploadRejected as exc:
+                raise AnswersInvalid(f'Instance {instance_id}: {path}: {exc.message}') from exc
+    return uploads
+
+
 def accepted_replacements(captured, ticked):
     """auto_accepted + ticked, as the draft filter takes them."""
     auto = (captured.get('classification') or {}).get('auto_accepted') or []
@@ -85,7 +127,7 @@ def accepted_replacements(captured, ticked):
 
 # --- converted DB fields -------------------------------------------------------
 
-def converted_plugin_selection(captured, ticked):
+def converted_plugin_selection(captured, ticked, uploaded=()):
     """The converted QLInstance.qlx_plugins.
 
     NULL (and '') selections are kept as they are: neither means "the operator
@@ -101,7 +143,9 @@ def converted_plugin_selection(captured, ticked):
         return captured.get('qlx_plugins_raw')
     stripped = {row['path'] for row in (captured.get('classification') or {}).get('stripped') or []}
     ticked = set(ticked or [])
-    kept = [path for path in effective if path not in stripped or path in ticked]
+    uploaded = set(uploaded or ())
+    kept = [path for path in effective
+            if path not in stripped or path in ticked or path in uploaded]
     return ', '.join(path[:-3] if path.endswith('.py') else path for path in kept)
 
 
@@ -137,7 +181,7 @@ def target_filter_inputs(inputs_dir):
     }
 
 
-def build_converted_tree(inputs_dir, captured, ticked, excluded, dest):
+def build_converted_tree(inputs_dir, captured, ticked, excluded, dest, uploads=None):
     """Write the converted config tree of one instance into `dest` (replaced
     if present) and return the converted DB fields.
 
@@ -157,8 +201,16 @@ def build_converted_tree(inputs_dir, captured, ticked, excluded, dest):
             scripts, UPGRADE_TARGET_RUNTIME,
             accepted_replacements=accepted_replacements(captured, ticked),
             **target_filter_inputs(inputs_dir))
+    uploads = uploads or {}
+    for path, text in sorted(uploads.items()):
+        # An upload replaces whatever the filter left (or a symlink, without
+        # following it) and creates scripts/ for pool-enabled plugins.
+        _discard(os.path.join(scripts, path))
+        os.makedirs(scripts, exist_ok=True)
+        with open(os.path.join(scripts, path), 'w', encoding='utf-8', newline='') as handle:
+            handle.write(text)
     return {
-        'qlx_plugins': converted_plugin_selection(captured, ticked),
+        'qlx_plugins': converted_plugin_selection(captured, ticked, uploads),
         'ld_preload_hooks': converted_ld_preload_hooks(captured.get('ld_preload_hooks'), excluded),
     }
 
