@@ -20,7 +20,7 @@ def validate_plugin_upload(path, text):
     """Return the cleaned text, or raise UploadRejected."""
     if not isinstance(path, str) or not isinstance(text, str):
         raise UploadRejected('Plugin file must be text')
-    if text.startswith('﻿'):
+    if text.startswith('\ufeff'):
         text = text[1:]
     if not text.strip():
         raise UploadRejected('Plugin file is empty')
@@ -33,11 +33,10 @@ def validate_plugin_upload(path, text):
     if len(raw) > MAX_FILE_BYTES:
         raise UploadRejected(
             f'Plugin file is larger than {MAX_FILE_BYTES // 1024} KiB')
-    if '/' in path or not path.endswith('.py') or not path[:-3].isidentifier():
+    if (not path.isascii() or '/' in path or not path.endswith('.py')
+            or not path[:-3].isidentifier()):
         raise UploadRejected('Plugin file name must be <plugin_name>.py')
     name = path[:-3]
-    if name != name.lower() or name[0].isdigit():
-        raise UploadRejected('Plugin file name must be lowercase and a valid identifier')
     try:
         tree = ast.parse(text)
     except SyntaxError as exc:
