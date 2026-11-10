@@ -66,11 +66,11 @@ You don't need QLSM to publish a repository. The hosted [Repository Manifest Edi
 
 To change a manifest later, click **Load JSON**, pick your existing `qlsm-repository.json` (an older `qlsm-plugins.json` loads too), edit it and download it again.
 
-The editor covers the common fields. It does not compute `sha256` hashes or edit `addons`, `depends_on` or `package_files`, but it keeps any of those that are already in a file you load and writes them back unchanged, so you can add them by hand in the **Raw JSON** tab.
+The editor covers the common fields. It does not compute `sha256` hashes or edit `addons`, `depends_on` or `package_files`, but it keeps any of those that are already in a file you load and writes them back unchanged, so you can add them by hand in the **Raw JSON** tab. If you run QLSM, the editor on a repository card (below) also edits `addons`.
 
 ## Edit The Manifest
 
-The **Edit & Export Manifest** button on a repository card opens its plugin list in an editor. This is for people who *publish* a repository: it writes a new `qlsm-plugins.json` for you to commit to the repository itself.
+The **Edit & Export Manifest** button on a repository card opens its plugins and addons in an editor. This is for people who *publish* a repository: it writes a new `qlsm-repository.json` for you to commit to the repository itself. If the repository still publishes the older `qlsm-plugins.json`, you can leave that file in place: QLSM reads `qlsm-repository.json` first and ignores the old file once the new one exists.
 
 ![The manifest editor, with a plugin selected and its cvars listed](../images/plugin-manifest-editor.png)
 
@@ -78,13 +78,16 @@ It does not change anything QLSM has stored. QLSM keeps a copy of whatever the r
 
 1. Pick a plugin on the left, or click **Add Plugin** for a new one. Drag the handles to reorder, or click **Sort A–Z**.
 2. Edit its filename, label, description, runtime and required QLSM version, and add or remove **cvars** and **commands**.
-3. Click **Download** to save the file. The box next to it sets the filename.
+3. To list addons, switch to the **Addons** tab above the list. Pick an addon or click **Add Addon**, and fill in its ID, zip path, version, SHA-256 of the zip, label, description and required QLSM version. The ID has to match the `id` in the zip's own `qlsm-addon.json`, or QLSM refuses to install it.
+4. Click **Download** to save the file. The box next to it sets the filename.
+
+A plugin's `version`, `sha256`, `depends_on` and `package_files` have no fields in this editor, but they are kept and written back unchanged.
 
 ![The editor flagging a filename qlsm would drop](../images/plugin-manifest-editor-issues.png)
 
-The list under the editor names every problem found, worst first; click one to jump to the plugin it belongs to. A red dot on a plugin means QLSM would drop something from that entry on its next sync — a filename that isn't a bare `name.py`, or a filename used twice. An amber dot is cosmetic: a missing label or description, or a cvar type the settings form doesn't recognize.
+The list under the editor names every problem found, worst first; click one to jump to the plugin or addon it belongs to. A red dot on a plugin means QLSM would drop something from that entry on its next sync — a filename that isn't a bare `name.py`, or a filename used twice. On an addon it means an ID that isn't lowercase kebab-case (64 characters at most), a zip path that isn't a relative path to a `.zip`, an ID used twice (only the first can be installed), or a `sha256` that isn't 64 hex characters (QLSM discards it and installs the zip without checking it). An amber dot is a missing or odd optional field: a missing label or description, a cvar type the settings form doesn't recognize, or an addon without a `sha256` or `version`.
 
-Only the plugins QLSM could read at the last sync appear here. If the repository's file has entries QLSM skipped, they are not in the editor and will not be in the downloaded file either, so check the result before committing it over the original.
+Only the plugins and addons QLSM could read at the last sync appear here. If the repository's file has entries QLSM skipped, they are not in the editor and will not be in the downloaded file either, so check the result before committing it over the original.
 
 **`sha256` powers the update badges.** For each listed plugin (hash of the `.py` with line endings normalized to LF) and addon (hash of the `.zip` as served), QLSM compares the declared hash/version against what's installed locally and shows **Update available** / **Up to date** / **Not installed** in the list. Entries without a `sha256` (or, for addons, without a `version`) simply show no status.
 
