@@ -499,3 +499,25 @@ def test_a_stored_upload_that_fails_revalidation_ends_in_failed_preparation_with
     assert _op(op.id).state == 'failed_preparation'
     assert 'mine.py' in (_op(op.id).last_error or '')
     assert db.session.get(Host, host.id).status == HostStatus.ACTIVE
+
+
+def test_a_stored_upload_is_applied_end_to_end(env):
+    host = make_host(env)
+    a = next(inst for inst in host.instances if inst.name.endswith('A'))
+    text = 'import minqlxtended\n\nclass mine(minqlxtended.Plugin):\n    pass\n'
+    op = create_operation(host, answers={})
+    op.uploads_json = json.dumps({str(a.id): {'mine.py': text}})
+    db.session.commit()
+    result, _deps = _run(op, FakeRemote(host), FakeLocks())
+    assert result is True, (_op(op.id).state, _op(op.id).last_error)
+    live = env.configs / host.name / str(a.id) / 'scripts' / 'mine.py'
+    assert live.read_text() == text
+    assert 'mine' in db.session.get(QLInstance, a.id).qlx_plugins
+
+
+def test_a_null_uploads_column_upgrades_as_before(env):
+    host = make_host(env)
+    op = create_operation(host, answers={})
+    assert op.uploads_json is None
+    result, _deps = _run(op, FakeRemote(host), FakeLocks())
+    assert result is True

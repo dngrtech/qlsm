@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ui import runtime_upgrade_conversion as conversion
 from ui import db, plugin_pool, preset_compat, runtime_upgrade
 from ui.models import Host, HostStatus, InstanceStatus, QLInstance
 from ui.runtime_upgrade import capture_upgrade_inputs, materialize_upgrade_inputs
@@ -334,15 +335,22 @@ def test_upload_for_a_pooled_row_without_a_scripts_dir_creates_a_local_copy(env)
     assert fields['qlx_plugins'] == 'gone'
 
 
-def test_upload_replaces_a_symlink_without_writing_outside_dest(env):
-    host, inst = _host(env)
+def test_upload_replaces_a_symlink_without_writing_outside_dest(env, monkeypatch):
+    host, _inst = _host(env)
     outside = env.tmp / 'outside.py'
     outside.write_text('ORIGINAL')
-    live = env.configs / host.name / str(inst.id) / 'scripts' / 'mine.py'
-    live.unlink()
-    live.symlink_to(outside)
     inputs, inputs_dir = _materialized(env, host)
     captured = inputs['instances'][0]
+    real = conversion.filter_scripts_for_target
+
+    def filter_then_link(scripts, *args, **kwargs):
+        real(scripts, *args, **kwargs)
+        link = os.path.join(scripts, 'mine.py')
+        if os.path.lexists(link):
+            os.unlink(link)
+        os.symlink(outside, link)
+
+    monkeypatch.setattr(conversion, 'filter_scripts_for_target', filter_then_link)
     dest = str(env.tmp / 'converted')
     build_converted_tree(inputs_dir, captured, [], excluded_hooks(inputs), dest,
                          uploads={'mine.py': UPLOAD})
@@ -353,11 +361,20 @@ def test_upload_replaces_a_symlink_without_writing_outside_dest(env):
     assert outside.read_text() == 'ORIGINAL'
 
 
-def test_uploaded_path_does_not_change_accepted_replacements(env):
+def test_uploaded_path_does_not_change_accepted_replacements(env, monkeypatch):
     host, _inst = _host(env)
-    inputs, _ = _materialized(env, host)
+    inputs, inputs_dir = _materialized(env, host)
     captured = inputs['instances'][0]
-    before = accepted_replacements(captured, ['ban.py'])
-    # uploads are not part of the signature, so nothing can add to the set
-    assert before == accepted_replacements(captured, ['ban.py'])
-    assert 'mine.py' not in before
+    seen = []
+    real = conversion.filter_scripts_for_target
+
+    def spy(scripts, *args, **kwargs):
+        seen.append(kwargs['accepted_replacements'])
+        return real(scripts, *args, **kwargs)
+
+    monkeypatch.setattr(conversion, 'filter_scripts_for_target', spy)
+    build_converted_tree(inputs_dir, captured, ['ban.py'], excluded_hooks(inputs),
+                         str(env.tmp / 'c1'))
+    build_converted_tree(inputs_dir, captured, ['ban.py'], excluded_hooks(inputs),
+                         str(env.tmp / 'c2'), uploads={'mine.py': UPLOAD})
+    assert seen[0] == seen[1] and 'mine.py' not in seen[1]
