@@ -87,19 +87,33 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
     });
   };
 
-  // The plan changed under us (409): reload it, drop the uploads with it.
-  const reloadPlan = async () => {
-    epochRef.current += 1;
+  const planKey = (data) => JSON.stringify([
+    data?.fingerprint, (data?.instances || []).map((inst) => inst.instance_id).sort()]);
+
+  // The start request got a 409: reload the plan. Uploads (and the note) are
+  // dropped only if the plan actually changed; a transient 409 (busy, backup
+  // running) keeps them.
+  const reloadPlan = async (previous, hadUploads) => {
     const epoch = epochRef.current;
-    setUploads(emptyUploads());
-    setPendingChecks(0);
+    setResetNote(false);
     try {
       const data = await getRuntimeUpgrade(hostId);
       if (epoch !== epochRef.current) return;
       setPlan(data);
-      setTicked(tickedDefaults(data.instances || []));
+      if (planKey(data) !== planKey(previous)) {
+        epochRef.current += 1;
+        setUploads(emptyUploads());
+        setPendingChecks(0);
+        setResetNote(hadUploads);
+        setTicked(tickedDefaults(data.instances || []));
+      }
     } catch {
-      if (epoch === epochRef.current) setPlan(null);
+      if (epoch === epochRef.current) {
+        epochRef.current += 1;
+        setUploads(emptyUploads());
+        setPendingChecks(0);
+        setPlan(null);
+      }
     }
   };
 
@@ -110,7 +124,6 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
       if (!isUploadablePath(row.path)) return null;
       const instanceId = inst.instance_id;
       const current = effectiveUpload(uploads, instanceId, row.path);
-      const hostWide = Boolean(uploads.files[row.path]);
       return (
         <PluginUploadControl
           hostId={hostId}
@@ -118,7 +131,7 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
           upload={current}
           disabled={submitting}
           onUploaded={live((file) => setUploads((prev) => (
-            current || hostWide
+            effectiveUpload(prev, instanceId, row.path) || prev.files[row.path]
               ? replaceRowUpload(prev, instanceId, row.path, file)
               : addUpload(prev, row.path, file))))}
           onRemove={() => setUploads((prev) => removeRowUpload(prev, instanceId, row.path))}
@@ -152,8 +165,7 @@ function RuntimeUpgradeDialog({ isOpen, host, onClose, onStarted }) {
       setError(errorMessage(err, 'Could not start the upgrade.'));
       if (err?.response?.status === 409) {
         const hadUploads = Object.keys(buildUploadPayload(plan, uploads).uploaded_files).length > 0;
-        setResetNote(hadUploads);
-        await reloadPlan();
+        await reloadPlan(plan, hadUploads);
       }
     } finally {
       setSubmitting(false);

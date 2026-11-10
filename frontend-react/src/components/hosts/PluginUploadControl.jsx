@@ -75,7 +75,7 @@ function PluginUploadControl({ hostId, path, upload, onUploaded, onRemove, disab
             Remove
           </button>
         )}
-        {upload && <span className="text-theme-secondary">Uploaded {upload.name}</span>}
+        {upload && <span className="text-theme-secondary">Uploaded manually, not verified on minqlxtended</span>}
       </div>
       {problem && (
         <div role="alert" className="mt-1 text-[var(--accent-danger)]">

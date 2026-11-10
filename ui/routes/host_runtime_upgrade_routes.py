@@ -146,9 +146,7 @@ def _parse_body(body):
         raise _Rejected('accepted_replacements must be an object keyed by instance id.', 400)
     answers = {}
     for key, paths in raw.items():
-        if not isinstance(key, str) or not key.isdigit():
-            raise _Rejected(f'accepted_replacements has an invalid instance id {key!r}.', 400)
-        instance_id = int(key)
+        instance_id = _instance_key(key, 'accepted_replacements')
         if instance_id in answers:
             raise _Rejected(f'accepted_replacements names instance {instance_id} twice.', 400)
         if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
@@ -272,6 +270,10 @@ def start_runtime_upgrade(host_id):
         return blocked
 
     instance_ids = sorted(inst.id for inst in host.instances)
+    # Reject fake instance ids before any lock or per-instance work: each id
+    # would otherwise multiply the uploaded text under the locks.
+    if set(uploads) - set(instance_ids):
+        return _error('uploaded_file_ids names an instance that is not on this host.', 400)
     token = str(uuid.uuid4())
     host_locked = False
     instances_locked = False

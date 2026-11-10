@@ -98,6 +98,7 @@ def parse_uploads(inputs, uploads_json):
         raise AnswersInvalid('Upgrade uploads must be an object keyed by instance id')
     captured = _captured_by_id(inputs)
     uploads = {instance_id: {} for instance_id in captured}
+    validated = {}  # (path, text) -> cleaned text; a shared file is checked once
     for key, files in raw.items():
         try:
             instance_id = int(key)
@@ -113,7 +114,9 @@ def parse_uploads(inputs, uploads_json):
                 raise AnswersInvalid(
                     f'Instance {instance_id}: {path} is not a plugin that needs an upload')
             try:
-                uploads[instance_id][path] = validate_plugin_upload(path, text)
+                if (path, text) not in validated:
+                    validated[(path, text)] = validate_plugin_upload(path, text)
+                uploads[instance_id][path] = validated[(path, text)]
             except UploadRejected as exc:
                 raise AnswersInvalid(f'Instance {instance_id}: {path}: {exc.message}') from exc
     return uploads

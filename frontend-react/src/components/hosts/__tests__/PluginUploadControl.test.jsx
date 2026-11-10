@@ -47,6 +47,11 @@ describe('PluginUploadControl', () => {
     expect(validateRuntimeUploadPlugin).toHaveBeenCalledWith(5, { path: 'x76admin.py', text: 'hello' });
   });
 
+  it('labels an existing upload as manual and unverified', () => {
+    setup({ upload: { name: 'x76admin.py', text: 'hello' } });
+    expect(screen.getByText('Uploaded manually, not verified on minqlxtended')).toBeInTheDocument();
+  });
+
   it('shows the message and every reason on a validation error', async () => {
     validateRuntimeUploadPlugin.mockRejectedValue({
       response: { data: { error: { message: 'Not valid.', reasons: ['reason one', 'reason two'] } } },
