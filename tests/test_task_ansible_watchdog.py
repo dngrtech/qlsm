@@ -3,6 +3,7 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock
 from ui.task_logic.ansible_watchdog import configure_host_watchdog_logic, enable_default_watchdog
+from ui import db
 from ui.models import HostStatus
 from ui.database import create_host, get_host
 
@@ -159,3 +160,17 @@ def test_unit_template_passes_dead_confirm_to_the_script(extra, expected):
         watchdog_dir='/opt/ql-watchdog', **extra)
 
     assert f'Environment=QL_WATCHDOG_DEAD_CONFIRM={expected}\n' in unit
+
+
+def test_enable_default_watchdog_commits_pending_changes_before_the_playbook(app, mock_run_playbook):
+    """Otherwise the playbook's host read autoflushes them and holds a write lock."""
+    order = []
+    mock_run_playbook.side_effect = lambda **kw: order.append('playbook') or (True, 'ok', '')
+    with app.app_context():
+        host = create_host(name='wd-commit-first', provider='vultr', status=HostStatus.PROVISIONED_PENDING_SETUP)
+        host.redis_unix_socket = True
+        real_commit = db.session.commit
+        with patch.object(db.session, 'commit', side_effect=lambda: order.append('commit') or real_commit()):
+            enable_default_watchdog(host)
+
+        assert order[:2] == ['commit', 'playbook']

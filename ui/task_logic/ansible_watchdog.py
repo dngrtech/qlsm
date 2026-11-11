@@ -31,6 +31,10 @@ def enable_default_watchdog(host):
     watchdog off and it can be enabled later from the host actions menu. The
     caller commits.
     """
+    # Setup has uncommitted host changes by now. Reading the host's address for
+    # the playbook would autoflush them and hold a SQLite write lock for the
+    # whole SSH + apt run, so commit first (as _dispatch_addon_payload_sync does).
+    db.session.commit()
     try:
         result = _run_host_ansible_playbook(
             host=host,
