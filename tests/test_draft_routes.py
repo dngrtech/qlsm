@@ -1430,12 +1430,12 @@ def test_seed_draft_same_runtime_load_keeps_everything(app, tmp_path):
     from ui.routes.draft_routes import _seed_draft
     source = os.path.abspath('configs/presets/_builtin/default/scripts')
     source_count = _count_py_files(source)
-    assert source_count == 54  # sanity: matches the reported reproduction
+    assert source_count > 0  # sanity: run pytest from the repo root
 
     draft = tmp_path / 'draft'
     with app.app_context():
         _seed_draft(str(draft), source, 'default', target_runtime='minqlx')
-    assert _count_py_files(draft) == 54
+    assert _count_py_files(draft) == source_count
 
 
 def test_seed_draft_same_runtime_load_keeps_everything_minqlxtended(app, tmp_path):
@@ -1443,13 +1443,13 @@ def test_seed_draft_same_runtime_load_keeps_everything_minqlxtended(app, tmp_pat
     from ui.routes.draft_routes import _seed_draft
     source = os.path.abspath('configs/presets/_builtin/default-minqlxtended/scripts')
     source_count = _count_py_files(source)
-    assert source_count == 75
+    assert source_count > 0  # sanity: run pytest from the repo root
 
     draft = tmp_path / 'draft'
     with app.app_context():
         _seed_draft(str(draft), source, 'default-minqlxtended',
                     target_runtime='minqlxtended', source_runtime='minqlxtended')
-    assert _count_py_files(draft) == 75
+    assert _count_py_files(draft) == source_count
 
 
 def test_undecodable_file_is_left_alone(app, tmp_path):

@@ -41,6 +41,7 @@ GitHub validates a workflow change against the default branch, so a PR that edit
 *   **Modularity:** Structure code into logical, focused modules/functions/classes.
 *   **Clear Responsibilities:** File purpose clear from name and location.
 *   **Responsive Design:** Ensure UI elements adapt gracefully to various screen sizes using Tailwind CSS utilities.
+*   **No Hardcoded Preset File Counts:** Tests over the built-in presets (`configs/presets/_builtin/`) derive file counts from the preset directory instead of asserting a literal, so adding or removing a shipped plugin doesn't break them.
 
 ## API Response Patterns
 
