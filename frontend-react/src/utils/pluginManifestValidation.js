@@ -201,7 +201,7 @@ export function validateManifestAddons(addons) {
     if (isBlank(a?.description)) {
       push('warning', i, `Addon ${label}: no description set.`);
     }
-    if (!isBlank(a?.requires_qlsm_version) && !DOTTED_VERSION_RE.test(a.requires_qlsm_version)) {
+    if (!isBlank(a?.requires_qlsm_version) && !DOTTED_VERSION_RE.test(a.requires_qlsm_version.trim())) {
       push('warning', i, `Addon ${label}: "${a.requires_qlsm_version}" isn't a dotted version number (e.g. "1.36.0") — qlsm can't compare it, so the version check is silently skipped.`);
     }
   });
