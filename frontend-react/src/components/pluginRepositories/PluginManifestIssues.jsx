@@ -1,7 +1,7 @@
 import { AlertTriangle, CircleAlert } from 'lucide-react';
 
-// Errors first -- those are the findings that make plugin data disappear the
-// next time qlsm fetches this file.
+// Errors first -- those are the findings that make plugin or addon data
+// disappear the next time qlsm fetches this file.
 const bySeverity = (a, b) => {
   if (a.severity === b.severity) return 0;
   return a.severity === 'error' ? -1 : 1;
@@ -17,7 +17,7 @@ const bySeverity = (a, b) => {
  * `index` belongs to no single row and can't be drawn as a dot at all, so
  * this list is the only place it can appear.
  */
-function PluginManifestIssues({ issues, onSelectPlugin }) {
+function PluginManifestIssues({ issues, onSelect }) {
   if (!issues.length) return null;
 
   return (
@@ -45,7 +45,7 @@ function PluginManifestIssues({ issues, onSelectPlugin }) {
               ) : (
                 <button
                   type="button"
-                  onClick={() => onSelectPlugin(iss.index)}
+                  onClick={() => onSelect(iss)}
                   className="w-full flex items-start gap-2 px-3 py-1.5 text-left hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
                 >
                   {body}
