@@ -2,7 +2,7 @@ import json
 
 import pytest
 from unittest.mock import patch, MagicMock
-from ui.task_logic.ansible_watchdog import configure_host_watchdog_logic
+from ui.task_logic.ansible_watchdog import configure_host_watchdog_logic, enable_default_watchdog
 from ui.models import HostStatus
 from ui.database import create_host, get_host
 
@@ -86,3 +86,38 @@ def test_configure_host_watchdog_host_not_found(app):
     with app.app_context():
         result = configure_host_watchdog_logic(99999, True)
         assert result is False
+
+
+def test_enable_default_watchdog_turns_it_on_with_default_settings(app, mock_run_playbook):
+    mock_run_playbook.return_value = (True, 'ok', '')
+    with app.app_context():
+        host = create_host(name='wd-default', provider='vultr', status=HostStatus.PROVISIONED_PENDING_SETUP)
+
+        assert enable_default_watchdog(host) is True
+
+        assert host.watchdog_enabled is True
+        assert host.watchdog_config is None
+        assert 'ql-watchdog enabled' in host.logs
+        kwargs = mock_run_playbook.call_args.kwargs
+        assert kwargs['playbook_name'] == 'configure_watchdog.yml'
+        assert kwargs['extravars'] == {'watchdog_enabled': True}
+
+
+@pytest.mark.parametrize('outcome', [
+    (False, '', 'apt failed'),
+    (None, 'Host details missing'),
+    RuntimeError('ssh exploded'),
+])
+def test_enable_default_watchdog_failure_never_fails_host_setup(app, mock_run_playbook, outcome):
+    if isinstance(outcome, Exception):
+        mock_run_playbook.side_effect = outcome
+    else:
+        mock_run_playbook.return_value = outcome
+    with app.app_context():
+        host = create_host(name='wd-default-fail', provider='vultr', status=HostStatus.PROVISIONED_PENDING_SETUP)
+
+        assert enable_default_watchdog(host) is False
+
+        assert host.watchdog_enabled is False
+        assert host.status == HostStatus.PROVISIONED_PENDING_SETUP
+        assert 'Could not enable ql-watchdog' in host.logs

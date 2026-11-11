@@ -84,6 +84,19 @@ backed up -- a slow map load, a blocking plugin call, or inbound traffic on the
 public game port. After `strikes` consecutive strikes the instance is
 restarted, at most `rate_max` times per `rate_window` seconds.
 
+A second detector covers an engine that crashed but never exited (it has closed
+its game socket, so Recv-Q stays at 0, and leftover threads keep using CPU). It
+restarts an instance when the engine does not answer a loopback connectionless
+packet **and** its `minqlx:server_status:<port>` key is absent from Redis, both
+were seen good earlier for the same process, and that has held on every check
+for 180 seconds. The Redis address, database and password are read from the
+engine's command line; a failed Redis read is "unknown" and never counts as
+absent. It shares `rate_max`/`rate_window`, `dryrun` and `forensics`; restart
+events carry `reason` (`frozen_loop` or `engine_dead`).
+
+First-time host setup (cloud, standalone and self) enables the watchdog with
+default settings. Re-running host setup does not change it.
+
 `dryrun` logs `would_restart` instead of restarting. `forensics` captures a gdb
 all-thread backtrace (and py-spy dump when available) before a real restart;
 enabling it installs `gdb` on the host.

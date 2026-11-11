@@ -108,7 +108,7 @@ def test_rerun_callers_no_longer_reference_legacy_instance_paths(
     ],
 )
 def test_rerun_uses_shared_reconciliation_once_and_stays_active(
-    app, provider, runner
+    app, provider, runner, default_watchdog_deploy
 ):
     host_id = _build_host(
         app,
@@ -135,6 +135,8 @@ def test_rerun_uses_shared_reconciliation_once_and_stays_active(
         result = runner(app, host_id, rerun=True)
 
     assert "Status: ACTIVE" in result
+    # A re-run must not switch the watchdog on behind the operator's back.
+    default_watchdog_deploy.assert_not_called()
     assert reconcile.call_count == 1
     assert seen_host_ids == [host_id]
     legacy_hooks.assert_not_called()

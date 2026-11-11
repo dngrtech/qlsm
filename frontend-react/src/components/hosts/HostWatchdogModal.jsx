@@ -76,9 +76,8 @@ function HostWatchdogModal({ isOpen, onClose, onSubmit, host }) {
                         <form onSubmit={handleSubmit}>
                             <div className="space-y-6">
                                 <p className="text-sm text-[var(--text-muted)]">
-                                    Detects a hung QLDS main-thread on <strong>{host?.name}</strong> (kernel
-                                    Recv-Q on the game port stops draining) and restarts only the affected
-                                    instance via systemctl.
+                                    Detects an instance on <strong>{host?.name}</strong> whose game has frozen
+                                    or crashed without exiting, and restarts only that instance via systemctl.
                                 </p>
 
                                 <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)]">

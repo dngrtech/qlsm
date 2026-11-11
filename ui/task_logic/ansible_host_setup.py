@@ -293,6 +293,10 @@ def setup_host_ansible_logic(host_id, rerun=False):
                 )
             else:
                 _mark_host_migrated_to_hook(host)
+                # New hosts get the hung-instance watchdog on by default; a
+                # re-run leaves whatever the operator has configured.
+                from .ansible_watchdog import enable_default_watchdog
+                enable_default_watchdog(host)
             host.status = HostStatus.ACTIVE
             append_log(host, f"Task finished successfully. Host is ACTIVE.")
             db.session.commit()

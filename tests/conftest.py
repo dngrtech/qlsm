@@ -124,6 +124,22 @@ def _offline_redis(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def default_watchdog_deploy(monkeypatch):
+    """First-time host setup turns ql-watchdog on, which runs a real playbook.
+
+    No test may shell out to ansible for it. Setup modules import the function
+    at call time, so replacing it on its home module covers every caller; tests
+    of the function itself hold their own reference to the real one.
+    """
+    from unittest.mock import MagicMock
+    from ui.task_logic import ansible_watchdog
+
+    mock = MagicMock(return_value=True)
+    monkeypatch.setattr(ansible_watchdog, 'enable_default_watchdog', mock)
+    return mock
+
+
+@pytest.fixture(autouse=True)
 def _fast_password_hashing(monkeypatch):
     """Hash test passwords with a cheap KDF.
 

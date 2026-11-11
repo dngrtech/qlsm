@@ -5,6 +5,7 @@ from ui import db
 from ui.models import Host, HostStatus
 from rq import get_current_job
 from ui.task_logic.ansible_runner import _run_host_ansible_playbook
+from ui.task_logic.common import append_log
 
 # Maps a key accepted in the `config` dict (host.watchdog_config JSON / API
 # payload) to the ansible-playbook extra-var consumed by
@@ -20,6 +21,38 @@ _CONFIG_TO_EXTRAVAR = {
     'rate_window': 'watchdog_rate_window',
     'forensics': 'watchdog_forensics',
 }
+
+
+def enable_default_watchdog(host):
+    """Turn ql-watchdog on with default settings as part of first-time host setup.
+
+    A failure here never fails the setup: the host stays usable with the
+    watchdog off and it can be enabled later from the host actions menu. The
+    caller commits.
+    """
+    try:
+        result = _run_host_ansible_playbook(
+            host=host,
+            playbook_name='configure_watchdog.yml',
+            extravars={'watchdog_enabled': True},
+        )
+        success = bool(result and result[0])
+    except Exception:
+        current_app.logger.exception(f"Enabling ql-watchdog failed for host {host.name}.")
+        success = False
+
+    if success:
+        host.watchdog_enabled = True
+        host.watchdog_config = None
+        append_log(host, "ql-watchdog enabled (on by default for new hosts).")
+    else:
+        current_app.logger.error(f"Could not enable ql-watchdog on new host {host.name}.")
+        append_log(
+            host,
+            "Could not enable ql-watchdog. Host setup continues; enable it from "
+            "Actions -> Configure Watchdog.",
+        )
+    return success
 
 
 def configure_host_watchdog_logic(host_id, enabled, config=None):
