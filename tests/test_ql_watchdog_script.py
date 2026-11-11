@@ -255,7 +255,7 @@ def test_status_key_present_reads_the_instance_database_with_its_password():
     {"qlx_redisAddress": "ADDR", "qlx_redisPassword": "wrong"},   # auth refused
     {"qlx_redisAddress": "ADDR"},                                 # auth required, none sent
     {"qlx_redisAddress": "ADDR", "qlx_redisPassword": "hunter2", "qlx_redisDatabase": "x"},
-    {"qlx_redisAddress": "/nonexistent/redis.sock", "qlx_redisUnixSocket": "1"},
+    {"qlx_redisAddress": "/var/run/redis/redis.sock", "qlx_redisUnixSocket": "1"},  # no such socket here
 ])
 def test_status_key_present_is_unknown_never_absent_when_redis_cannot_be_read(args):
     server = _FakeRedis(password="hunter2")
@@ -323,7 +323,7 @@ def test_a_stalled_watchdog_loop_does_not_count_as_evidence():
 
 def test_check_dead_engine_starts_unarmed_for_a_new_process(monkeypatch):
     monkeypatch.setattr(watchdog, "engine_args", lambda pid: {"qlx_redisAddress": "x"})
-    monkeypatch.setattr(watchdog, "probe_engine", lambda port, host: False)
+    monkeypatch.setattr(watchdog, "probe_engine", lambda port: False)
     monkeypatch.setattr(watchdog, "status_key_present", lambda args, port: False)
     monkeypatch.setattr(watchdog, "log_event", lambda *a, **kw: None)
     watches = {27965: {**watchdog.new_dead_watch("902"), "armed": True}}
@@ -335,11 +335,10 @@ def test_check_dead_engine_starts_unarmed_for_a_new_process(monkeypatch):
     assert watches[27965]["pid"] == "4242" and watches[27965]["armed"] is False
 
 
-def test_check_dead_engine_confirms_an_armed_process_and_probes_net_ip(monkeypatch):
-    probed = []
+def test_check_dead_engine_confirms_an_armed_process(monkeypatch):
     state = {"alive": True}
-    monkeypatch.setattr(watchdog, "engine_args", lambda pid: {"net_ip": "10.0.0.5", "qlx_redisAddress": "x"})
-    monkeypatch.setattr(watchdog, "probe_engine", lambda port, host: probed.append(host) or state["alive"])
+    monkeypatch.setattr(watchdog, "engine_args", lambda pid: {"qlx_redisAddress": "x"})
+    monkeypatch.setattr(watchdog, "probe_engine", lambda port: state["alive"])
     monkeypatch.setattr(watchdog, "status_key_present", lambda args, port: state["alive"])
     monkeypatch.setattr(watchdog, "log_event", lambda *a, **kw: None)
     watches = {}
@@ -349,7 +348,6 @@ def test_check_dead_engine_confirms_an_armed_process_and_probes_net_ip(monkeypat
     verdicts = [watchdog.check_dead_engine(27965, "902", watches, 1010.0 + i * 10) for i in range(19)]
 
     assert verdicts[-1] is True and not any(verdicts[:-1])
-    assert set(probed) == {"10.0.0.5"}
 
 
 def test_check_dead_engine_is_unknown_when_the_process_cannot_be_read(monkeypatch):
@@ -423,3 +421,20 @@ def test_loop_dead_engine_respects_the_restart_rate_limit(monkeypatch):
 
     assert restarts == [27965, 27965]
     assert [f["reason"] for e, f in events if e == "restart_giveup"][0] == "engine_dead"
+
+
+@pytest.mark.parametrize("args", [
+    # The command line belongs to the unprivileged engine user; root must not
+    # follow it to another machine or to an arbitrary local socket.
+    {"qlx_redisAddress": "ADDR_REMOTE"},
+    {"qlx_redisAddress": "/var/run/docker.sock", "qlx_redisUnixSocket": "1"},
+    {"qlx_redisAddress": "6379"},
+])
+def test_status_key_present_refuses_targets_qlsm_never_configures(monkeypatch, args):
+    connects = []
+    monkeypatch.setattr(watchdog.socket, "create_connection", lambda *a, **kw: connects.append(a) or 1 / 0)
+    monkeypatch.setattr(watchdog.socket, "socket", lambda *a, **kw: connects.append(a) or 1 / 0)
+    args = {k: ("10.1.2.3:6379" if v == "ADDR_REMOTE" else v) for k, v in args.items()}
+
+    assert watchdog.status_key_present(args, 27965) is None
+    assert connects == []

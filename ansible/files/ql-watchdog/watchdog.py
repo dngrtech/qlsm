@@ -106,6 +106,12 @@ DEAD_MIN_CHECKS = 3
 PROBE_TIMEOUT = 1.0
 REDIS_TIMEOUT = 1.0
 STATUS_KEY_PREFIX = "minqlx:server_status"
+# The watchdog is root and the engine command line belongs to the unprivileged
+# `ql` user, who can rewrite it. So the Redis target taken from it is only
+# honoured when it is one QLSM itself configures: Redis on loopback, or the
+# host Redis unix socket. Anything else is "unknown" and never restarts.
+REDIS_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+REDIS_UNIX_SOCKETS = ("/var/run/redis/redis.sock", "/run/redis/redis.sock")
 # qlds@<port>.service - the systemd template unit prefix qlsm uses for QLDS
 # instances (ansible/templates/qlds@.service.j2). The game port is read
 # directly from the unit's instance name (the part after '@').
@@ -313,18 +319,20 @@ def engine_args(pid: str) -> dict[str, str] | None:
     return args
 
 
-def probe_engine(port: int, host: str = "127.0.0.1", timeout: float = PROBE_TIMEOUT) -> bool | None:
+def probe_engine(port: int, timeout: float = PROBE_TIMEOUT) -> bool | None:
     """Does the engine answer a connectionless packet on its game port?
 
     A live engine replies at once ("Server uses protocol version ..."). True on
     a reply, False on silence, None if the probe itself could not be made.
+    Always loopback: an engine bound to one specific address never answers,
+    is therefore never seen healthy, and stays out of the dead-engine detector.
     """
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     except OSError:
         return None
     try:
-        sock.sendto(b'\xff\xff\xff\xffconnect ""', (host, port))
+        sock.sendto(b'\xff\xff\xff\xffconnect ""', ("127.0.0.1", port))
         readable, _, _ = select.select([sock], [], [], timeout)
         if not readable:
             return False
@@ -347,8 +355,9 @@ def status_key_present(args: dict[str, str], port: int, timeout: float = REDIS_T
     """Is the instance's live-status key in the Redis it was started against?
 
     True/False only when Redis answered every command cleanly. None for
-    anything else: no Redis settings on the command line, connection or auth
-    failure, timeout, unexpected reply.
+    anything else: no Redis settings on the command line, a Redis target that
+    is not loopback or the host Redis socket, connection or auth failure,
+    timeout, unexpected reply.
     """
     address = args.get("qlx_redisAddress", "")
     if not address:
@@ -366,12 +375,16 @@ def status_key_present(args: dict[str, str], port: int, timeout: float = REDIS_T
     sock = None
     try:
         if args.get("qlx_redisUnixSocket") == "1":
+            if address not in REDIS_UNIX_SOCKETS:
+                return None
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.settimeout(timeout)
             sock.connect(address)
         else:
             host, _, redis_port = address.rpartition(":")
-            sock = socket.create_connection((host or "127.0.0.1", int(redis_port)), timeout=timeout)
+            if host not in REDIS_LOOPBACK_HOSTS:
+                return None
+            sock = socket.create_connection((host, int(redis_port)), timeout=timeout)
             sock.settimeout(timeout)
         sock.sendall(b"".join(commands))
         with sock.makefile("rb") as reader:
@@ -446,7 +459,7 @@ def check_dead_engine(port: int, pid: str, watches: dict[int, dict[str, object]]
         reply: bool | None = None
         key_present: bool | None = None
     else:
-        reply = probe_engine(port, args.get("net_ip") or "127.0.0.1")
+        reply = probe_engine(port)
         # An armed instance that answers is healthy enough to end any streak;
         # the Redis read only matters for arming and for confirming silence.
         if reply is True and watch["armed"]:

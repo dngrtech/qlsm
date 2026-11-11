@@ -90,8 +90,8 @@ restarts an instance when the engine does not answer a loopback connectionless
 packet **and** its `minqlx:server_status:<port>` key is absent from Redis, both
 were seen good earlier for the same process, and that has held on every check
 for 180 seconds. The Redis address, database and password are read from the
-engine's command line; a failed Redis read is "unknown" and never counts as
-absent. It shares `rate_max`/`rate_window`, `dryrun` and `forensics`; restart
+engine's command line, and only loopback Redis or the host Redis unix socket is
+contacted; a failed Redis read is "unknown" and never counts as absent. It shares `rate_max`/`rate_window`, `dryrun` and `forensics`; restart
 events carry `reason` (`frozen_loop` or `engine_dead`).
 
 First-time host setup (cloud, standalone and self) enables the watchdog with
