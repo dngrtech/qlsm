@@ -32,7 +32,7 @@ A crashed server can get stuck while shutting down. It has already closed its ga
 - **The server does not answer** a test packet sent to its game port from the host itself.
 - **The server has stopped reporting live status** (the map and player data QLSM shows).
 - **Both worked earlier** for the same server process.
-- **Nothing changed for 3 minutes**, checked every interval.
+- **Nothing changed for 3 minutes** (the **Crash Check Wait** setting), checked every interval.
 
 One sign alone never triggers a restart. A server under heavy traffic may miss the test packet but keeps reporting status; a server whose `serverchecker` plugin is broken or removed stops reporting status but still answers. If the watchdog cannot tell — for example it cannot reach Redis — it does nothing.
 
@@ -41,7 +41,7 @@ This check has two limits:
 - An instance without the `serverchecker` plugin is never restarted by it, because the watchdog never sees it report status.
 - An instance that crashes before the watchdog has seen it healthy is not caught. This can happen if it crashes right after the watchdog itself was started.
 
-The 3-minute wait is fixed. The check shares the restart limit, dry-run and forensics settings below.
+The check shares the restart limit, dry-run and forensics settings below.
 
 ## Turning It On
 
@@ -66,10 +66,11 @@ If the watchdog was already on before you updated QLSM to v1.56.0, open the moda
 | --- | --- | --- |
 | Check Interval (s) | 10 | How often each instance is checked. |
 | Recv-Q Threshold (bytes) | 8192 | How much unread game traffic counts as "piling up". A healthy server stays well below this. |
-| Strikes Before Restart | 3 | How many checks in a row must look frozen before a restart. With the defaults, a frozen instance is restarted after about 30 seconds. Does not apply to the crash check, which always waits 3 minutes. |
+| Strikes Before Restart | 3 | How many checks in a row must look frozen before a restart. With the defaults, a frozen instance is restarted after about 30 seconds. Does not apply to the crash check, which uses Crash Check Wait. |
 | Boot Grace Period (s) | 90 | How long a newly started instance is ignored. |
 | Max Restarts / Window | 3 | The most restarts allowed for one instance within the window below. |
 | Rate Limit Window (s) | 900 | The window for the limit above. Once an instance hits the limit, the watchdog stops restarting it and only records the freeze, so a server that keeps freezing can't restart forever. |
+| Crash Check Wait (s) | 180 | How long an instance must stay silent, with no live status, before the crash check restarts it. The minimum is 60, so a slow map load is never mistaken for a crash. |
 | Capture forensics | On | Saves a snapshot of what the frozen server was doing just before restarting it. Useful when reporting the problem. |
 | Dry-run | Off | Detects and records freezes but never restarts anything. Use it to see what the watchdog would do on a host before letting it act. |
 

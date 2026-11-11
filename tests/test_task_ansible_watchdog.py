@@ -121,3 +121,41 @@ def test_enable_default_watchdog_failure_never_fails_host_setup(app, mock_run_pl
         assert host.watchdog_enabled is False
         assert host.status == HostStatus.PROVISIONED_PENDING_SETUP
         assert 'Could not enable ql-watchdog' in host.logs
+
+
+@pytest.mark.parametrize('value, ok', [
+    (60, True), (180, True), (3600, True),
+    (59, False), (3601, False), (0, False), (True, False), ('180', False), (180.0, False),
+])
+def test_dead_confirm_is_validated_with_a_floor_of_one_minute(value, ok):
+    from ui.routes.host_routes import _validate_watchdog_config
+
+    config, error = _validate_watchdog_config({'dead_confirm': value})
+
+    if ok:
+        assert error is None and config == {'dead_confirm': value}
+    else:
+        assert config is None and 'dead_confirm' in error['message']
+
+
+def test_dead_confirm_reaches_the_playbook_and_is_saved(app, mock_run_playbook, mock_get_current_job):
+    mock_run_playbook.return_value = (True, 'ok', '')
+    with app.app_context():
+        host = create_host(name='wd-dead-confirm', provider='vultr', status=HostStatus.CONFIGURING)
+
+        assert configure_host_watchdog_logic(host.id, True, {'dead_confirm': 300}) is True
+
+        assert mock_run_playbook.call_args.kwargs['extravars']['watchdog_dead_confirm'] == 300
+        assert json.loads(get_host(host.id).watchdog_config) == {'dead_confirm': 300}
+
+
+@pytest.mark.parametrize('extra, expected', [({}, '180'), ({'watchdog_dead_confirm': 300}, '300')])
+def test_unit_template_passes_dead_confirm_to_the_script(extra, expected):
+    import os
+    from jinja2 import Environment, FileSystemLoader
+
+    templates = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ansible', 'templates')
+    unit = Environment(loader=FileSystemLoader(templates)).get_template('ql-watchdog.service.j2').render(
+        watchdog_dir='/opt/ql-watchdog', **extra)
+
+    assert f'Environment=QL_WATCHDOG_DEAD_CONFIRM={expected}\n' in unit

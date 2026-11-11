@@ -65,6 +65,7 @@ takes the host lock and runs `configure_watchdog.yml` as a background task.
     "grace": 90,
     "rate_max": 3,
     "rate_window": 900,
+    "dead_confirm": 180,
     "dryrun": false,
     "forensics": true
   }
@@ -73,7 +74,7 @@ takes the host lock and runs `configure_watchdog.yml` as a background task.
 
 `config` is optional; unknown keys are rejected. All tunables are validated as
 integers within range (`recvq_threshold` must be >= 1 -- 0 would mark every
-instance permanently hung) or booleans.
+instance permanently hung; `dead_confirm` must be 60-3600) or booleans.
 
 **How detection works.** Every `interval` seconds the watchdog reads the kernel
 Recv-Q for each `qlds@<port>.service` game port *and* the process CPU time from
@@ -89,7 +90,7 @@ its game socket, so Recv-Q stays at 0, and leftover threads keep using CPU). It
 restarts an instance when the engine does not answer a loopback connectionless
 packet **and** its `minqlx:server_status:<port>` key is absent from Redis, both
 were seen good earlier for the same process, and that has held on every check
-for 180 seconds. The Redis address, database and password are read from the
+for `dead_confirm` seconds (default 180). The Redis address, database and password are read from the
 engine's command line, and only loopback Redis or the host Redis unix socket is
 contacted; a failed Redis read is "unknown" and never counts as absent. It shares `rate_max`/`rate_window`, `dryrun` and `forensics`; restart
 events carry `reason` (`frozen_loop` or `engine_dead`).

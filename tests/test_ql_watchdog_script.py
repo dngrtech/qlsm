@@ -438,3 +438,16 @@ def test_status_key_present_refuses_targets_qlsm_never_configures(monkeypatch, a
 
     assert watchdog.status_key_present(args, 27965) is None
     assert connects == []
+
+
+@pytest.mark.parametrize("env, expected", [(None, 180), ("300", 300), ("5", 60), ("junk", 180)])
+def test_dead_confirm_comes_from_the_environment_with_a_floor(monkeypatch, env, expected):
+    if env is None:
+        monkeypatch.delenv("QL_WATCHDOG_DEAD_CONFIRM", raising=False)
+    else:
+        monkeypatch.setenv("QL_WATCHDOG_DEAD_CONFIRM", env)
+    try:
+        assert _load().DEAD_CONFIRM == expected
+    finally:
+        monkeypatch.undo()
+        globals()["watchdog"] = _load()

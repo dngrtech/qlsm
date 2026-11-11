@@ -20,6 +20,7 @@ _CONFIG_TO_EXTRAVAR = {
     'rate_max': 'watchdog_rate_max',
     'rate_window': 'watchdog_rate_window',
     'forensics': 'watchdog_forensics',
+    'dead_confirm': 'watchdog_dead_confirm',
 }
 
 

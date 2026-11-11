@@ -9,6 +9,7 @@ const DEFAULTS = {
     grace: 90,
     rate_max: 3,
     rate_window: 900,
+    dead_confirm: 180,
     forensics: true,
     dryrun: false,
 };
@@ -104,6 +105,7 @@ function HostWatchdogModal({ isOpen, onClose, onSubmit, host }) {
                                             {numberField('grace', 'Boot Grace Period (s)', 30, 3600)}
                                             {numberField('rate_max', 'Max Restarts / Window', 1, 100)}
                                             {numberField('rate_window', 'Rate Limit Window (s)', 60, 86400)}
+                                            {numberField('dead_confirm', 'Crash Check Wait (s)', 60, 3600)}
                                         </div>
 
                                         <div className="flex items-center justify-between">
