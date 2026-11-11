@@ -10,7 +10,7 @@ Open from host row **Actions** in the Servers page.
 - **[View Logs](host-logs.md)**: opens this host's provisioning and setup log. Start here when a host is in **Error**.
 - **Restart Host**: queues host reboot flow. If the host takes longer than expected to come back and briefly shows **Error**, QLSM keeps probing it and restores it to **Active** automatically once it's reachable again — no manual action needed in that case.
 - **[Configure Auto-Restart](auto-restart.md)**: opens restart schedule modal.
-- **[Configure Watchdog](watchdog.md)**: turns on automatic restart of any instance on this host whose game loop has frozen. Off by default.
+- **[Configure Watchdog](watchdog.md)**: turns on automatic restart of any instance on this host whose game has frozen or crashed without exiting. On by default for new hosts.
 - **[Update Workshop Item](update-workshop-item.md)**: triggers workshop update on this host.
 - **[Check for Updates](check-for-updates.md)**: compares this host's plugins with the versions QLSM ships and lets you pick which files to update.
 - **[Install/Uninstall QLFilter](../features/qlfilter.md)**: depends on current QLFilter state.

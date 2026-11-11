@@ -76,7 +76,7 @@ class Host(db.Model):
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True) # New field for QLFilter
     auto_restart_schedule = db.Column(db.String(100), nullable=True) # Cron expression for auto-restart
     watchdog_enabled = db.Column(db.Boolean, default=False, nullable=False, server_default='0') # ql-watchdog addon: detect+restart hung QLDS instances
-    watchdog_config = db.Column(db.Text, nullable=True) # JSON overrides: recvq_threshold, strikes, interval, grace, rate_max, rate_window, forensics, dryrun
+    watchdog_config = db.Column(db.Text, nullable=True) # JSON overrides: recvq_threshold, strikes, interval, grace, rate_max, rate_window, dead_confirm, forensics, dryrun
     logs = db.Column(db.Text, nullable=True) # Stores logs from background tasks (e.g., Terraform)
     last_updated = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)

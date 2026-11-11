@@ -2,7 +2,8 @@ import json
 
 import pytest
 from unittest.mock import patch, MagicMock
-from ui.task_logic.ansible_watchdog import configure_host_watchdog_logic
+from ui.task_logic.ansible_watchdog import configure_host_watchdog_logic, enable_default_watchdog
+from ui import db
 from ui.models import HostStatus
 from ui.database import create_host, get_host
 
@@ -86,3 +87,90 @@ def test_configure_host_watchdog_host_not_found(app):
     with app.app_context():
         result = configure_host_watchdog_logic(99999, True)
         assert result is False
+
+
+def test_enable_default_watchdog_turns_it_on_with_default_settings(app, mock_run_playbook):
+    mock_run_playbook.return_value = (True, 'ok', '')
+    with app.app_context():
+        host = create_host(name='wd-default', provider='vultr', status=HostStatus.PROVISIONED_PENDING_SETUP)
+
+        assert enable_default_watchdog(host) is True
+
+        assert host.watchdog_enabled is True
+        assert host.watchdog_config is None
+        assert 'ql-watchdog enabled' in host.logs
+        kwargs = mock_run_playbook.call_args.kwargs
+        assert kwargs['playbook_name'] == 'configure_watchdog.yml'
+        assert kwargs['extravars'] == {'watchdog_enabled': True}
+
+
+@pytest.mark.parametrize('outcome', [
+    (False, '', 'apt failed'),
+    (None, 'Host details missing'),
+    RuntimeError('ssh exploded'),
+])
+def test_enable_default_watchdog_failure_never_fails_host_setup(app, mock_run_playbook, outcome):
+    if isinstance(outcome, Exception):
+        mock_run_playbook.side_effect = outcome
+    else:
+        mock_run_playbook.return_value = outcome
+    with app.app_context():
+        host = create_host(name='wd-default-fail', provider='vultr', status=HostStatus.PROVISIONED_PENDING_SETUP)
+
+        assert enable_default_watchdog(host) is False
+
+        assert host.watchdog_enabled is False
+        assert host.status == HostStatus.PROVISIONED_PENDING_SETUP
+        assert 'Could not enable ql-watchdog' in host.logs
+
+
+@pytest.mark.parametrize('value, ok', [
+    (60, True), (180, True), (3600, True),
+    (59, False), (3601, False), (0, False), (True, False), ('180', False), (180.0, False),
+])
+def test_dead_confirm_is_validated_with_a_floor_of_one_minute(value, ok):
+    from ui.routes.host_routes import _validate_watchdog_config
+
+    config, error = _validate_watchdog_config({'dead_confirm': value})
+
+    if ok:
+        assert error is None and config == {'dead_confirm': value}
+    else:
+        assert config is None and 'dead_confirm' in error['message']
+
+
+def test_dead_confirm_reaches_the_playbook_and_is_saved(app, mock_run_playbook, mock_get_current_job):
+    mock_run_playbook.return_value = (True, 'ok', '')
+    with app.app_context():
+        host = create_host(name='wd-dead-confirm', provider='vultr', status=HostStatus.CONFIGURING)
+
+        assert configure_host_watchdog_logic(host.id, True, {'dead_confirm': 300}) is True
+
+        assert mock_run_playbook.call_args.kwargs['extravars']['watchdog_dead_confirm'] == 300
+        assert json.loads(get_host(host.id).watchdog_config) == {'dead_confirm': 300}
+
+
+@pytest.mark.parametrize('extra, expected', [({}, '180'), ({'watchdog_dead_confirm': 300}, '300')])
+def test_unit_template_passes_dead_confirm_to_the_script(extra, expected):
+    import os
+    from jinja2 import Environment, FileSystemLoader
+
+    templates = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ansible', 'templates')
+    unit = Environment(loader=FileSystemLoader(templates)).get_template('ql-watchdog.service.j2').render(
+        watchdog_dir='/opt/ql-watchdog', **extra)
+
+    assert f'Environment=QL_WATCHDOG_DEAD_CONFIRM={expected}\n' in unit
+
+
+def test_enable_default_watchdog_commits_pending_changes_before_the_playbook(app, mock_run_playbook):
+    """Otherwise the playbook's host read autoflushes them and holds a write lock."""
+    order = []
+    mock_run_playbook.side_effect = lambda **kw: order.append('playbook') or (True, 'ok', '')
+    with app.app_context():
+        host = create_host(name='wd-commit-first', provider='vultr', status=HostStatus.PROVISIONED_PENDING_SETUP)
+        host.redis_unix_socket = True
+        real_commit = db.session.commit
+        with patch.object(db.session, 'commit', side_effect=lambda: order.append('commit') or real_commit()):
+            enable_default_watchdog(host)
+
+        assert order[:2] == ['commit', 'playbook']

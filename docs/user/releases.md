@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.56.0` | 2026-11-11 | [#274](https://github.com/dngrtech/qlsm/pull/274) | The watchdog now also restarts an instance that crashed without exiting, with a new **Crash Check Wait** setting, and is turned on automatically for new hosts. |
 | `v1.55.0` | 2026-11-10 | [#273](https://github.com/dngrtech/qlsm/pull/273) | In the Upgrade to minqlxtended dialog, you can now upload your own minqlxtended-compatible version of a plugin that would otherwise be switched off. |
 | `v1.54.1` | 2026-11-09 | [#271](https://github.com/dngrtech/qlsm/pull/271) | In the Upgrade to minqlxtended dialog, plugins an instance doesn't have enabled are now marked **Not enabled**, greyed out, and listed after enabled ones, so they no longer look like they'd break a running server. |
 | `v1.54.0` | 2026-11-08 | [#269](https://github.com/dngrtech/qlsm/pull/269) | minqlxtended hosts are now built with server-side demo capture (minqlxtended PR #8, with a one-line fix) applied on top of the pinned minqlxtended release, plus a guard that stops the server crashing when a bot sends a command while a match restarts. Hosts pick it up the next time they are set up or rebuilt. |

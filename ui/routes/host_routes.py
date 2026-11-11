@@ -64,6 +64,9 @@ WATCHDOG_CONFIG_FIELDS = {
     'rate_max': (lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 100, 'rate_max must be an integer between 1 and 100'),
     'rate_window': (lambda v: isinstance(v, int) and not isinstance(v, bool) and 60 <= v <= 86400, 'rate_window must be an integer between 60 and 86400'),
     'forensics': (lambda v: isinstance(v, bool), 'forensics must be a boolean'),
+    # Floor of 60: shorter than a slow map load or plugin stall would let the
+    # crashed-engine check restart a server that is only busy.
+    'dead_confirm': (lambda v: isinstance(v, int) and not isinstance(v, bool) and 60 <= v <= 3600, 'dead_confirm must be an integer between 60 and 3600'),
 }
 
 
