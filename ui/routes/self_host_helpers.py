@@ -74,6 +74,13 @@ def remove_authorized_key(public_key, host_ssh_dir="/host-ssh"):
     tmp_path = auth_path.with_name(f".{auth_path.name}.tmp")
     tmp_path.write_text(("\n".join(kept) + "\n") if kept else "")
     os.chmod(tmp_path, 0o600)
+    # Keep the original owner: this runs as root in the container, and a
+    # root-owned 0600 file is unreadable by sshd for the host user.
+    try:
+        st = auth_path.stat()
+        os.chown(tmp_path, st.st_uid, st.st_gid)
+    except OSError:
+        pass
     os.replace(tmp_path, auth_path)
     return True
 

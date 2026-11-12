@@ -134,7 +134,12 @@ No manual setup is required. The `host-init` service in `docker-compose.yml`
 runs automatically on every `docker compose up` and handles all host-side
 configuration:
 
-- Creates `~/.qlsm-ssh/` with correct permissions
+- Creates `~/.qlsm-ssh/` with correct permissions, and hands ownership of it
+  (and `authorized_keys`) to the user who owns your home directory. The
+  container runs as root, so without this a `git clone` install ends up with
+  root-owned files that `sshd` cannot read as your user, and the self-host SSH
+  user defaults to `root`. Existing root-owned installs are repaired on the next
+  `docker compose up`.
 - Writes `/etc/ssh/sshd_config.d/qlsm.conf` so `sshd` reads keys from
   `~/.qlsm-ssh/authorized_keys`
 - Reloads `sshd`

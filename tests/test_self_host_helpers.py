@@ -96,6 +96,20 @@ def test_remove_authorized_key_rewrites_file(tmp_path):
     assert oct(auth.stat().st_mode & 0o777) == "0o600"
 
 
+def test_remove_authorized_key_preserves_original_owner(monkeypatch, tmp_path):
+    host_ssh = tmp_path / "host-ssh"
+    host_ssh.mkdir()
+    auth = host_ssh / "authorized_keys"
+    auth.write_text("ssh-rsa keep\nssh-rsa remove\n")
+    original = auth.stat()
+
+    calls = []
+    monkeypatch.setattr(helpers.os, "chown", lambda path, uid, gid: calls.append((uid, gid)))
+
+    assert helpers.remove_authorized_key("ssh-rsa remove", host_ssh_dir=host_ssh) is True
+    assert calls == [(original.st_uid, original.st_gid)]
+
+
 def test_generate_self_host_keys_cleans_up_authorized_key_on_permission_fix_error(monkeypatch, tmp_path):
     ssh_keys = tmp_path / "keys"
     host_ssh = tmp_path / "host-ssh"

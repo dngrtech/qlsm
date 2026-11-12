@@ -47,6 +47,8 @@ services:
     build: ./host-init
     pid: host
     privileged: true
+    environment:
+      HOST_HOME: ${HOME}
     volumes:
       - ${HOME}/.qlsm-ssh:/qlsm-ssh
     restart: "no"
