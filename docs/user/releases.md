@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.57.1` | 2026-11-11 | [#275](https://github.com/dngrtech/qlsm/pull/275) | Fixed self-host SSH failing on installs made with `git clone`, where `~/.qlsm-ssh` ended up owned by root. Existing installs are repaired on the next `docker compose up`. |
 | `v1.57.0` | 2026-11-11 | [#272](https://github.com/dngrtech/qlsm/pull/272) | Edit and export addons alongside plugins in the repository manifest editor, while preserving plugin version, hash, dependency, and package metadata. |
 | `v1.56.0` | 2026-11-11 | [#274](https://github.com/dngrtech/qlsm/pull/274) | The watchdog now also restarts an instance that crashed without exiting, with a new **Crash Check Wait** setting, and is turned on automatically for new hosts. |
 | `v1.55.0` | 2026-11-10 | [#273](https://github.com/dngrtech/qlsm/pull/273) | In the Upgrade to minqlxtended dialog, you can now upload your own minqlxtended-compatible version of a plugin that would otherwise be switched off. |

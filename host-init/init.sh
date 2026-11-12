@@ -34,3 +34,30 @@ HOST_OS_PRETTY_SAFE=$(printf '%s' "$HOST_OS_PRETTY" | sed 's/\\/\\\\/g; s/"/\\"/
 HOST_OS_VERSION_SAFE=$(printf '%s' "$HOST_OS_VERSION" | sed 's/\\/\\\\/g; s/"/\\"/g')
 printf '{"os_type":"%s","pretty_name":"%s","version_id":"%s"}\n' "$HOST_OS_TYPE_SAFE" "$HOST_OS_PRETTY_SAFE" "$HOST_OS_VERSION_SAFE" \
   > /qlsm-ssh/host-os-type || true
+
+# Hand ownership of ~/.qlsm-ssh back to the host user. This container runs as
+# root, so on a git-clone install (where nothing pre-created the directory)
+# the dir and authorized_keys end up root:root 0600, and sshd -- which reads
+# authorized_keys as the logging-in user -- cannot read the key. Mirror the
+# owner of the host home directory instead. Runs every `up`, so it also
+# repairs installs that already have root-owned files.
+if [ -n "${HOST_HOME:-}" ]; then
+  nsenter -t 1 -m -- /bin/sh -c '
+    for f in "$2" "$2/authorized_keys" "$2/host-os-type"; do
+      [ -e "$f" ] && chown --reference="$1" -- "$f"
+    done
+    true
+  ' _ "$HOST_HOME" "$HOST_HOME/.qlsm-ssh" || true
+fi
+
+# Record the name of the host user who owns the home directory, so the web
+# container (which cannot resolve a host uid to a name) can pre-fill it as the
+# self-host SSH user. sshd resolves .qlsm-ssh/authorized_keys against that
+# user's home, so it must be the owner of ~/.qlsm-ssh.
+if [ -n "${HOST_HOME:-}" ]; then
+  HOST_USER=$(nsenter -t 1 -m -- stat -c %U "$HOST_HOME" 2>/dev/null || true)
+  if [ -n "$HOST_USER" ] && [ "$HOST_USER" != "UNKNOWN" ]; then
+    printf '%s\n' "$HOST_USER" > /qlsm-ssh/host-user
+    nsenter -t 1 -m -- chown --reference="$HOST_HOME" -- "$HOST_HOME/.qlsm-ssh/host-user" 2>/dev/null || true
+  fi
+fi
