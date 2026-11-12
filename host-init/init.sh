@@ -49,3 +49,15 @@ if [ -n "${HOST_HOME:-}" ]; then
     true
   ' _ "$HOST_HOME" "$HOST_HOME/.qlsm-ssh" || true
 fi
+
+# Record the name of the host user who owns the home directory, so the web
+# container (which cannot resolve a host uid to a name) can pre-fill it as the
+# self-host SSH user. sshd resolves .qlsm-ssh/authorized_keys against that
+# user's home, so it must be the owner of ~/.qlsm-ssh.
+if [ -n "${HOST_HOME:-}" ]; then
+  HOST_USER=$(nsenter -t 1 -m -- stat -c %U "$HOST_HOME" 2>/dev/null || true)
+  if [ -n "$HOST_USER" ] && [ "$HOST_USER" != "UNKNOWN" ]; then
+    printf '%s\n' "$HOST_USER" > /qlsm-ssh/host-user
+    nsenter -t 1 -m -- chown --reference="$HOST_HOME" -- "$HOST_HOME/.qlsm-ssh/host-user" 2>/dev/null || true
+  fi
+fi

@@ -126,7 +126,7 @@ cd ~/qlsm && docker compose up -d
 | `LOG_FORMAT` | Log output format: `text` (human-readable) or `json` (structured, useful for log aggregators). | `text` |
 | `LOG_FILE` | Optional file path to write logs to. If unset, logs go to stdout/stderr. | (blank) |
 | `VULTR_API_KEY` | Vultr API key. Required only if you want QLSM to provision game server VMs via the Vultr provider. | (blank) |
-| `QLSM_HOST_USER` | SSH username used when QLSM connects back to the host machine for self-hosted game servers. | `root` |
+| `QLSM_HOST_USER` | SSH username used when QLSM connects back to the host machine for self-hosted game servers. | The user who ran `docker compose up` |
 | `QLSM_HOST_IP` | Pre-fills the "Server address" field when adding a self-host entry in the UI. | (blank) |
 | `QLSM_SELF_HOST_SSH_TARGET` | Override the auto-detected SSH management target for the self-host provider. Only needed in non-standard network setups. | auto-detected |
 | `GRAFANA_PASSWORD` | Grafana admin password. Only used when starting the stack with `--profile logging`. | `admin` |

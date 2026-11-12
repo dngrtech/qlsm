@@ -14,6 +14,15 @@ def detect_default_self_ssh_user(host_ssh_dir="/host-ssh"):
     if env_user:
         return env_user
 
+    # Written by host-init: the name of the host user who owns ~/.qlsm-ssh.
+    # The container cannot resolve a host uid to a name itself.
+    try:
+        recorded = (Path(host_ssh_dir) / "host-user").read_text().strip()
+        if recorded:
+            return recorded
+    except OSError:
+        pass
+
     try:
         # Imported lazily: `pwd` is POSIX-only, and importing it at module
         # level made `create_app()` -- and therefore the whole `app` test
@@ -79,7 +88,7 @@ def remove_authorized_key(public_key, host_ssh_dir="/host-ssh"):
     try:
         st = auth_path.stat()
         os.chown(tmp_path, st.st_uid, st.st_gid)
-    except OSError:
+    except (OSError, AttributeError):  # AttributeError: no os.chown on Windows
         pass
     os.replace(tmp_path, auth_path)
     return True
