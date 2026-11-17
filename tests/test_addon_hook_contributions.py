@@ -245,9 +245,15 @@ def test_minqlxtended_is_cloned_from_overridable_vars(playbook):
     paths = runtime_paths(MINQLXTENDED)
     assert play['vars']['minqlxtended_git_repo'] == paths['git_repo']
     assert play['vars']['minqlxtended_git_version'] == paths['git_version']
-    clone = next(t for t in play['tasks'] if t.get('name') == 'Clone minqlxtended repo as ql user')
-    assert clone['git']['repo'] == '{{ minqlxtended_git_repo }}'
-    assert clone['git']['version'] == '{{ minqlxtended_git_version }}'
+    # The clone itself lives in the shared build task file both playbooks import.
+    assert any(t.get('ansible.builtin.import_tasks') == 'tasks/build_minqlxtended.yml'
+               for t in play['tasks'])
+    build_path = os.path.join(os.path.dirname(path), 'tasks', 'build_minqlxtended.yml')
+    with open(build_path, encoding='utf-8') as f:
+        build_tasks = yaml.safe_load(f)
+    clone = next(t for t in build_tasks if t.get('name') == 'Clone minqlxtended repo as ql user')
+    assert clone['ansible.builtin.git']['repo'] == '{{ minqlxtended_git_repo }}'
+    assert clone['ansible.builtin.git']['version'] == '{{ minqlxtended_git_version }}'
 
 
 # ---- backup trees ------------------------------------------------------

@@ -92,5 +92,5 @@ def test_seed_adds_every_default_repository(runner, app, monkeypatch):
     assert result.exit_code == 0
     with app.app_context():
         urls = {r.display_url or r.url for r in PluginRepository.query.all()}
-    assert 'https://github.com/ark-ql/minqlx-plugins' in urls
-    assert len(urls) == len(DEFAULT_PLUGIN_REPOSITORIES) == 2
+    assert 'https://github.com/D00MSDAYDEVICE/minqlx' in urls
+    assert len(urls) == len(DEFAULT_PLUGIN_REPOSITORIES) == 1

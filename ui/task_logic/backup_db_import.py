@@ -37,7 +37,7 @@ def _host_from_row(row):
         region=row.get('region'), machine_size=row.get('machine_size'),
         provider=row['provider'], workspace_name=row.get('workspace_name'),
         ssh_user=row.get('ssh_user'), ssh_key_path=row.get('ssh_key_path'),
-        ssh_port=row.get('ssh_port', 22), os_type=row.get('os_type'),
+        ssh_port=row.get('ssh_port', 22), os_type=row.get('os_type'), os_version=row.get('os_version'),
         is_standalone=row.get('is_standalone', False), timezone=row.get('timezone'),
         cpu_count=row.get('cpu_count'),
         redis_unix_socket=row.get('redis_unix_socket', False),

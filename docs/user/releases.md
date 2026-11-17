@@ -6,6 +6,17 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.57.1` | 2026-11-11 | [#275](https://github.com/dngrtech/qlsm/pull/275) | Fixed self-host SSH failing on installs made with `git clone`, where `~/.qlsm-ssh` ended up owned by root. Existing installs are repaired on the next `docker compose up`. |
+| `v1.57.0` | 2026-11-11 | [#272](https://github.com/dngrtech/qlsm/pull/272) | Edit and export addons alongside plugins in the repository manifest editor, while preserving plugin version, hash, dependency, and package metadata. |
+| `v1.56.0` | 2026-11-11 | [#274](https://github.com/dngrtech/qlsm/pull/274) | The watchdog now also restarts an instance that crashed without exiting, with a new **Crash Check Wait** setting, and is turned on automatically for new hosts. |
+| `v1.55.0` | 2026-11-10 | [#273](https://github.com/dngrtech/qlsm/pull/273) | In the Upgrade to minqlxtended dialog, you can now upload your own minqlxtended-compatible version of a plugin that would otherwise be switched off. |
+| `v1.54.1` | 2026-11-09 | [#271](https://github.com/dngrtech/qlsm/pull/271) | In the Upgrade to minqlxtended dialog, plugins an instance doesn't have enabled are now marked **Not enabled**, greyed out, and listed after enabled ones, so they no longer look like they'd break a running server. |
+| `v1.54.0` | 2026-11-08 | [#269](https://github.com/dngrtech/qlsm/pull/269) | minqlxtended hosts are now built with server-side demo capture (minqlxtended PR #8, with a one-line fix) applied on top of the pinned minqlxtended release, plus a guard that stops the server crashing when a bot sends a command while a match restarts. Hosts pick it up the next time they are set up or rebuilt. |
+| `v1.53.0` | 2026-11-07 | [#268](https://github.com/dngrtech/qlsm/pull/268) | New minqlx hosts on Vultr are now deployed on Ubuntu 24.04, so they can be upgraded to minqlxtended. |
+| `v1.52.0` | 2026-11-04 | [#267](https://github.com/dngrtech/qlsm/pull/267) | Existing minqlx hosts on Ubuntu 24.04 or newer can now be upgraded to minqlxtended from the host actions menu, with automatic rollback if anything fails. |
+| `v1.51.2` | 2026-11-03 | [#266](https://github.com/dngrtech/qlsm/pull/266) | Hosts created before v1.51.0 now show their OS version too. Self deployments get it after updating with `qlsm-install.sh --update`. |
+| `v1.51.1` | 2026-11-03 | [#265](https://github.com/dngrtech/qlsm/pull/265) | Pull request reviews now run several specialised Claude reviewers in parallel, and a verifier checks their findings before anything is posted. This is a development-only change with no effect on the running app. |
+| `v1.51.0` | 2026-11-01 | [#264](https://github.com/dngrtech/qlsm/pull/264) | The host drawer now shows **OS** with the version (for example Ubuntu 24.04) instead of **OS Type**. Hosts created before this release show the distribution only. |
 | `v1.50.4` | 2026-10-25 | [#262](https://github.com/dngrtech/qlsm/pull/262) | `setup-worktree.sh` now lists the default plugin repositories on new worktrees. |
 | `v1.50.3` | 2026-10-23 | [#261](https://github.com/dngrtech/qlsm/pull/261) | Fixed the `lgacc` plugin's accuracy messages leaving players stuck or glitching after a death, and its numbers going wrong when `reset_acc` auto-reset is on. |
 | `v1.50.2` | 2026-10-23 | [#256](https://github.com/dngrtech/qlsm/pull/256) | Loading a preset keeps the server hostname. |

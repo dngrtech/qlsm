@@ -29,16 +29,47 @@ class _FakeJob:
     id = "fake-job-id"
 
 
-def test_os_vars_for_minqlx_is_debian_12():
+_DEBIAN_12 = ["-var=os_name=Debian 12 x64 (bookworm)", "-var=os_family=debian"]
+_UBUNTU_2404 = ["-var=os_name=Ubuntu 24.04 LTS x64", "-var=os_family=ubuntu"]
+
+
+def _host_with(runtime, os_type):
+    class H:
+        pass
+    h = H()
+    h.runtime = runtime
+    h.os_type = os_type
+    return h
+
+
+def test_os_vars_for_an_existing_debian_minqlx_host_stays_debian_12():
+    """The regression this guards: new minqlx hosts moved to Ubuntu, but a
+    resize/destroy of a host built on Debian must not re-resolve to Ubuntu,
+    or Vultr reinstalls the OS on a live server."""
     from ui.task_logic.terraform_runner import _os_vars
 
-    class H:
-        runtime = MINQLX
+    assert _os_vars(_host_with(MINQLX, "debian")) == _DEBIAN_12
 
-    assert _os_vars(H()) == [
-        "-var=os_name=Debian 12 x64 (bookworm)",
-        "-var=os_family=debian",
-    ]
+
+def test_os_vars_for_a_new_ubuntu_minqlx_host_is_ubuntu_2404():
+    from ui.task_logic.terraform_runner import _os_vars
+
+    assert _os_vars(_host_with(MINQLX, "ubuntu")) == _UBUNTU_2404
+
+
+def test_os_vars_for_minqlx_with_no_recorded_os_keeps_the_legacy_debian_12():
+    """Rows from before os_type was stored got Debian 12 when created."""
+    from ui.task_logic.terraform_runner import _os_vars
+
+    assert _os_vars(_host_with(MINQLX, None)) == _DEBIAN_12
+    assert _os_vars(_host_with(MINQLX, "")) == _DEBIAN_12
+    assert _os_vars(_host_with(MINQLX, "freebsd")) == _DEBIAN_12
+
+
+def test_os_vars_for_minqlxtended_with_no_recorded_os_is_ubuntu_2404():
+    from ui.task_logic.terraform_runner import _os_vars
+
+    assert _os_vars(_host_with(MINQLXTENDED, None)) == _UBUNTU_2404
 
 
 def test_os_vars_for_minqlxtended_is_ubuntu_2404():

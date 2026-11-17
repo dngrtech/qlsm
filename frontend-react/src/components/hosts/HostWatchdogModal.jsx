@@ -9,6 +9,7 @@ const DEFAULTS = {
     grace: 90,
     rate_max: 3,
     rate_window: 900,
+    dead_confirm: 180,
     forensics: true,
     dryrun: false,
 };
@@ -76,9 +77,8 @@ function HostWatchdogModal({ isOpen, onClose, onSubmit, host }) {
                         <form onSubmit={handleSubmit}>
                             <div className="space-y-6">
                                 <p className="text-sm text-[var(--text-muted)]">
-                                    Detects a hung QLDS main-thread on <strong>{host?.name}</strong> (kernel
-                                    Recv-Q on the game port stops draining) and restarts only the affected
-                                    instance via systemctl.
+                                    Detects an instance on <strong>{host?.name}</strong> whose game has frozen
+                                    or crashed without exiting, and restarts only that instance via systemctl.
                                 </p>
 
                                 <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-raised)]">
@@ -105,6 +105,7 @@ function HostWatchdogModal({ isOpen, onClose, onSubmit, host }) {
                                             {numberField('grace', 'Boot Grace Period (s)', 30, 3600)}
                                             {numberField('rate_max', 'Max Restarts / Window', 1, 100)}
                                             {numberField('rate_window', 'Rate Limit Window (s)', 60, 86400)}
+                                            {numberField('dead_confirm', 'Crash Check Wait (s)', 60, 3600)}
                                         </div>
 
                                         <div className="flex items-center justify-between">

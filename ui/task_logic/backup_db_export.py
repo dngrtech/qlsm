@@ -15,7 +15,7 @@ def _host_row(host):
         'region': host.region, 'machine_size': host.machine_size,
         'provider': host.provider, 'workspace_name': host.workspace_name,
         'ssh_user': host.ssh_user, 'ssh_key_path': host.ssh_key_path,
-        'ssh_port': host.ssh_port, 'os_type': host.os_type,
+        'ssh_port': host.ssh_port, 'os_type': host.os_type, 'os_version': host.os_version,
         'is_standalone': host.is_standalone, 'timezone': host.timezone,
         'cpu_count': host.cpu_count,
         'redis_unix_socket': bool(host.redis_unix_socket),

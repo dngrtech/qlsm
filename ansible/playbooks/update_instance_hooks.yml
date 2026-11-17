@@ -13,6 +13,9 @@
     runtime_plugins_dirname: "minqlx-plugins"
     runtime_shared_dir: "/home/ql/minqlx-shared"
     launch_script: "run_server_x64_minqlx.sh"
+    # The instance's isolated dependency venv (QLInstance.python_deps_path,
+    # via ui.runtime.instance_runtime_extravars()); "" = system Python.
+    python_deps_path: ""
 
   tasks:
     - name: Ensure system-hooks directory exists

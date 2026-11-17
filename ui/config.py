@@ -36,6 +36,10 @@ class Config:
     # recreate even when the operator's compose predates a dedicated mount.
     ADDON_PACKAGES_DIR = os.environ.get('ADDON_PACKAGES_DIR', './data/addon-packages')
 
+    # Host runtime upgrade snapshots (data/runtime-upgrades/<host_id>/<operation_id>/).
+    # A relative path resolves against the app root.
+    RUNTIME_UPGRADES_DIR = os.environ.get('RUNTIME_UPGRADES_DIR', 'data/runtime-upgrades')
+
     # Restart stamp: POST /api/system/restart touches this file, restart-watcher.sh
     # (started by entrypoint.sh) polls it in every app container. Both sides read
     # the same env var so the two halves cannot drift apart.

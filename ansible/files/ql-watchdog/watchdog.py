@@ -35,6 +35,25 @@ Detection (per instance, every INTERVAL) requires TWO signals to agree:
   Deliberate trade-off: a busy-spin hang keeps consuming CPU and is NOT caught.
   Restarting a healthy server mid-match is worse than missing a rare spin.
 
+Second detector: dead engine
+----------------------------
+A crashed engine can deadlock inside its own crash handler. The process stays
+alive (so systemd never restarts it) but has already closed its game socket,
+so Recv-Q stays at 0, and leftover threads keep burning a little CPU: the
+detector above sees nothing. This one restarts an instance when ALL hold:
+  1. the engine does not answer a connectionless packet sent over loopback, and
+  2. the status key that the serverchecker plugin refreshes every 10 seconds
+     is absent from Redis (a failed read counts as unknown, never as absent), and
+  3. both were seen good earlier for the same process, and
+  4. 1 and 2 have held on every check for DEAD_CONFIRM seconds.
+
+  The two signals fail independently on a healthy server: under a flood the
+  engine may miss the probe but keeps writing its status, and a broken or
+  removed serverchecker loses the key while the engine still answers. Rule 3
+  keeps instances that never produce both signals (no serverchecker, engine
+  bound to another address) out of this detector entirely. An instance that
+  dies before the watchdog has seen it healthy is NOT caught.
+
 Stdlib only. Runs as root (systemctl restart on a system unit + gdb attach to
 another user's process both require it).
 """
@@ -43,6 +62,8 @@ from __future__ import annotations
 
 import json
 import os
+import select
+import socket
 import subprocess
 import sys
 import time
@@ -78,6 +99,19 @@ GRACE = max(30, _env_int("QL_WATCHDOG_GRACE", 90))
 # Restart loop guard: at most RATE_MAX restarts per RATE_WINDOW per instance.
 RATE_MAX = max(1, _env_int("QL_WATCHDOG_RATE_MAX", 3))
 RATE_WINDOW = max(60, _env_int("QL_WATCHDOG_RATE_WINDOW", 900))
+# Dead-engine detector: how long the engine must stay silent with no status
+# key before a restart. Long enough to outlast any map load or plugin stall.
+DEAD_CONFIRM = max(60, _env_int("QL_WATCHDOG_DEAD_CONFIRM", 180))
+DEAD_MIN_CHECKS = 3
+PROBE_TIMEOUT = 1.0
+REDIS_TIMEOUT = 1.0
+STATUS_KEY_PREFIX = "minqlx:server_status"
+# The watchdog is root and the engine command line belongs to the unprivileged
+# `ql` user, who can rewrite it. So the Redis target taken from it is only
+# honoured when it is one QLSM itself configures: Redis on loopback, or the
+# host Redis unix socket. Anything else is "unknown" and never restarts.
+REDIS_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+REDIS_UNIX_SOCKETS = ("/var/run/redis/redis.sock", "/run/redis/redis.sock")
 # qlds@<port>.service - the systemd template unit prefix qlsm uses for QLDS
 # instances (ansible/templates/qlds@.service.j2). The game port is read
 # directly from the unit's instance name (the part after '@').
@@ -268,6 +302,179 @@ def cpu_ticks(pid: str) -> int | None:
         return None
 
 
+def engine_args(pid: str) -> dict[str, str] | None:
+    """The `+set <name> <value>` pairs the engine process was started with.
+
+    Returns None if the process is gone or /proc is unreadable.
+    """
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            argv = [a.decode(errors="replace") for a in fh.read().split(b"\0")]
+    except OSError:
+        return None
+    args: dict[str, str] = {}
+    for i in range(len(argv) - 2):
+        if argv[i] == "+set":
+            args[argv[i + 1]] = argv[i + 2]
+    return args
+
+
+def probe_engine(port: int, timeout: float = PROBE_TIMEOUT) -> bool | None:
+    """Does the engine answer a connectionless packet on its game port?
+
+    A live engine replies at once ("Server uses protocol version ..."). True on
+    a reply, False on silence, None if the probe itself could not be made.
+    Always loopback: an engine bound to one specific address never answers,
+    is therefore never seen healthy, and stays out of the dead-engine detector.
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    except OSError:
+        return None
+    try:
+        sock.sendto(b'\xff\xff\xff\xffconnect ""', ("127.0.0.1", port))
+        readable, _, _ = select.select([sock], [], [], timeout)
+        if not readable:
+            return False
+        return True if sock.recv(2048).startswith(b"\xff\xff\xff\xff") else None
+    except (OSError, ValueError):
+        return None
+    finally:
+        sock.close()
+
+
+def _resp_command(*parts: str) -> bytes:
+    out = [f"*{len(parts)}\r\n".encode()]
+    for part in parts:
+        raw = part.encode()
+        out.append(b"$%d\r\n%s\r\n" % (len(raw), raw))
+    return b"".join(out)
+
+
+def status_key_present(args: dict[str, str], port: int, timeout: float = REDIS_TIMEOUT) -> bool | None:
+    """Is the instance's live-status key in the Redis it was started against?
+
+    True/False only when Redis answered every command cleanly. None for
+    anything else: no Redis settings on the command line, a Redis target that
+    is not loopback or the host Redis socket, connection or auth failure,
+    timeout, unexpected reply.
+    """
+    address = args.get("qlx_redisAddress", "")
+    if not address:
+        return None
+    try:
+        db = int(args.get("qlx_redisDatabase", "0"))
+    except ValueError:
+        return None
+    password = args.get("qlx_redisPassword", "")
+    commands = []
+    if password:
+        commands.append(_resp_command("AUTH", password))
+    commands.append(_resp_command("SELECT", str(db)))
+    commands.append(_resp_command("EXISTS", f"{STATUS_KEY_PREFIX}:{port}"))
+    sock = None
+    try:
+        if args.get("qlx_redisUnixSocket") == "1":
+            if address not in REDIS_UNIX_SOCKETS:
+                return None
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            sock.connect(address)
+        else:
+            host, _, redis_port = address.rpartition(":")
+            if host not in REDIS_LOOPBACK_HOSTS:
+                return None
+            sock = socket.create_connection((host, int(redis_port)), timeout=timeout)
+            sock.settimeout(timeout)
+        sock.sendall(b"".join(commands))
+        with sock.makefile("rb") as reader:
+            for _ in commands[:-1]:
+                if reader.readline().strip() != b"+OK":
+                    return None
+            reply = reader.readline().strip()
+        if reply == b":1":
+            return True
+        if reply == b":0":
+            return False
+        return None
+    except (OSError, ValueError):
+        return None
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+def new_dead_watch(pid: str) -> dict[str, object]:
+    return {"pid": pid, "armed": False, "since": None, "checks": 0, "last": None}
+
+
+def dead_engine_step(
+    watch: dict[str, object],
+    reply: bool | None,
+    key_present: bool | None,
+    now: float,
+    max_gap: float,
+) -> bool:
+    """Fold one check into the watch; True once the engine is confirmed dead.
+
+    Only clear-cut evidence moves it: reply and key both good arms it, both
+    bad (after arming) extends the streak, anything else ends the streak.
+    """
+    healthy = reply is True and key_present is True
+    dead = reply is False and key_present is False
+    if healthy:
+        watch["armed"] = True
+    if not dead or not watch["armed"]:
+        watch["since"] = None
+        watch["checks"] = 0
+    else:
+        last = watch["last"]
+        unbroken = watch["since"] is not None and last is not None and now - last <= max_gap  # type: ignore[operator]
+        if unbroken:
+            watch["checks"] = int(watch["checks"]) + 1  # type: ignore[arg-type]
+        else:
+            watch["since"] = now
+            watch["checks"] = 1
+    watch["last"] = now
+    return (
+        watch["since"] is not None
+        and int(watch["checks"]) >= DEAD_MIN_CHECKS  # type: ignore[arg-type]
+        and now - watch["since"] >= DEAD_CONFIRM  # type: ignore[operator]
+    )
+
+
+def check_dead_engine(port: int, pid: str, watches: dict[int, dict[str, object]], now: float) -> bool:
+    """Probe one instance and advance its dead-engine watch."""
+    if not pid:
+        watches.pop(port, None)
+        return False
+    watch = watches.get(port)
+    if watch is None or watch["pid"] != pid:
+        watch = watches[port] = new_dead_watch(pid)
+    args = engine_args(pid)
+    if args is None:
+        reply: bool | None = None
+        key_present: bool | None = None
+    else:
+        reply = probe_engine(port)
+        # An armed instance that answers is healthy enough to end any streak;
+        # the Redis read only matters for arming and for confirming silence.
+        if reply is True and watch["armed"]:
+            key_present = True
+        else:
+            key_present = status_key_present(args, port)
+    was_streaking = watch["since"] is not None
+    confirmed = dead_engine_step(watch, reply, key_present, now, max(60.0, 3.0 * INTERVAL))
+    if watch["since"] is not None and not was_streaking:
+        log_event("engine_silent", port=port, pid=pid, need_sec=DEAD_CONFIRM)
+    elif was_streaking and watch["since"] is None:
+        log_event("engine_answering", port=port, pid=pid, reply=reply, status_key=key_present)
+    return confirmed
+
+
 def restart_instance(port: int) -> tuple[bool, str]:
     unit = _unit_name(port)
     try:
@@ -357,7 +564,9 @@ def main() -> int:
         unit_prefix=UNIT_PREFIX,
         forensics=FORENSICS,
         gdb=bool(_which(GDB)),
+        dead_confirm=DEAD_CONFIRM,
     )
+    dead_watches: dict[int, dict[str, object]] = {}
     strikes: dict[int, int] = {}
     restarts: dict[int, deque[float]] = {}
     cpu: dict[int, int | None] = {}
@@ -368,6 +577,7 @@ def main() -> int:
             for port, info in instances.items():
                 if info["state"] != "active" or int(info["uptime_sec"]) < GRACE:  # type: ignore[arg-type]
                     strikes[port] = 0
+                    dead_watches.pop(port, None)
                     continue
                 rq = recv_q(port)
                 # Recv-Q alone cannot tell "frozen frame loop" from "inbound
@@ -396,23 +606,34 @@ def main() -> int:
                     and ticks == prev_ticks
                 )
                 hung = rq >= RECVQ_THRESHOLD and cpu_frozen
-                if not hung:
+                if hung:
+                    strikes[port] = strikes.get(port, 0) + 1
+                    log_event(
+                        "hang_suspected",
+                        port=port,
+                        recv_q=rq,
+                        cpu_ticks=ticks,
+                        strike=strikes[port],
+                        need=STRIKES,
+                    )
+                else:
                     if strikes.get(port):
                         log_event(
                             "recovered", port=port, recv_q=rq, cpu_ticks=ticks
                         )
                     strikes[port] = 0
-                    continue
-                strikes[port] = strikes.get(port, 0) + 1
-                log_event(
-                    "hang_suspected",
-                    port=port,
-                    recv_q=rq,
-                    cpu_ticks=ticks,
-                    strike=strikes[port],
-                    need=STRIKES,
-                )
-                if strikes[port] < STRIKES:
+                # Second detector (see module docstring): a crashed engine
+                # that never exited shows neither Recv-Q nor a flat CPU.
+                dead = check_dead_engine(port, pid, dead_watches, time.monotonic())
+                if dead:
+                    reason = "engine_dead"
+                    # Start a fresh streak whatever happens next (restart,
+                    # rate limit, dry-run), so this fires once per DEAD_CONFIRM.
+                    dead_watches[port]["since"] = None
+                    dead_watches[port]["checks"] = 0
+                elif hung and strikes[port] >= STRIKES:
+                    reason = "frozen_loop"
+                else:
                     continue
 
                 hist = restarts.setdefault(port, deque())
@@ -423,6 +644,7 @@ def main() -> int:
                     log_event(
                         "restart_giveup",
                         port=port,
+                        reason=reason,
                         recv_q=rq,
                         restarts_in_window=len(hist),
                         window_sec=RATE_WINDOW,
@@ -435,7 +657,7 @@ def main() -> int:
                     # No forensics in dry-run: the dry-run branch never appends
                     # to the rate-limit history, so capturing here would write a
                     # dump every STRIKES*INTERVAL seconds forever.
-                    log_event("would_restart", port=port, recv_q=rq)
+                    log_event("would_restart", port=port, reason=reason, recv_q=rq)
                     strikes[port] = 0
                     continue
 
@@ -451,6 +673,7 @@ def main() -> int:
                 log_event(
                     "restart" if ok else "restart_failed",
                     port=port,
+                    reason=reason,
                     recv_q=rq,
                     ok=ok,
                     output=out,

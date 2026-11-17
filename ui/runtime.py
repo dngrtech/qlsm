@@ -1,7 +1,8 @@
 """Single source of truth for the per-host minqlx runtime split.
 
-A host picks its runtime at creation (Host.runtime) and never changes it, so
-every path this module returns is stable for the life of the host. Every
+A host picks its runtime at creation (Host.runtime). It is changed only by the
+"Upgrade to minqlxtended" action (ui/runtime_upgrade.py), so every path this
+module returns is stable except across that one audited transition. Every
 hardcoded 'minqlx-plugins' / 'minqlx.log' / '/home/ql/minqlx-shared' string in
 the backend, the playbooks and the Terraform roots resolves through here, so
 the two runtimes cannot drift apart.
@@ -9,6 +10,7 @@ the two runtimes cannot drift apart.
 minqlxtended (github.com/tjone270/minqlxtended) is a hard fork of minqlx with
 no backwards compatibility: plugins written for one do not run on the other.
 """
+import os
 import re
 
 MINQLX = 'minqlx'
@@ -17,8 +19,8 @@ MINQLXTENDED = 'minqlxtended'
 VALID_RUNTIMES = (MINQLX, MINQLXTENDED)
 
 # Nothing ever "flips" this: the Add Host form pre-selects no runtime at all,
-# because the choice is irreversible and QLSM will not make it on an operator's
-# behalf. This constant is the fallback for the two cases where no human is
+# because the choice is changed only by the Upgrade to minqlxtended action and
+# QLSM will not make it on an operator's behalf. This constant is the fallback for the two cases where no human is
 # choosing -- a host row that predates the runtime column, and an API payload
 # that omits the field -- and it points at minqlx because that is the
 # conservative answer, not because it is anyone's default.
@@ -36,9 +38,14 @@ _RUNTIME_PATHS = {
         'log_filename': 'minqlx.log',
         'git_repo': 'https://github.com/MinoMino/minqlx.git',
         'git_version': 'fbdd915185337791d8e209dc4b686a1ee60d3721',
-        'os_name': 'Debian 12 x64 (bookworm)',
-        'os_family': 'debian',
-        'os_type': 'debian',
+        # What a NEW cloud host gets. Ubuntu 24.04 so every new minqlx host is
+        # eligible for the minqlxtended upgrade (runtime_upgrade.py requires
+        # Ubuntu 24.04+). Existing Debian hosts are unaffected: terraform
+        # resolves their image from the host row via vultr_image_for_host().
+        'os_name': 'Ubuntu 24.04 LTS x64',
+        'os_family': 'ubuntu',
+        'os_type': 'ubuntu',
+        'os_version': '24.04',
         # No Python floor: existing hosts run whatever they already run, and
         # inventing a gate here would break them on the next setup re-run.
         'min_python': None,
@@ -57,6 +64,7 @@ _RUNTIME_PATHS = {
         'os_name': 'Ubuntu 24.04 LTS x64',
         'os_family': 'ubuntu',
         'os_type': 'ubuntu',
+        'os_version': '24.04',
         # The build links -lpython3.12 explicitly.
         'min_python': (3, 12),
         # minqlxtended hooks Sys_IsLANAddress itself, unconditionally
@@ -99,6 +107,32 @@ def host_runtime(host):
     return normalize_runtime(getattr(host, 'runtime', None))
 
 
+# Vultr images QLSM has ever provisioned, keyed by the Host.os_type recorded at
+# creation. Debian 12 is what every minqlx cloud host got before new minqlx
+# hosts moved to Ubuntu 24.04.
+_VULTR_IMAGES = {
+    'debian': {'os_name': 'Debian 12 x64 (bookworm)', 'os_family': 'debian'},
+    'ubuntu': {'os_name': 'Ubuntu 24.04 LTS x64', 'os_family': 'ubuntu'},
+}
+# Rows with no recorded OS (created before os_type was stored) keep the image
+# their runtime got at the time, so a resize or destroy never resolves to a
+# different image than the one the server is running.
+_LEGACY_VULTR_IMAGE_BY_RUNTIME = {MINQLX: 'debian', MINQLXTENDED: 'ubuntu'}
+
+
+def vultr_image_for_host(host):
+    """The Vultr image (os_name, os_family) an existing host was built from.
+
+    Read from the host's recorded OS, not from the runtime table: the table
+    describes what a NEW host gets and has changed since older hosts were
+    created. Terraform runs this on every provision, resize and destroy, and an
+    image that differs from the running one makes Vultr reinstall the OS.
+    """
+    os_type = (getattr(host, 'os_type', None) or '').strip().lower()
+    key = os_type if os_type in _VULTR_IMAGES else _LEGACY_VULTR_IMAGE_BY_RUNTIME[host_runtime(host)]
+    return dict(_VULTR_IMAGES[key])
+
+
 def log_filename_pattern(runtime):
     """Regex matching the runtime's live log file and its rotated siblings."""
     return re.escape(runtime_paths(runtime)['log_filename']) + r'(\.\d+)?'
@@ -115,3 +149,52 @@ def runtime_extravars(host):
         'runtime_shared_dir': paths['shared_dir'],
         'launch_script': paths['launch_script'],
     }
+
+
+ISOLATED_INSTANCE_DEPS_ROOT = '/home/ql/runtime-deps/minqlxtended/instances'
+# Controller-side core requirements for venvs built outside an upgrade
+# operation (new/redeployed instances on an isolated host). Anchored at the
+# repository root (as preset_compat.ASSETS_DIR is), never the worker's cwd.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+_CORE_REQUIREMENTS = os.path.join(
+    _REPO_ROOT, 'ql-assets', 'data', _RUNTIME_PATHS[MINQLXTENDED]['asset_plugins_dir'], 'requirements.txt')
+
+
+def isolated_instance_deps_path(instance_id):
+    """The venv an instance gets on a host with isolated runtime deps."""
+    return f'{ISOLATED_INSTANCE_DEPS_ROOT}/{int(instance_id)}'
+
+
+def instance_runtime_extravars(instance):
+    """runtime_extravars() for an instance's host, plus the instance's isolated
+    dependency venv when it has one (QLInstance.python_deps_path, set by the
+    runtime upgrade). With no venv the result is exactly runtime_extravars(),
+    so the playbooks render and install exactly as before.
+
+    On a minqlxtended host with Host.runtime_deps_isolated (an upgraded host),
+    an instance without a venv is assigned one under
+    ISOLATED_INSTANCE_DEPS_ROOT (persisted with the caller's next commit), and
+    python_deps_ensure asks tasks/install_minqlx_deps.yml to build or refresh
+    it as ql before any pip -- system pip is never used there. The instance's
+    own requirements are the copy already synced to the host.
+
+    A venv under ISOLATED_INSTANCE_DEPS_ROOT is keyed by the instance id,
+    which SQLite can reuse after a delete, so it also gets python_deps_owner
+    (id + creation time): install_minqlx_deps.yml rebuilds a venv whose
+    marker names another instance. Operation venvs embed the operation id."""
+    host = instance.host
+    extravars = runtime_extravars(host)
+    isolated = (bool(getattr(host, 'runtime_deps_isolated', False))
+                and host_runtime(host) == MINQLXTENDED)
+    if isolated and not getattr(instance, 'python_deps_path', None):
+        instance.python_deps_path = isolated_instance_deps_path(instance.id)
+    deps_path = getattr(instance, 'python_deps_path', None)
+    if deps_path:
+        extravars['python_deps_path'] = deps_path
+    if isolated:
+        extravars['python_deps_ensure'] = True
+        extravars['python_deps_core_requirements_src'] = _CORE_REQUIREMENTS
+        if deps_path == isolated_instance_deps_path(instance.id):
+            created = getattr(instance, 'created_at', None)
+            extravars['python_deps_owner'] = f'{int(instance.id)}:{created.isoformat() if created else "unknown"}'
+    return extravars

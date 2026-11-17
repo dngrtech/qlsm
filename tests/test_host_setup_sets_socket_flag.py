@@ -14,7 +14,8 @@ STANDALONE_MODULE = 'ui.task_logic.standalone_host_setup'
 @patch(f'{CLOUD_MODULE}.subprocess.run')
 @patch(f'{CLOUD_MODULE}.os.path.exists', return_value=True)
 def test_cloud_setup_sets_redis_unix_socket(
-    mock_exists, mock_run, mock_popen, mock_stream, mock_append_log, mock_job, mock_session
+    mock_exists, mock_run, mock_popen, mock_stream, mock_append_log, mock_job, mock_session,
+    default_watchdog_deploy,
 ):
     mock_job.return_value = MagicMock(id='job-1')
     host = MagicMock(spec=Host)
@@ -38,6 +39,8 @@ def test_cloud_setup_sets_redis_unix_socket(
 
     assert host.redis_unix_socket is True
     assert host.status == HostStatus.ACTIVE
+    # A new host gets the hung-instance watchdog on by default.
+    default_watchdog_deploy.assert_called_once_with(host)
 
 
 @patch(f'{STANDALONE_MODULE}.db.session')
@@ -47,7 +50,8 @@ def test_cloud_setup_sets_redis_unix_socket(
 @patch(f'{STANDALONE_MODULE}._wait_for_ssh', return_value=True)
 @patch(f'{STANDALONE_MODULE}._run_setup_playbook', return_value=True)
 def test_standalone_setup_sets_redis_unix_socket(
-    mock_playbook, mock_ssh, mock_inventory, mock_append_log, mock_job, mock_session
+    mock_playbook, mock_ssh, mock_inventory, mock_append_log, mock_job, mock_session,
+    default_watchdog_deploy,
 ):
     mock_job.return_value = MagicMock(id='job-2')
     host = MagicMock(spec=Host)
@@ -65,6 +69,7 @@ def test_standalone_setup_sets_redis_unix_socket(
 
     assert host.redis_unix_socket is True
     assert host.status == HostStatus.ACTIVE
+    default_watchdog_deploy.assert_called_once_with(host)
 
 
 @patch(f'{STANDALONE_MODULE}.db.session')

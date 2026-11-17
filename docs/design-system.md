@@ -103,13 +103,16 @@ input styles — check `index.css` for the full variant before adding a new one.
 | `CodeMirrorEditor` | `CodeMirrorEditor.jsx` | Shared code editor used by file manager / config editors; theme and highlight styles live in `utils/codemirrorSetup.js` (`themeExtensions`, `mergeThemeExtensions`) |
 | `FloatingListbox` | `components/common/FloatingListbox.jsx` | Headless UI `Listbox`-based custom select with floating-ui positioning; supports option badges (`OptionBadge`) and perf chips |
 | `InfoTooltip` | `components/common/InfoTooltip.jsx` | Hover tooltip; props: `size`, `placement` (top/bottom/left/right), `variant` (info/cyan/warning/danger), `testId` (data-testid for the hover target) |
+| `CompatibilityRow` | `components/presetManager/CompatibilityRow.jsx` | One plugin row of a cross-runtime compatibility report (checkbox for replaceable plugins, none for dropped ones); props: `entry`, `sourceRuntime`, `targetRuntime`, `checked`, `onToggle`, `sourceNoun` (`'preset'` default, `'instance'` for the upgrade dialog), `showEnablement` (upgrade dialog only: tags and mutes rows whose `originally_checked` is false; off for presets, where a legacy preset reports every row unchecked). Shared by `PresetCompatibilityDialog` and `hosts/RuntimeUpgradeDialog` |
 | `QlColorString` | `components/common/QlColorString.jsx` | Renders Quake Live `^`-color-coded strings as styled spans |
 | `SubfolderPluginNotice` | `components/fileManager/SubfolderPluginNotice.jsx` | Dismissible `.alert-warning` banner; props: `count` (0 renders nothing), `onDismiss`. Parent owns dismissal state |
 | `SidebarResizeHandle` | `components/fileManager/SidebarResizeHandle.jsx` | Drag handle between the file list and the editor pane; doubles as the 1px divider. Pointer-capture drag, double-click or `Home` resets, arrow keys nudge 16px. Width lives in the `useSidebarWidth` store (module-level + `localStorage`, clamped 200-560, default 320) so all three mounted FileManager tabs resize together |
 | `OverwritePluginsModal` | `pluginRepositories/OverwritePluginsModal.jsx` | Per-file overwrite prompt (checkbox + Diff per file); `files: [{filename, runtime}]`, `onConfirm(filenames)` |
 | `PluginDiffModal` | `pluginRepositories/PluginDiffModal.jsx` | 95vw×95vh read-only `@codemirror/merge` two-pane diff; z-[80] so it stacks above other modals |
-| `PluginManifestEditorModal` | `pluginRepositories/PluginManifestEditorModal.jsx` | max-w-5xl × 85vh two-pane `qlsm-plugins.json` authoring modal (list ⟷ selected plugin). Owns the draft; the panes are `PluginManifestPluginList` (@dnd-kit reorder + Sort A–Z), `PluginManifestCvarRows`, `PluginManifestCommandRows` and `PluginManifestIssues`. Local only — nothing is saved back to the repository row |
-| `PluginManifestIssues` | `pluginRepositories/PluginManifestIssues.jsx` | Scrolling validator-message list under an editor pane; errors first, a message carrying an `index` is a button that selects that row |
+| `PluginManifestEditorModal` | `pluginRepositories/PluginManifestEditorModal.jsx` | max-w-5xl × 85vh two-pane `qlsm-repository.json` authoring modal (list ⟷ selected plugin or addon, with a Plugins / Addons tab switch above the list). Owns both drafts; the panes are `PluginManifestPluginList` (@dnd-kit reorder + Sort A–Z), `PluginManifestCvarRows`, `PluginManifestCommandRows`, `PluginManifestAddonList`, `PluginManifestAddonFields` and `PluginManifestIssues`. Local only — nothing is saved back to the repository row |
+| `PluginManifestAddonList` | `pluginRepositories/PluginManifestAddonList.jsx` | The editor's addon list: select/remove rows with a status dot, plus Add Addon. No reordering (an addon's position changes nothing) |
+| `PluginManifestAddonFields` | `pluginRepositories/PluginManifestAddonFields.jsx` | Form for one addon entry (id, label, description, zip, version, sha256, requires_qlsm_version); `addon`, `onChange(patch)` |
+| `PluginManifestIssues` | `pluginRepositories/PluginManifestIssues.jsx` | Scrolling validator-message list under an editor pane; errors first, a message carrying an `index` is a button that passes the issue to `onSelect` (the editor uses its `kind` to pick the plugin or addon row) |
 
 Feature-scoped directories (`components/hosts`, `instances`, `presetManager`,
 `fileManager`, `addInstance`, `users`, `rcon`) contain additional modals and
@@ -146,7 +149,7 @@ dropdowns/tooltips instead of manual absolute positioning.
 
 ## File size note
 
-Per `CLAUDE.md`, source files are capped at 300 lines (soft) / 500 lines
-(hard). `frontend-react/src/index.css` (4,300+ lines) already exceeds this —
-it's a known/accepted exception for the single global stylesheet, not a
-pattern to replicate in new files.
+There is no hard line cap (see `File Size Guideline` in
+`development_guidelines.md`). `frontend-react/src/index.css` (4,300+ lines) is
+the single global stylesheet. Put styles for new components in their own files
+rather than growing it further.

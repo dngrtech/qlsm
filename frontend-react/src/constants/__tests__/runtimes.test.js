@@ -60,12 +60,13 @@ describe('defaultPresetNameForRuntime', () => {
 });
 
 describe('runtimeTooltipTail', () => {
-  // The runtime choice is irreversible, so the tooltip has to be accurate about
+  // The runtime choice is hard to undo (only a one-way upgrade to minqlxtended
+  // exists), so the tooltip has to be accurate about
   // what the operator is committing to -- and that differs by provider. On a
   // cloud host QLSM picks the OS image; on the operator's own machine it does
   // not, and only minqlxtended has a floor to miss.
   it('tells cloud operators QLSM provisions the OS for them', () => {
-    expect(runtimeTooltipTail('minqlx', 'vultr')).toBe('QLSM provisions Debian 12.');
+    expect(runtimeTooltipTail('minqlx', 'vultr')).toBe('QLSM provisions Ubuntu 24.04.');
     expect(runtimeTooltipTail('minqlxtended', 'vultr')).toBe('QLSM provisions Ubuntu 24.04.');
   });
 
@@ -107,6 +108,6 @@ describe('runtimeTooltipTail', () => {
   });
 
   it('falls back to minqlx copy for an unknown runtime', () => {
-    expect(runtimeTooltipTail('garbage', 'vultr')).toBe('QLSM provisions Debian 12.');
+    expect(runtimeTooltipTail('garbage', 'vultr')).toBe('QLSM provisions Ubuntu 24.04.');
   });
 });

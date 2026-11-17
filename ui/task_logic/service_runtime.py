@@ -26,6 +26,43 @@ class RuntimeObservation:
     invocation_id: str | None
     active: bool
     service_started_at: int | None
+    # Engine processes for the port (only when probed with_processes=True).
+    processes: int | None = None
+
+
+# Executed on the host by the probe (and in tests against a fake /proc).
+# Counts, per port, processes in the instance's systemd unit cgroup plus any
+# qzeroded engine started with `+set net_port <port>` outside it, so a server
+# that outlived its unit is still seen.
+PROCESS_SCAN_SOURCE = '''
+def count_qlds_processes(ports, proc_root="/proc"):
+    import os
+    counts = {port: 0 for port in ports}
+    try:
+        pids = [name for name in os.listdir(proc_root) if name.isdigit()]
+    except OSError:
+        return None
+    for pid in pids:
+        try:
+            with open(os.path.join(proc_root, pid, "cmdline"), "rb") as handle:
+                argv = handle.read().split(b"\\0")
+        except OSError:
+            continue
+        try:
+            with open(os.path.join(proc_root, pid, "cgroup"), "rb") as handle:
+                cgroup = handle.read().decode(errors="replace")
+        except OSError:
+            cgroup = ""
+        engine = bool(argv) and os.path.basename(argv[0].decode(errors="replace")).startswith("qzeroded")
+        for port in ports:
+            in_unit = "qlds@%d.service" % port in cgroup
+            flagged = engine and any(
+                argv[i] == b"net_port" and argv[i + 1] == str(port).encode()
+                for i in range(len(argv) - 1))
+            if in_unit or flagged:
+                counts[port] += 1
+    return counts
+'''
 
 def _normalize_invocation_id(value):
     value = value.strip() if isinstance(value, str) else ""
@@ -64,8 +101,9 @@ def _validated_port_db_pairs(instances):
     return pairs
 
 
-def _remote_probe_script(ports_dbs, redis_password):
+def _remote_probe_script(ports_dbs, redis_password, with_processes=False):
     password_b64 = base64.b64encode(redis_password.encode()).decode() if redis_password is not None else None
+    process_scan = PROCESS_SCAN_SOURCE if with_processes else ''
     return f'''import base64
 import json
 import math
@@ -173,6 +211,11 @@ for block in systemd_stdout.split("\\n\\n"):
     if unit_id:
         records[unit_id] = record
 
+{process_scan}
+process_counts = (
+    count_qlds_processes([port for port, _ in ports_dbs]) if {bool(with_processes)!r} else None
+)
+
 observations = {{}}
 for port, _ in ports_dbs:
     record = records.get(f"qlds@{{port}}.service", {{}})
@@ -189,15 +232,16 @@ for port, _ in ports_dbs:
         "active_state": record.get("ActiveState"),
         "invocation_id": record.get("InvocationID"),
         "service_started_at": service_started_at,
+        "processes": process_counts.get(port) if process_counts is not None else None,
     }}
 print(json.dumps(observations))
 '''
 
 
-def build_runtime_probe_command(host, instances, redis_password=None):
+def build_runtime_probe_command(host, instances, redis_password=None, with_processes=False):
     """Build one SSH command that observes every requested instance on a host."""
     ports_dbs = _validated_port_db_pairs(instances)
-    script = _remote_probe_script(ports_dbs, redis_password)
+    script = _remote_probe_script(ports_dbs, redis_password, with_processes=with_processes)
     return [
         "ssh",
         "-i", os.path.abspath(host.ssh_key_path),
@@ -235,11 +279,15 @@ def _observations_from_payload(payload):
         invocation_id = _normalize_invocation_id(raw_observation.get("invocation_id"))
         if not active or service_started_at is None:
             invocation_id = None
+        processes = raw_observation.get("processes")
+        if isinstance(processes, bool) or not isinstance(processes, int) or processes < 0:
+            processes = None
         observations[str(port)] = RuntimeObservation(
             status=raw_observation.get("status"),
             invocation_id=invocation_id,
             active=active,
             service_started_at=service_started_at,
+            processes=processes,
         )
     return observations
 
@@ -264,10 +312,11 @@ def observation_has_fresh_status(observation):
     return isinstance(updated, int) and not isinstance(updated, bool) and updated > service_started_at
 
 
-def probe_host_runtime(host, instances, redis_password=None):
+def probe_host_runtime(host, instances, redis_password=None, with_processes=False):
     """Return a host observation map, or None when the SSH round-trip fails."""
     try:
-        command = build_runtime_probe_command(host, instances, redis_password=redis_password)
+        command = build_runtime_probe_command(host, instances, redis_password=redis_password,
+                                              with_processes=with_processes)
     except Exception as exc:
         logger.warning("Could not build runtime probe for host %s: %s", getattr(host, "name", "?"), exc)
         return None
@@ -326,3 +375,17 @@ def probe_instance_invocation_id(instance):
     except Exception:
         logger.exception("Unable to collect invocation ID for instance %s", getattr(instance, "id", "?"))
         return None
+
+
+def quiescence_state(observation):
+    """'active' (systemd active), 'inactive' (systemd inactive and no engine
+    process for the port), 'stray_process' (systemd inactive but a server
+    process is still there) or 'unknown' (not observed, or processes not
+    counted)."""
+    if not isinstance(observation, RuntimeObservation):
+        return 'unknown'
+    if observation.active:
+        return 'active'
+    if observation.processes is None:
+        return 'unknown'
+    return 'stray_process' if observation.processes > 0 else 'inactive'

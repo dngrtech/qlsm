@@ -226,13 +226,18 @@ def setup_host_ansible_logic(host_id, rerun=False):
         # allow-list in step with the number of instances the backend accepts.
         # Must be one JSON object: the bare `-e key=[...]` form is parsed by
         # Ansible as a whitespace-split string, not a list.
-        ansible_command_args += ['-e', json.dumps({
+        setup_vars = {
             'game_udp_ports': GAME_UDP_PORTS,
             'rcon_tcp_ports': RCON_TCP_PORTS,
             # Read from the DB on every run, so re-running setup always
             # rebuilds the runtime the host was created with.
             'runtime': host_runtime(host),
-        })]
+        }
+        if getattr(host, 'runtime_deps_isolated', False):
+            # Upgraded host: instances use their own venvs, so the common
+            # pool sync must not pip-install into the system Python.
+            setup_vars['skip_pip_install'] = True
+        ansible_command_args += ['-e', json.dumps(setup_vars)]
         # Addons may contribute extra-vars (a payload to deploy, a flag their
         # own playbook tasks read, the repository a runtime is built from).
         ansible_command_args += addon_setup_extravar_args(host)
@@ -288,6 +293,10 @@ def setup_host_ansible_logic(host_id, rerun=False):
                 )
             else:
                 _mark_host_migrated_to_hook(host)
+                # New hosts get the hung-instance watchdog on by default; a
+                # re-run leaves whatever the operator has configured.
+                from .ansible_watchdog import enable_default_watchdog
+                enable_default_watchdog(host)
             host.status = HostStatus.ACTIVE
             append_log(host, f"Task finished successfully. Host is ACTIVE.")
             db.session.commit()

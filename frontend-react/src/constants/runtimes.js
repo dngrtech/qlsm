@@ -1,8 +1,9 @@
 // The runtime a host with no recorded value is understood to be running. This
 // is a *label* fallback for host rows that predate the runtime column -- it is
 // deliberately NOT the Add Host form's starting value. That form starts with
-// nothing selected, because the choice is immutable once the host is created
-// and QLSM will not make an irreversible pick on the operator's behalf.
+// nothing selected, because the choice can only change later through the
+// one-way minqlx -> minqlxtended upgrade, and QLSM will not make that pick on
+// the operator's behalf.
 // Mirrors ui/runtime.py.
 export const DEFAULT_RUNTIME = 'minqlx';
 
@@ -37,7 +38,7 @@ export const runtimeLabel = (value) => (KNOWN.has(value) ? value : DEFAULT_RUNTI
 // 3.12" is a dead end and "use Ubuntu 24.04" is the actionable instruction.
 const TOOLTIP_TAILS = {
   minqlx: {
-    provisioned: 'QLSM provisions Debian 12.',
+    provisioned: 'QLSM provisions Ubuntu 24.04.',
     // min_python is None for minqlx -- it runs on whatever python3 ships.
     operatorOwned: "Runs on the distro's own python3 — no version floor.",
   },

@@ -248,6 +248,21 @@
         state: absent
       when: service_action == 'delete' # Use renamed variable
 
+    # Upgraded hosts give new instances a venv keyed by the instance id; a
+    # reused id must not inherit it (install_minqlx_deps.yml also checks an
+    # ownership marker, which covers a delete whose play failed). The path is
+    # built from the integer id only; removed as ql, who owns that tree.
+    - name: Remove the instance's isolated dependency venv (delete action)
+      become: yes
+      become_user: ql
+      ansible.builtin.file:
+        path: "/home/ql/runtime-deps/minqlxtended/instances/{{ id | int }}"
+        state: absent
+      when:
+        - service_action == 'delete'
+        - (id | default(0) | int) > 0
+      ignore_errors: yes  # never block the rest of the delete
+
     - name: Remove QLSM server-log cursor (delete action)
       ansible.builtin.file:
         path: /var/lib/qlsm/logcursor-{{ game_port }}

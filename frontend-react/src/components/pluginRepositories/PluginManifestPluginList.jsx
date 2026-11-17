@@ -122,7 +122,7 @@ function PluginManifestPluginList({
   };
 
   return (
-    <div className="flex flex-col min-h-0 border border-[var(--surface-border)] rounded-lg overflow-hidden">
+    <div className="flex flex-col min-h-0 flex-1 border border-[var(--surface-border)] rounded-lg overflow-hidden">
       <div className="flex-1 overflow-y-auto scrollbar-thin divide-y divide-[var(--surface-border)]">
         <DndContext
           sensors={sensors}

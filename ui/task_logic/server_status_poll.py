@@ -7,6 +7,7 @@ from flask import current_app
 
 from ui import db
 from ui.models import Host, HostStatus, InstanceStatus
+from ui.runtime_upgrade_guard import reserved_host_ids
 from ui.task_logic.common import append_log
 from ui.task_logic.instance_runtime_reconciliation import reconcile_runtime_observations
 from ui.task_logic.service_runtime import RuntimeObservation, probe_host_runtime
@@ -73,8 +74,15 @@ def poll_all_hosts():
         logger.debug("No pollable hosts — skipping poll cycle")
         return
 
+    # A runtime upgrade owns its host's host/instance statuses until it is
+    # terminal; observing mid-upgrade (or mid-rollback) would overwrite them.
+    reserved = reserved_host_ids()
+
     total_instances = 0
     for host in hosts:
+        if host.id in reserved:
+            logger.debug("Skipping host %s — runtime upgrade in progress", host.name)
+            continue
         running = [
             instance for instance in host.instances
             if instance.status in (InstanceStatus.RUNNING, InstanceStatus.UPDATED)

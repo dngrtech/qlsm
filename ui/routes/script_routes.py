@@ -14,6 +14,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
 from ui.preset_support import resolve_preset_subdir
+from ui.runtime_upgrade_guard import host_name_block_response
 from ui.plugin_manifest import read_plugin_manifest as _read_plugin_manifest
 
 # Create blueprint
@@ -332,6 +333,9 @@ def save_script_content():
 
     if not all([host, instance_id, file_path]):
         return jsonify({'error': {'message': 'host, instance_id, and path are required'}}), 400
+    blocked = host_name_block_response(host)
+    if blocked:
+        return blocked
 
     if content is None:
         return jsonify({'error': {'message': 'content is required'}}), 400
@@ -407,6 +411,9 @@ def upload_script():
 
     if not all([host, instance_id]):
         return jsonify({'error': {'message': 'host and instance_id are required'}}), 400
+    blocked = host_name_block_response(host)
+    if blocked:
+        return blocked
 
     if file.filename == '':
         return jsonify({'error': {'message': 'No file selected'}}), 400

@@ -237,7 +237,7 @@ def test_apply_config_clears_records_only_with_restart(monkeypatch, app, restart
     monkeypatch.setattr(ansible_instance_mgmt, '_build_qlds_args_string', MagicMock(return_value='args'))
     monkeypatch.setattr(ansible_instance_mgmt, '_build_ld_preload_paths', MagicMock(return_value=''))
     monkeypatch.setattr(ansible_instance_mgmt, 'with_self_host_network_extravars', lambda _i, extra: extra)
-    monkeypatch.setattr(ansible_instance_mgmt, 'runtime_extravars', MagicMock(return_value={}))
+    monkeypatch.setattr(ansible_instance_mgmt, 'instance_runtime_extravars', MagicMock(return_value={}))
     monkeypatch.setattr(ansible_instance_mgmt, '_addon_contributions', MagicMock())
     monkeypatch.setattr(
         ansible_instance_mgmt, '_run_ansible_playbook',
@@ -278,7 +278,7 @@ def test_restart_clears_records(monkeypatch, app):
     monkeypatch.setattr(ansible_instance_mgmt, '_build_qlds_args_string', MagicMock(return_value='args'))
     monkeypatch.setattr(ansible_instance_mgmt, '_build_ld_preload_paths', MagicMock(return_value=''))
     monkeypatch.setattr(ansible_instance_mgmt, 'with_self_host_network_extravars', lambda _i, extra: extra)
-    monkeypatch.setattr(ansible_instance_mgmt, 'runtime_extravars', MagicMock(return_value={}))
+    monkeypatch.setattr(ansible_instance_mgmt, 'instance_runtime_extravars', MagicMock(return_value={}))
     monkeypatch.setattr(
         ansible_instance_mgmt, '_run_ansible_playbook',
         MagicMock(return_value=(SimpleAnsibleResult(0, 'ok', ''), None)),

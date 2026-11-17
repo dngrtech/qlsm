@@ -10,10 +10,11 @@ Open from host row **Actions** in the Servers page.
 - **[View Logs](host-logs.md)**: opens this host's provisioning and setup log. Start here when a host is in **Error**.
 - **Restart Host**: queues host reboot flow. If the host takes longer than expected to come back and briefly shows **Error**, QLSM keeps probing it and restores it to **Active** automatically once it's reachable again — no manual action needed in that case.
 - **[Configure Auto-Restart](auto-restart.md)**: opens restart schedule modal.
-- **[Configure Watchdog](watchdog.md)**: turns on automatic restart of any instance on this host whose game loop has frozen. Off by default.
+- **[Configure Watchdog](watchdog.md)**: turns on automatic restart of any instance on this host whose game has frozen or crashed without exiting. On by default for new hosts.
 - **[Update Workshop Item](update-workshop-item.md)**: triggers workshop update on this host.
 - **[Check for Updates](check-for-updates.md)**: compares this host's plugins with the versions QLSM ships and lets you pick which files to update.
 - **[Install/Uninstall QLFilter](../features/qlfilter.md)**: depends on current QLFilter state.
+- **[Upgrade to minqlxtended](#upgrade-to-minqlxtended)**: moves a minqlx host to minqlxtended. Only shown on minqlx hosts.
 - **Re-run Host Setup**: re-applies the host configuration playbook on an existing host.
 - **Delete / Remove**: removes host from management (or destroys cloud host).
 
@@ -76,6 +77,62 @@ Re-running host setup also refreshes the host's game and RCON port allow-list, s
 After the playbook completes, the host returns to **Active** status.
 
 > **Running instances are automatically restarted** after a successful run. Plan for brief server downtime if you run this on a live host.
+
+## Upgrade To Minqlxtended
+
+**Upgrade to minqlxtended** moves an existing minqlx host to minqlxtended, the newer runtime, without rebuilding the host. It is also in the host drawer. It works on one host at a time and upgrades every instance on that host together.
+
+### When it is available
+
+The action only appears on hosts that run minqlx. It is greyed out, with an info icon that tells you why, unless:
+
+- the host is **Active**;
+- the host runs **Ubuntu 24.04 or newer** (minqlxtended needs Python 3.12; Debian 12 hosts cannot be upgraded);
+- every instance on the host is **Running** or **Stopped**. An instance in Error, Idle, Updated or any in-progress state blocks it. Fix or wait for that instance first.
+
+Hover the info icon to see the reason for your host.
+
+![Upgrade to minqlxtended greyed out on a Debian 12 host, with the reason shown](../images/host-actions-upgrade-disabled.png)
+
+### What you see before anything happens
+
+Clicking the action opens a dialog straight away. Nothing is stopped until you confirm.
+
+![Upgrade to minqlxtended dialog listing plugin decisions per instance](../images/host-actions-upgrade-dialog.png)
+ For each instance on the host the dialog lists what happens to its plugins:
+
+- standard plugins you have not changed are swapped for minqlxtended's version silently;
+- a plugin you edited or that is outdated, where minqlxtended has its own version, has a checkbox: tick it to use minqlxtended's version, leave it unticked to drop the plugin;
+- an enabled plugin minqlxtended has no version of is listed without a checkbox. It will be dropped and switched off.
+
+Plugins the instance has enabled come first. A plugin you wrote or edited that is **not enabled** is still listed, because its file won't be carried over either. It's marked **Not enabled** and greyed out, since nothing running today depends on it.
+
+#### Supplying your own file for a dropped plugin
+
+For an enabled plugin that minqlxtended has no version of, the row has an **Upload** button. Use it if you have a minqlxtended-ready copy of the plugin: pick the file and it is installed on the host in place of the old one, and the plugin stays enabled instead of being switched off.
+
+- The file must be named exactly like the plugin, including capitals: `old_stats.py` for the row `old_stats.py`. Names use letters, digits and underscores only. A different name is refused straight away.
+- It must be a text file of at most **512 KiB** (all uploads together at most **2 MiB**), with valid Python, and it must define a class with the same name as the file.
+- QLSM checks the file as soon as you pick it. If it is explicitly written for minqlx only, the row shows the reasons (for example "line 3: imports the minqlx module") and the file is not used.
+- A file that passes is accepted, but **QLSM cannot verify it will run on minqlxtended**, because the plugin is not part of minqlxtended's baseline. A plugin that fails to load does not fail the upgrade, so test it afterwards.
+- If several instances list the same plugin, one upload covers them all. You can use **Replace** on one instance to give it a different file, or **Remove** to go back to dropping the plugin there.
+- Nothing is saved until you press **Upgrade**. Closing the dialog, or reopening it after a change on the host, clears your uploads.
+
+If nothing needs a decision, the dialog is a plain confirmation. **Cancel** changes nothing. If you or someone else edits an instance while the dialog is open, the upgrade refuses to start and asks you to reopen it, so what you approved is what gets applied.
+
+### What happens when you confirm
+
+The host shows **Configuring** and other actions on it are blocked. QLSM saves a copy of every instance, stops every instance, builds minqlxtended, converts each instance's configuration with your answers, and starts it again. Instances that were running are started again; **instances that were stopped stay stopped.** Expect downtime for the whole host while this runs. Progress and results are in [Host Logs](host-logs.md).
+
+Each instance also gets a fallback preset named `pre-minqlxtended-...` in the preset manager. You do not need it for a normal rollback, but you can load it by hand if you ever want the old configuration back.
+
+### If something fails
+
+If the build, a stop, a conversion or any instance's start fails, QLSM **rolls the whole host back**: the host returns to minqlx, every instance gets its previous config and plugins back, and each one is running or stopped exactly as before. The host is then **Active** again and its log says why the upgrade failed. If the failure came before anything was stopped, the host simply returns to Active. A plugin that merely fails to load inside a running server does not count as a failure.
+
+If a rollback cannot finish, the host shows **Error** and the log lists the instances that did not come back. The host stays on minqlx. QLSM retries automatically every few minutes until the host is reachable and the rollback completes, including after a restart of QLSM itself, and other actions on the host stay blocked until it completes. There is no manual retry button.
+
+Upgrading is one way. QLSM has no downgrade action; the old minqlx build stays on the host, which is what makes rollback possible.
 
 ## Related Pages
 

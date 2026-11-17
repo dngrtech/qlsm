@@ -46,14 +46,14 @@ describe('PluginManifestEditorModal', () => {
     expect(screen.getByText(/1 error/i)).toBeInTheDocument();
   });
 
-  it('downloads a cleaned qlsm-plugins.json for the current draft', () => {
+  it('downloads a cleaned qlsm-repository.json for the current draft', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     render(<PluginManifestEditorModal isOpen onClose={vi.fn()} repo={repo} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^download/i }));
 
     expect(clickSpy).toHaveBeenCalledTimes(1);
-    expect(clickSpy.mock.instances[0].download).toBe('qlsm-plugins.json');
+    expect(clickSpy.mock.instances[0].download).toBe('qlsm-repository.json');
     clickSpy.mockRestore();
   });
 
@@ -170,5 +170,68 @@ describe('PluginManifestEditorModal', () => {
     expect(select).toHaveValue('integer');
     expect(screen.getByRole('option', { name: 'not set' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /integer \(unrecognized\)/ })).toBeInTheDocument();
+  });
+
+  describe('addons', () => {
+    const withAddons = {
+      id: 7,
+      name: 'Addon Repo',
+      plugins: [{ filename: 'afkplus.py', label: 'AFK Plus', description: 'd' }],
+      addons: [{
+        id: 'my-addon', zip: 'my-addon.zip', label: 'My Addon', description: 'd', version: '1.0.0',
+        sha256: 'a'.repeat(64), requires_qlsm_version: null,
+      }],
+    };
+
+    const exportedBody = (blobSpy) => JSON.parse(blobSpy.mock.calls[0][0][0]);
+
+    it('lists the repository addons on their own tab', () => {
+      render(<PluginManifestEditorModal isOpen onClose={vi.fn()} repo={withAddons} />);
+      fireEvent.click(screen.getByRole('tab', { name: /addons \(1\)/i }));
+      expect(screen.getByLabelText('Addon ID')).toHaveValue('my-addon');
+      expect(screen.getByLabelText('Zip')).toHaveValue('my-addon.zip');
+    });
+
+    it('opens an addon-only repository on the Addons tab', () => {
+      render(<PluginManifestEditorModal isOpen onClose={vi.fn()} repo={{ id: 8, plugins: [], addons: withAddons.addons }} />);
+      expect(screen.getByRole('tab', { name: /addons/i })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByLabelText('Addon ID')).toHaveValue('my-addon');
+    });
+
+    it('adds, edits and removes addons, and exports them', () => {
+      const blobSpy = vi.spyOn(globalThis, 'Blob').mockImplementation(function FakeBlob(parts) { this.parts = parts; });
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      render(<PluginManifestEditorModal isOpen onClose={vi.fn()} repo={withAddons} />);
+      fireEvent.click(screen.getByRole('tab', { name: /addons/i }));
+
+      fireEvent.click(screen.getByRole('button', { name: /add addon/i }));
+      expect(screen.getByLabelText('Addon ID')).toHaveValue('');
+      fireEvent.change(screen.getByLabelText('Addon ID'), { target: { value: 'second' } });
+      fireEvent.change(screen.getByLabelText('Zip'), { target: { value: 'second.zip' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /remove my addon/i }));
+      // The added addon is still the one being edited after the row above it went.
+      expect(screen.getByLabelText('Addon ID')).toHaveValue('second');
+
+      fireEvent.click(screen.getByRole('button', { name: /^download/i }));
+      const body = exportedBody(blobSpy);
+      expect(body.addons).toEqual([{ id: 'second', zip: 'second.zip' }]);
+      expect(body.plugins).toEqual([{ filename: 'afkplus.py', label: 'AFK Plus', description: 'd' }]);
+
+      blobSpy.mockRestore();
+      clickSpy.mockRestore();
+    });
+
+    it('counts an addon error and jumps to the addon when the issue is clicked', () => {
+      const bad = { ...withAddons, addons: [{ ...withAddons.addons[0], id: 'Bad Id' }] };
+      render(<PluginManifestEditorModal isOpen onClose={vi.fn()} repo={bad} />);
+      // Opens on plugins; the addon's error is still counted in the footer.
+      expect(screen.getByText(/1 error/i)).toBeInTheDocument();
+      expect(screen.getByDisplayValue('afkplus.py')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText(/id must be kebab-case/));
+      expect(screen.getByRole('tab', { name: /addons/i })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByLabelText('Addon ID')).toHaveValue('Bad Id');
+    });
   });
 });

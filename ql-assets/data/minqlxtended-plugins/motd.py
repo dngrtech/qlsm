@@ -37,6 +37,46 @@ class motd(minqlxtended.Plugin):
         # Add this server to the MOTD set.
         self.db.sadd(MOTD_SET_KEY, self.home)
 
+        # QLSM: minqlx's motd.py keyed the MOTD on the FULL fs_homepath. Adopt that
+        # entry once, so a server moved from minqlx keeps the MOTD it already had.
+        self._adopt_legacy_motd(self.get_cvar("fs_homepath"))
+
+        # QLSM: qlx_motd1..qlx_motd10 seed the MOTD when none is stored. A stored MOTD
+        # wins; !reloadmotd rebuilds it from the cvars on demand.
+        if self.motd_key not in self.db:
+            self.load_motd_from_config()
+
+    def _adopt_legacy_motd(self, homepath):
+        if not homepath:
+            return
+        legacy_key = f"{MOTD_SET_KEY}:{homepath}"
+        if legacy_key == self.motd_key or legacy_key not in self.db:
+            return
+        if self.motd_key not in self.db:
+            self.db[self.motd_key] = self.db[legacy_key]
+        # This server no longer reads the full-path entry, so take it out of the set
+        # the *all commands walk. The key itself is left for any minqlx server still
+        # sharing this Redis.
+        self.db.srem(MOTD_SET_KEY, homepath)
+
+    def load_motd_from_config(self):
+        """ Sets this server's MOTD from qlx_motd1..qlx_motd10. False if none are set. """
+        lines = [line for line in (self.get_cvar(f"qlx_motd{i}") for i in range(1, 11)) if line]
+        if not lines:
+            return False
+        self.db.sadd(MOTD_SET_KEY, self.home)
+        self.db[self.motd_key] = "\\n".join(lines)
+        return True
+
+    @minqlxtended.command("reloadmotd", permission=4)
+    def cmd_reloadmotd(self, player, msg, channel):
+        """ Rebuilds this server's MOTD from qlx_motd1..qlx_motd10. """
+        if self.load_motd_from_config():
+            player.tell("The MOTD has been reloaded from config.")
+        else:
+            player.tell("No qlx_motd1..qlx_motd10 cvars are set, so the MOTD was left as it is.")
+        return minqlxtended.Return.STOP_EVENT
+
     @minqlxtended.hook("player_loaded", priority=minqlxtended.Priority.LOWEST)
     @minqlxtended.delay(2)
     def handle_player_loaded(self, player):

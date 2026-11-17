@@ -91,6 +91,36 @@ def delay(time):
     return decorate
 
 
+def setting(name, default):
+    """A class attribute that reads cvar `name`, or `default` when it is unset.
+
+    Tests read it through the instance's get_cvar, so assigning `plugin.cvars[name]`
+    changes what the plugin sees, as `set qlx_...` would on the engine.
+    """
+    def read(self):
+        value = self.get_cvar(name)
+        return default if value is None else value
+    return property(read)
+
+
+def hook(event, priority=None):
+    """Decorator form of add_hook. Records the event on the function and returns it
+    unchanged; tests call handlers directly."""
+    def decorate(func):
+        func._qlsm_hook = event
+        return func
+    return decorate
+
+
+def command(name, permission=0, usage="", **kwargs):
+    """Decorator form of add_command. Records the names on the function and returns
+    it unchanged; tests call handlers directly."""
+    def decorate(func):
+        func._qlsm_command = (name,) if isinstance(name, str) else tuple(name)
+        return func
+    return decorate
+
+
 def parse_infostring(infostring):
     """_core.py:97. Splits a backslash-delimited infostring into a dict.
 
@@ -432,6 +462,9 @@ def install_stub():
     module.thread = thread
     module.next_frame = next_frame
     module.delay = delay
+    module.setting = setting
+    module.hook = hook
+    module.command = command
     module.parse_infostring = parse_infostring
     module.GameClient = GameClient
     module.NO_AMMO = NO_AMMO

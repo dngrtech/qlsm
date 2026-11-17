@@ -83,6 +83,20 @@ def test_detect_default_self_ssh_user_prefers_env(monkeypatch, tmp_path):
     assert helpers.detect_default_self_ssh_user(host_ssh_dir=tmp_path) == "rage"
 
 
+def test_detect_default_self_ssh_user_uses_host_user_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("QLSM_HOST_USER", raising=False)
+    (tmp_path / "host-user").write_text("qlsm\n")
+
+    assert helpers.detect_default_self_ssh_user(host_ssh_dir=tmp_path) == "qlsm"
+
+
+def test_detect_default_self_ssh_user_env_beats_host_user_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("QLSM_HOST_USER", "rage")
+    (tmp_path / "host-user").write_text("qlsm\n")
+
+    assert helpers.detect_default_self_ssh_user(host_ssh_dir=tmp_path) == "rage"
+
+
 def test_remove_authorized_key_rewrites_file(tmp_path):
     host_ssh = tmp_path / "host-ssh"
     host_ssh.mkdir()
@@ -94,6 +108,20 @@ def test_remove_authorized_key_rewrites_file(tmp_path):
     assert removed is True
     assert auth.read_text() == "ssh-rsa keep\n"
     assert oct(auth.stat().st_mode & 0o777) == "0o600"
+
+
+def test_remove_authorized_key_preserves_original_owner(monkeypatch, tmp_path):
+    host_ssh = tmp_path / "host-ssh"
+    host_ssh.mkdir()
+    auth = host_ssh / "authorized_keys"
+    auth.write_text("ssh-rsa keep\nssh-rsa remove\n")
+    original = auth.stat()
+
+    calls = []
+    monkeypatch.setattr(helpers.os, "chown", lambda path, uid, gid: calls.append((uid, gid)), raising=False)
+
+    assert helpers.remove_authorized_key("ssh-rsa remove", host_ssh_dir=host_ssh) is True
+    assert calls == [(original.st_uid, original.st_gid)]
 
 
 def test_generate_self_host_keys_cleans_up_authorized_key_on_permission_fix_error(monkeypatch, tmp_path):

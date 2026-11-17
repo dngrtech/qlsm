@@ -15,6 +15,10 @@
 # Requires: common_assets_dir (e.g. /home/ql/assets/common),
 #           runtime_plugins_dirname (e.g. minqlx-plugins / minqlxtended-plugins),
 #           runtime (minqlx / minqlxtended; passed by runtime_extravars())
+# Optional: common_plugins_builtin_src / common_plugins_operator_src -- the
+# controller-side built-in and operator pools (default: the live
+# ql-assets/data and data/shared-plugins dirs above). install_runtime.yml
+# points them at the operation's immutable captured copies.
 # Optional: skip_pip_install (default false) — set true for the on-demand
 # "Update Plugins" UI action, where the host was already fully set up once
 # and reinstalling the same pip floors on every plugin refresh only adds
@@ -31,7 +35,7 @@
 
 - name: Check if runtime's requirements.txt is available on controller
   stat:
-    path: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
+    path: "{{ common_plugins_builtin_src | default(playbook_dir ~ '/../../ql-assets/data/' ~ runtime_plugins_dirname) }}/requirements.txt"
   delegate_to: localhost
   become: no
   register: minqlx_reqs_stat
@@ -39,7 +43,7 @@
 
 - name: Stage runtime requirements file on host
   copy:
-    src: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/requirements.txt"
+    src: "{{ common_plugins_builtin_src | default(playbook_dir ~ '/../../ql-assets/data/' ~ runtime_plugins_dirname) }}/requirements.txt"
     dest: "/root/minqlx-requirements.txt"
     owner: root
     group: root
@@ -64,14 +68,14 @@
 
 - name: Check if local runtime plugins directory exists
   stat:
-    path: "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}"
+    path: "{{ common_plugins_builtin_src | default(playbook_dir ~ '/../../ql-assets/data/' ~ runtime_plugins_dirname) }}"
   delegate_to: localhost
   register: local_minqlx_plugins_stat
   become: no
 
 - name: Check if local operator plugins directory exists
   stat:
-    path: "{{ playbook_dir }}/../../data/shared-plugins/{{ runtime }}"
+    path: "{{ common_plugins_operator_src | default(playbook_dir ~ '/../../data/shared-plugins/' ~ runtime) }}"
   delegate_to: localhost
   register: local_operator_plugins_stat
   become: no
@@ -92,7 +96,7 @@
         argv:
           - rsync
           - -a
-          - "{{ playbook_dir }}/../../ql-assets/data/{{ runtime_plugins_dirname }}/"
+          - "{{ common_plugins_builtin_src | default(playbook_dir ~ '/../../ql-assets/data/' ~ runtime_plugins_dirname) }}/"
           - "{{ merged_pool_stage.path }}/"
       delegate_to: localhost
       become: no
@@ -105,7 +109,7 @@
         argv:
           - rsync
           - -a
-          - "{{ playbook_dir }}/../../data/shared-plugins/{{ runtime }}/"
+          - "{{ common_plugins_operator_src | default(playbook_dir ~ '/../../data/shared-plugins/' ~ runtime) }}/"
           - "{{ merged_pool_stage.path }}/"
       delegate_to: localhost
       become: no

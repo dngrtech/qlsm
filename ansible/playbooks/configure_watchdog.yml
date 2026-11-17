@@ -2,8 +2,9 @@
 # Deploys/configures/removes the ql-watchdog addon on a host.
 #
 # ql-watchdog detects a hung QLDS main-thread (kernel Recv-Q on the game UDP
-# port stays high because the frame-loop stopped draining it) and restarts
-# only the affected qlds@<port>.service instance via systemctl - see
+# port stays high because the frame-loop stopped draining it) or an engine that
+# crashed without exiting (no reply on the game port and no live-status key)
+# and restarts only the affected qlds@<port>.service instance via systemctl - see
 # ansible/files/ql-watchdog/watchdog.py for the detection/restart logic.
 #
 # Called with -e watchdog_enabled=true|false (+ optional tunables) by

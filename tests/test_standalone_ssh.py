@@ -406,6 +406,20 @@ def test_detect_local_os_host_info_empty_os_type_normalized_to_none():
     assert result["pretty_name"] == "Arch Linux"
 
 
+def test_detect_local_os_host_info_passes_version_id():
+    host_info = '{"os_type":"ubuntu","pretty_name":"Ubuntu 24.04.1 LTS","version_id":"24.04"}'
+    with patch("builtins.open", side_effect=[mock_open(read_data=host_info).return_value]):
+        result = detect_local_os()
+    assert result["version_id"] == "24.04"
+
+
+def test_detect_local_os_host_info_without_version_id_returns_none():
+    host_info = '{"os_type":"ubuntu","pretty_name":"Ubuntu 24.04.1 LTS"}'
+    with patch("builtins.open", side_effect=[mock_open(read_data=host_info).return_value]):
+        result = detect_local_os()
+    assert result["version_id"] is None
+
+
 def test_detect_local_os_falls_back_when_host_info_missing():
     os_release = 'ID=debian\nPRETTY_NAME="Debian GNU/Linux 12 (bookworm)"\n'
     def open_side_effect(path, *args, **kwargs):

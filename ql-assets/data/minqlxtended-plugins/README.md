@@ -37,7 +37,7 @@ ships exactly those four.
 
 ## Locally patched upstream files
 
-Nine files here started as upstream and now carry QLSM patches. They keep
+Ten files here started as upstream and now carry QLSM patches. They keep
 `"origin": "upstream"` — that field records **lineage**, not whether the bytes still
 match, and `tests/test_minqlxtended_plugin_baseline.py` asserts all 33 upstream
 filenames are marked that way. So the manifest cannot tell you which files diverge, and
@@ -55,11 +55,12 @@ diff it against ours, and reapply. None of them is large.
 | `dictionary.py` | Per-player `DEFINE_COOLDOWN` before `!define` forks its HTTP worker. |
 | `infectedmm.py` | The delayed warmup callback re-checks gametype and `_loaded` before adding the mastermind bot. |
 | `leaverban.py` | `handle_game_start` filters bots out of `players_start`, matching the rest of the file. |
+| `motd.py` | Adopts the MOTD minqlx's `motd.py` stored under the full `fs_homepath` (upstream keys on its basename), seeds the MOTD from `qlx_motd1`..`qlx_motd10` when none is stored, and adds `!reloadmotd`. Without this a server moved from minqlx comes back with no MOTD. |
 | `names.py` | v1.1.0: maintain accepted client baselines, check enforcement eligibility on every restore, lazily hydrate reloaded online players, and bound synchronous self-assignment guards. |
 | `vpnblock.py` | `_update_cache`'s four messages go through `_msg_next_frame` instead of calling `self.msg()` from the worker thread. |
 
-All but `branding.py` and `names.py` came from the review recorded in
-`docs/findings/2026-08-27-minqlxtended-upstream-plugin-review.md`. The other 24 upstream
+All but `branding.py`, `motd.py` and `names.py` came from the review recorded in
+`docs/findings/2026-08-27-minqlxtended-upstream-plugin-review.md`. The other 23 upstream
 files are byte-identical to the pinned commit.
 
 > The copies in `configs/presets/_builtin/default-minqlxtended/scripts/` must be updated

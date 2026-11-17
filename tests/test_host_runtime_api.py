@@ -37,7 +37,10 @@ def test_cloud_host_defaults_to_minqlx(app, client, auth_headers, stub_provision
     with app.app_context():
         host = Host.query.filter_by(name="default-host").one()
         assert host.runtime == MINQLX
-        assert host.os_type == "debian"
+        # New minqlx cloud hosts are Ubuntu 24.04 so they can be upgraded to
+        # minqlxtended; only hosts created before that stay Debian.
+        assert host.os_type == "ubuntu"
+        assert host.os_version == "24.04"
 
 
 def test_cloud_host_accepts_minqlxtended_and_targets_ubuntu(app, client, auth_headers,

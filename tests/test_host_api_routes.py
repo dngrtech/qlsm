@@ -1758,3 +1758,67 @@ def test_configure_auto_restart_api_invalid_schedule(client, app):
     })
     assert response.status_code == 400
     assert 'Invalid schedule format' in response.get_json()['error']['message']
+
+
+
+def _count_selects(app, fn):
+    from sqlalchemy import event
+
+    statements = []
+    with app.app_context():
+        engine = db.engine
+
+    def before(conn, cursor, statement, *args):
+        if statement.lstrip().upper().startswith('SELECT'):
+            statements.append(statement)
+
+    event.listen(engine, 'before_cursor_execute', before)
+    try:
+        result = fn()
+    finally:
+        event.remove(engine, 'before_cursor_execute', before)
+    return result, len(statements)
+
+
+def _add_hosts_with_instances(app, start, stop, per_host=2):
+    with app.app_context():
+        for h in range(start, stop):
+            host = Host(name=f'nplus-{h}', provider='vultr', status=HostStatus.ACTIVE,
+                        runtime='minqlx', os_type='ubuntu', os_version='24.04', ip_address=f'10.0.1.{h}')
+            db.session.add(host)
+            db.session.flush()
+            for i in range(per_host):
+                db.session.add(QLInstance(name=f'n{h}-{i}', port=27960 + i, hostname='hn', host_id=host.id,
+                                          status=InstanceStatus.RUNNING, zmq_rcon_port=28000 + i,
+                                          zmq_rcon_password='x', zmq_stats_port=29000 + i,
+                                          zmq_stats_password='y'))
+        db.session.commit()
+
+
+@patch('ui.routes.host_routes._enqueue_os_version_backfill')
+def test_list_hosts_query_count_does_not_grow_with_hosts(mock_backfill, client, app):
+    """The polled hosts list (each host's instances and runtime_upgrade
+    eligibility included) loads instances in one query, not one per host."""
+    headers = auth_headers(app, DEFAULT_USER)
+    _add_hosts_with_instances(app, 0, 2)
+    _resp, few = _count_selects(app, lambda: client.get('/api/hosts/', headers=headers))
+    _add_hosts_with_instances(app, 2, 8)
+    resp, many = _count_selects(app, lambda: client.get('/api/hosts/', headers=headers))
+    assert resp.status_code == 200
+    data = resp.get_json()['data']
+    assert len(data) == 8
+    assert all(len(h['instances']) == 2 and h['runtime_upgrade']['enabled'] for h in data)
+    assert many == few, (few, many)
+
+
+def test_list_hosts_output_matches_host_to_dict(client, app):
+    """The list route's dicts are exactly what Host.to_dict() returns."""
+    headers = auth_headers(app, DEFAULT_USER)
+    _add_hosts_with_instances(app, 0, 3)
+    with app.app_context():
+        create_host(name='bare', provider='vultr', status=HostStatus.PENDING)
+    with patch('ui.routes.host_routes._enqueue_os_version_backfill'):
+        data = client.get('/api/hosts/', headers=headers).get_json()['data']
+    with app.app_context():
+        expected = [host.to_dict() for host in Host.query.order_by(Host.name).all()]
+    assert data == expected

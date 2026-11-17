@@ -126,6 +126,10 @@ def setup_standalone_host_logic(host_id, rerun=False):
         else:
             from .ansible_host_setup import _mark_host_migrated_to_hook
             _mark_host_migrated_to_hook(host)
+            # New hosts get the hung-instance watchdog on by default; a re-run
+            # leaves whatever the operator has configured.
+            from .ansible_watchdog import enable_default_watchdog
+            enable_default_watchdog(host)
         host.status = HostStatus.ACTIVE
         append_log(host, "Task finished successfully. Host is ACTIVE.")
         db.session.commit()
@@ -224,6 +228,10 @@ def _setup_playbook_extra_vars(host):
         extra_vars['use_host_redis'] = 'false'
     if host.timezone:
         extra_vars['host_timezone'] = host.timezone
+    if getattr(host, 'runtime_deps_isolated', False):
+        # Upgraded host: instances use their own venvs, so the common pool
+        # sync must not pip-install into the system Python.
+        extra_vars['skip_pip_install'] = True
     return extra_vars
 
 

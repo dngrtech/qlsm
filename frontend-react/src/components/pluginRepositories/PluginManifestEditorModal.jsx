@@ -2,17 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, FileJson, AlertTriangle, Download, CircleAlert } from 'lucide-react';
 import { RUNTIME_OPTIONS } from '../../constants/runtimes';
-import { validateManifestPlugins, issueCounts } from '../../utils/pluginManifestValidation';
-import { triggerManifestDownload } from '../../utils/pluginManifestDownload';
-import { blankPlugin, blankCvar, blankCommand, buildManifestDraft } from '../../utils/pluginManifestDraft';
+import { validateManifestPlugins, validateManifestAddons, issueCounts } from '../../utils/pluginManifestValidation';
+import { triggerManifestDownload, DEFAULT_MANIFEST_FILENAME } from '../../utils/pluginManifestDownload';
+import {
+  blankPlugin, blankAddon, blankCvar, blankCommand, buildManifestDraft, buildAddonDraft,
+} from '../../utils/pluginManifestDraft';
 import PluginManifestPluginList from './PluginManifestPluginList';
+import PluginManifestAddonList from './PluginManifestAddonList';
+import PluginManifestAddonFields from './PluginManifestAddonFields';
 import PluginManifestCvarRows from './PluginManifestCvarRows';
 import PluginManifestCommandRows from './PluginManifestCommandRows';
 import PluginManifestIssues from './PluginManifestIssues';
 
 /**
- * Edits a local, in-memory copy of one repository's plugin list and exports
- * it as a new qlsm-plugins.json to download.
+ * Edits a local, in-memory copy of one repository's plugin and addon lists
+ * and exports them as a new qlsm-repository.json to download.
  *
  * Deliberately does not save anything back into this repository's row:
  * `PluginRepository.manifest_json` is a verbatim cache of the last fetch from
@@ -25,7 +29,10 @@ import PluginManifestIssues from './PluginManifestIssues';
 function PluginManifestEditorModal({ isOpen, onClose, repo }) {
   const [plugins, setPlugins] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [filename, setFilename] = useState('qlsm-plugins.json');
+  const [addons, setAddons] = useState([]);
+  const [selectedAddonIndex, setSelectedAddonIndex] = useState(-1);
+  const [tab, setTab] = useState('plugins');
+  const [filename, setFilename] = useState(DEFAULT_MANIFEST_FILENAME);
 
   // Seeded on open and on a change of *which* repository is being edited --
   // deliberately not on `repo`'s object identity. PluginRepositoriesPage
@@ -37,22 +44,34 @@ function PluginManifestEditorModal({ isOpen, onClose, repo }) {
       const draft = buildManifestDraft(repo?.plugins);
       setPlugins(draft);
       setSelectedIndex(draft.length ? 0 : -1);
-      setFilename('qlsm-plugins.json');
+      const addonDraft = buildAddonDraft(repo?.addons);
+      setAddons(addonDraft);
+      setSelectedAddonIndex(addonDraft.length ? 0 : -1);
+      // An addon-only repository opens on its addons, everything else on plugins.
+      setTab(draft.length || !addonDraft.length ? 'plugins' : 'addons');
+      setFilename(DEFAULT_MANIFEST_FILENAME);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, repo?.id]);
 
-  const issues = useMemo(() => validateManifestPlugins(plugins), [plugins]);
+  const issues = useMemo(
+    () => [...validateManifestPlugins(plugins), ...validateManifestAddons(addons)],
+    [plugins, addons],
+  );
   const { errors, warnings } = useMemo(() => issueCounts(issues), [issues]);
-  const issuesByPlugin = useMemo(() => {
-    const map = new Map();
+  // Plugin issues carry no `kind`; addon issues carry kind 'addon'. The two
+  // lists number their rows independently, so they get separate buckets.
+  const [issuesByPlugin, issuesByAddon] = useMemo(() => {
+    const byPlugin = new Map();
+    const byAddon = new Map();
     issues.forEach((iss) => {
       if (iss.index === undefined) return;
+      const map = iss.kind === 'addon' ? byAddon : byPlugin;
       const bucket = map.get(iss.index) || { errors: 0, warnings: 0 };
       if (iss.severity === 'error') bucket.errors += 1; else bucket.warnings += 1;
       map.set(iss.index, bucket);
     });
-    return map;
+    return [byPlugin, byAddon];
   }, [issues]);
 
   const updatePlugin = (index, patch) => {
@@ -88,8 +107,34 @@ function PluginManifestEditorModal({ isOpen, onClose, repo }) {
   const addCommand = () => updatePlugin(selectedIndex, { commands: [...(plugins[selectedIndex].commands || []), blankCommand()] });
   const removeCommand = (cIndex) => updatePlugin(selectedIndex, { commands: plugins[selectedIndex].commands.filter((_, j) => j !== cIndex) });
 
+  const updateAddon = (patch) => {
+    setAddons((prev) => prev.map((a, i) => (i === selectedAddonIndex ? { ...a, ...patch } : a)));
+  };
+  const addAddon = () => {
+    setAddons((prev) => [...prev, blankAddon()]);
+    setSelectedAddonIndex(addons.length);
+  };
+  const removeAddon = (index) => {
+    setAddons((prev) => prev.filter((_, i) => i !== index));
+    setSelectedAddonIndex((prev) => {
+      if (index < prev) return prev - 1;
+      if (index === prev) return Math.min(prev, addons.length - 2);
+      return prev;
+    });
+  };
+
+  const selectIssue = (iss) => {
+    if (iss.kind === 'addon') {
+      setTab('addons');
+      setSelectedAddonIndex(iss.index);
+    } else {
+      setTab('plugins');
+      setSelectedIndex(iss.index);
+    }
+  };
+
   const handleDownload = () => {
-    triggerManifestDownload(filename, plugins);
+    triggerManifestDownload(filename, plugins, addons);
   };
 
   // Reordering (drag or Sort A-Z) moves plugins around in the array, so the
@@ -105,6 +150,12 @@ function PluginManifestEditorModal({ isOpen, onClose, repo }) {
   };
 
   const selected = selectedIndex >= 0 ? plugins[selectedIndex] : null;
+  const selectedAddon = selectedAddonIndex >= 0 ? addons[selectedAddonIndex] : null;
+  const tabClass = (name) => `flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+    tab === name
+      ? 'bg-black/[0.06] dark:bg-white/[0.08] text-[var(--text-primary)]'
+      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+  }`;
 
   return (
     <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
@@ -130,26 +181,53 @@ function PluginManifestEditorModal({ isOpen, onClose, repo }) {
               </button>
             </div>
             <p className="text-xs text-[var(--text-muted)] mb-4 flex-shrink-0">
-              Edits a local copy of this repository&apos;s plugin list. Download writes a new{' '}
-              <code>qlsm-plugins.json</code> for you to commit to the repository itself — Sync always
+              Edits a local copy of this repository&apos;s plugin and addon lists. Download writes a new{' '}
+              <code>qlsm-repository.json</code> for you to commit to the repository itself — Sync always
               re-fetches from the source URL, so nothing here is saved by qlsm. Only the entries qlsm
               could read at the last sync are listed; anything it skipped is not in this file either.
             </p>
 
             <div className="relative z-10 flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4">
-              <PluginManifestPluginList
-                plugins={plugins}
-                selectedIndex={selectedIndex}
-                issuesByPlugin={issuesByPlugin}
-                onSelect={setSelectedIndex}
-                onRemove={removePlugin}
-                onAdd={addPlugin}
-                onReorder={reorderTo}
-              />
+              <div className="flex flex-col min-h-0 gap-2">
+                <div role="tablist" aria-label="Manifest sections" className="flex gap-1 p-1 rounded-lg border border-[var(--surface-border)] flex-shrink-0">
+                  <button type="button" role="tab" aria-selected={tab === 'plugins'} onClick={() => setTab('plugins')} className={tabClass('plugins')}>
+                    Plugins ({plugins.length})
+                  </button>
+                  <button type="button" role="tab" aria-selected={tab === 'addons'} onClick={() => setTab('addons')} className={tabClass('addons')}>
+                    Addons ({addons.length})
+                  </button>
+                </div>
+                {tab === 'plugins' ? (
+                  <PluginManifestPluginList
+                    plugins={plugins}
+                    selectedIndex={selectedIndex}
+                    issuesByPlugin={issuesByPlugin}
+                    onSelect={setSelectedIndex}
+                    onRemove={removePlugin}
+                    onAdd={addPlugin}
+                    onReorder={reorderTo}
+                  />
+                ) : (
+                  <PluginManifestAddonList
+                    addons={addons}
+                    selectedIndex={selectedAddonIndex}
+                    issuesByAddon={issuesByAddon}
+                    onSelect={setSelectedAddonIndex}
+                    onRemove={removeAddon}
+                    onAdd={addAddon}
+                  />
+                )}
+              </div>
 
-              {/* Selected plugin editor */}
+              {/* Selected plugin or addon editor */}
               <div className="flex flex-col min-h-0 overflow-y-auto scrollbar-thin pr-1">
-                {!selected ? (
+                {tab === 'addons' ? (
+                  selectedAddon ? (
+                    <PluginManifestAddonFields key={selectedAddon._key} addon={selectedAddon} onChange={updateAddon} />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted)] p-4">Add an addon, or pick one on the left, to edit it.</p>
+                  )
+                ) : !selected ? (
                   <p className="text-sm text-[var(--text-muted)] p-4">Add a plugin, or pick one on the left, to edit it.</p>
                 ) : (
                   <div className="space-y-5 pb-2">
@@ -226,7 +304,7 @@ function PluginManifestEditorModal({ isOpen, onClose, repo }) {
               </div>
             </div>
 
-            <PluginManifestIssues issues={issues} onSelectPlugin={setSelectedIndex} />
+            <PluginManifestIssues issues={issues} onSelect={selectIssue} />
 
             <div className="relative z-10 flex items-center justify-between gap-3 pt-4 mt-2 border-t border-slate-700/50 flex-shrink-0">
               <div className="flex items-center gap-2 text-xs">

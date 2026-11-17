@@ -17,7 +17,6 @@ from ui.routes.plugin_repository_routes import _repo_urls, _sync
 
 DEFAULT_PLUGIN_REPOSITORIES = (
     ('Doomsday\'s Plugins Repository', 'https://github.com/D00MSDAYDEVICE/minqlx'),
-    ('ark-ql Plugins Repository', 'https://github.com/ark-ql/minqlx-plugins'),
 )
 
 

@@ -18,6 +18,7 @@ Environment=QL_WATCHDOG_STRIKES={{ watchdog_strikes | default(3) }}
 Environment=QL_WATCHDOG_GRACE={{ watchdog_grace | default(90) }}
 Environment=QL_WATCHDOG_RATE_MAX={{ watchdog_rate_max | default(3) }}
 Environment=QL_WATCHDOG_RATE_WINDOW={{ watchdog_rate_window | default(900) }}
+Environment=QL_WATCHDOG_DEAD_CONFIRM={{ watchdog_dead_confirm | default(180) }}
 Environment=QL_WATCHDOG_FORENSICS={{ '1' if watchdog_forensics | default(true) else '0' }}
 Environment=QL_WATCHDOG_EVENTS=/var/lib/qlsm/watchdog/events.jsonl
 Environment=QL_WATCHDOG_FORENSICS_DIR=/var/lib/qlsm/watchdog/forensics
