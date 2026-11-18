@@ -20,7 +20,7 @@
         cmd: >-
           {{ playbook_dir }}/../files/install_custom_runtime.py
           {{ custom_bundle_tmp.path | quote }} {{ custom_release_digest | quote }}
-          /var/lib/qlsm/custom-runtime {{ custom_requirements_file | quote }}
+          {{ runtime_shared_dir | dirname | quote }} {{ custom_requirements_file | quote }}
           {{ custom_launch_script | quote }} {{ custom_dependency_imports | to_json | quote }}
         executable: /usr/bin/python3
   always:

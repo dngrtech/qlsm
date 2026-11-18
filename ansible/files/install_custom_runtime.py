@@ -8,43 +8,43 @@ import os
 from pathlib import Path
 import re
 import shutil
-import stat
 import subprocess
 import tarfile
 import tempfile
 
 
-def _seal_dependencies(dependencies):
-    """Keep service processes from changing a release shared by instances."""
-    for directory, subdirectories, files in os.walk(dependencies):
-        root = Path(directory)
-        if any((root / name).is_symlink() for name in subdirectories):
-            raise ValueError("Unexpected link in the runtime dependency tree.")
-        for path in (root, *(root / name for name in files)):
-            info = path.lstat()
-            if stat.S_ISLNK(info.st_mode):
-                raise ValueError("Unexpected link in the runtime dependency tree.")
-            os.chown(path, 0, 0, follow_symlinks=False)
-            path.chmod(stat.S_IMODE(info.st_mode) & ~0o022)
+def _dependency_member(member, destination):
+    if member.type not in (tarfile.DIRTYPE, tarfile.REGTYPE, tarfile.AREGTYPE) or member.sparse is not None:
+        raise tarfile.FilterError("Unexpected member in the runtime dependency tree.")
+    return tarfile.data_filter(member, destination)
 
 
 def _install_dependencies(stage, requirements, imports):
-    dependencies = stage / "deps"
+    dependencies = stage.parent / "dependencies"
     dependencies.mkdir()
-    stage.chmod(0o755)
     shutil.chown(dependencies, user="ql", group="ql")
-    python = ["runuser", "-u", "ql", "--", "/usr/bin/python3"]
+    as_ql = ["runuser", "-u", "ql", "--"]
     subprocess.run([
-        *python, "-m", "pip", "install", "--no-cache-dir", "--only-binary=:all:",
+        *as_ql, "/usr/bin/python3", "-m", "pip", "install", "--no-cache-dir", "--only-binary=:all:",
         "--target", str(dependencies), "-r", str(stage / requirements),
     ], check=True, cwd=stage)
+
+    # Read ql's files as ql and publish fresh files with safe modes and ownership.
+    published = stage / "deps"
+    published.mkdir()
+    with tempfile.TemporaryFile(dir=stage.parent) as snapshot:
+        subprocess.run([*as_ql, "/bin/tar", "-C", str(dependencies), "-cf", "-", "."],
+                       check=True, stdout=snapshot, cwd=stage)
+        snapshot.seek(0)
+        with tarfile.open(fileobj=snapshot, mode="r:") as archive:
+            archive.extractall(published, filter=_dependency_member)
+
     if imports:
         probe = "import importlib, sys; [importlib.import_module(name) for name in sys.argv[1:]]"
         subprocess.run([
-            "runuser", "-u", "ql", "--", "env", f"PYTHONPATH={dependencies}",
+            *as_ql, "env", f"PYTHONPATH={published}",
             "/usr/bin/python3", "-c", probe, *imports,
         ], check=True, cwd=stage)
-    _seal_dependencies(dependencies)
 
 
 def install(bundle, digest, root, requirements, launcher, imports):

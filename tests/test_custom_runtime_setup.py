@@ -66,21 +66,36 @@ def test_invalid_or_interrupted_install_cannot_make_release_visible(tmp_path, mo
     assert (root / digest / "launch.sh").stat().st_mode & 0o100
 
 
-def test_dependency_tree_is_sealed_before_publication(tmp_path, monkeypatch):
+def test_dependency_snapshot_publishes_only_safe_file_modes(tmp_path, monkeypatch):
+    from io import BytesIO
+    import tarfile
+
     path = Path(__file__).resolve().parents[1] / "ansible/files/install_custom_runtime.py"
     spec = importlib.util.spec_from_file_location("install_custom_runtime", path)
     installer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(installer)
-    deps = tmp_path / "deps"
-    deps.mkdir()
-    package = deps / "wheel.py"
-    package.write_text("value = 1")
-    package.chmod(0o666)
-    ownership = []
-    monkeypatch.setattr(installer.os, "chown", lambda path, uid, gid, **kwargs: ownership.append((Path(path), uid, gid)))
-    installer._seal_dependencies(deps)
-    assert ownership == [(deps, 0, 0), (package, 0, 0)]
-    assert package.stat().st_mode & 0o777 == 0o644
+    stage = tmp_path / "release"
+    stage.mkdir()
+    package = stage / "deps" / "wheel.py"
+    content = b"value = 1\n"
+    commands = []
+
+    def run(command, *, stdout=None, **kwargs):
+        commands.append(command)
+        if stdout is not None:
+            with tarfile.open(fileobj=stdout, mode="w:") as archive:
+                member = tarfile.TarInfo("wheel.py")
+                member.size = len(content)
+                member.mode = 0o4666
+                archive.addfile(member, BytesIO(content))
+
+    monkeypatch.setattr(installer.shutil, "chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(installer.subprocess, "run", run)
+    installer._install_dependencies(stage, "requirements.txt", ["wheel"])
+    assert all(command[:4] == ["runuser", "-u", "ql", "--"] for command in commands)
+    assert f"PYTHONPATH={package.parent}" in commands[-1]
+    assert package.read_bytes() == content
+    assert package.stat().st_mode & 0o7777 == 0o644
 
 
 def test_custom_host_installs_system_redis_for_management_probes():
