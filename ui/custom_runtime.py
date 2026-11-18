@@ -259,6 +259,8 @@ def release_for_host(host, *, require_provider=True):
 
 
 def custom_setup_extravars(host) -> dict:
+    from ui.plugin_pool import operator_pool_dir
+
     release = release_for_host(host)
     metadata = release.metadata
     plugin_api = metadata["plugin_api"]
@@ -271,6 +273,6 @@ def custom_setup_extravars(host) -> dict:
         "custom_dependency_imports": metadata.get("dependency_imports", []),
         "runtime_shared_dir": release.installed_path,
         "runtime_plugins_dirname": f"{plugin_api}-plugins",
-        "plugin_api_runtime": plugin_api,
+        "common_plugins_operator_src": operator_pool_dir(plugin_api),
         "skip_pip_install": True,
     }

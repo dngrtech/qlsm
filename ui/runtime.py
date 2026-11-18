@@ -187,13 +187,14 @@ def runtime_extravars(host):
     runtime = host_runtime(host)
     if runtime == CUSTOM:
         from ui.custom_runtime import release_for_host
+        from ui.plugin_pool import operator_pool_dir
 
         release = release_for_host(host)
         api = plugin_api_for_host(host)
         return {
             'runtime': CUSTOM,
             'runtime_plugins_dirname': runtime_paths(api)['plugins_dirname'],
-            'plugin_api_runtime': api,
+            'common_plugins_operator_src': operator_pool_dir(api),
             'runtime_shared_dir': release.installed_path,
             'launch_script': release.metadata['launch_script'],
             'runtime_launch_path': f"{release.installed_path}/{release.metadata['launch_script']}",

@@ -20,7 +20,7 @@ def test_custom_setup_uses_pinned_digest_after_new_release_is_approved(app, tmp_
     with app.app_context():
         extra = _setup_playbook_extra_vars(host)
     assert extra["custom_release_digest"] == digest
-    assert extra["plugin_api_runtime"] == "minqlx"
+    assert Path(extra["common_plugins_operator_src"]) == Path("data/shared-plugins/minqlx").resolve()
     assert extra["skip_pip_install"] is True
     assert extra["runtime_shared_dir"] == f"/var/lib/qlsm/custom-runtime/{digest}"
 

@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from flask_jwt_extended import create_access_token
@@ -35,6 +36,7 @@ def test_custom_deploy_uses_pinned_launcher_and_pool(app, tmp_path):
     assert extra["runtime_launch_path"] == f"/var/lib/qlsm/custom-runtime/{digest}/launch.sh"
     assert extra["skip_pip_install"] is True
     assert extra["runtime_plugins_dirname"] == "minqlx-plugins"
+    assert Path(extra["common_plugins_operator_src"]) == Path("data/shared-plugins/minqlx").resolve()
     assert '+set qlx_plugins "serverchecker, example, ranked"' in args
     assert '+set sv_lanForceRate 1' in args
 
