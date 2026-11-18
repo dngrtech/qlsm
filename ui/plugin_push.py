@@ -7,7 +7,7 @@
 # the common-pool box ticked (ui/task_logic/ansible_plugin_update.py), so
 # lock, failure handler and host-log behaviour are identical to that flow.
 #
-# Only ACTIVE hosts of a matching runtime are touched. Anything else is
+# Only ACTIVE hosts of a matching plugin API are touched. Anything else is
 # reported back as skipped with a reason so the UI can tell the operator
 # which hosts still need a manual Check for Updates.
 
@@ -16,7 +16,8 @@ import uuid
 
 from ui.database import get_hosts
 from ui.models import HostStatus
-from ui.runtime import host_runtime
+from ui.runtime import CUSTOM, host_runtime, plugin_api_for_host
+from ui.custom_runtime import RuntimeUnavailable, release_for_host
 from ui.runtime_upgrade_guard import active_runtime_upgrade
 from ui.task_lock import acquire_lock, release_lock
 from ui.task_logic.job_failure_handlers import host_job_failure_handler
@@ -29,7 +30,7 @@ PUSH_LOCK_TTL = 240
 
 
 def push_pool_to_hosts(runtimes):
-    """Enqueue a common-pool refresh on every ACTIVE host whose runtime is in
+    """Enqueue a common-pool refresh on every ACTIVE host whose plugin API is in
     `runtimes`. Returns {"queued": [{"id", "name"}],
     "skipped": [{"id", "name", "reason"}]}. Never raises for a single host's
     failure: that host is reported as skipped and the rest still go out."""
@@ -39,7 +40,13 @@ def push_pool_to_hosts(runtimes):
         return result
 
     for host in get_hosts():
-        if host_runtime(host) not in runtimes:
+        try:
+            if plugin_api_for_host(host) not in runtimes:
+                continue
+            if host_runtime(host) == CUSTOM and host.status == HostStatus.ACTIVE:
+                release_for_host(host)
+        except RuntimeUnavailable as error:
+            result["skipped"].append({"id": host.id, "name": host.name, "reason": str(error)})
             continue
         if host.status != HostStatus.ACTIVE:
             result["skipped"].append({"id": host.id, "name": host.name, "reason": f"status: {host.status.name}"})

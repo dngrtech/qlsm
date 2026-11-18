@@ -1,0 +1,31 @@
+---
+- name: Install the pinned Custom runtime
+  block:
+    - name: Allocate a temporary runtime bundle path
+      ansible.builtin.tempfile:
+        state: file
+        prefix: qlsm-runtime-
+      register: custom_bundle_tmp
+
+    - name: Copy the verified runtime bundle from the panel
+      ansible.builtin.copy:
+        src: "{{ custom_bundle_path }}"
+        dest: "{{ custom_bundle_tmp.path }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Verify and publish the pinned runtime
+      ansible.builtin.script:
+        cmd: >-
+          {{ playbook_dir }}/../files/install_custom_runtime.py
+          {{ custom_bundle_tmp.path | quote }} {{ custom_release_digest | quote }}
+          {{ runtime_shared_dir | dirname | quote }} {{ custom_requirements_file | quote }}
+          {{ custom_launch_script | quote }} {{ custom_dependency_imports | to_json | quote }}
+        executable: /usr/bin/python3
+  always:
+    - name: Clean up the temporary runtime bundle
+      ansible.builtin.file:
+        path: "{{ custom_bundle_tmp.path }}"
+        state: absent
+      when: custom_bundle_tmp.path is defined

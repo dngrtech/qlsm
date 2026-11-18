@@ -110,3 +110,26 @@ def test_a_failing_lock_release_still_reports_the_host_as_skipped(mock_lock, moc
 
         assert result['queued'] == []
         assert result['skipped'] == [{'id': host.id, 'name': 'release-fails', 'reason': 'enqueue failed'}]
+
+
+def test_push_refreshes_matching_custom_pool(app, tmp_path, monkeypatch):
+    from tests.test_custom_runtime_release import PROVIDER, activate, runtime_package
+    from ui.addons.install import install_addon_zip
+
+    packages = tmp_path / "packages"
+    release, digest = runtime_package()
+    install_addon_zip(release, packages)
+    activate(app, packages)
+    monkeypatch.setattr(plugin_push, "acquire_lock", lambda *args, **kwargs: True)
+    queued = []
+    monkeypatch.setattr(plugin_push, "enqueue_task", lambda *args, **kwargs: queued.append(args))
+    with app.app_context():
+        for api, name in (("minqlx", "matching"), ("minqlxtended", "other-api")):
+            db.session.add(Host(
+                name=name, provider="standalone", status=HostStatus.ACTIVE, runtime="custom",
+                runtime_provider_id=PROVIDER, runtime_release_sha256=digest, runtime_plugin_api=api,
+            ))
+        db.session.commit()
+        result = plugin_push.push_pool_to_hosts({"minqlx"})
+        assert [host["name"] for host in result["queued"]] == ["matching"]
+        assert queued[0][1] == result["queued"][0]["id"]

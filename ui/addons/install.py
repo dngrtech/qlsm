@@ -171,6 +171,13 @@ def install_addon_zip(blob, packages_dir):
             if not os.path.isfile(os.path.join(staging, MANIFEST_FILENAME)):
                 raise AddonInstallError(f'{MANIFEST_FILENAME} did not survive extraction.')
 
+            if 'custom_runtime' in manifest:
+                from ui.custom_runtime import retain_release
+                try:
+                    retain_release(packages_dir, staging, manifest)
+                except ValueError as error:
+                    raise AddonInstallError(str(error)) from error
+
             # Move the old copy aside rather than deleting it, so a failed
             # swap can put it back -- an upgrade must never be able to leave
             # the operator with no addon at all.

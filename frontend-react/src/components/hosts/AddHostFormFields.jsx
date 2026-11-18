@@ -54,6 +54,10 @@ function AddHostFormFields({
   runtime,
   onRuntimeChange,
   runtimeError,
+  runtimeProviders = [],
+  runtimeProviderId = '',
+  onRuntimeProviderChange,
+  customUnavailableReason,
 }) {
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
@@ -141,7 +145,49 @@ function AddHostFormFields({
               />
             </div>
           ))}
+          {isStandalone && (
+            <label
+              className={`inline-flex items-center gap-2 text-sm text-theme-secondary ${
+                runtimeProviders.length ? 'cursor-pointer' : 'cursor-not-allowed'
+              }`}
+            >
+              <input
+                type="radio"
+                name="host-runtime"
+                value="custom"
+                checked={runtime === 'custom'}
+                disabled={!runtimeProviders.length}
+                onChange={() => onRuntimeChange('custom')}
+                className="h-4 w-4"
+                style={{ accentColor: 'var(--accent-primary)' }}
+              />
+              <span className="text-theme-primary">Custom</span>
+            </label>
+          )}
         </fieldset>
+        {isStandalone && !runtimeProviders.length && customUnavailableReason && (
+          <p className="mt-1.5 text-xs text-theme-secondary">{customUnavailableReason}</p>
+        )}
+        {isStandalone && runtime === 'custom' && runtimeProviders.length === 1 && (
+          <p className="mt-1.5 text-sm text-theme-secondary">
+            {runtimeProviders[0].label} <span>{runtimeProviders[0].build}</span>
+          </p>
+        )}
+        {isStandalone && runtime === 'custom' && runtimeProviders.length > 1 && (
+          <label className="mt-2 block text-sm text-theme-primary">
+            Runtime provider
+            <select
+              value={runtimeProviderId}
+              onChange={(event) => onRuntimeProviderChange(event.target.value)}
+              className={`${inputClass} ${inputFocusRing}`}
+            >
+              <option value="">Select a provider</option>
+              {runtimeProviders.map(({ provider_id, label, build }) => (
+                <option key={provider_id} value={provider_id}>{label} {build}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {runtimeError && (
           <p
             id="runtime-error"

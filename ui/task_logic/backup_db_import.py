@@ -11,7 +11,7 @@ from ui.models import (
     ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
     InstanceStatus, Notification, Operator, QLFilterStatus, QLInstance, User,
 )
-from ui.runtime import normalize_runtime
+from ui.runtime import CUSTOM, normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
 
 _REQUIRED_KEYS = ('hosts', 'instances', 'users', 'presets', 'api_keys', 'app_settings', 'binary_metadata')
@@ -43,7 +43,10 @@ def _host_from_row(row):
         redis_unix_socket=row.get('redis_unix_socket', False),
         lan_rate_uses_hook=row.get('lan_rate_uses_hook', False),
         firewall_pool_v2=row.get('firewall_pool_v2', False),
-        runtime=normalize_runtime(row.get('runtime')),
+        runtime=CUSTOM if row.get('runtime') == CUSTOM else normalize_runtime(row.get('runtime')),
+        runtime_provider_id=row.get('runtime_provider_id'),
+        runtime_release_sha256=row.get('runtime_release_sha256'),
+        runtime_plugin_api=row.get('runtime_plugin_api'),
         status=HostStatus(row['status']) if row.get('status') else HostStatus.UNKNOWN,
         qlfilter_status=QLFilterStatus(row['qlfilter_status']) if row.get('qlfilter_status') else QLFilterStatus.UNKNOWN,
         auto_restart_schedule=row.get('auto_restart_schedule'), logs=row.get('logs'),

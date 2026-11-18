@@ -114,6 +114,8 @@ def _scan(app):
         if not os.path.isdir(base):
             continue
         for entry in sorted(os.listdir(base)):
+            if entry == ".runtime-releases":
+                continue
             root = os.path.join(base, entry)
             if not os.path.isdir(root):
                 continue

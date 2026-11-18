@@ -7,6 +7,7 @@ import AddHostModal from '../AddHostModal';
 const mocks = vi.hoisted(() => ({
   createHost: vi.fn(),
   getHosts: vi.fn(),
+  getRuntimeOptions: vi.fn(),
   getSelfHostDefaults: vi.fn(),
   testHostConnection: vi.fn(),
   showSuccess: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../services/api', () => ({
   createHost: mocks.createHost,
   getHosts: mocks.getHosts,
+  getRuntimeOptions: mocks.getRuntimeOptions,
   getSelfHostDefaults: mocks.getSelfHostDefaults,
   testHostConnection: mocks.testHostConnection,
 }));
@@ -54,6 +56,7 @@ vi.mock('../AddHostFormFields', () => ({
       <input aria-label="SSH Password" value={props.sshPassword || ''} onChange={props.onSshPasswordChange} />
       <textarea aria-label="SSH Private Key" value={props.sshKey || ''} onChange={props.onSshKeyChange} />
       <div data-testid="runtime-value">{props.runtime}</div>
+      <button type="button" onClick={() => props.onRuntimeChange('custom')}>Choose Custom runtime</button>
       <div data-testid="runtime-error">{props.runtimeError || ''}</div>
       <button type="button" onClick={() => props.onRuntimeChange('minqlx')}>Choose minqlx runtime</button>
       <button type="button" onClick={() => props.onRuntimeChange('minqlxtended')}>Choose minqlxtended runtime</button>
@@ -69,6 +72,7 @@ describe('AddHostModal self provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getHosts.mockResolvedValue([]);
+    mocks.getRuntimeOptions.mockResolvedValue({ providers: [] });
     mocks.getSelfHostDefaults.mockResolvedValue({
       ssh_user: 'rage',
       host_ip: '203.0.113.10',
@@ -368,4 +372,31 @@ describe('AddHostModal runtime selection', () => {
       expect.objectContaining({ runtime: 'minqlxtended' }),
     ));
   });
+});
+
+it('refreshes the approved release and asks for a new selection after a conflict', async () => {
+  mocks.getHosts.mockResolvedValue([{ id: 7, provider: 'self', name: 'self-host' }]);
+  const provider = { provider_id: 'fixture', label: 'Fixture', build: '1', sha256: 'old' };
+  mocks.getRuntimeOptions
+    .mockResolvedValueOnce({ providers: [provider] })
+    .mockResolvedValueOnce({ providers: [{ ...provider, sha256: 'new' }] });
+  mocks.testHostConnection.mockResolvedValue({ success: true });
+  mocks.createHost.mockRejectedValueOnce({ error: { code: 'stale_runtime', message: 'The approved build changed.' } });
+
+  render(<AddHostModal isOpen={true} onClose={vi.fn()} onHostAdded={vi.fn()} />);
+  await waitFor(() => expect(screen.getByTestId('provider-value')).toHaveTextContent('standalone'));
+  fireEvent.change(screen.getByLabelText('Host Name'), { target: { value: 'custom-host' } });
+  fireEvent.change(screen.getByLabelText('Server address'), { target: { value: '203.0.113.42' } });
+  fireEvent.change(screen.getByLabelText('SSH Private Key'), { target: { value: 'fake-key' } });
+  fireEvent.click(screen.getByRole('button', { name: /set timezone/i }));
+  fireEvent.click(screen.getByRole('button', { name: /choose custom runtime/i }));
+  fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
+  await waitFor(() => expect(screen.getByTestId('connection-status')).toHaveTextContent('success'));
+  fireEvent.click(screen.getByRole('button', { name: /add host/i }));
+
+  await waitFor(() => expect(mocks.getRuntimeOptions).toHaveBeenCalledTimes(2));
+  expect(mocks.createHost).toHaveBeenCalledWith(expect.objectContaining({
+    runtime_provider_id: 'fixture', runtime_release_sha256: 'old',
+  }));
+  expect(screen.getByTestId('runtime-value')).toBeEmptyDOMElement();
 });

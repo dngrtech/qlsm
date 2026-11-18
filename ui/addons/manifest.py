@@ -507,6 +507,12 @@ def validate_manifest(data):
         'settings': settings,
         'ui': ui,
     }
+    if 'custom_runtime' in data:
+        from ui.custom_runtime import validate_custom_runtime
+        try:
+            manifest['custom_runtime'] = validate_custom_runtime(data['custom_runtime'])
+        except ValueError as error:
+            _err(errors, str(error))
     return manifest, errors
 
 

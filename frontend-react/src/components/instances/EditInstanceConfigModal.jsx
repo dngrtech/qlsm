@@ -119,6 +119,8 @@ function EditInstanceConfigModal({
   const [hostOsType, setHostOsType] = useState(null);
   const [hostLanRateUsesHook, setHostLanRateUsesHook] = useState(false);
   const [hostRuntime, setHostRuntime] = useState('minqlx');
+  const [hostPluginApi, setHostPluginApi] = useState('minqlx');
+  const [hostForcesLanRate, setHostForcesLanRate] = useState(false);
   const [hostId, setHostId] = useState(null);
 
   // Restart on Save state
@@ -212,7 +214,7 @@ function EditInstanceConfigModal({
     preset: draftPreset || undefined,
     host: draftPreset ? undefined : scriptHostName,
     instanceId: draftPreset ? undefined : instanceId,
-    targetRuntime: hostRuntime,
+    targetRuntime: hostPluginApi,
     acceptedReplacements,
     active: isOpen && (draftPreset != null || scriptHostName != null),
   });
@@ -444,6 +446,8 @@ function EditInstanceConfigModal({
           setHostOsType(instanceDetails.host_os_type || null);
           setHostLanRateUsesHook(instanceDetails.host_lan_rate_uses_hook === true);
           setHostRuntime(instanceDetails.host_runtime || 'minqlx');
+          setHostForcesLanRate(instanceDetails.host_runtime_forces_lan_rate === true);
+          setHostPluginApi(instanceDetails.host_plugin_api || instanceDetails.host_runtime || 'minqlx');
           setHostId(instanceDetails.host_id ?? null);
           setInstanceStatus(instanceDetails.status || null);
           const incomingFolders = Array.isArray(configData?.config_folders)
@@ -543,7 +547,7 @@ function EditInstanceConfigModal({
   }, [writeConfigContent]);
 
   const lanRateChanged = lanRateEnabled !== originalLanRateEnabled;
-  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime };
+  const hostShape = { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime, runtime_plugin_api: hostPluginApi, runtime_forces_lan_rate: hostForcesLanRate };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,
     currentEnabled: originalLanRateEnabled && lanRateEnabled,
@@ -671,7 +675,7 @@ function EditInstanceConfigModal({
       // the same leniency the manual-toggle gate (canToggleLanRate) applies.
       if (presetData.lan_rate_enabled != null) {
         const canEnable = canEnableLanRate({
-          host: { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime },
+          host: { os_type: hostOsType, lan_rate_uses_hook: hostLanRateUsesHook, runtime: hostRuntime, runtime_plugin_api: hostPluginApi, runtime_forces_lan_rate: hostForcesLanRate },
           currentEnabled: originalLanRateEnabled,
         });
         const nextLanRate = presetData.lan_rate_enabled && !canEnable ? false : presetData.lan_rate_enabled;
@@ -700,12 +704,12 @@ function EditInstanceConfigModal({
   // pluginTree: partitionCheckedPaths folds in a plugin's depends_on from the
   // tree, so a stale [] silently degrades a preset load to the pre-manifest
   // behaviour of dropping those dependencies.
-  }, [hostLanRateUsesHook, hostOsType, hostRuntime, originalLanRateEnabled, pluginTree, resetConfigs, resetFactories, serverHostname, showSuccess]);
+  }, [hostLanRateUsesHook, hostOsType, hostRuntime, hostPluginApi, hostForcesLanRate, originalLanRateEnabled, pluginTree, resetConfigs, resetFactories, serverHostname, showSuccess]);
 
   const handleLoadPreset = useCallback(async (presetId) => {
     setPresetError(null);
     try {
-      const presetData = await getPresetById(presetId, { targetRuntime: hostRuntime });
+      const presetData = await getPresetById(presetId, { targetRuntime: hostPluginApi });
       if (presetData.compatibility?.stripped?.length) {
         setPendingPreset({ id: presetId, data: presetData });
         return;
@@ -719,7 +723,7 @@ function EditInstanceConfigModal({
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
-  }, [applyPresetData, hostRuntime]);
+  }, [applyPresetData, hostPluginApi]);
 
   const handleConfirmPresetCompatibility = useCallback(async (tickedPaths) => {
     if (!pendingPreset) return;

@@ -1,5 +1,6 @@
 """Shared rules for 99k LAN rate compatibility."""
-from ui.runtime import MINQLXTENDED, host_runtime
+from ui.runtime import CUSTOM, MINQLXTENDED, host_runtime
+from ui.custom_runtime import RuntimeUnavailable, release_for_host
 
 SUPPORTED_LAN_RATE_OS_TYPES = frozenset({"debian"})
 OS_TYPE_ALIASES = {
@@ -31,7 +32,13 @@ def lan_rate_forced_on(host):
     both runtimes -- _build_qlds_args_string() has always emitted the cvar from
     the stored flag -- which is why the decision has to be enforced here.
     """
-    return host_runtime(host) == MINQLXTENDED
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        try:
+            return release_for_host(host, require_provider=False).metadata.get('forced_lan_rate') is True
+        except RuntimeUnavailable:
+            return False
+    return runtime == MINQLXTENDED
 
 
 def effective_lan_rate(instance):
@@ -71,6 +78,8 @@ def lan_rate_unsupported_message(host):
     """Return the user-facing reason the toggle is not the operator's to set on
     this host, or None when it is freely settable."""
     if lan_rate_forced_on(host):
+        if host_runtime(host) == CUSTOM:
+            return "The Custom runtime requires 99k LAN rate."
         return FORCED_LAN_RATE_MESSAGE
     if not host_requires_os_check(host):
         return None

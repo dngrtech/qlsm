@@ -7,7 +7,8 @@ from rq import get_current_job
 from ui import db
 from ui.constants import GAME_UDP_PORTS, RCON_TCP_PORTS
 from ui.models import Host, HostStatus
-from ui.runtime import host_runtime
+from ui.runtime import CUSTOM, host_runtime
+from ui.custom_runtime import RuntimeUnavailable, custom_setup_extravars
 from ui.task_logic.self_host_network import resolve_self_host_management_target
 from .common import append_log, record_host_error
 from .standalone_inventory import generate_standalone_inventory
@@ -224,6 +225,8 @@ def _setup_playbook_extra_vars(host):
         'rcon_tcp_ports': RCON_TCP_PORTS,
         'runtime': host_runtime(host),
     }
+    if extra_vars['runtime'] == CUSTOM:
+        extra_vars.update(custom_setup_extravars(host))
     if host.provider == 'self':
         extra_vars['use_host_redis'] = 'false'
     if host.timezone:
@@ -246,7 +249,13 @@ def _run_setup_playbook(host, inventory_path):
     # One JSON --extra-vars object: the bare `-e key=value` form stringifies
     # (and whitespace-splits) list values, which silently corrupts the firewall
     # port lists. Scalars stay strings here, exactly as the old form produced.
-    core_extra_vars = _setup_playbook_extra_vars(host)
+    try:
+        core_extra_vars = _setup_playbook_extra_vars(host)
+    except RuntimeUnavailable as error:
+        append_log(host, f"Host setup failed: {error}")
+        host.status = HostStatus.ERROR
+        db.session.commit()
+        return False
     ansible_command_args += ['-e', json.dumps(core_extra_vars)]
     # Same addon contributions a cloud host's setup gets (host.setup hook).
     from .ansible_host_setup import addon_setup_extravar_args

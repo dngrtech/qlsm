@@ -46,7 +46,7 @@ import {
   isLanRateSupported,
 } from '../../utils/lanRateCompatibility';
 import { validateZmqPassword } from '../../utils/zmqPassword';
-import { defaultPresetNameForRuntime, runtimeLabel } from '../../constants/runtimes';
+import { defaultPresetNameForRuntime, pluginRuntimeForHost, runtimeLabel } from '../../constants/runtimes';
 import { presetRuntimeStripWarning } from '../../utils/presetRuntimeCompat';
 import { combineAcceptedPaths, mergeReplacements } from '../../utils/presetCompatibility';
 import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
@@ -157,8 +157,8 @@ function AddInstanceForm({
   // Plugin/hook seeds are per-runtime: minqlx plugins do not load on
   // minqlxtended, so every seed site resolves through the selected host rather
   // than a single flat default.
-  const initialHostRuntime = (initialData.hosts || [])
-    .find((host) => String(host.id) === String(initialHostId))?.runtime;
+  const initialHostRuntime = pluginRuntimeForHost((initialData.hosts || [])
+    .find((host) => String(host.id) === String(initialHostId)));
   const seedForRuntime = useCallback((runtime) => (
     (initialData.defaultSeedsByRuntime || {})[runtimeLabel(runtime)]
       || { checkedPlugins: [], availableHooks: [], enabledHooks: [] }
@@ -334,7 +334,10 @@ function AddInstanceForm({
     os_type: selectedHostOsType,
     lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
     runtime: selectedHost?.runtime ?? null,
+    runtime_plugin_api: selectedHost?.runtime_plugin_api ?? null,
+    runtime_forces_lan_rate: selectedHost?.runtime_forces_lan_rate ?? false,
   };
+  const targetPluginApi = pluginRuntimeForHost(selectedHostShape);
 
   const configsAdapter = useStateAdapter({
     initialFiles: configContents,
@@ -348,7 +351,7 @@ function AddInstanceForm({
   const pluginsAdapter = useDraftAdapter({
     source: 'preset',
     preset: draftPreset || 'default',
-    targetRuntime: selectedHostShape.runtime,
+    targetRuntime: targetPluginApi,
     acceptedReplacements,
     active: true,
   });
@@ -454,7 +457,7 @@ function AddInstanceForm({
     setSelectedHostId(hostId);
 
     const newHostRecord = (initialData.hosts || []).find((host) => String(host.id) === String(hostId));
-    const newRuntime = runtimeLabel(newHostRecord?.runtime);
+    const newRuntime = runtimeLabel(pluginRuntimeForHost(newHostRecord));
     const previousRuntime = seededRuntimeRef.current;
 
     // A preset loaded against one host's runtime is not safe to carry over to
@@ -828,7 +831,7 @@ function AddInstanceForm({
         // reselection of the same host, silently wiping the plugin
         // selection this function just set. The preset's true source
         // runtime is preserved separately below as `sourceRuntime`.
-        runtime: selectedHostShape.runtime,
+        runtime: targetPluginApi,
         // The preset's own declared source runtime, kept for consumers
         // (e.g. presetRuntimeStripWarning) that need to describe where the
         // preset was originally saved from, as opposed to `runtime` above
@@ -838,11 +841,11 @@ function AddInstanceForm({
       setPresetClearedNotice(null);
       // The preset's plugin/hook selection is now the seed, and that seed
       // was built for the host it was just applied against -- so the
-      // seeded runtime must be the target runtime (selectedHostShape.runtime),
+      // seeded runtime must be the target runtime (targetPluginApi),
       // matching `loadedPreset.runtime` above, not the preset's own source
       // runtime (see the comment on that field for why the distinction
       // matters).
-      seededRuntimeRef.current = runtimeLabel(selectedHostShape.runtime);
+      seededRuntimeRef.current = runtimeLabel(targetPluginApi);
       // Reseed draft workspace with the loaded preset's scripts. acceptedPaths
       // defaults to [] (a plain default, not a speculative clear elsewhere) so
       // a no-dialog load carries nothing forward, and both state updates land
@@ -910,13 +913,13 @@ function AddInstanceForm({
     }
   // pluginsAdapter.tree: partitionCheckedPaths folds in a plugin's depends_on
   // from the tree, so a stale [] drops those dependencies on a preset load.
-  }, [checkedPlugins, lanRateEnabled, lanRateSupported, pluginsAdapter.tree, resetConfigs, resetFactories, syncConfigState, selectedHostShape.runtime]);
+  }, [checkedPlugins, lanRateEnabled, lanRateSupported, pluginsAdapter.tree, resetConfigs, resetFactories, syncConfigState, targetPluginApi]);
 
   const handleLoadPreset = useCallback(async (presetId) => {
     setIsLoadingPreset(true);
     try {
       setInternalFormError(null);
-      const presetData = await getPresetById(presetId, { targetRuntime: selectedHostShape.runtime });
+      const presetData = await getPresetById(presetId, { targetRuntime: targetPluginApi });
       if (presetData.compatibility?.stripped?.length) {
         setPendingPreset({ id: presetId, data: presetData });
         return;
@@ -932,7 +935,7 @@ function AddInstanceForm({
     } finally {
       setIsLoadingPreset(false);
     }
-  }, [applyPresetData, selectedHostShape.runtime]);
+  }, [applyPresetData, targetPluginApi]);
 
   const handleConfirmPresetCompatibility = useCallback(async (tickedPaths) => {
     if (!pendingPreset) return;

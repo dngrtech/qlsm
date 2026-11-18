@@ -40,6 +40,16 @@ During setup, QLSM creates a dedicated `ql` system user for Quake Live files and
 
 Only one `QLSM Host (self)` deployment may exist at a time.
 
+## Custom Runtime
+
+Custom is available when adding a Standalone host and an installed runtime addon is enabled. The Add Host form shows the provider and approved build. Select the build shown in the form when creating a fresh host that meets the provider's OS, architecture and Python requirements.
+
+QLSM pins that build on the host. Addon updates affect new hosts after QLSM restarts and the addon is active. **Re-run Host Setup** installs the existing host's pinned build. If the provider is missing, disabled or broken, the host stays listed with the reason. Restore the provider and the pinned release before rerunning setup.
+
+Preset compatibility follows the provider's plugin API. For example, a Custom runtime that declares minqlx uses the minqlx preset and plugin pool. Runtime changes to and from Custom are unavailable.
+
+The pinned addon supplies Python plugin dependencies during host setup. QLSM skips per-instance `scripts/requirements.txt` on Custom hosts.
+
 ## Standalone Workflow
 
 1. Set **Provider** to `Standalone`.

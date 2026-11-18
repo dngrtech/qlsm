@@ -22,11 +22,15 @@ export const RUNTIME_OPTIONS = [
   },
 ];
 
-const KNOWN = new Set(RUNTIME_OPTIONS.map(option => option.id));
+const KNOWN = new Set(['custom', ...RUNTIME_OPTIONS.map(option => option.id)]);
 
 // A host with no recorded runtime predates the column, and nothing but minqlx
 // has ever existed.
 export const runtimeLabel = (value) => (KNOWN.has(value) ? value : DEFAULT_RUNTIME);
+
+export const pluginRuntimeForHost = (host) => (
+  host?.runtime === 'custom' ? host.runtime_plugin_api ?? null : host?.runtime ?? null
+);
 
 // The closing line of a runtime's tooltip, which depends on who supplies the
 // machine. On a cloud host QLSM writes the OS image, so the operator cannot get

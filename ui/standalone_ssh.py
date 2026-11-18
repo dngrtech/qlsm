@@ -186,7 +186,7 @@ def _detect_remote_python_version(client):
     return version or None
 
 
-def detect_remote_os(*, host, port, username, timeout=30, password=None, key_filename=None):
+def detect_remote_os(*, host, port, username, timeout=30, password=None, key_filename=None, include_arch=False):
     """Read /etc/os-release over SSH and map it onto QLSM's supported standalone OS types.
 
     Also runs `docker ps` in the same SSH session to detect whether the host is
@@ -207,6 +207,12 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
             stdout_text, _ = _run_checked_command(client, "cat /etc/os-release")
             qlsm_detected = _check_qlsm_running(client)
             python_version = _detect_remote_python_version(client)
+            arch = None
+            if include_arch:
+                try:
+                    arch, _ = _run_checked_command(client, "uname -m")
+                except (StandaloneSSHError, paramiko.SSHException, OSError):
+                    pass
     except (paramiko.AuthenticationException, paramiko.SSHException, OSError, StandaloneSSHError) as exc:
         raise StandaloneSSHError(f"Unable to detect remote OS: {exc}") from exc
 
@@ -222,6 +228,7 @@ def detect_remote_os(*, host, port, username, timeout=30, password=None, key_fil
         "os_type": _detect_supported_os_type(os_release_values),
         "qlsm_detected": qlsm_detected,
         "python_version": python_version,
+        **({"arch": arch.strip() if arch else None} if include_arch else {}),
     }
 
 

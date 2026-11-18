@@ -15,6 +15,7 @@ import re
 
 MINQLX = 'minqlx'
 MINQLXTENDED = 'minqlxtended'
+CUSTOM = 'custom'
 
 VALID_RUNTIMES = (MINQLX, MINQLXTENDED)
 
@@ -99,12 +100,27 @@ def is_valid_runtime(value):
 
 def runtime_paths(runtime):
     """Return a copy of the path table for `runtime`."""
+    if runtime == CUSTOM:
+        from ui.custom_runtime import RuntimeUnavailable
+        raise RuntimeUnavailable("Resolve a Custom runtime using its host's pinned release.")
     return dict(_RUNTIME_PATHS[normalize_runtime(runtime)])
 
 
 def host_runtime(host):
     """The runtime of a Host row, tolerant of None and of detached objects."""
-    return normalize_runtime(getattr(host, 'runtime', None))
+    value = getattr(host, 'runtime', None)
+    return CUSTOM if value == CUSTOM else normalize_runtime(value)
+
+
+def plugin_api_for_host(host):
+    runtime = host_runtime(host)
+    if runtime != CUSTOM:
+        return runtime
+    api = getattr(host, 'runtime_plugin_api', None)
+    if api not in VALID_RUNTIMES:
+        from ui.custom_runtime import RuntimeUnavailable
+        raise RuntimeUnavailable("The Custom host has no valid pinned plugin API.")
+    return api
 
 
 # Vultr images QLSM has ever provisioned, keyed by the Host.os_type recorded at
@@ -138,11 +154,53 @@ def log_filename_pattern(runtime):
     return re.escape(runtime_paths(runtime)['log_filename']) + r'(\.\d+)?'
 
 
+def log_filename_for_host(host):
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        from ui.custom_runtime import RuntimeUnavailable, release_for_host
+
+        try:
+            return release_for_host(host, require_provider=False).metadata['log_filename']
+        except RuntimeUnavailable:
+            return None
+    return runtime_paths(runtime)['log_filename']
+
+
+def log_filename_pattern_for_host(host):
+    filename = log_filename_for_host(host)
+    return re.escape(filename) + r'(\.\d+)?' if filename else '(?!)'
+
+
+def excluded_preloads_for_host(host):
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        from ui.custom_runtime import release_for_host
+
+        return frozenset(release_for_host(host).metadata["excluded_preloads"])
+    return runtime_paths(runtime)['excluded_system_hooks']
+
+
 def runtime_extravars(host):
     """The extra-vars every instance-level playbook needs to target the right
     runtime. Call sites merge this into their own extravars dict so no playbook
     can be updated without its caller."""
-    paths = runtime_paths(host_runtime(host))
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        from ui.custom_runtime import release_for_host
+        from ui.plugin_pool import operator_pool_dir
+
+        release = release_for_host(host)
+        api = plugin_api_for_host(host)
+        return {
+            'runtime': CUSTOM,
+            'runtime_plugins_dirname': runtime_paths(api)['plugins_dirname'],
+            'common_plugins_operator_src': operator_pool_dir(api),
+            'runtime_shared_dir': release.installed_path,
+            'launch_script': release.metadata['launch_script'],
+            'runtime_launch_path': f"{release.installed_path}/{release.metadata['launch_script']}",
+            'skip_pip_install': True,
+        }
+    paths = runtime_paths(runtime)
     return {
         'runtime': paths['runtime'],
         'runtime_plugins_dirname': paths['plugins_dirname'],

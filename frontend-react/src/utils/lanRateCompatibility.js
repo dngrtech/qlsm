@@ -33,7 +33,7 @@ export function isLanRateForcedOn(host) {
   const runtime = host && typeof host.runtime === 'string'
     ? host.runtime.trim().toLowerCase()
     : '';
-  return runtime === 'minqlxtended';
+  return runtime === 'minqlxtended' || (runtime === 'custom' && host.runtime_forces_lan_rate === true);
 }
 
 /**
@@ -64,7 +64,7 @@ export function isLanRateSupported(host) {
  */
 export function getLanRateUnsupportedMessage(host) {
   if (isLanRateForcedOn(host)) {
-    return FORCED_LAN_RATE_MESSAGE;
+    return host.runtime === 'custom' ? 'The Custom runtime requires 99k LAN rate.' : FORCED_LAN_RATE_MESSAGE;
   }
   if (!host || host.lan_rate_uses_hook === true) {
     return '';

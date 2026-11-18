@@ -6,7 +6,9 @@ from ui.database import (
     get_hosts, get_host, get_host_by_name, create_host, update_host, delete_host # delete_host might be used by delete_host_route
 )
 from ui.vultr_settings import is_vultr_configured
-from ui.runtime import DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, runtime_paths
+from ui.runtime import CUSTOM, DEFAULT_RUNTIME, VALID_RUNTIMES, host_runtime, is_valid_runtime, runtime_paths
+from ui.custom_runtime import RuntimeUnavailable, approved_release, custom_platform_error, release_for_host
+from ui.addons.registry import get_addons
 from ui.runtime_upgrade_guard import upgrade_block_response
 import re
 import os
@@ -121,7 +123,7 @@ def _validate_runtime(value):
     normalized = value.strip().lower()
     if not normalized:
         return None, "Runtime must be a non-empty string."
-    if not is_valid_runtime(normalized):
+    if normalized != CUSTOM and not is_valid_runtime(normalized):
         return None, f"Invalid runtime. Must be one of: {', '.join(VALID_RUNTIMES)}."
     return normalized, None
 
@@ -215,6 +217,31 @@ def _enqueue_os_version_backfill(hosts):
     except Exception:
         current_app.logger.exception("Could not enqueue OS version backfill")
 
+@host_api_bp.route('/runtime-options', methods=['GET'])
+@jwt_required()
+def runtime_options():
+    providers = []
+    reasons = []
+    for addon in get_addons().values():
+        if not (addon.manifest or {}).get('custom_runtime'):
+            continue
+        try:
+            release = approved_release(addon.id)
+        except RuntimeUnavailable as error:
+            reasons.append(str(error))
+            continue
+        providers.append({
+            'provider_id': release.provider_id, 'label': release.label,
+            'build': release.version, 'sha256': release.sha256,
+        })
+    return jsonify({'data': {
+        'providers': providers,
+        'unavailable_reason': None if providers else (
+            '; '.join(reasons) or 'Install and enable a Custom runtime provider to use Custom.'
+        ),
+    }})
+
+
 @host_api_bp.route('/', methods=['POST'], endpoint='add_host_api')
 @jwt_required()
 def add_host_api():
@@ -238,6 +265,21 @@ def add_host_api():
     runtime, runtime_error = _validate_runtime(data.get('runtime'))
     if runtime_error:
         return jsonify({"error": {"message": runtime_error}}), 400
+
+    if runtime == CUSTOM:
+        if provider != 'standalone':
+            return jsonify({'error': {'message': 'Custom requires a new Standalone host.'}}), 400
+        provider_id = data.get('runtime_provider_id')
+        if not isinstance(provider_id, str) or not provider_id:
+            return jsonify({'error': {'message': 'Select a Custom runtime provider.'}}), 400
+        try:
+            release = approved_release(provider_id)
+        except RuntimeUnavailable as error:
+            return jsonify({'error': {'message': str(error)}}), 400
+        if data.get('runtime_release_sha256') != release.sha256:
+            return jsonify({'error': {'message': 'The approved build changed. Select the current build.',
+                                      'code': 'stale_runtime'}}), 409
+        return _handle_standalone_host_creation(name, data, runtime, release)
 
     if provider == 'self':
         return _handle_self_host_creation(name, data, runtime)
@@ -459,7 +501,7 @@ def _validate_runtime_python(detected_os, runtime):
 
 
 def _detect_and_validate_remote_os(*, host, port, username, timeout=15, password=None,
-                                   key_filename=None, runtime=DEFAULT_RUNTIME):
+                                   key_filename=None, runtime=DEFAULT_RUNTIME, release=None):
     try:
         detected_os = detect_remote_os(
             host=host,
@@ -468,6 +510,7 @@ def _detect_and_validate_remote_os(*, host, port, username, timeout=15, password
             timeout=timeout,
             password=password,
             key_filename=key_filename,
+            **({"include_arch": True} if release is not None else {}),
         )
     except StandaloneSSHError as exc:
         return False, f"Connection failed: {exc}", None
@@ -475,6 +518,10 @@ def _detect_and_validate_remote_os(*, host, port, username, timeout=15, password
     success, message = _validate_detected_remote_os(detected_os)
     if not success:
         return success, message, detected_os
+
+    if release is not None:
+        error = custom_platform_error(release, detected_os)
+        return not error, error or message, detected_os
 
     python_ok, python_message = _validate_runtime_python(detected_os, runtime)
     if not python_ok:
@@ -540,7 +587,7 @@ def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_k
                 pass
 
 
-def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
+def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, release=None):
     """Handle creation of standalone (user-provided) hosts."""
     ip_address = data.get('ip_address')
     ssh_key = data.get('ssh_key')
@@ -619,6 +666,7 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
             timeout=30,
             key_filename=ssh_key_path,
             runtime=runtime,
+            **({'release': release} if release is not None else {}),
         )
         if not remote_os_ok:
             if ssh_auth_method == 'password':
@@ -634,6 +682,11 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
                 _cleanup_local_key_material(ssh_key_path, public_key_path)
             return jsonify({"error": {"message": remote_os_message}}), 400
 
+        pin = {}
+        if release is not None:
+            pin = {'runtime_provider_id': release.provider_id, 'runtime_release_sha256': release.sha256,
+                   'runtime_plugin_api': release.metadata['plugin_api']}
+
         # Create host record
         host = create_host(
             name=name,
@@ -647,7 +700,8 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME):
             timezone=timezone,
             is_standalone=True,
             runtime=runtime,
-            status=HostStatus.PENDING
+            status=HostStatus.PENDING,
+            **pin,
         )
 
         if host:
@@ -948,6 +1002,10 @@ def update_host_api(host_id):
     data = request.get_json()
     if not data:
         return jsonify({"error": {"message": "No data provided"}}), 400
+
+    if ({'runtime', 'runtime_provider_id', 'runtime_release_sha256', 'runtime_plugin_api'}
+            & data.keys()):
+        return jsonify({'error': {'message': 'Runtime selection is only supported at host creation.'}}), 400
 
     # Handle name update
     if 'name' in data:
@@ -1439,6 +1497,12 @@ def apply_plugin_updates_api(host_id):
 
     if not apply_common_pool and not instance_selections:
         return jsonify({"error": {"message": "Nothing selected to update"}}), 400
+    # Refreshing the common pool runs the pinned release's playbook vars.
+    if apply_common_pool and host_runtime(host) == CUSTOM:
+        try:
+            release_for_host(host)
+        except RuntimeUnavailable as error:
+            return jsonify({"error": {"message": str(error)}}), 409
 
     try:
         lock_token = str(uuid.uuid4())

@@ -24,7 +24,10 @@ export default function InstanceRowContent({
     // QLSM runs minqlxtended hosts at 99k, so the Rate column must not read 25k
     // while the details modal reads Enabled for the same instance.
     const lanRateOn = inst.lan_rate_enabled
-        || isLanRateForcedOn({ runtime: inst.host_runtime ?? host?.runtime ?? null });
+        || isLanRateForcedOn({
+          runtime: inst.host_runtime ?? host?.runtime ?? null,
+          runtime_forces_lan_rate: inst.host_runtime_forces_lan_rate ?? host?.runtime_forces_lan_rate,
+        });
 
     return (
         <>

@@ -29,6 +29,7 @@ function PerfChip({ label }) {
 const RUNTIME_CHIP_STYLES = {
   minqlx:       { color: '#10b981', border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.08)' },
   minqlxtended: { color: '#a855f7', border: '1px solid rgba(168,85,247,0.35)', background: 'rgba(168,85,247,0.08)' },
+  custom:       { color: '#06b6d4', border: '1px solid rgba(6,182,212,0.35)', background: 'rgba(6,182,212,0.08)' },
 };
 
 function RuntimeChip({ runtime }) {
@@ -282,6 +283,12 @@ export default function HostDetailDrawer({
                         </Field>
                         <Field label="Runtime">
                           <RuntimeChip runtime={internalHost.runtime} />
+                          {internalHost.runtime_provider_label && (
+                            <span className="ml-2">{internalHost.runtime_provider_label} {internalHost.runtime_build}</span>
+                          )}
+                          {internalHost.runtime_unavailable_reason && (
+                            <p role="status" className="mt-1 text-xs">{internalHost.runtime_unavailable_reason}</p>
+                          )}
                         </Field>
                         {internalHost.is_standalone ? (
                           <>

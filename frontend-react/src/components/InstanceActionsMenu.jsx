@@ -44,6 +44,7 @@ function InstanceActionsMenu({ instance, handleRestart, handleDelete, handleStop
     os_type: instance.host_os_type,
     lan_rate_uses_hook: instance.host_lan_rate_uses_hook,
     runtime: instance.host_runtime,
+    runtime_forces_lan_rate: instance.host_runtime_forces_lan_rate,
   };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,
