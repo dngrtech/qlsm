@@ -146,7 +146,11 @@ function AddHostFormFields({
             </div>
           ))}
           {isStandalone && (
-            <label className="inline-flex items-center gap-2 text-sm text-theme-primary">
+            <label
+              className={`inline-flex items-center gap-2 text-sm text-theme-secondary ${
+                runtimeProviders.length ? 'cursor-pointer' : 'cursor-not-allowed'
+              }`}
+            >
               <input
                 type="radio"
                 name="host-runtime"
@@ -155,8 +159,9 @@ function AddHostFormFields({
                 disabled={!runtimeProviders.length}
                 onChange={() => onRuntimeChange('custom')}
                 className="h-4 w-4"
+                style={{ accentColor: 'var(--accent-primary)' }}
               />
-              Custom
+              <span className="text-theme-primary">Custom</span>
             </label>
           )}
         </fieldset>
