@@ -15,7 +15,11 @@ from ui import db
 from ui.constants import resolve_redis_db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from ui.lan_rate_policy import effective_lan_rate
-from ui.runtime import host_runtime, instance_runtime_extravars, log_filename_pattern, runtime_paths
+from ui.runtime import (
+    CUSTOM, excluded_preloads_for_host, host_runtime, instance_runtime_extravars,
+    log_filename_for_host, log_filename_pattern_for_host, plugin_api_for_host, runtime_paths,
+)
+from ui.custom_runtime import release_for_host
 from .common import append_log # Import from the common module
 from . import service_runtime
 from .ansible_runner import _run_ansible_playbook
@@ -136,7 +140,7 @@ def _build_qlds_args_string(instance):
     parts += [
         f'+set qlx_redisDatabase {redis_db_index}',
         f'+set fs_homepath {homepath}',
-        f'+set qlx_pluginsPath {homepath}/{runtime_paths(host_runtime(instance.host))["plugins_dirname"]}',
+        f'+set qlx_pluginsPath {homepath}/{runtime_paths(plugin_api_for_host(instance.host))["plugins_dirname"]}',
         # ZMQ RCON
         '+set zmq_rcon_enable 1',
         f'+set zmq_rcon_port {instance.zmq_rcon_port}',
@@ -151,6 +155,9 @@ def _build_qlds_args_string(instance):
     all_plugins = SYSTEM_PLUGINS + [
         p for p in user_plugins + addon_plugins if p not in SYSTEM_PLUGINS
     ]
+    if host_runtime(instance.host) == CUSTOM:
+        required = release_for_host(instance.host).metadata["required_plugins"]
+        all_plugins = list(dict.fromkeys([*all_plugins, *required]))
     parts.append(f'+set qlx_plugins "{", ".join(all_plugins)}"')
 
     # Addon-contributed cvars go last: the engine takes the last +set for a
@@ -205,8 +212,9 @@ def _build_ld_preload_paths(instance):
     """
     from ui.task_logic.hook_paths import resolve_user_hook
 
-    runtime = host_runtime(getattr(instance, 'host', None))
-    excluded = runtime_paths(runtime)['excluded_system_hooks']
+    host = getattr(instance, 'host', None)
+    runtime = host_runtime(host)
+    excluded = excluded_preloads_for_host(host)
 
     paths = []
     for filename, predicate, subdir in _SYSTEM_HOOKS:
@@ -216,8 +224,10 @@ def _build_ld_preload_paths(instance):
             paths.append(f"/home/ql/qlds-{instance.port}/{subdir}/{filename}")
     if instance.ld_preload_hooks and instance.host:
         for fn in (h.strip() for h in instance.ld_preload_hooks.split(',') if h.strip()):
+            if runtime == CUSTOM and os.path.basename(fn) in excluded:
+                continue
             res = resolve_user_hook(CONFIGS_BASE, instance.host.name, instance.id, fn,
-                                    runtime=runtime)
+                                    runtime=plugin_api_for_host(host))
             if res is None:
                 log.warning(
                     "Hook %s not found for instance %s; skipping from LD_PRELOAD",
@@ -226,6 +236,9 @@ def _build_ld_preload_paths(instance):
                 continue
             paths.append(f"/home/ql/qlds-{instance.port}/{res['host_subdir']}/{fn}")
     paths += [str(p) for p in _addon_contributions('instance.ld_preload', instance) if p]
+    if runtime == CUSTOM:
+        paths = [path for entry in paths for path in re.split(r'[:\s]+', entry)
+                 if path and os.path.basename(path) not in excluded]
     return ":".join(paths)
 
 
@@ -553,6 +566,8 @@ def start_instance_logic(instance_id):
             log.error(f"Instance with id {instance_id} not found.")
             return f"Error: Instance {instance_id} not found."
 
+        if host_runtime(instance.host) == CUSTOM:
+            release_for_host(instance.host)
         append_log(instance, f"Task started: start_instance (Job ID: {job.id})")
         instance.status = InstanceStatus.STARTING
         db.session.commit()
@@ -1353,7 +1368,7 @@ def _validate_minqlx_log_request(filter_mode, lines, filename, instance):
     if filter_mode not in ('lines', 'all'):
         return "filter_mode must be 'lines' or 'all'"
 
-    if not re.fullmatch(log_filename_pattern(host_runtime(instance.host)), filename or ''):
+    if not re.fullmatch(log_filename_pattern_for_host(instance.host), filename or ''):
         return "Invalid MinQLX log filename."
 
     if filter_mode == 'lines':
@@ -1430,7 +1445,7 @@ def fetch_instance_minqlx_logs(instance_id, filter_mode='lines', lines=500, file
             return False, "", instance_error
 
         if filename is None:
-            filename = runtime_paths(host_runtime(host))['log_filename']
+            filename = log_filename_for_host(host)
 
         validation_error = _validate_minqlx_log_request(filter_mode, lines, filename, instance)
         if validation_error:
@@ -1504,7 +1519,7 @@ def list_instance_minqlx_logs(instance_id):
 
         extravars = {
             'port': instance.port,
-            'filename': runtime_paths(host_runtime(host))['log_filename'],
+            'filename': log_filename_for_host(host),
             'ansible_ssh_user': host.ssh_user,
             'ansible_ssh_private_key_file': os.path.abspath(host.ssh_key_path),
         }
@@ -1543,8 +1558,8 @@ def list_instance_minqlx_logs(instance_id):
             log.warning(f"Parsed MinQLX msg is not a list: {type(files)}")
             return True, [], None
 
-        pattern = log_filename_pattern(host_runtime(host))
-        live_name = runtime_paths(host_runtime(host))['log_filename']
+        pattern = log_filename_pattern_for_host(host)
+        live_name = log_filename_for_host(host)
         valid_files = [f for f in files if isinstance(f, str) and re.fullmatch(pattern, f)]
         valid_files.sort(key=lambda f: 0 if f == live_name else int(f.rsplit('.', 1)[1]))
         return True, valid_files, None

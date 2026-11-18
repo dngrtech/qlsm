@@ -141,6 +141,7 @@
       changed_when: common_minqlx_backfill.stdout != ""
 
     - ansible.builtin.import_tasks: tasks/install_minqlx_deps.yml
+      when: runtime != 'custom'
 
     - name: Remove existing factory files before syncing (ensures only selected factories remain)
       ansible.builtin.shell: |
@@ -181,6 +182,7 @@
         group: ql
         mode: preserve
         remote_src: yes
+      when: runtime != 'custom'
 
     - name: Render QLDS systemd service file (Update Hostname/Args)
       ansible.builtin.template:

@@ -232,6 +232,7 @@ function InstanceDetailsModal({ instanceId, isOpen, onClose, onInstanceDeleted, 
     os_type: hostOsType,
     lan_rate_uses_hook: instance?.host_lan_rate_uses_hook ?? instance?.host?.lan_rate_uses_hook ?? false,
     runtime: instance?.host_runtime ?? instance?.host?.runtime ?? null,
+    runtime_forces_lan_rate: instance?.host_runtime_forces_lan_rate ?? instance?.host?.runtime_forces_lan_rate,
   };
   const canToggleLanRate = canEnableLanRate({
     host: hostShape,

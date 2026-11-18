@@ -16,7 +16,8 @@ from ui.preset_support import (
     resolve_preset_path,
     resolve_preset_subdir,
 )
-from ui.runtime import host_runtime, log_filename_pattern, plugin_api_for_host, runtime_paths
+from ui.runtime import CUSTOM, host_runtime, log_filename_for_host, log_filename_pattern_for_host, plugin_api_for_host
+from ui.custom_runtime import RuntimeUnavailable, release_for_host
 from ui.runtime_upgrade_guard import upgrade_block_response
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
@@ -49,7 +50,7 @@ ALLOWED_CONFIG_EXTENSIONS = {'.cfg', '.txt', '.ent'}
 ALLOWED_FACTORY_EXTENSIONS = {'.factories'}
 
 
-def _reject_mutation_while_host_configuring(host):
+def _reject_mutation_while_host_configuring(host, *, require_runtime=True):
     if host is not None:
         # A runtime upgrade reservation outlives CONFIGURING (an incomplete
         # rollback leaves the host ERROR), so it is checked on its own.
@@ -65,6 +66,11 @@ def _reject_mutation_while_host_configuring(host):
                 ),
             },
         }), 409
+    if require_runtime and host_runtime(host) == CUSTOM:
+        try:
+            release_for_host(host)
+        except RuntimeUnavailable as error:
+            return jsonify({"error": {"message": str(error)}}), 409
     return None
 
 
@@ -623,7 +629,7 @@ def delete_instance_api(instance_id): # Renamed function
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
 
-    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host, require_runtime=False)
     if mutation_rejection:
         return mutation_rejection
 
@@ -687,7 +693,7 @@ def stop_instance_api(instance_id):
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
 
-    mutation_rejection = _reject_mutation_while_host_configuring(instance.host)
+    mutation_rejection = _reject_mutation_while_host_configuring(instance.host, require_runtime=False)
     if mutation_rejection:
         return mutation_rejection
 
@@ -1031,15 +1037,16 @@ def fetch_remote_minqlx_logs_api(instance_id):
     if not instance.host:
         return jsonify({"error": {"message": "Instance has no associated host."}}), 400
 
-    runtime = host_runtime(instance.host)
     filter_mode = request.args.get('filter_mode', 'lines')
     lines_raw = request.args.get('lines', '500')
-    filename = request.args.get('filename') or runtime_paths(runtime)['log_filename']
+    filename = request.args.get('filename') or log_filename_for_host(instance.host)
 
     if filter_mode not in ('lines', 'all'):
         return jsonify({"error": {"message": "filter_mode must be 'lines' or 'all'"}}), 400
 
-    if not re.fullmatch(log_filename_pattern(runtime), filename):
+    if filename is None:
+        return jsonify({"error": {"message": "Runtime log metadata is unavailable. Use service logs."}}), 409
+    if not re.fullmatch(log_filename_pattern_for_host(instance.host), filename):
         return jsonify({"error": {"message": "Invalid MinQLX log filename."}}), 400
 
     try:

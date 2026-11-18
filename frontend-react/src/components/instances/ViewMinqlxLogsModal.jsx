@@ -122,7 +122,7 @@ function ViewMinqlxLogsModal({ isOpen, onClose, instance }) {
             // Seed the initial selection from the instance's own runtime so the
             // fetch effect below asks for a filename that runtime accepts. The
             // file listing response corrects this if it turns out to be wrong.
-            const seed = runtimeLogFilename(instance.host_runtime);
+            const seed = instance.host_runtime_log_filename || runtimeLogFilename(instance.host_runtime);
             setSelectedFile(seed);
             fetchLogFiles(seed);
         } else {

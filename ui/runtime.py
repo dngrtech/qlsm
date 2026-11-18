@@ -154,6 +154,32 @@ def log_filename_pattern(runtime):
     return re.escape(runtime_paths(runtime)['log_filename']) + r'(\.\d+)?'
 
 
+def log_filename_for_host(host):
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        from ui.custom_runtime import RuntimeUnavailable, release_for_host
+
+        try:
+            return release_for_host(host, require_provider=False).metadata['log_filename']
+        except RuntimeUnavailable:
+            return None
+    return runtime_paths(runtime)['log_filename']
+
+
+def log_filename_pattern_for_host(host):
+    filename = log_filename_for_host(host)
+    return re.escape(filename) + r'(\.\d+)?' if filename else '(?!)'
+
+
+def excluded_preloads_for_host(host):
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        from ui.custom_runtime import release_for_host
+
+        return frozenset(release_for_host(host).metadata["excluded_preloads"])
+    return runtime_paths(runtime)['excluded_system_hooks']
+
+
 def runtime_extravars(host):
     """The extra-vars every instance-level playbook needs to target the right
     runtime. Call sites merge this into their own extravars dict so no playbook
@@ -170,6 +196,8 @@ def runtime_extravars(host):
             'plugin_api_runtime': api,
             'runtime_shared_dir': release.installed_path,
             'launch_script': release.metadata['launch_script'],
+            'runtime_launch_path': f"{release.installed_path}/{release.metadata['launch_script']}",
+            'skip_pip_install': True,
         }
     paths = runtime_paths(runtime)
     return {

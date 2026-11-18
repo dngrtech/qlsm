@@ -149,6 +149,7 @@
         group: ql
         mode: preserve
         remote_src: yes
+      when: runtime != 'custom'
       # This single task replaces the previous two separate tasks for minqlx files and package.
       # It will copy minqlx.x64.so, run_server_x64_minqlx.sh, the minqlx/ dir,
       # and optional scripts if they exist in the source, directly into the instance dir.
@@ -255,6 +256,7 @@
   # 4. Install Instance-Specific Dependencies (if any)
   #######################################################################
     - ansible.builtin.import_tasks: tasks/install_minqlx_deps.yml
+      when: runtime != 'custom'
 
   #######################################################################
   # 5. Ensure Ownership and Permissions

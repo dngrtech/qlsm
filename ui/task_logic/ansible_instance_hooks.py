@@ -3,7 +3,7 @@ import os
 
 from ui import db
 from ui.models import QLInstance, InstanceStatus
-from ui.runtime import instance_runtime_extravars
+from ui.runtime import CUSTOM, excluded_preloads_for_host, host_runtime, instance_runtime_extravars, plugin_api_for_host
 from ui.task_logic.ansible_instance_mgmt import (
     _SYSTEM_HOOKS,
     _build_ld_preload_paths,
@@ -34,9 +34,14 @@ def _enabled_hooks(instance):
 
 
 def _preflight(instance):
+    custom = host_runtime(instance.host) == CUSTOM
+    excluded = excluded_preloads_for_host(instance.host) if custom else frozenset()
     for filename in _enabled_hooks(instance):
+        if filename in excluded:
+            continue
         res = resolve_user_hook(
             CONFIGS_BASE, instance.host.name, instance.id, filename,
+            **({'runtime': plugin_api_for_host(instance.host)} if custom else {}),
         )
         if not res:
             return f"{filename} missing"
@@ -49,6 +54,8 @@ def _preflight(instance):
 
     # System-hook source verification
     for filename, predicate, _subdir in _SYSTEM_HOOKS:
+        if filename in excluded:
+            continue
         try:
             active = bool(predicate(instance))
         except Exception as exc:

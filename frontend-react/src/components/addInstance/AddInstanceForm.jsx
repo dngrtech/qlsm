@@ -335,6 +335,7 @@ function AddInstanceForm({
     lan_rate_uses_hook: selectedHost?.lan_rate_uses_hook ?? false,
     runtime: selectedHost?.runtime ?? null,
     runtime_plugin_api: selectedHost?.runtime_plugin_api ?? null,
+    runtime_forces_lan_rate: selectedHost?.runtime_forces_lan_rate ?? false,
   };
   const targetPluginApi = pluginRuntimeForHost(selectedHostShape);
 

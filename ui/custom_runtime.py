@@ -179,12 +179,12 @@ def _active_provider(provider_id):
     return addon
 
 
-def _retained_release(provider_id, digest):
+def _retained_release(provider_id, digest, *, require_bundle=True):
     if not _matches(_SHA256, digest):
         raise RuntimeUnavailable(f"Runtime provider {provider_id} has an invalid release digest.")
     directory = Path(current_app.config["ADDON_PACKAGES_DIR"]) / RELEASES_DIR / provider_id / digest
     bundle = directory / "bundle.tar.gz"
-    if not bundle.is_file():
+    if require_bundle and not bundle.is_file():
         raise RuntimeUnavailable(f"The pinned runtime bundle {provider_id}/{digest[:12]} is missing.")
     try:
         release = json.loads((directory / "release.json").read_text(encoding="utf-8"))
@@ -224,7 +224,10 @@ def custom_platform_error(release, detected):
 def release_for_host(host, *, require_provider=True):
     provider_id = host.runtime_provider_id
     digest = host.runtime_release_sha256
-    release = pinned_release(provider_id, digest) if require_provider else _retained_release(provider_id, digest)
+    release = (
+        pinned_release(provider_id, digest) if require_provider
+        else _retained_release(provider_id, digest, require_bundle=False)
+    )
     if release.metadata["plugin_api"] != host.runtime_plugin_api:
         raise RuntimeUnavailable("The runtime release does not match this host's pinned plugin API.")
     return release

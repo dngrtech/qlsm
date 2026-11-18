@@ -557,3 +557,19 @@ ordering and isolation from a throwing handler, nothing more.
   (the `HOOK_SCOPES` comment) and nothing else.
 - **Not enforced — conflict resolution across contributors.** See "Merge
   order and conflicts" above; this is entirely on the consuming addon.
+
+
+## Custom runtime providers
+
+An installed addon can supply an optional `custom_runtime` object in `qlsm-addon.json`:
+
+| Fields | Meaning |
+| --- | --- |
+| `plugin_api` | Built-in preset and plugin pool to use. Either `minqlx` or `minqlxtended`. |
+| `source_commit`, `bundle_path`, `sha256` | Full Git commit, package-relative gzip tar path and SHA-256 of that tar. |
+| `platform` | Exact `os_id`, `os_version`, `arch`, and `python` major/minor array. |
+| `engine_so`, `python_runtime_files`, `launch_script`, `log_filename` | Release-local file or directory names. QLSM runs the launcher with the instance working directory and its generated QLDS arguments. |
+| `requirements_file`, `dependency_imports` | Requirements file and optional Python modules to verify after installing dependencies. |
+| `required_plugins`, `excluded_preloads`, `forced_lan_rate` | Plugin module names, excluded shared-object filenames, and optional fixed 99k rate policy. Place required plugins in `plugins/` inside the bundle. The launcher supplies their runtime overlay. |
+
+The addon ZIP install validates the bundle and retains it by digest. Use the usual QLSM restart and enable flow to activate the approved release. A new Standalone host pins the active provider and displayed release. If its provider becomes unavailable, QLSM rejects runtime-dependent changes and keeps the host available for inspection.

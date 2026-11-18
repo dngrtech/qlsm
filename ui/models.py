@@ -92,15 +92,17 @@ class Host(db.Model):
         return f'<Host {self.name} ({self.ip_address or "No IP"})>'
 
     def _custom_runtime_fields(self):
-        from ui.custom_runtime import RuntimeUnavailable, pinned_release
+        from ui.custom_runtime import RuntimeUnavailable, release_for_host
+        from ui.lan_rate_policy import lan_rate_forced_on
 
         fields = {
             'runtime_provider_id': self.runtime_provider_id,
             'runtime_release_sha256': self.runtime_release_sha256,
             'runtime_plugin_api': self.runtime_plugin_api,
+            'runtime_forces_lan_rate': lan_rate_forced_on(self),
         }
         try:
-            release = pinned_release(self.runtime_provider_id, self.runtime_release_sha256)
+            release = release_for_host(self)
         except RuntimeUnavailable as error:
             return {**fields, 'runtime_unavailable_reason': str(error)}
         return {
@@ -198,6 +200,16 @@ class QLInstance(db.Model):
         host_name = self.host.name if self.host else "No Host"
         return f'<QLInstance {self.name} ({host_name}:{self.port})>'
     
+    def _custom_host_fields(self):
+        from ui.runtime import log_filename_for_host
+        from ui.lan_rate_policy import lan_rate_forced_on
+
+        return {
+            'host_plugin_api': self.host.runtime_plugin_api,
+            'host_runtime_log_filename': log_filename_for_host(self.host),
+            'host_runtime_forces_lan_rate': lan_rate_forced_on(self.host),
+        }
+
     def to_dict(self):
         """Convert instance to dictionary."""
         return {
@@ -209,7 +221,7 @@ class QLInstance(db.Model):
             'host_os_type': self.host.os_type if self.host else None,
             'host_lan_rate_uses_hook': bool(self.host.lan_rate_uses_hook) if self.host else False,
             'host_runtime': host_runtime(self.host),
-            **({'host_plugin_api': self.host.runtime_plugin_api} if host_runtime(self.host) == CUSTOM else {}),
+            **(self._custom_host_fields() if host_runtime(self.host) == CUSTOM else {}),
             'port': self.port,
             'hostname': self.hostname, # Added hostname
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode
