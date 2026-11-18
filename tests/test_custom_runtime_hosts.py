@@ -109,3 +109,22 @@ def test_upgrade_endpoint_rejects_both_custom_conversion_directions(app, client,
                                json={"target_runtime": target, "fingerprint": "fixture"})
         assert response.status_code == 400
         assert "to or from Custom" in response.get_json()["error"]["message"]
+
+
+def test_common_pool_apply_is_rejected_while_provider_is_unavailable(app, client, hosted_runtime):
+    headers, payload, _, queued = hosted_runtime
+    created = client.post("/api/hosts/", headers=headers, json=payload)
+    assert created.status_code == 201, created.get_json()
+    host_id = created.get_json()["data"]["id"]
+    with app.app_context():
+        db.session.get(Host, host_id).status = HostStatus.ACTIVE
+        db.session.commit()
+        app.extensions["addons"].pop(PROVIDER)
+    queued.clear()
+    response = client.post(f"/api/hosts/{host_id}/plugin-updates/apply", headers=headers,
+                           json={"update_common_pool": True})
+    assert response.status_code == 409
+    assert "provider" in response.get_json()["error"]["message"]
+    assert queued == []
+    with app.app_context():
+        assert db.session.get(Host, host_id).status == HostStatus.ACTIVE

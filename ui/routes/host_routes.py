@@ -6,8 +6,8 @@ from ui.database import (
     get_hosts, get_host, get_host_by_name, create_host, update_host, delete_host # delete_host might be used by delete_host_route
 )
 from ui.vultr_settings import is_vultr_configured
-from ui.runtime import CUSTOM, DEFAULT_RUNTIME, VALID_RUNTIMES, is_valid_runtime, runtime_paths
-from ui.custom_runtime import RuntimeUnavailable, approved_release, custom_platform_error
+from ui.runtime import CUSTOM, DEFAULT_RUNTIME, VALID_RUNTIMES, host_runtime, is_valid_runtime, runtime_paths
+from ui.custom_runtime import RuntimeUnavailable, approved_release, custom_platform_error, release_for_host
 from ui.addons.registry import get_addons
 from ui.runtime_upgrade_guard import upgrade_block_response
 import re
@@ -1497,6 +1497,12 @@ def apply_plugin_updates_api(host_id):
 
     if not apply_common_pool and not instance_selections:
         return jsonify({"error": {"message": "Nothing selected to update"}}), 400
+    # Refreshing the common pool runs the pinned release's playbook vars.
+    if apply_common_pool and host_runtime(host) == CUSTOM:
+        try:
+            release_for_host(host)
+        except RuntimeUnavailable as error:
+            return jsonify({"error": {"message": str(error)}}), 409
 
     try:
         lock_token = str(uuid.uuid4())
