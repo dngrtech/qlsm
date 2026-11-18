@@ -24,7 +24,7 @@ from ui.preset_support import (
     default_preset_name_for_runtime,
     resolve_preset_subdir,
 )
-from ui.runtime import is_valid_runtime, normalize_runtime
+from ui.runtime import CUSTOM, host_runtime, is_valid_runtime, normalize_runtime, plugin_api_for_host
 from ui.runtime_conversion import filter_scripts_for_target
 from ui.runtime_upgrade_guard import host_name_block_response
 from ui.font_files import FONT_EXTENSIONS, MAX_FONT_FILE_SIZE, validate_font_content
@@ -530,7 +530,7 @@ def _resolve_source_runtime(data):
         return getattr(preset, 'runtime', None)
     if data.get('source') == 'instance':
         host = get_host_by_name(data.get('host')) if data.get('host') else None
-        return getattr(host, 'runtime', None)
+        return plugin_api_for_host(host) if host_runtime(host) == CUSTOM else getattr(host, 'runtime', None)
     return None
 
 

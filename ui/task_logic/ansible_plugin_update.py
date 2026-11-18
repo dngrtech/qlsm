@@ -27,7 +27,7 @@ from flask import current_app
 from ui.models import HostStatus, InstanceStatus
 from ui.database import get_host, update_host, update_instance
 from ui.plugin_pool import resolve_pool_file, resolve_pool_path
-from ui.runtime import host_runtime, runtime_extravars
+from ui.runtime import plugin_api_for_host, runtime_extravars
 from .ansible_runner import _run_host_ansible_playbook
 
 
@@ -40,7 +40,7 @@ def _copy_selected_plugin_files(host, instance, filenames):
     filename lists. A name is a bare filename (os.path.basename applied
     defensively — this list ultimately comes from a JSON request body) or a
     forward-slash path into a plugin's helper package ('restore/items.py')."""
-    runtime = host_runtime(host)
+    runtime = plugin_api_for_host(host)
     dest_dir = os.path.abspath(os.path.join('configs', host.name, str(instance.id), 'scripts'))
     os.makedirs(dest_dir, exist_ok=True)
 

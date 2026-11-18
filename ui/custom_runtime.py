@@ -38,6 +38,10 @@ class RuntimeRelease:
     def sha256(self):
         return self.metadata["sha256"]
 
+    @property
+    def installed_path(self):
+        return f"/var/lib/qlsm/custom-runtime/{self.sha256}"
+
 
 def _path(value, *, basename=False):
     if not isinstance(value, str):
@@ -237,7 +241,7 @@ def custom_setup_extravars(host) -> dict:
         "custom_requirements_file": metadata["requirements_file"],
         "custom_launch_script": metadata["launch_script"],
         "custom_dependency_imports": metadata.get("dependency_imports", []),
-        "runtime_shared_dir": f"/var/lib/qlsm/custom-runtime/{release.sha256}",
+        "runtime_shared_dir": release.installed_path,
         "runtime_plugins_dirname": f"{plugin_api}-plugins",
         "plugin_api_runtime": plugin_api,
         "skip_pip_install": True,

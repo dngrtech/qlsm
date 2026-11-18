@@ -16,7 +16,7 @@ from ui.preset_support import (
     resolve_preset_path,
     resolve_preset_subdir,
 )
-from ui.runtime import host_runtime, log_filename_pattern, runtime_paths
+from ui.runtime import host_runtime, log_filename_pattern, plugin_api_for_host, runtime_paths
 from ui.runtime_upgrade_guard import upgrade_block_response
 from ui.database import (
     get_instances, get_instance, create_instance, update_instance, delete_instance,
@@ -462,7 +462,7 @@ def add_instance_api():
             # (--ignore-existing) cannot correct a same-named wrong-runtime
             # file — every plugin would then die on import.
             default_scripts_dir = resolve_preset_subdir(
-                default_preset_name_for_runtime(host_runtime(selected_host)), 'scripts'
+                default_preset_name_for_runtime(plugin_api_for_host(selected_host)), 'scripts'
             )
             if os.path.exists(default_scripts_dir):
                 shutil.copytree(default_scripts_dir, instance_scripts_dir, dirs_exist_ok=True)

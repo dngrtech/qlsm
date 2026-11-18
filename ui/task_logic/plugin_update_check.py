@@ -31,7 +31,7 @@ from ui.update_checks import (
     hash_local_tree, hash_package_trees, parse_sha256sum_output, diff_trees, PLUGIN_EXTENSIONS,
 )
 from ui.plugin_pool import pool_file_hashes, pool_package_hashes
-from ui.runtime import host_runtime, runtime_paths
+from ui.runtime import plugin_api_for_host, runtime_paths
 from .ansible_runner import run_host_ansible_adhoc
 
 COMMON_ASSETS_REMOTE_DIR = "/home/ql/assets/common"
@@ -39,11 +39,11 @@ COMMON_ASSETS_REMOTE_DIR = "/home/ql/assets/common"
 
 def _pool_hashes(host):
     """{filename: sha256} of the merged pool for this host's runtime."""
-    return pool_file_hashes(host_runtime(host), extensions=PLUGIN_EXTENSIONS)
+    return pool_file_hashes(plugin_api_for_host(host), extensions=PLUGIN_EXTENSIONS)
 
 
 def _common_pool_remote_dir(host):
-    return f"{COMMON_ASSETS_REMOTE_DIR}/{runtime_paths(host_runtime(host))['asset_plugins_dir']}"
+    return f"{COMMON_ASSETS_REMOTE_DIR}/{runtime_paths(plugin_api_for_host(host))['asset_plugins_dir']}"
 
 
 def _instance_scripts_dir(host_name, instance_id):
@@ -89,7 +89,7 @@ def check_instance_selected_plugins(host, instance):
     # apply never deletes.
     package_dirs = _instance_package_dirs(scripts_dir)
     if package_dirs:
-        source_pkg = pool_package_hashes(host_runtime(host), package_dirs, extensions=PLUGIN_EXTENSIONS)
+        source_pkg = pool_package_hashes(plugin_api_for_host(host), package_dirs, extensions=PLUGIN_EXTENSIONS)
         target_pkg = hash_package_trees(scripts_dir, package_dirs, extensions=PLUGIN_EXTENSIONS)
         changes += [c for c in diff_trees(source_pkg, target_pkg) if c["change"] != "removed"]
     return sorted(changes, key=lambda c: c["name"])

@@ -208,7 +208,8 @@ class QLInstance(db.Model):
             'host_ip_address': self.host.ip_address if self.host else None, # Include host IP address
             'host_os_type': self.host.os_type if self.host else None,
             'host_lan_rate_uses_hook': bool(self.host.lan_rate_uses_hook) if self.host else False,
-            'host_runtime': normalize_runtime(self.host.runtime) if self.host else DEFAULT_RUNTIME,
+            'host_runtime': host_runtime(self.host),
+            **({'host_plugin_api': self.host.runtime_plugin_api} if host_runtime(self.host) == CUSTOM else {}),
             'port': self.port,
             'hostname': self.hostname, # Added hostname
             'lan_rate_enabled': self.lan_rate_enabled, # 99k LAN rate mode

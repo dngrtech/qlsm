@@ -158,7 +158,20 @@ def runtime_extravars(host):
     """The extra-vars every instance-level playbook needs to target the right
     runtime. Call sites merge this into their own extravars dict so no playbook
     can be updated without its caller."""
-    paths = runtime_paths(host_runtime(host))
+    runtime = host_runtime(host)
+    if runtime == CUSTOM:
+        from ui.custom_runtime import release_for_host
+
+        release = release_for_host(host)
+        api = plugin_api_for_host(host)
+        return {
+            'runtime': CUSTOM,
+            'runtime_plugins_dirname': runtime_paths(api)['plugins_dirname'],
+            'plugin_api_runtime': api,
+            'runtime_shared_dir': release.installed_path,
+            'launch_script': release.metadata['launch_script'],
+        }
+    paths = runtime_paths(runtime)
     return {
         'runtime': paths['runtime'],
         'runtime_plugins_dirname': paths['plugins_dirname'],

@@ -28,6 +28,10 @@ const KNOWN = new Set(['custom', ...RUNTIME_OPTIONS.map(option => option.id)]);
 // has ever existed.
 export const runtimeLabel = (value) => (KNOWN.has(value) ? value : DEFAULT_RUNTIME);
 
+export const pluginRuntimeForHost = (host) => (
+  host?.runtime === 'custom' ? host.runtime_plugin_api ?? null : host?.runtime ?? null
+);
+
 // The closing line of a runtime's tooltip, which depends on who supplies the
 // machine. On a cloud host QLSM writes the OS image, so the operator cannot get
 // this wrong. On a standalone or self host the OS is already whatever it is,
