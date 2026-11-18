@@ -48,6 +48,8 @@ QLSM pins that build on the host. Addon updates affect new hosts after QLSM rest
 
 Preset compatibility follows the provider's plugin API. For example, a Custom runtime that declares minqlx uses the minqlx preset and plugin pool. Runtime changes to and from Custom are unavailable.
 
+The pinned addon supplies Python plugin dependencies during host setup. QLSM skips per-instance `scripts/requirements.txt` on Custom hosts.
+
 ## Standalone Workflow
 
 1. Set **Provider** to `Standalone`.

@@ -184,9 +184,11 @@ Font files are shown the same way — binary, download/replace-only — but with
 
 ### Python Dependency Auto-Install
 
-If your plugin directory contains a `requirements.txt` file, QLSM automatically runs `pip install -r requirements.txt` on the host every time you deploy or sync configs. You do not need to SSH into the host to install dependencies manually.
+On built-in runtimes, QLSM runs `pip install -r requirements.txt` when you deploy or sync configs if your plugin directory contains that file.
 
 If pip encounters an error (e.g. a package unavailable on the host Python version), QLSM logs a warning but does not fail the deploy. Check the instance logs if a plugin behaves unexpectedly after a fresh deploy.
+
+On Custom hosts, the pinned addon supplies Python plugin dependencies during host setup. QLSM skips per-instance `scripts/requirements.txt`.
 
 ### Validate Plugin
 

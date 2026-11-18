@@ -208,7 +208,9 @@ Factories tab does not support folders at all.
 
 ## Plugin Python Dependencies (`requirements.txt`)
 
-To install Python packages required by minqlx plugins, create a `requirements.txt` file inside the instance's scripts directory:
+On built-in runtimes, create a `requirements.txt` file inside the instance's scripts directory to install Python packages required by plugins.
+
+Custom runtimes install Python packages from the pinned addon's requirements file during host setup. QLSM skips per-instance `scripts/requirements.txt` on Custom hosts.
 
 **Location:** `configs/<host_name>/<instance_id>/scripts/requirements.txt`
 
