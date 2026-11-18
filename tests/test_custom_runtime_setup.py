@@ -91,3 +91,32 @@ def test_custom_host_installs_system_redis_for_management_probes():
     [task] = [task for task in play["tasks"]
               if "python3-redis" in str(task.get("ansible.builtin.apt", {}))]
     assert task["when"] == "runtime == 'custom'"
+
+
+def test_custom_platform_assert_uses_os_release_version_id():
+    import json
+
+    from jinja2.nativetypes import NativeEnvironment
+    import yaml
+
+    path = Path(__file__).resolve().parents[1] / "ansible/playbooks/setup_host.yml"
+    [play] = yaml.safe_load(path.read_text())
+    task = next(task for task in play["tasks"] if task["name"] == "Check that this host can run the pinned Custom release")
+    env = NativeEnvironment()
+    env.filters.update(bool=bool, from_json=json.loads)
+    expected = {"os_id": "debian", "os_version": "12", "arch": "x86_64", "python": [3, 11]}
+    actual = {"os": {"ID": "debian", "VERSION_ID": "12"}, "arch": "x86_64",
+              "python": [3, 11], "safe_tar_filter": True}
+    values = {
+        "is_standalone": True, "custom_platform": expected,
+        "ansible_facts": {"distribution": "Debian", "distribution_version": "12.5"},
+    }
+    decode_platform = env.from_string(task["vars"]["detected_platform"])
+    conditions = [env.compile_expression(assertion) for assertion in task["ansible.builtin.assert"]["that"]]
+
+    for safe_tar_filter in (True, False):
+        actual["safe_tar_filter"] = safe_tar_filter
+        values["detected_platform"] = decode_platform.render(
+            custom_host_platform={"stdout": json.dumps(actual)}
+        )
+        assert all(condition(**values) for condition in conditions) is safe_tar_filter

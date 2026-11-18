@@ -97,6 +97,8 @@ def validate_custom_runtime(data):
     if (not isinstance(python, list) or len(python) != 2
             or not all(type(version) is int and version >= 0 for version in python)):
         raise ValueError("Invalid custom_runtime.platform.python.")
+    if tuple(python) < (3, 11):
+        raise ValueError("Custom runtime installation requires Python 3.11 or newer.")
     return {key: data[key] for key in (*scalar_checks, *list_checks, "platform") if key in data}
 
 
@@ -260,6 +262,7 @@ def release_for_host(host, *, require_provider=True):
 
 def custom_setup_extravars(host) -> dict:
     from ui.plugin_pool import operator_pool_dir
+    from ui.runtime import runtime_paths
 
     release = release_for_host(host)
     metadata = release.metadata
@@ -272,7 +275,7 @@ def custom_setup_extravars(host) -> dict:
         "custom_launch_script": metadata["launch_script"],
         "custom_dependency_imports": metadata.get("dependency_imports", []),
         "runtime_shared_dir": release.installed_path,
-        "runtime_plugins_dirname": f"{plugin_api}-plugins",
+        "runtime_plugins_dirname": runtime_paths(plugin_api)["plugins_dirname"],
         "common_plugins_operator_src": operator_pool_dir(plugin_api),
         "skip_pip_install": True,
     }

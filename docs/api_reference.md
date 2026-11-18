@@ -21,6 +21,7 @@ All endpoints except `/api/auth/login` require authentication via JWT cookie.
 |----------|--------|-------------|
 | `/hosts` | GET | List all hosts |
 | `/hosts` | POST | Create host (triggers Terraform provisioning) |
+| `/hosts/runtime-options` | GET | List available Custom runtime providers and their approved releases |
 | `/hosts/self/defaults` | GET | Get detected defaults for the self-host provider |
 | `/hosts/test-connection` | POST | Test standalone SSH connectivity before host creation |
 | `/hosts/<id>` | GET | Get host details with instances |
@@ -426,7 +427,7 @@ Success response (`200 OK`):
 
 Error responses:
 
-- `400` for a missing body, an invalid name, or a non-boolean `apply_to_machine`.
+- `400` for a missing body, an invalid name, a non-boolean `apply_to_machine`, or a request that includes any of the creation-only fields `runtime`, `runtime_provider_id`, `runtime_release_sha256`, or `runtime_plugin_api`.
 - `404` when the host does not exist.
 - `409` when the name is taken or another operation holds the host lock (the name is reverted).
 - `500` when the rename task cannot be queued (the name is reverted).
@@ -489,12 +490,22 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
-All three provider payloads above accept an optional `runtime` field: `"minqlx"` (default) or `"minqlxtended"`. It is rejected with `400` if present and not one of those two values, and it is set at creation. The only way to change it afterwards is the minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade); there is no downgrade. For cloud hosts, a new host of either runtime is provisioned on Ubuntu 24.04 (minqlxtended needs the Python 3.12 the build links against, and a minqlx host on Ubuntu 24.04 can later be upgraded to minqlxtended). minqlx cloud hosts created before v1.53.0 are Debian 12 and stay that way.
+All three provider payloads above accept `runtime: "minqlx"` (the default) or `runtime: "minqlxtended"`. A new Standalone host can also use [Custom runtime](#custom-runtime-options). The API returns `400` for an unsupported runtime or provider combination. The minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade) is the only supported runtime change. For cloud hosts, a new host with either built-in runtime is provisioned on Ubuntu 24.04. minqlx cloud hosts created before v1.53.0 use Debian 12.
 
 The Python 3.12 floor for `runtime: "minqlxtended"` is enforced differently per provider, because QLSM doesn't have the same evidence available at creation time for each:
 
 - **Standalone:** enforced synchronously. `POST /api/hosts` runs an SSH-based OS/Python detection before creating the row, and returns `400` immediately if the detected Python is older than 3.12 (or undetectable).
 - **Self:** *not* enforced at creation. Self-host creation only reads local `/etc/os-release`-style detection, which carries no Python version — there is no SSH session to probe, since the host *is* the QLSM server's own reachable target. `POST /api/hosts` returns `201` regardless of the host's actual Python version, the record is created, and asynchronous setup is queued. `ansible/playbooks/setup_host.yml` is the actual gate: it asserts the Python floor before building, and a self host whose Python is too old reaches `ERROR` status once that setup task runs and fails — after creation returned successfully, not instead of it.
+
+### Custom Runtime Options
+
+```
+GET /api/hosts/runtime-options
+```
+
+Returns `data.providers`, an array with `provider_id`, `label`, `build`, and `sha256` for each enabled provider with a verified approved bundle. When the array is empty, `data.unavailable_reason` explains why Custom is unavailable. It is `null` when at least one provider is available.
+
+To create a Custom host, add `runtime: "custom"`, `runtime_provider_id` and `runtime_release_sha256` to the Standalone payload for `POST /api/hosts`. Use the provider ID and digest from this response. QLSM records the provider's `runtime_plugin_api` from the pinned release metadata. A missing or unavailable provider or an unsupported host platform returns `400`. A changed approved digest returns `409` with `error.code: "stale_runtime"`. Refresh the options before retrying.
 
 ### Self-Host Defaults
 
@@ -621,7 +632,9 @@ Example success response:
 
 `firewall_pool_v2: false` means the host's firewall allow-list was rendered before the game/RCON port pool was widened, so the higher instance slots may not be reachable. A successful host setup run — initial or "Re-run Host Setup" — sets it to `true`.
 
-`runtime` is `"minqlx"` or `"minqlxtended"`, set at creation and changed afterwards only by the minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade). `NULL`/legacy rows normalize to `"minqlx"`.
+`runtime` is `"minqlx"`, `"minqlxtended"` or `"custom"`. `NULL`/legacy rows normalize to `"minqlx"`.
+
+Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` and `runtime_plugin_api`, plus `runtime_forces_lan_rate`. When the pinned release is available, the response includes `runtime_provider_label`, `runtime_build`, and `runtime_log_filename`. The `runtime_unavailable_reason` field is `null` when the release is available and carries an error message when it is unavailable.
 
 `os_version` is the host's `/etc/os-release` `VERSION_ID` (e.g. `"24.04"`), or `null` when unknown. Hosts created before this field existed are filled in by a background task that `GET /api/hosts/` starts for ACTIVE hosts (at most once per host per hour; self deployments get it after updating with `qlsm-install.sh --update`), so the value appears on a later request.
 

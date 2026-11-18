@@ -130,3 +130,10 @@ def test_retained_release_is_part_of_addon_backups(tmp_path, monkeypatch):
     backed_up = {path for path, _ in backup_files.walk_tree(root, skip)}
     assert f".runtime-releases/{PROVIDER}/{digest}/bundle.tar.gz" in backed_up
     assert f".runtime-releases/{PROVIDER}/{digest}/release.json" in backed_up
+
+
+def test_runtime_manifest_rejects_python_without_installer_hash_support(tmp_path):
+    platform = {"os_id": "ubuntu", "os_version": "22.04", "arch": "x86_64", "python": [3, 10]}
+    package, _ = runtime_package(metadata={"platform": platform})
+    with pytest.raises(AddonInstallError, match="Python 3.11"):
+        install_addon_zip(package, tmp_path / "packages")

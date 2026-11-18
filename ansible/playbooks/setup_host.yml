@@ -62,19 +62,39 @@
         success_msg: "Python {{ ansible_python_version }} satisfies the minqlxtended floor."
       when: runtime == 'minqlxtended'
 
+    - name: Read the Custom host platform with the installer interpreter
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - >-
+            import json, platform, sys, tarfile;
+            print(json.dumps({
+              "os": platform.freedesktop_os_release(),
+              "arch": platform.machine(),
+              "python": sys.version_info[:2],
+              "safe_tar_filter": hasattr(tarfile, "data_filter")
+            }))
+      register: custom_host_platform
+      changed_when: false
+      when: runtime == 'custom'
+
     - name: Check that this host can run the pinned Custom release
+      vars:
+        detected_platform: "{{ custom_host_platform.stdout | from_json }}"
       ansible.builtin.assert:
         that:
           - is_standalone | bool
-          - ansible_facts.distribution | lower == custom_platform.os_id
-          - ansible_facts.distribution_version == custom_platform.os_version
-          - ansible_facts.architecture == custom_platform.arch
-          - ansible_facts.python.version.major == custom_platform.python[0]
-          - ansible_facts.python.version.minor == custom_platform.python[1]
+          - detected_platform.os.ID | default('') | lower == custom_platform.os_id
+          - detected_platform.os.VERSION_ID | default('') == custom_platform.os_version
+          - detected_platform.arch == custom_platform.arch
+          - detected_platform.python == custom_platform.python
+          - detected_platform.safe_tar_filter
         fail_msg: >-
           This Custom release requires {{ custom_platform.os_id }}
           {{ custom_platform.os_version }} {{ custom_platform.arch }}
-          with Python {{ custom_platform.python | join('.') }}.
+          with Python {{ custom_platform.python | join('.') }}
+          and the tarfile data extraction filter.
       when: runtime == 'custom'
 
   #######################################################################
