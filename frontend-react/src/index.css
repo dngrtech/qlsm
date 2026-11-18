@@ -1,3 +1,6 @@
+/* Declared first so addon stylesheets (imported into this layer by
+   components/addons/addonCss.js) rank below every QLSM style. */
+@layer qlsm-addons;
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 

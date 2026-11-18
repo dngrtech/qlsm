@@ -13,7 +13,16 @@ export function addonCssPathFor(component) {
 }
 
 /**
- * Injects a <link rel="stylesheet"> for the addon's CSS, if any. Left in
+ * Cascade layer every addon stylesheet is imported into. index.css declares
+ * it before Tailwind's layers, so it ranks below all of QLSM's own styles: an
+ * addon that ships page-wide rules (e.g. its own Tailwind build with
+ * `.flex-col` / `.hidden`) can style its own markup but can never override
+ * the panel's layout.
+ */
+export const ADDON_CSS_LAYER = 'qlsm-addons';
+
+/**
+ * Imports the addon's CSS, if any, into ADDON_CSS_LAYER. Left in
  * document.head for the page's lifetime rather than removed on unmount --
  * CSS is idempotent, and a mount point that gets toggled (e.g. switching
  * tabs back and forth) shouldn't refetch and reapply it every time. Keyed by
@@ -27,12 +36,11 @@ export function ensureAddonCss(addonId, component) {
   if (!href) return;   // path escapes the addon's ui/ directory
   const linkId = `qlsm-addon-css--${addonId}--${cssPath}`;
   if (document.getElementById(linkId)) return;
-  const link = document.createElement('link');
-  link.id = linkId;
-  link.rel = 'stylesheet';
-  link.href = href;
+  const style = document.createElement('style');
+  style.id = linkId;
+  style.textContent = `@import url(${JSON.stringify(href)}) layer(${ADDON_CSS_LAYER});`;
   // No CSS next to this component is the common case, not an error -- drop
   // the tag quietly instead of leaving a permanently-failed request in head.
-  link.onerror = () => link.remove();
-  document.head.appendChild(link);
+  style.onerror = () => style.remove();
+  document.head.appendChild(style);
 }

@@ -27,7 +27,11 @@ reference the variables - no compiler, no PostCSS, no Tailwind config.
 QLSM auto-loads `Panel.css` when it loads `Panel.js` for a tier-2 component
 (same base filename, next to it in `ui/`) - see `README.md` in this
 directory for the loading contract and `_examples/css-test-addon` for a
-minimal working proof.
+minimal working proof. The stylesheet is imported into the `qlsm-addons`
+cascade layer, which ranks below every QLSM style: it styles your own markup
+but cannot override the panel's, so page-wide rules (such as a bundled
+Tailwind build) can't break QLSM layouts. Scope your selectors to your
+component's root class anyway.
 
 Because the variables already flip between light and dark theme at the
 `:root` / `.dark` level, your addon gets both themes for free - you never

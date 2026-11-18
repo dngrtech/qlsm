@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { addonCssPathFor, ensureAddonCss } from '../addonCss';
 
 afterEach(() => {
-  document.querySelectorAll('link[id^="qlsm-addon-css--"]').forEach((el) => el.remove());
+  document.querySelectorAll('[id^="qlsm-addon-css--"]').forEach((el) => el.remove());
 });
 
 describe('addonCssPathFor', () => {
@@ -21,30 +21,31 @@ describe('addonCssPathFor', () => {
 });
 
 describe('ensureAddonCss', () => {
-  it('adds a stylesheet link for the addon css', () => {
+  it('imports the addon css into the low-priority addon layer', () => {
     ensureAddonCss('demo-addon', 'ui/Panel.js');
 
-    const link = document.getElementById('qlsm-addon-css--demo-addon--ui/Panel.css');
-    expect(link).not.toBeNull();
-    expect(link.tagName).toBe('LINK');
-    expect(link.rel).toBe('stylesheet');
-    expect(link.href).toContain('/api/addons/demo-addon/ui/ui/Panel.css');
+    const style = document.getElementById('qlsm-addon-css--demo-addon--ui/Panel.css');
+    expect(style).not.toBeNull();
+    expect(style.tagName).toBe('STYLE');
+    expect(style.textContent).toBe(
+      '@import url("/api/addons/demo-addon/ui/ui/Panel.css") layer(qlsm-addons);',
+    );
   });
 
   it('does not duplicate the link on a second mount of the same component', () => {
     ensureAddonCss('demo-addon', 'ui/Panel.js');
     ensureAddonCss('demo-addon', 'ui/Panel.js');
 
-    const links = document.querySelectorAll('link[id="qlsm-addon-css--demo-addon--ui/Panel.css"]');
+    const links = document.querySelectorAll('[id="qlsm-addon-css--demo-addon--ui/Panel.css"]');
     expect(links.length).toBe(1);
   });
 
   it('does nothing when the component has no css by convention', () => {
     ensureAddonCss('demo-addon', 'ui/Panel');
-    expect(document.querySelectorAll('link[id^="qlsm-addon-css--"]').length).toBe(0);
+    expect(document.querySelectorAll('[id^="qlsm-addon-css--"]').length).toBe(0);
   });
 
-  it('removes the link if the css fails to load', () => {
+  it('removes the import if the css fails to load', () => {
     ensureAddonCss('demo-addon', 'ui/Missing.js');
     const link = document.getElementById('qlsm-addon-css--demo-addon--ui/Missing.css');
     expect(link).not.toBeNull();
