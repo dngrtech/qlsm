@@ -74,9 +74,10 @@ def validate_custom_runtime(data):
         "python_runtime_files": lambda value: _path(value, basename=True),
         "required_plugins": lambda value: _matches(_PLUGIN, value),
         "excluded_preloads": lambda value: _path(value, basename=True),
+        "dependency_imports": lambda value: _matches(_PLUGIN, value),
     }
     for field, valid in list_checks.items():
-        values = data.get(field)
+        values = data.get(field, [] if field == "dependency_imports" else None)
         if (not isinstance(values, list) or not all(valid(value) for value in values)
                 or len(set(values)) != len(values)):
             raise ValueError(f"Invalid custom_runtime.{field}.")
@@ -214,3 +215,30 @@ def custom_platform_error(release, detected):
         return None
     return (f"{release.label} requires {expected['os_id']} {expected['os_version']} "
             f"{expected['arch']} with Python {python}.")
+
+
+def release_for_host(host, *, require_provider=True):
+    provider_id = host.runtime_provider_id
+    digest = host.runtime_release_sha256
+    release = pinned_release(provider_id, digest) if require_provider else _retained_release(provider_id, digest)
+    if release.metadata["plugin_api"] != host.runtime_plugin_api:
+        raise RuntimeUnavailable("The runtime release does not match this host's pinned plugin API.")
+    return release
+
+
+def custom_setup_extravars(host) -> dict:
+    release = release_for_host(host)
+    metadata = release.metadata
+    plugin_api = metadata["plugin_api"]
+    return {
+        "custom_bundle_path": str(release.bundle_path.resolve()),
+        "custom_release_digest": release.sha256,
+        "custom_platform": metadata["platform"],
+        "custom_requirements_file": metadata["requirements_file"],
+        "custom_launch_script": metadata["launch_script"],
+        "custom_dependency_imports": metadata.get("dependency_imports", []),
+        "runtime_shared_dir": f"/var/lib/qlsm/custom-runtime/{release.sha256}",
+        "runtime_plugins_dirname": f"{plugin_api}-plugins",
+        "plugin_api_runtime": plugin_api,
+        "skip_pip_install": True,
+    }

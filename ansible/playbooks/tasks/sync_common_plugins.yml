@@ -75,7 +75,7 @@
 
 - name: Check if local operator plugins directory exists
   stat:
-    path: "{{ common_plugins_operator_src | default(playbook_dir ~ '/../../data/shared-plugins/' ~ runtime) }}"
+    path: "{{ common_plugins_operator_src | default(playbook_dir ~ '/../../data/shared-plugins/' ~ (plugin_api_runtime | default(runtime))) }}"
   delegate_to: localhost
   register: local_operator_plugins_stat
   become: no
@@ -109,7 +109,7 @@
         argv:
           - rsync
           - -a
-          - "{{ common_plugins_operator_src | default(playbook_dir ~ '/../../data/shared-plugins/' ~ runtime) }}/"
+          - "{{ common_plugins_operator_src | default(playbook_dir ~ '/../../data/shared-plugins/' ~ (plugin_api_runtime | default(runtime))) }}/"
           - "{{ merged_pool_stage.path }}/"
       delegate_to: localhost
       become: no

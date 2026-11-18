@@ -62,6 +62,21 @@
         success_msg: "Python {{ ansible_python_version }} satisfies the minqlxtended floor."
       when: runtime == 'minqlxtended'
 
+    - name: Check that this host can run the pinned Custom release
+      ansible.builtin.assert:
+        that:
+          - is_standalone | bool
+          - ansible_facts.distribution | lower == custom_platform.os_id
+          - ansible_facts.distribution_version == custom_platform.os_version
+          - ansible_facts.architecture == custom_platform.arch
+          - ansible_facts.python.version.major == custom_platform.python[0]
+          - ansible_facts.python.version.minor == custom_platform.python[1]
+        fail_msg: >-
+          This Custom release requires {{ custom_platform.os_id }}
+          {{ custom_platform.os_version }} {{ custom_platform.arch }}
+          with Python {{ custom_platform.python | join('.') }}.
+      when: runtime == 'custom'
+
   #######################################################################
   # 0. Network Configuration for Debian (Disable cloud-init & set static IP)
   #######################################################################
@@ -644,6 +659,10 @@
   #######################################################################
   # 6. Sync Common Assets & Install Core Dependencies
   #######################################################################
+    - name: Install the pinned Custom runtime before publishing host setup
+      ansible.builtin.import_tasks: tasks/install_custom_runtime.yml
+      when: runtime == 'custom'
+
     - ansible.builtin.import_tasks: tasks/sync_common_plugins.yml
 
   #######################################################################
