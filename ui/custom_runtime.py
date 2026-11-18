@@ -6,8 +6,10 @@ import json
 import os
 import re
 import shutil
+import stat
 import tarfile
 import tempfile
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -179,13 +181,36 @@ def _active_provider(provider_id):
     return addon
 
 
+@lru_cache(maxsize=128)
+def _retained_bundle_digest(bundle, _stamp):
+    # Status polling shares the result until the file is replaced or edited.
+    with bundle.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def _require_verified_bundle(bundle, provider_id, digest):
+    identifier = f"{provider_id}/{digest[:12]}"
+    try:
+        info = bundle.stat()
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeUnavailable(f"The pinned runtime bundle {identifier} is not a regular file.")
+        stamp = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+        actual = _retained_bundle_digest(bundle, stamp)
+    except FileNotFoundError:
+        raise RuntimeUnavailable(f"The pinned runtime bundle {identifier} is missing.") from None
+    except OSError as error:
+        raise RuntimeUnavailable(f"The pinned runtime bundle {identifier} cannot be read.") from error
+    if actual != digest:
+        raise RuntimeUnavailable(f"The pinned runtime bundle {identifier} failed its digest check.")
+
+
 def _retained_release(provider_id, digest, *, require_bundle=True):
     if not _matches(_SHA256, digest):
         raise RuntimeUnavailable(f"Runtime provider {provider_id} has an invalid release digest.")
     directory = Path(current_app.config["ADDON_PACKAGES_DIR"]) / RELEASES_DIR / provider_id / digest
     bundle = directory / "bundle.tar.gz"
-    if require_bundle and not bundle.is_file():
-        raise RuntimeUnavailable(f"The pinned runtime bundle {provider_id}/{digest[:12]} is missing.")
+    if require_bundle:
+        _require_verified_bundle(bundle, provider_id, digest)
     try:
         release = json.loads((directory / "release.json").read_text(encoding="utf-8"))
         metadata = validate_custom_runtime(release["metadata"])

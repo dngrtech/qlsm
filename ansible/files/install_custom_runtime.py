@@ -8,9 +8,24 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
+
+
+def _seal_dependencies(dependencies):
+    """Keep service processes from changing a release shared by instances."""
+    for directory, subdirectories, files in os.walk(dependencies):
+        root = Path(directory)
+        if any((root / name).is_symlink() for name in subdirectories):
+            raise ValueError("Unexpected link in the runtime dependency tree.")
+        for path in (root, *(root / name for name in files)):
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
+                raise ValueError("Unexpected link in the runtime dependency tree.")
+            os.chown(path, 0, 0, follow_symlinks=False)
+            path.chmod(stat.S_IMODE(info.st_mode) & ~0o022)
 
 
 def _install_dependencies(stage, requirements, imports):
@@ -29,6 +44,7 @@ def _install_dependencies(stage, requirements, imports):
             "runuser", "-u", "ql", "--", "env", f"PYTHONPATH={dependencies}",
             "/usr/bin/python3", "-c", probe, *imports,
         ], check=True, cwd=stage)
+    _seal_dependencies(dependencies)
 
 
 def install(bundle, digest, root, requirements, launcher, imports):

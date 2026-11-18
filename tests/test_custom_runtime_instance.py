@@ -65,3 +65,21 @@ def test_missing_provider_blocks_start_but_allows_stop_and_status(app, client, t
     assert client.get(f"/api/instances/{inst.id}", headers=headers).status_code == 200
     assert client.post(f"/api/instances/{inst.id}/stop", headers=headers).status_code == 202
     assert provider.id == PROVIDER
+
+
+def test_corrupt_retained_bundle_blocks_changes_but_preserves_inspection(app, client, tmp_path, monkeypatch):
+    from ui.custom_runtime import pinned_release
+
+    inst, digest = install_test_runtime(app, tmp_path)
+    with app.app_context():
+        headers = {"Authorization": f"Bearer {create_access_token(identity='testuser')}"}
+        bundle = pinned_release(PROVIDER, digest).bundle_path
+    monkeypatch.setattr("ui.routes.instance_routes.acquire_lock", lambda *_a, **_kw: False)
+    value = bundle.read_bytes()
+    bundle.write_bytes(bytes((value[0] ^ 1,)) + value[1:])
+    response = client.post(f"/api/instances/{inst.id}/restart", headers=headers)
+    assert response.status_code == 409
+    assert "digest" in response.get_json()["error"]["message"]
+    observed = client.get(f"/api/instances/{inst.id}", headers=headers)
+    assert observed.status_code == 200
+    assert observed.get_json()["data"]["host_runtime_log_filename"] == "engine.log"

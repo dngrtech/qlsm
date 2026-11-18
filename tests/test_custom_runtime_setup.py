@@ -64,3 +64,20 @@ def test_invalid_or_interrupted_install_cannot_make_release_visible(tmp_path, mo
     installer.install(bundle, digest, root, "requirements.txt", "launch.sh", [])
     assert (root / digest / "engine.so").read_bytes() == b"1.0"
     assert (root / digest / "launch.sh").stat().st_mode & 0o100
+
+
+def test_dependency_tree_is_sealed_before_publication(tmp_path, monkeypatch):
+    path = Path(__file__).resolve().parents[1] / "ansible/files/install_custom_runtime.py"
+    spec = importlib.util.spec_from_file_location("install_custom_runtime", path)
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    deps = tmp_path / "deps"
+    deps.mkdir()
+    package = deps / "wheel.py"
+    package.write_text("value = 1")
+    package.chmod(0o666)
+    ownership = []
+    monkeypatch.setattr(installer.os, "chown", lambda path, uid, gid, **kwargs: ownership.append((Path(path), uid, gid)))
+    installer._seal_dependencies(deps)
+    assert ownership == [(deps, 0, 0), (package, 0, 0)]
+    assert package.stat().st_mode & 0o777 == 0o644
