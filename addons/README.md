@@ -572,4 +572,6 @@ An installed addon can supply an optional `custom_runtime` object in `qlsm-addon
 | `requirements_file`, `dependency_imports` | Requirements file and optional Python modules to verify after installing dependencies. |
 | `required_plugins`, `excluded_preloads`, `forced_lan_rate` | Plugin module names, excluded shared-object filenames, and optional fixed 99k rate policy. Place required plugins in `plugins/` inside the bundle. The launcher supplies their runtime overlay. |
 
+Host setup installs the requirements as wheels only (`pip --only-binary=:all:`) into `deps/` inside the release directory. The launcher must add that directory to `sys.path` or `PYTHONPATH`. Pin exact versions so every host gets the same dependencies. `deps` and `.qlsm-release` are reserved top-level names. Tar member names must be plain relative paths, so build with `tar -czf bundle.tar.gz -C dir engine.so ...` rather than `tar -C dir -czf bundle.tar.gz .`, which adds a `./` prefix.
+
 The addon ZIP install validates the bundle and retains it by digest. Use the usual QLSM restart and enable flow to activate the approved release. A new Standalone host pins the active provider and displayed release. If its provider becomes unavailable, QLSM rejects runtime-dependent changes and keeps the host available for inspection.

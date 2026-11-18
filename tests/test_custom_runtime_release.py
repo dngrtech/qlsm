@@ -92,7 +92,7 @@ def test_invalid_runtime_bundle_keeps_previous_package(tmp_path):
     assert manifest["custom_runtime"]["sha256"] == old_digest
 
 
-@pytest.mark.parametrize("name", ["../escape", "/absolute", "engine.so"])
+@pytest.mark.parametrize("name", ["../escape", "/absolute", "engine.so", "deps/x.py", ".qlsm-release"])
 def test_invalid_runtime_members_are_rejected(tmp_path, name):
     invalid, _ = runtime_package(extra_members=[(name, b"bad")])
     with pytest.raises(AddonInstallError, match="bundle member"):

@@ -120,7 +120,9 @@ def _verify_bundle(bundle, metadata):
             for member in archive:
                 name = member.name
                 directory = member.isdir()
+                # The host installer creates deps/ and .qlsm-release in the release.
                 if (len(members) >= MEMBER_LIMIT or not _path(name) or name in members
+                        or name.split("/")[0] in ("deps", ".qlsm-release")
                         or (not directory and member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE))
                         or member.sparse is not None):
                     raise ValueError(f"Invalid runtime bundle member {name!r}.")
