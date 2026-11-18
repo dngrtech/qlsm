@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, Server, AlertTriangle } from 'lucide-react';
-import { createHost, getHosts, getSelfHostDefaults, testHostConnection } from '../../services/api';
+import { createHost, getHosts, getRuntimeOptions, getSelfHostDefaults, testHostConnection } from '../../services/api';
 import { useNotification } from '../NotificationProvider';
 import { providerOptions } from '../../utils/providerData';
 import AddHostFormFields from './AddHostFormFields';
@@ -34,6 +34,9 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   // upgrade, so the operator picks it explicitly or the form does not submit.
   const [runtime, setRuntime] = useState('');
   const [runtimeError, setRuntimeError] = useState(null);
+  const [runtimeProviderId, setRuntimeProviderId] = useState('');
+  const [customOptions, setCustomOptions] = useState({ providers: [], unavailable_reason: '' });
+  const selectedRelease = customOptions.providers.find((item) => item.provider_id === runtimeProviderId);
   const [selfHostExists, setSelfHostExists] = useState(false);
   const [providerOptionsReady, setProviderOptionsReady] = useState(false);
   const [selectedContinent, setSelectedContinent] = useState('');
@@ -70,8 +73,8 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     let cancelled = false;
     setProviderOptionsReady(false);
 
-    Promise.allSettled([getHosts(), getSelfHostDefaults()])
-      .then(([hostsResult, defaultsResult]) => {
+    Promise.allSettled([getHosts(), getSelfHostDefaults(), getRuntimeOptions()])
+      .then(([hostsResult, defaultsResult, runtimeResult]) => {
         if (cancelled) return;
 
         if (hostsResult.status === 'fulfilled') {
@@ -97,6 +100,9 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
           setVultrConfigured(false);
         }
 
+        setCustomOptions(runtimeResult.status === 'fulfilled' ? runtimeResult.value : {
+          providers: [], unavailable_reason: 'Could not load Custom runtime providers.',
+        });
         setProviderOptionsReady(true);
       });
 
@@ -140,6 +146,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
     setNameError(null);
     setProvider(selfHostExists ? 'standalone' : 'self');
     setRuntime('');
+    setRuntimeProviderId('');
     setRuntimeError(null);
     setSelectedContinent('');
     setRegion('');
@@ -218,6 +225,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
 
   const handleSwitchToSelfHost = () => {
     setProvider('self');
+    if (runtime === 'custom') setRuntime('');
     setSshKey('');
     setSshPassword('');
     setSshPort(22);
@@ -298,6 +306,11 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       }
     }
 
+    if (runtime === 'custom' && (provider !== 'standalone' || !selectedRelease)) {
+      setRuntimeError('Select an available Custom runtime provider.');
+      return;
+    }
+
     setLoading(true);
     try {
       let hostData;
@@ -314,6 +327,10 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
             : { ssh_key: sshKey }),
           timezone,
           runtime,
+          ...(runtime === 'custom' ? {
+            runtime_provider_id: selectedRelease.provider_id,
+            runtime_release_sha256: selectedRelease.sha256,
+          } : {}),
         };
       } else if (provider === 'self') {
         hostData = {
@@ -346,6 +363,15 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
       handleClose();
     } catch (err) {
       const errorMessage = err.error?.message || err.message || 'Failed to add host. Please check details and try again.';
+      if (err.error?.code === 'stale_runtime') {
+        setRuntime('');
+        setRuntimeProviderId('');
+        try {
+          setCustomOptions(await getRuntimeOptions());
+        } catch {
+          setCustomOptions({ providers: [], unavailable_reason: 'Could not refresh Custom runtime providers.' });
+        }
+      }
       setError(errorMessage);
       showError(errorMessage);
     } finally {
@@ -411,6 +437,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         providerListOptions={availableProviderOptions}
                         onProviderChange={(value) => {
                           setProvider(value);
+                          if (value !== 'standalone' && runtime === 'custom') setRuntime('');
                           setError(null);
                           resetConnectionTest();
                           if (value === 'standalone') {
@@ -456,9 +483,17 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
                         onSwitchToSelfHost={handleSwitchToSelfHost}
                         osInfo={selfHostOsInfo}
                         runtime={runtime}
+                        runtimeProviderId={runtimeProviderId}
+                        runtimeProviders={customOptions.providers}
+                        customUnavailableReason={customOptions.unavailable_reason}
+                        onRuntimeProviderChange={setRuntimeProviderId}
                         runtimeError={runtimeError}
                         onRuntimeChange={(value) => {
                           setRuntime(value);
+                          if (value === 'custom') {
+                            setRuntimeProviderId(customOptions.providers.length === 1
+                              ? customOptions.providers[0].provider_id : '');
+                          }
                           setRuntimeError(null);
                         }}
                       />

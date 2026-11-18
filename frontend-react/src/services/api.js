@@ -66,6 +66,11 @@ export const getHosts = async () => {
   }
 };
 
+export const getRuntimeOptions = async () => {
+  const response = await apiClient.get('/hosts/runtime-options');
+  return response.data.data;
+};
+
 export const createHost = async (hostData) => {
   try {
     const response = await apiClient.post('/hosts/', hostData); // Added trailing slash

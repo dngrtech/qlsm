@@ -4,7 +4,7 @@ import json
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
-from ui.runtime import DEFAULT_RUNTIME, normalize_runtime
+from ui.runtime import CUSTOM, DEFAULT_RUNTIME, host_runtime, normalize_runtime
 from ui.runtime_upgrade import upgrade_eligibility
 
 class HostStatus(enum.Enum):
@@ -72,6 +72,9 @@ class Host(db.Model):
     # with whole-host rollback), so it can never drift from what is installed.
     runtime = db.Column(db.String(20), nullable=False, default=DEFAULT_RUNTIME,
                         server_default=DEFAULT_RUNTIME)
+    runtime_provider_id = db.Column(db.String(80), nullable=True)
+    runtime_release_sha256 = db.Column(db.String(64), nullable=True)
+    runtime_plugin_api = db.Column(db.String(20), nullable=True)
     status = db.Column(db.Enum(HostStatus), default=HostStatus.PENDING, nullable=False)
     qlfilter_status = db.Column(db.Enum(QLFilterStatus), default=QLFilterStatus.UNKNOWN, nullable=True) # New field for QLFilter
     auto_restart_schedule = db.Column(db.String(100), nullable=True) # Cron expression for auto-restart
@@ -87,6 +90,23 @@ class Host(db.Model):
 
     def __repr__(self):
         return f'<Host {self.name} ({self.ip_address or "No IP"})>'
+
+    def _custom_runtime_fields(self):
+        from ui.custom_runtime import RuntimeUnavailable, pinned_release
+
+        fields = {
+            'runtime_provider_id': self.runtime_provider_id,
+            'runtime_release_sha256': self.runtime_release_sha256,
+            'runtime_plugin_api': self.runtime_plugin_api,
+        }
+        try:
+            release = pinned_release(self.runtime_provider_id, self.runtime_release_sha256)
+        except RuntimeUnavailable as error:
+            return {**fields, 'runtime_unavailable_reason': str(error)}
+        return {
+            **fields, 'runtime_build': release.version, 'runtime_provider_label': release.label,
+            'runtime_log_filename': release.metadata['log_filename'], 'runtime_unavailable_reason': None,
+        }
 
     def to_dict(self, refresh=True):
         """Convert host to dictionary.
@@ -118,7 +138,8 @@ class Host(db.Model):
             'redis_unix_socket': bool(self.redis_unix_socket),
             'lan_rate_uses_hook': bool(self.lan_rate_uses_hook),
             'firewall_pool_v2': bool(self.firewall_pool_v2),
-            'runtime': normalize_runtime(self.runtime),
+            'runtime': host_runtime(self),
+            **(self._custom_runtime_fields() if host_runtime(self) == CUSTOM else {}),
             'runtime_upgrade': upgrade_eligibility(self),
             'status': self.status.value if self.status else None,
             'qlfilter_status': self.qlfilter_status.value if self.qlfilter_status else QLFilterStatus.UNKNOWN.value, # Include QLFilter status

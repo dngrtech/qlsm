@@ -22,7 +22,7 @@ export const RUNTIME_OPTIONS = [
   },
 ];
 
-const KNOWN = new Set(RUNTIME_OPTIONS.map(option => option.id));
+const KNOWN = new Set(['custom', ...RUNTIME_OPTIONS.map(option => option.id)]);
 
 // A host with no recorded runtime predates the column, and nothing but minqlx
 // has ever existed.

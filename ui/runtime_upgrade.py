@@ -43,7 +43,7 @@ def upgrade_eligibility(host, *, assume_status=None):
     """
     from ui.models import HostStatus, InstanceStatus
 
-    if normalize_runtime(host.runtime) != MINQLX:
+    if host_runtime(host) != MINQLX:
         return _result(False, False)
 
     status = assume_status if assume_status is not None else host.status

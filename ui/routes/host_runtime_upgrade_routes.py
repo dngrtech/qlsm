@@ -261,8 +261,13 @@ def start_runtime_upgrade(host_id):
     host = db.session.get(Host, host_id)
     if host is None:
         return _error('Host not found.', 404)
+    from ui.runtime import CUSTOM, host_runtime
+
+    body = _json_body()
+    if host_runtime(host) == CUSTOM or (isinstance(body, dict) and body.get('target_runtime') == CUSTOM):
+        return _error('Changing a host to or from Custom is unsupported.', 400)
     try:
-        fingerprint, answers, uploads = _parse_body(_json_body())
+        fingerprint, answers, uploads = _parse_body(body)
     except _Rejected as rejected:
         return rejected.response
     blocked = upgrade_block_response(host.id, host.name)

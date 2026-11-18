@@ -192,3 +192,25 @@ describe('AddHostFormFields runtime error', () => {
     expect(alert.id).toBeTruthy();
   });
 });
+
+describe('Custom runtime', () => {
+  it('shows the approved build for a Standalone host', () => {
+    renderFields({
+      provider: 'standalone',
+      runtime: 'custom',
+      runtimeProviders: [{ provider_id: 'fixture', label: 'Fixture runtime', build: 'Build 1' }],
+      runtimeProviderId: 'fixture',
+    });
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked();
+    expect(screen.getByText('Build 1')).toBeInTheDocument();
+  });
+
+  it('explains why Custom is unavailable', () => {
+    renderFields({
+      provider: 'standalone', runtimeProviders: [],
+      customUnavailableReason: 'No enabled Custom runtime provider.',
+    });
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeDisabled();
+    expect(screen.getByText('No enabled Custom runtime provider.')).toBeInTheDocument();
+  });
+});

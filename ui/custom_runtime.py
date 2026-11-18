@@ -203,3 +203,14 @@ def approved_release(provider_id: str) -> RuntimeRelease:
 def pinned_release(provider_id: str, digest: str) -> RuntimeRelease:
     _active_provider(provider_id)
     return _retained_release(provider_id, digest)
+
+
+def custom_platform_error(release, detected):
+    expected = release.metadata["platform"]
+    python = ".".join(map(str, expected["python"]))
+    actual_python = (detected.get("python_version") or "").split(".")
+    if (detected.get("id") == expected["os_id"] and detected.get("version_id") == expected["os_version"]
+            and detected.get("arch") == expected["arch"] and actual_python[:2] == python.split(".")):
+        return None
+    return (f"{release.label} requires {expected['os_id']} {expected['os_version']} "
+            f"{expected['arch']} with Python {python}.")

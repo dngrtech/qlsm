@@ -282,6 +282,12 @@ export default function HostDetailDrawer({
                         </Field>
                         <Field label="Runtime">
                           <RuntimeChip runtime={internalHost.runtime} />
+                          {internalHost.runtime_provider_label && (
+                            <span className="ml-2">{internalHost.runtime_provider_label} {internalHost.runtime_build}</span>
+                          )}
+                          {internalHost.runtime_unavailable_reason && (
+                            <p role="status" className="mt-1 text-xs">{internalHost.runtime_unavailable_reason}</p>
+                          )}
                         </Field>
                         {internalHost.is_standalone ? (
                           <>

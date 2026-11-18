@@ -1,6 +1,6 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
 from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User
-from ui.runtime import normalize_runtime
+from ui.runtime import CUSTOM, host_runtime, normalize_runtime
 
 DB_EXPORT_FORMAT_VERSION = 1
 
@@ -21,7 +21,12 @@ def _host_row(host):
         'redis_unix_socket': bool(host.redis_unix_socket),
         'lan_rate_uses_hook': bool(host.lan_rate_uses_hook),
         'firewall_pool_v2': bool(host.firewall_pool_v2),
-        'runtime': normalize_runtime(host.runtime),
+        'runtime': host_runtime(host),
+        **({
+            'runtime_provider_id': host.runtime_provider_id,
+            'runtime_release_sha256': host.runtime_release_sha256,
+            'runtime_plugin_api': host.runtime_plugin_api,
+        } if host_runtime(host) == CUSTOM else {}),
         'status': host.status.value if host.status else None,
         'qlfilter_status': host.qlfilter_status.value if host.qlfilter_status else None,
         'auto_restart_schedule': host.auto_restart_schedule,

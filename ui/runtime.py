@@ -15,6 +15,7 @@ import re
 
 MINQLX = 'minqlx'
 MINQLXTENDED = 'minqlxtended'
+CUSTOM = 'custom'
 
 VALID_RUNTIMES = (MINQLX, MINQLXTENDED)
 
@@ -99,12 +100,27 @@ def is_valid_runtime(value):
 
 def runtime_paths(runtime):
     """Return a copy of the path table for `runtime`."""
+    if runtime == CUSTOM:
+        from ui.custom_runtime import RuntimeUnavailable
+        raise RuntimeUnavailable("Resolve a Custom runtime using its host's pinned release.")
     return dict(_RUNTIME_PATHS[normalize_runtime(runtime)])
 
 
 def host_runtime(host):
     """The runtime of a Host row, tolerant of None and of detached objects."""
-    return normalize_runtime(getattr(host, 'runtime', None))
+    value = getattr(host, 'runtime', None)
+    return CUSTOM if value == CUSTOM else normalize_runtime(value)
+
+
+def plugin_api_for_host(host):
+    runtime = host_runtime(host)
+    if runtime != CUSTOM:
+        return runtime
+    api = getattr(host, 'runtime_plugin_api', None)
+    if api not in VALID_RUNTIMES:
+        from ui.custom_runtime import RuntimeUnavailable
+        raise RuntimeUnavailable("The Custom host has no valid pinned plugin API.")
+    return api
 
 
 # Vultr images QLSM has ever provisioned, keyed by the Host.os_type recorded at
