@@ -81,3 +81,13 @@ def test_dependency_tree_is_sealed_before_publication(tmp_path, monkeypatch):
     installer._seal_dependencies(deps)
     assert ownership == [(deps, 0, 0), (package, 0, 0)]
     assert package.stat().st_mode & 0o777 == 0o644
+
+
+def test_custom_host_installs_system_redis_for_management_probes():
+    import yaml
+
+    playbook = Path(__file__).resolve().parents[1] / "ansible/playbooks/setup_host.yml"
+    [play] = yaml.safe_load(playbook.read_text())
+    [task] = [task for task in play["tasks"]
+              if "python3-redis" in str(task.get("ansible.builtin.apt", {}))]
+    assert task["when"] == "runtime == 'custom'"

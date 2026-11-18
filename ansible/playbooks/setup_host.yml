@@ -328,6 +328,12 @@
       environment:
         DEBIAN_FRONTEND: noninteractive
 
+    - name: Install system Redis client for QLSM management probes
+      ansible.builtin.apt:
+        name: python3-redis
+        state: present
+      when: runtime == 'custom'
+
     - name: Set system timezone
       community.general.timezone:
         name: "{{ host_timezone | default('UTC') }}"
