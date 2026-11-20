@@ -631,3 +631,57 @@ def test_status_on_settings_section_rejected():
         'settings_section': {'id': 's', 'panel': 'p', 'status': 'GET x'},
     }))
     assert any('status' in e and 'host_menu' in e for e in errors)
+
+
+# ---- add_instance_tabs -------------------------------------------------
+
+def _add_instance_panel(**panel):
+    data = {'kind': 'form', 'fields': [{'key': 'on', 'type': 'bool'}]}
+    data.update(panel)
+    return data
+
+
+def test_add_instance_tab_with_a_form_panel_is_valid():
+    _, errors = validate_manifest(_minimal(ui={
+        'panels': {'new': _add_instance_panel(load='GET add-instance?host_id={host_id}')},
+        'add_instance_tabs': [{'id': 'new', 'label': 'New', 'panel': 'new'}],
+    }))
+    assert errors == []
+
+
+def test_add_instance_tab_may_be_a_component():
+    _, errors = validate_manifest(_minimal(ui={
+        'add_instance_tabs': [{'id': 'new', 'component': 'AddTab.js'}],
+    }))
+    assert errors == []
+
+
+def test_add_instance_tab_panel_must_be_a_form():
+    _, errors = validate_manifest(_minimal(ui={
+        'panels': {'files': {'kind': 'table'}},
+        'add_instance_tabs': [{'id': 'new', 'panel': 'files'}],
+    }))
+    assert any('must be of kind "form"' in e for e in errors)
+
+
+def test_add_instance_tab_panel_may_not_submit_on_its_own():
+    _, errors = validate_manifest(_minimal(ui={
+        'panels': {'new': _add_instance_panel(submit='PUT add-instance')},
+        'add_instance_tabs': [{'id': 'new', 'panel': 'new'}],
+    }))
+    assert any('must not declare "submit"' in e for e in errors)
+
+
+def test_add_instance_tab_cannot_render_its_own_modal():
+    _, errors = validate_manifest(_minimal(ui={
+        'add_instance_tabs': [{'id': 'new', 'component': 'AddTab.js', 'renders': 'modal'}],
+    }))
+    assert any('"renders": "modal" is not available here' in e for e in errors)
+
+
+def test_add_instance_tab_load_route_may_not_escape_the_addon():
+    _, errors = validate_manifest(_minimal(ui={
+        'panels': {'new': _add_instance_panel(load='GET ../../hosts')},
+        'add_instance_tabs': [{'id': 'new', 'panel': 'new'}],
+    }))
+    assert any('must stay inside the addon prefix' in e for e in errors)

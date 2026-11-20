@@ -139,7 +139,7 @@ the selection under `selection_key` (default `selected`), so an addon can
 keep the field name its API already uses.
 
 Mount points: `host_menu`, `instance_menu`, `instance_tabs`,
-`settings_section`, `page`. Routes in a panel are always relative to the
+`settings_section`, `page`, `add_instance_tabs` (see below). Routes in a panel are always relative to the
 addon's own `/api/addons/<id>/` prefix, so a panel cannot point at a core
 endpoint. Manifest validation enforces that, and rejects more than an
 absolute path: a declared route may not contain a `.` or `..` segment, an
@@ -271,6 +271,95 @@ warning.
 
 Requires `"ui_api": 4`.
 
+### `add_instance_tabs` -- a tab in the Add Instance form
+
+Every other mount point acts on something that already exists. This one
+puts a tab into the Add Instance form, where the instance does not exist
+yet, so the tab cannot save anything on its own: its values go out with the
+create request and reach the addon's `instance.created` handler (see
+"Instance creation" below). The point is that whatever the addon prepares
+there is in place before the instance's first deploy, so its contribution
+(launch args, plugins) is part of that deploy instead of costing a second
+apply and restart.
+
+```json
+{ "ui": {
+  "add_instance_tabs": [
+    { "id": "stats", "label": "Stats Hub", "icon": "radio", "panel": "new_instance" }
+  ],
+  "panels": {
+    "new_instance": {
+      "kind": "form",
+      "load": "GET add-instance?host_id={host_id}",
+      "fields": [
+        { "key": "telemetry", "type": "bool", "label": "Send telemetry" },
+        { "key": "server_id", "type": "string", "label": "Server ID (optional)" }
+      ]
+    }
+  }
+} }
+```
+
+- The panel must be a `form` and may not declare `submit`. Its optional
+  `load` route prefills the fields; the scope is the host picked in the form,
+  so `{host_id}` is available, and the tab reloads when the host changes.
+  Without a `load` route, or while no host is picked, the fields start from
+  their manifest `default`s. A failed load falls back to those defaults and
+  says so in the tab.
+- The tab stays mounted while hidden, so its (pre)filled values are sent
+  even when the operator never opens it. They are validated and coerced like
+  any declarative form (`number` fields are required; use a `string` field
+  for an optional value).
+- A tier-2 `component` works too, with `ctx.addInstance = { hostId, values,
+  onChange }`: the form holds the values, the component reports changes
+  through `onChange(nextValues)`. `"renders": "modal"` is not available here.
+- An addon with several tabs gets their values merged into one object.
+- Shown only while the addon is enabled globally, like every mount point but
+  `settings_section`.
+
+The create request carries the values as
+`"addon_options": {"<addon_id>": {...}}`; core checks only that this is an
+object of objects. An older core ignores both the mount point and the
+field, so an addon may declare this tab without raising its `ui_api`: the
+tab just does not appear there (raising `ui_api` would withhold the addon's
+whole UI on that core). Its `instance.created` handler has to be
+feature-detected the same way, see below.
+
+### Instance creation (`instance.created`)
+
+`POST /api/instances/` dispatches `instance.created` once, after the
+instance row is committed and its config files are written to
+`configs/<host>/<id>/`, and before the deploy job is queued:
+
+```python
+from ui.addons.hooks import HOOK_SCOPES
+
+def register(ctx):
+    if 'instance.created' in HOOK_SCOPES:          # older cores lack it
+        @ctx.on('instance.created')
+        def prepare(instance_id, options):
+            ...
+```
+
+- `options` is this addon's own `addon_options` entry, `{}` when the request
+  had none (an API client, or a form without the addon's tab). No addon ever
+  sees another addon's options.
+- **Ungated.** A new instance has no instance-layer enable row yet, so an
+  `instance`-scoped hook could never fire, and whether the addon switches
+  itself on for the new instance (from its tab values, or from an "enable
+  for new instances" setting) is exactly the decision the handler makes.
+  Check `ctx.settings.is_enabled('global')` yourself if a globally disabled
+  addon should stay out of it.
+- **Synchronous, inside the request.** Keep it quick: no SSH, no Ansible, at
+  most a short HTTP call with a timeout. Do not queue an apply or a restart;
+  the deploy that follows picks up what the handler prepared (enable layers
+  for `instance.launch_args`, ids, files under the instance's config dir).
+- **Cannot block the create.** A handler that raises is logged, whatever it
+  left uncommitted in the database session is rolled back, and the next
+  addon runs; the instance is created and deployed either way. Report a
+  partial result the way the rest of the addon does (the instance log, the
+  addon's own status), not by raising.
+
 ## UI, tier 2 — the addon's own component
 
 Build it yourself and ship the built file in `ui/`:
@@ -291,7 +380,7 @@ The component receives one prop:
 
 ```js
 export default function Panel({ ctx }) { /* ... */ }
-// ctx = { addonId, scope: { kind, id }, api, apiFor, download, saveBlob, ui, manifest, modal }
+// ctx = { addonId, scope: { kind, id }, api, apiFor, download, saveBlob, ui, manifest, modal, addInstance }
 ```
 
 `ctx.api(method, path, { params, data })` is pre-pinned to your addon's own

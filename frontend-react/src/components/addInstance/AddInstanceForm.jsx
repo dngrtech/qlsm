@@ -51,6 +51,10 @@ import { presetRuntimeStripWarning } from '../../utils/presetRuntimeCompat';
 import { combineAcceptedPaths, mergeReplacements } from '../../utils/presetCompatibility';
 import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
 import OwnerAdminEditor from '../operators/OwnerAdminEditor';
+import AddonAddInstanceTab from '../addons/AddonAddInstanceTab';
+import { resolveAddonIcon } from '../addons/addonIcons';
+import { normalizeFields, serializeValues, validateValues } from '../addons/panelRoute';
+import { useAddonMounts } from '../../contexts/AddonsContext';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
@@ -214,7 +218,13 @@ function AddInstanceForm({
   const [presetClearedNotice, setPresetClearedNotice] = useState(null);
 
   // Scripts tab state
-  const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories' | 'hooks' | 'admins'
+  const [activeMainTab, setActiveMainTab] = useState('config'); // 'config' | 'scripts' | 'factories' | 'hooks' | 'admins' | 'addon:<key>'
+
+  // Addon tabs (`ui.add_instance_tabs`). Their values are kept here, per
+  // mount, and sent with the create request as addon_options[<addon_id>].
+  const addonTabs = useAddonMounts('add_instance_tabs');
+  const [addonTabValues, setAddonTabValues] = useState({});
+  const [addonTabErrors, setAddonTabErrors] = useState({});
   const initialPluginSeed = seedCheckedPlugins(initialSeed.checkedPlugins);
   const [checkedPlugins, setCheckedPlugins] = useState(initialPluginSeed.selectable);
   const [droppedPluginCount, setDroppedPluginCount] = useState(initialPluginSeed.dropped.length);
@@ -1230,6 +1240,34 @@ function AddInstanceForm({
     }
     setPasswordErrors({});
 
+    // One object per addon, merged across that addon's tabs. A declarative
+    // tab is validated and coerced the same way a settings form is.
+    const addonOptions = {};
+    const foundAddonErrors = {};
+    for (const mount of addonTabs) {
+      const values = addonTabValues[mount.key];
+      if (!values) continue;
+      let serialized = values;
+      if (!mount.entry?.component) {
+        const fields = normalizeFields(mount.panel?.fields);
+        const errors = validateValues(fields, values);
+        if (Object.keys(errors).length) {
+          foundAddonErrors[mount.key] = errors;
+          continue;
+        }
+        serialized = serializeValues(fields, values);
+      }
+      addonOptions[mount.addon.id] = { ...(addonOptions[mount.addon.id] || {}), ...serialized };
+    }
+    setAddonTabErrors(foundAddonErrors);
+    const firstBadTab = Object.keys(foundAddonErrors)[0];
+    if (firstBadTab) {
+      const mount = addonTabs.find((m) => m.key === firstBadTab);
+      setActiveMainTab(`addon:${firstBadTab}`);
+      setInternalFormError(`Please fix the highlighted fields in the ${mount?.label || 'addon'} tab.`);
+      return;
+    }
+
     if (pluginsManagerRef.current?.flushEdits) {
       await pluginsManagerRef.current.flushEdits();
     }
@@ -1261,6 +1299,9 @@ function AddInstanceForm({
     // to revoke everyone, so an untouched list must not be sent at all.
     if (adminEntries !== null) {
       submitData.admins = adminEntries;
+    }
+    if (Object.keys(addonOptions).length) {
+      submitData.addon_options = addonOptions;
     }
 
     await onSubmit(submitData, { consumeDraft: pluginConsume });
@@ -1359,6 +1400,13 @@ function AddInstanceForm({
               { key: 'factories', icon: LayoutGrid, label: 'Factories' },
               { key: 'hooks', icon: Webhook, label: 'Hooks' },
               { key: 'admins', icon: Crown, label: 'Owner & Admins' },
+              // Addon tabs come last, as in the instance editor, so a newly
+              // installed addon never reorders the tabs an operator knows.
+              ...addonTabs.map((mount) => ({
+                key: `addon:${mount.key}`,
+                icon: resolveAddonIcon(mount.icon),
+                label: mount.label,
+              })),
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -1461,6 +1509,22 @@ function AddInstanceForm({
                 onAdminEntriesLoaded={setLoadedAdminEntries}
               />
             </div>
+            {/* Kept mounted: a tab's defaults have to load (and be sent)
+                even when the operator never opens it. */}
+            {addonTabs.map((mount) => (
+              <div
+                key={mount.key}
+                className={activeMainTab === `addon:${mount.key}` ? 'flex-1 min-h-0 overflow-y-auto' : 'hidden'}
+              >
+                <AddonAddInstanceTab
+                  mount={mount}
+                  hostId={selectedHostId}
+                  values={addonTabValues[mount.key]}
+                  errors={addonTabErrors[mount.key]}
+                  onChange={(values) => setAddonTabValues((prev) => ({ ...prev, [mount.key]: values }))}
+                />
+              </div>
+            ))}
           </div>
         </div>
       </div>

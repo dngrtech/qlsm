@@ -292,6 +292,46 @@ def _read_default_config(filename):
         return None
 
 
+def _validate_addon_options(addon_options):
+    """`addon_options` on create: {<addon_id>: {...}}, what each addon's
+    add-instance tab collected. Only the shape is checked here; what the
+    values mean is the addon's business (its instance.created handler).
+    Returns (options, error_message)."""
+    if addon_options is None:
+        return {}, None
+    if not isinstance(addon_options, dict):
+        return None, "addon_options must be an object keyed by addon id"
+    for addon_id, options in addon_options.items():
+        if not isinstance(options, dict):
+            return None, f'addon_options["{addon_id}"] must be an object'
+    return addon_options, None
+
+
+def _dispatch_instance_created(instance_id, addon_options):
+    """Run every addon's instance.created handler with its own options.
+
+    Never raises: an addon must not be able to stop an instance from being
+    created. A handler that raises is logged by the registry, and its
+    half-done session work is rolled back so it cannot ride along with the
+    status update that follows (the instance row itself is already
+    committed).
+    """
+    # Whatever the route still holds in the session (ld_preload_hooks) is
+    # committed first, so a rollback after a failing handler cannot drop it.
+    db.session.commit()
+    try:
+        from ui.addons import dispatch_each
+
+        dispatch_each(
+            'instance.created', instance_id,
+            lambda addon_id: ((instance_id, dict(addon_options.get(addon_id) or {})), {}),
+            on_error=lambda addon_id, exc: db.session.rollback(),
+        )
+    except Exception as e:  # registry unavailable, e.g. outside an app context
+        db.session.rollback()
+        current_app.logger.warning(f"Addon hook instance.created skipped for instance {instance_id}: {e}")
+
+
 @instance_api_bp.route('/', methods=['POST'], endpoint='add_instance_api')
 @jwt_required()
 def add_instance_api():
@@ -337,6 +377,10 @@ def add_instance_api():
     redis_db, redis_db_err = _validate_redis_db(data.get('redis_db'))
     if redis_db_err:
         return jsonify({"error": {"message": redis_db_err}}), 400
+
+    addon_options, addon_options_err = _validate_addon_options(data.get('addon_options'))
+    if addon_options_err:
+        return jsonify({"error": {"message": addon_options_err}}), 400
 
     zmq_stats_password, stats_pwd_err = validate_zmq_password(
         data.get('zmq_stats_password'), 'ZMQ Stats Password'
@@ -499,6 +543,11 @@ def add_instance_api():
             if os.path.exists(default_factories_dir):
                 shutil.copytree(default_factories_dir, instance_factories_dir, dirs_exist_ok=True)
                 current_app.logger.info(f"Copied default factories to {instance_factories_dir} for instance {instance.id}")
+
+        # Addons prepare their per-instance state now, before the deploy is
+        # queued, so what they contribute to the deploy (launch args,
+        # plugins) is already there on the first run.
+        _dispatch_instance_created(instance.id, addon_options)
 
         # Acquire entity lock before enqueue
         lock_token = str(uuid.uuid4())

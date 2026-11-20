@@ -46,7 +46,9 @@ function MenuEntryStatus({ mount, scopeId }) {
 
   if (!status) return null;
   return (
-    <span className="ml-auto flex items-center gap-1.5 pl-3">
+    // min-w-0 lets the label truncate instead of squeezing the entry's own
+    // name onto several lines in a narrow menu.
+    <span className="ml-auto flex min-w-0 items-center gap-1.5 pl-3">
       <span
         data-testid="addon-menu-status-dot"
         className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${status.ok ? 'bg-emerald-400' : 'bg-gray-400'}`}
@@ -106,7 +108,7 @@ export function useAddonMenu(point, entity, subtitle) {
                   }`}
                 >
                   <Icon size={15} className="mr-3 flex-shrink-0 text-theme-muted" />
-                  {mount.label}
+                  <span className="whitespace-nowrap flex-shrink-0">{mount.label}</span>
                   <MenuEntryStatus mount={mount} scopeId={scopeId} />
                 </button>
               )}
