@@ -260,8 +260,11 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
             try:
                 value = handler(*args, **kwargs)
             except Exception as e:
-                log.error('Addon %s hook %s failed: %s\n%s',
-                          addon.id, hook, e, traceback.format_exc())
+                if hook == 'backup.export':
+                    log.error('Addon %s hook %s failed (%s).', addon.id, hook, type(e).__name__)
+                else:
+                    log.error('Addon %s hook %s failed: %s\n%s',
+                              addon.id, hook, e, traceback.format_exc())
                 continue
             finally:
                 elapsed = time.monotonic() - started

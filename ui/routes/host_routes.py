@@ -1,3 +1,4 @@
+from contextlib import ExitStack, contextmanager
 from flask import Blueprint, request, jsonify, current_app # Removed render_template, redirect, url_for, flash, abort. Added jsonify, current_app
 from ui import db, rq
 from ui.constants import GAME_UDP_PORTS
@@ -8,6 +9,9 @@ from ui.database import (
 from ui.vultr_settings import is_vultr_configured
 from ui.runtime import CUSTOM, DEFAULT_RUNTIME, VALID_RUNTIMES, host_runtime, is_valid_runtime, runtime_paths
 from ui.custom_runtime import RuntimeUnavailable, approved_release, custom_platform_error, release_for_host
+from ui.addons.runtime_protection import (
+    RuntimeProviderConflict, ensure_runtime_provider_present, provider_lifecycle_lock, standalone_creation_lock,
+)
 from ui.addons.registry import get_addons
 from ui.runtime_upgrade_guard import upgrade_block_response
 import re
@@ -587,6 +591,25 @@ def _test_standalone_connection_with_key(validated_ip, ssh_port, ssh_user, ssh_k
                 pass
 
 
+@contextmanager
+def _standalone_runtime_creation(release):
+    """Fence provider/restore changes until the initial host task lock is held."""
+    if release is None:
+        yield
+        return
+    with provider_lifecycle_lock(release.provider_id):
+        db.session.rollback()  # Start a fresh read after the SSH probe.
+        ensure_runtime_provider_present(release.provider_id)
+        try:
+            current = approved_release(release.provider_id)
+        except RuntimeUnavailable as error:
+            raise RuntimeProviderConflict(str(error), code='stale_runtime') from error
+        if current.sha256 != release.sha256:
+            raise RuntimeProviderConflict('The approved build changed. Select the current build.',
+                                          code='stale_runtime')
+        yield
+
+
 def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, release=None):
     """Handle creation of standalone (user-provided) hosts."""
     ip_address = data.get('ip_address')
@@ -645,7 +668,15 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, releas
     ssh_key_path = None
     public_key_path = None
     managed_key_installed = False
+    creation_scope = ExitStack()
     try:
+        # A restore or same-name creation may have finished since the first
+        # name check. Keep both outside permanent key writes and cleanup.
+        creation_scope.enter_context(standalone_creation_lock(name))
+        db.session.rollback()
+        _, error = validate_host_name(name)
+        if error:
+            return jsonify({"error": {"message": error["message"]}}), error["status_code"]
         if ssh_auth_method == 'password':
             ssh_key_path, public_key_path = generate_managed_standalone_keypair(name)
             bootstrap_managed_key(
@@ -687,6 +718,7 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, releas
             pin = {'runtime_provider_id': release.provider_id, 'runtime_release_sha256': release.sha256,
                    'runtime_plugin_api': release.metadata['plugin_api']}
 
+        creation_scope.enter_context(_standalone_runtime_creation(release))
         # Create host record
         host = create_host(
             name=name,
@@ -721,6 +753,8 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, releas
                 else:
                     _cleanup_local_key_material(ssh_key_path, public_key_path)
                 return jsonify({"error": {"message": f'Another operation is running on host "{name}". Please wait for it to complete.'}}), 409
+
+        if host:
             try:
                 # Skip PROVISIONING, go directly to PROVISIONED_PENDING_SETUP
                 update_host(host.id, status=HostStatus.PROVISIONED_PENDING_SETUP)
@@ -746,7 +780,7 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, releas
             current_app.logger.error(f'Error adding standalone host "{name}" - create_host returned None.')
             return jsonify({"error": {"message": f'Error adding standalone host "{name}".'}}), 500
 
-    except StandaloneSSHError as exc:
+    except (StandaloneSSHError, RuntimeProviderConflict) as exc:
         if ssh_auth_method == 'password':
             _cleanup_password_bootstrap_artifacts(
                 validated_ip,
@@ -758,6 +792,9 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, releas
             )
         else:
             _cleanup_local_key_material(ssh_key_path, public_key_path)
+        if isinstance(exc, RuntimeProviderConflict):
+            db.session.rollback()
+            return jsonify({"error": exc.to_error()}), 409
         current_app.logger.warning(f'Standalone password bootstrap failed for "{name}": {exc}')
         return jsonify({"error": {"message": str(exc)}}), 400
     except Exception as e:
@@ -780,6 +817,8 @@ def _handle_standalone_host_creation(name, data, runtime=DEFAULT_RUNTIME, releas
             _cleanup_local_key_material(ssh_key_path, public_key_path)
         current_app.logger.error(f'Error adding standalone host: {e}', exc_info=True)
         return jsonify({"error": {"message": f'Error adding standalone host: {str(e)}'}}), 500
+    finally:
+        creation_scope.close()
 
 # Note: The GET part of the original add_host is removed as forms are handled by React.
 

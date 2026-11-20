@@ -205,6 +205,28 @@ describe('Custom runtime', () => {
     expect(screen.getByText('Build 1')).toBeInTheDocument();
   });
 
+  it('highlights the chosen provider and build as the provider selection changes', () => {
+    const providers = [
+      { provider_id: 'one', label: 'Provider One', build: 'v1.2.3' },
+      { provider_id: 'two', label: 'Provider Two', build: 'v2.0.0' },
+    ];
+    function Form() {
+      const [providerId, setProviderId] = React.useState('one');
+      return (
+        <AddHostFormFields {...baseProps} provider="standalone" runtime="custom"
+          runtimeProviders={providers} runtimeProviderId={providerId}
+          onRuntimeProviderChange={setProviderId} />
+      );
+    }
+
+    render(<Form />);
+    const release = screen.getByRole('region', { name: /selected custom release/i });
+    expect(release).toHaveTextContent(/Provider One.*v1\.2\.3/);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Runtime provider' }), { target: { value: 'two' } });
+    expect(release).toHaveTextContent(/Provider Two.*v2\.0\.0/);
+    expect(screen.queryByTestId('runtime-immutable-warning')).not.toBeInTheDocument();
+  });
+
   it('explains why Custom is unavailable', () => {
     renderFields({
       provider: 'standalone', runtimeProviders: [],

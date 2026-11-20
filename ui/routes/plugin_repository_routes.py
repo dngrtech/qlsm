@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required
 
 from ui import db
 from ui.models import PluginRepository
+from ui.addons.runtime_protection import RuntimeProviderConflict
 from ui.plugin_pool import resolve_pool_file
 from ui.plugin_push import push_pool_to_hosts
 from ui.plugin_repositories import (
@@ -428,6 +429,8 @@ def install_plugin_repository_addon(repo_id):
 
     try:
         manifest = download_addon(repo.url, entry, packages_dir)
+    except RuntimeProviderConflict as e:
+        return jsonify({'error': e.to_error()}), 409
     except PluginRepositoryError as e:
         return jsonify({'error': {'message': str(e)}}), 422
 

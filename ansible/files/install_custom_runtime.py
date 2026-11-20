@@ -1,10 +1,13 @@
 """Publish a verified Custom runtime and its Python dependencies together."""
 
 import argparse
+from functools import partial
 import fcntl
 import hashlib
 import json
 import os
+import platform
+import sys
 from pathlib import Path
 import re
 import shutil
@@ -47,7 +50,7 @@ def _install_dependencies(stage, requirements, imports):
         ], check=True, cwd=stage)
 
 
-def install(bundle, digest, root, requirements, launcher, imports):
+def install(bundle, digest, root, requirements, launcher, imports, *, verify_owner=None):
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ValueError("Invalid Custom runtime release digest.")
     with bundle.open("rb") as source:
@@ -57,6 +60,8 @@ def install(bundle, digest, root, requirements, launcher, imports):
     target = root / digest
     with (root / ".install.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if verify_owner is not None:
+            verify_owner()
         if target.is_dir():
             if (target / ".qlsm-release").read_text(encoding="ascii").strip() != digest:
                 raise ValueError("Existing runtime installation has an invalid release marker.")
@@ -72,6 +77,8 @@ def install(bundle, digest, root, requirements, launcher, imports):
             executable.chmod(0o755)
             _install_dependencies(stage, requirements, imports)
             (stage / ".qlsm-release").write_text(digest + "\n", encoding="ascii")
+            if verify_owner is not None:
+                verify_owner()
             os.rename(stage, target)
 
 
@@ -83,8 +90,24 @@ def main():
     parser.add_argument("requirements")
     parser.add_argument("launcher")
     parser.add_argument("imports", type=json.loads)
+    parser.add_argument("--platform", type=json.loads)
+    parser.add_argument("--operation-fence", nargs=3, metavar=("HELPER", "OPERATION", "TOKEN"))
     args = parser.parse_args()
-    install(args.bundle, args.digest, args.root, args.requirements, args.launcher, args.imports)
+    if args.platform:
+        os_release = platform.freedesktop_os_release()
+        actual = {"os_id": os_release.get("ID", "").lower(), "os_version": os_release.get("VERSION_ID"),
+                  "arch": platform.machine(), "python": list(sys.version_info[:2])}
+        if (any(actual[key] != args.platform.get(key) for key in actual)
+                or not hasattr(tarfile, "data_filter")):
+            parser.error("The host is incompatible with the release platform.")
+    verify_owner = None
+    if args.operation_fence:
+        helper, operation, token = args.operation_fence
+        verify_owner = partial(subprocess.run, [
+            sys.executable, helper, "check", "--operation-id", operation, "--fencing-token", token,
+        ], check=True)
+    install(args.bundle, args.digest, args.root, args.requirements, args.launcher, args.imports,
+            verify_owner=verify_owner)
 
 
 if __name__ == "__main__":

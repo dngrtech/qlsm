@@ -533,3 +533,61 @@ def test_release_never_signals_a_recycled_pid(helper, tmp_path, capsys):
     finally:
         bystander.kill()
         bystander.wait()
+
+
+def test_custom_unit_inventory_and_exact_restore(helper, instance, capsys):
+    unit = instance['unit']
+    unit.chmod(0o640)
+    plan = _replan(instance, 'unit.json', sources=instance['plan_data']['sources'][-1:],
+                   preserve_unit_permissions=True)
+    original_group = unit.stat().st_gid
+    rc, result = _run(helper, capsys, *plan, '--inventory-only')
+    assert rc == 0 and result['applied'] == 0 and unit.read_text() == 'old unit\n'
+    assert _run(helper, capsys, *plan)[0] == 0
+    assert unit.read_text() == 'new unit\n'
+    assert unit.stat().st_mode & 0o777 == 0o640 and unit.stat().st_gid == original_group
+    rc, result = _run(helper, capsys, *instance['restore'], '--exact-unit')
+    assert rc == 0 and result['restored'] == 1
+    assert unit.read_text() == 'old unit\n' and unit.stat().st_mode & 0o777 == 0o640
+    assert (instance['qlds'] / 'baseq3/server.cfg').read_text() == 'old cfg\n'
+    os.remove(os.path.join(instance['ops'], 'manifest.json'))
+    rc, _ = _run(helper, capsys, *instance['restore'], '--exact-unit')
+    assert rc != 0
+
+
+def test_late_custom_play_cannot_reopen_its_finalized_operation(helper, tmp_path, capsys):
+    base = str(tmp_path)
+    for op in (OP_A, OP_B):
+        args = ['--base', base, '--operation-id', op, '--fencing-token', '1']
+        rc, acquired = _run(helper, capsys, 'acquire', *args, '--ttl', '60')
+        assert rc == 0
+        assert _run(helper, capsys, 'release', *args)[0] == 0
+        assert _gone(acquired['holder_pid'])
+        assert _run(helper, capsys, 'receipt', *args) == (0, {'receipt': 'open'})
+        assert _run(helper, capsys, 'finalize', *args)[0] == 0
+        assert _run(helper, capsys, 'receipt', *args) == (0, {'receipt': 'closed'})
+    rc, result = _run(helper, capsys, 'acquire', '--base', base, '--operation-id', OP_A,
+                      '--fencing-token', '1', '--ttl', '1')
+    assert rc != 0 and 'finalized' in result['refused']
+
+
+def test_service_mutation_rechecks_remote_fence(helper, instance, capsys, monkeypatch):
+    called = []
+    monkeypatch.setattr(helper.subprocess, 'run', lambda argv, **kwargs: called.append(argv))
+    args = ['service', '--base', instance['base'], *FENCE, '--port', '27960', '--action', 'stop']
+    assert _run(helper, capsys, *args)[0] == 0
+    assert called == [['systemctl', 'stop', 'qlds@27960.service']]
+    args[args.index('--fencing-token') + 1] = '2'
+    assert _run(helper, capsys, *args)[0] != 0 and len(called) == 1
+
+
+def test_custom_unit_new_private_unit(helper, instance, capsys):
+    unit = instance['unit']
+    unit.unlink()
+    plan = _replan(instance, 'unit.json', sources=instance['plan_data']['sources'][-1:],
+                   preserve_unit_permissions=True)
+    assert _run(helper, capsys, *plan, '--inventory-only')[0] == 0
+    assert _run(helper, capsys, *plan)[0] == 0
+    assert unit.read_text() == 'new unit\n' and unit.stat().st_mode & 0o777 == 0o600
+    assert _run(helper, capsys, *instance['restore'], '--exact-unit')[0] == 0
+    assert not unit.exists()

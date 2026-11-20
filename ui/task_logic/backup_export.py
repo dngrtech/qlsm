@@ -9,7 +9,7 @@ import zipfile
 
 from ui.backup_crypto import encrypt_archive
 from ui.task_logic.backup_db_export import serialize_database
-from ui.task_logic.backup_files import backup_file_trees, walk_tree
+from ui.task_logic.backup_files import backup_archive_file_trees, backup_file_trees, walk_tree
 
 BACKUP_MANIFEST_FORMAT_VERSION = 1
 
@@ -31,7 +31,7 @@ def _build_manifest():
     }
 
 
-def build_backup_zip_bytes():
+def build_backup_zip_bytes(trees=None):
     """Build the plaintext ZIP (manifest + db_export.json + file trees)."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
@@ -43,7 +43,9 @@ def build_backup_zip_bytes():
             'db_export.json',
             json.dumps(serialize_database(), indent=2, sort_keys=True) + '\n',
         )
-        for prefix, root, skip in backup_file_trees():
+        if trees is None:
+            trees = backup_file_trees()
+        for prefix, root, skip in trees:
             for rel_path, full_path in walk_tree(root, skip):
                 archive.write(full_path, f'files/{prefix}/{rel_path}')
     buffer.seek(0)
@@ -52,7 +54,8 @@ def build_backup_zip_bytes():
 
 def build_backup_archive(password):
     """Return (blob, filename) for the downloadable .qlsmbak file."""
-    zip_bytes = build_backup_zip_bytes()
+    with backup_archive_file_trees() as trees:
+        zip_bytes = build_backup_zip_bytes(trees)
     blob = encrypt_archive(zip_bytes, password)
     timestamp = datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
     return blob, f'qlsm-backup-{timestamp}.qlsmbak'

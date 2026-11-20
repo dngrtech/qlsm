@@ -173,6 +173,11 @@ class UpgradeDeps:
             time.sleep(READY_POLL_SECONDS)
 
     # --- Task 4 remote entry points ---------------------------------------------
+    def custom_step(self, host, action, **kwargs):
+        from .custom_runtime_remote import run_step
+
+        return run_step(host, action, **kwargs)
+
     def install(self, host_id, **kwargs):
         from ui.task_logic.instance_runtime_update import install_runtime_on_host
 

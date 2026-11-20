@@ -78,7 +78,7 @@ def test_invalid_db_export_json_does_not_create_artifacts_or_mutate_files(app, a
     assert _managed_tree_contents(app_root) == contents_before_restore
 
 
-def test_malformed_database_row_rolls_back_database_and_completed_file_swaps(app, app_root, monkeypatch):
+def test_malformed_database_row_rolls_back_database_before_swapping_files(app, app_root, monkeypatch):
     ssh_keys = app_root / 'terraform' / 'ssh-keys'
     (ssh_keys / 'archive_only').write_text('archive only')
     state_dir = app_root / 'terraform' / 'vultr-root' / 'terraform.tfstate.d'
@@ -109,7 +109,11 @@ def test_malformed_database_row_rolls_back_database_and_completed_file_swaps(app
         reached_replace_database = True
         return real_replace_database(data)
 
+    def reject_swap(*_args):
+        pytest.fail('An invalid database export must be rejected before swapping files.')
+
     monkeypatch.setattr('ui.task_logic.backup_import.replace_database', track_replace_database)
+    monkeypatch.setattr('ui.task_logic.backup_import._swap_tree', reject_swap)
 
     with app.app_context():
         with pytest.raises(KeyError):

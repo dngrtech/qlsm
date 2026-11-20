@@ -598,7 +598,7 @@ def test_download_addon_rejects_a_broken_archive(tmp_path, monkeypatch):
         download_addon('https://example.com/repo', _addon_entry(), str(tmp_path / 'addon-packages'))
 
 
-def test_download_addon_installing_over_an_existing_copy_is_the_update(tmp_path, monkeypatch):
+def test_download_addon_installing_over_an_existing_copy_is_the_update(tmp_path, monkeypatch, app_context):
     packages_dir = tmp_path / 'addon-packages'
     monkeypatch.setattr(
         plugin_repositories.requests, 'get',
