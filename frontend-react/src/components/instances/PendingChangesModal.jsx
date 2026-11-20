@@ -48,7 +48,8 @@ function DiffBlock({ diff }) {
   );
 }
 
-function FileChange({ file }) {
+// Also used by the bulk preset apply to show a server's diff.
+export function FileChange({ file }) {
   return (
     <details className="rounded border border-[var(--surface-border)] px-3 py-2">
       <summary className="cursor-pointer text-sm">

@@ -64,6 +64,17 @@ Built-in presets are updated with QLSM releases and have no **Plugin Updates** b
 - **"Common pool check failed"** in the modal means QLSM couldn't read the host's plugin pool, usually because the host is unreachable. The per-instance results are still accurate, because QLSM reads those locally.
 - If refreshing the common plugin pool fails, the host goes to **Error** and no instance files are changed. Check [Host Logs](host-logs.md) for the reason.
 
+## Bulk actions: Update plugins
+
+To check every host at once, click **Bulk actions** in the header of the **Servers** page and stay on the **Update plugins** tab. Click **Check for updates** to run the same check as above on every **Active** host, two hosts at a time; nothing is checked until you click it. The results stay while the dialog is open, also when you switch to **Apply preset** and back; **Check again** runs the check anew. Closing the dialog stops the hosts not checked yet and drops the results. Presets are not part of this tab.
+
+- Each host has its own box with the same choices as the single-host window: the **Common plugin pool**, the changed files of each instance, and **Restart to apply** per instance. Everything outdated is ticked at first, and **Restart to apply** starts off for stopped instances and for every instance when **Defer restarts** is on in Settings.
+- A host that already matches says **up to date**.
+- Click **Update Selected** to send the ticked updates. Up to four hosts are processed at a time.
+- Each host reports on its own row. A failure on one row does not stop the others. A host that was sent shows **queued** and is unticked, so a second click does not send it again. Updating a file replaces the copy, including your edits, exactly as in the single-host window; untick files you want to keep.
+
+Verify the result the same way as for a single host, under [Verification](#verification).
+
 ## Related Pages
 
 - [Host Actions Menu](host-actions-menu.md)

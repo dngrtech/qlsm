@@ -259,6 +259,20 @@ A preset with an admin list no longer replaces the server's admins: QLSM compare
 
 While a preset is loading, **Load** is disabled; only the last load you started is applied, and a load still running when you close the editor is dropped. **Save Configuration** stays disabled until the preset's plugin list has been matched to its files.
 
+## Bulk actions: Apply preset
+
+**Bulk actions** in the header of the **Servers** page, tab **Apply preset**, loads one preset into many servers at once. It works like [Load Preset](#load-preset) for each server, with a preview before anything is changed.
+
+1. Choose a preset, then tick the servers. A host box selects all of its servers. Only servers on **Active** hosts can be ticked.
+2. **Keep each server's own value of** lists the cvars each server keeps instead of taking the preset's value, with the source next to each name (for example an addon or a plugin manifest with `"per_server": true`; see [Load Preset](#load-preset) for the rules). The list is the union over the ticked servers. If a server's list cannot be read, its row says why and **Preview** stays off until **Retry** reads it. Untick a cvar to let the preset overwrite it, or type a name and click **Add** to keep one more. `qlx_plugins` is never kept.
+3. Click **Preview**. QLSM builds the result for each server and shows what would change: plugins and hooks added or removed, admins, 99k LAN rate, and changed files. A server the preset would not change says **no changes** and is skipped.
+4. If some of the preset's plugins can't run on a server's runtime, QLSM asks the compatibility question once for each runtime, not once per server, and lists every such plugin of that runtime's servers, also the ones with no replacement that would be dropped. Those servers say **needs decision** until it is answered. Cancelling it leaves them unapplied, and they show why.
+5. Tick or untick **Restart servers to apply** (it starts off when **Defer restarts** is on in Settings; stopped servers are never started), then click **Apply**.
+
+Changing the preset, the ticked servers or the kept cvars discards the previews, so preview again before applying. Up to four servers are previewed or applied at a time.
+
+Each server reports on its own row, and a failure on one does not stop the others: **queued** means the change was sent, **busy** means the server is already being changed, and **preview again** means the preset or the server changed after the preview, so no changes were made and **Apply** does not send it again. Run **Preview** again, then **Apply**. **Close** is off while an apply is running.
+
 ## Factories
 
 The **Factories** tab controls factory files included in the deployment bundle.

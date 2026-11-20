@@ -58,4 +58,11 @@ describe('preset apply API helpers', () => {
 
     await expect(applyPresetToInstance(3, { preset_id: 9 })).rejects.toEqual(body);
   });
+
+  it('applyPresetToInstance rethrows the status with the error body', async () => {
+    const body = { error: { message: 'Another operation is running on instance "x". Please wait for it to complete.' } };
+    mocks.post.mockRejectedValueOnce({ response: { status: 409, data: body } });
+
+    await expect(applyPresetToInstance(3, { preset_id: 9 })).rejects.toEqual({ ...body, status: 409 });
+  });
 });

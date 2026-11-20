@@ -734,7 +734,8 @@ export const applyPresetToInstance = async (instanceId, body) => {
     return response.data; // the PUT /instances/<id>/config response body
   } catch (error) {
     console.error(`Failed to apply preset to instance ${instanceId}:`, error.response ? error.response.data : error.message);
-    throw error.response ? error.response.data : new Error(`Failed to apply preset to instance ${instanceId}`);
+    // The status tells a locked instance (409) apart from other failures.
+    throw error.response ? { ...error.response.data, status: error.response.status } : new Error(`Failed to apply preset to instance ${instanceId}`);
   }
 };
 
