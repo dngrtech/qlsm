@@ -13,6 +13,7 @@ from ui.admin_permissions import strip_numeric_admin_lines, validate_admin_entri
 from ui.database import get_presets, create_preset, get_preset, update_preset, delete_preset
 from ui.models import BinaryMetadata
 from ui.preset_compat import apply_compatibility
+from ui.preset_plugin_updates import apply_preset_plugin_updates, check_preset_plugins
 from ui.preset_support import (
     PRESETS_DIR,
     default_preset_name_for_runtime,
@@ -1617,3 +1618,99 @@ def delete_preset_api(preset_id):
         db.session.rollback()
         current_app.logger.error(f"Error deleting preset {preset_id}: {e}", exc_info=True)
         return jsonify({"error": {"message": f"Error deleting preset: {str(e)}"}}), 500
+
+
+def _plugin_update_target(preset):
+    """(scripts_dir, None) for a preset whose plugins may be refreshed from
+    the pool, else (None, (response, status))."""
+    if preset.is_builtin or is_internal_preset_name(preset.name):
+        return None, (jsonify({"error": {"message": "Built-in presets are updated with QLSM releases, not from here."}}), 403)
+    try:
+        return _resolve_preset_scripts_root(preset.path), None
+    except ValueError as e:
+        return None, (jsonify({"error": {"message": str(e)}}), 400)
+
+
+def _preset_plugin_update_payload(preset, scripts_dir):
+    payload = check_preset_plugins(preset.runtime, scripts_dir)
+    payload.update({
+        "preset_id": preset.id,
+        "name": preset.name,
+        "runtime": normalize_runtime(preset.runtime),
+    })
+    return payload
+
+
+@preset_api_bp.route('/plugin-updates', methods=['GET'], endpoint='check_all_preset_plugin_updates_api')
+@jwt_required()
+def check_all_preset_plugin_updates_api():
+    """Check for Updates across every user preset. Local hashing only, no
+    SSH, so it is cheap enough to run when the Presets page loads."""
+    try:
+        results = []
+        for preset in get_presets():
+            scripts_dir, refused = _plugin_update_target(preset)
+            if refused:
+                continue
+            results.append(_preset_plugin_update_payload(preset, scripts_dir))
+        return jsonify({"data": results}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error checking preset plugin updates: {e}", exc_info=True)
+        return jsonify({"error": {"message": "Failed to check preset plugin updates"}}), 500
+
+
+@preset_api_bp.route('/<int:preset_id>/plugin-updates', methods=['GET'], endpoint='check_preset_plugin_updates_api')
+@jwt_required()
+def check_preset_plugin_updates_api(preset_id):
+    """Diffs the preset's own plugin copies against the merged pool for the
+    preset's runtime. Nothing is written here."""
+    preset = get_preset(preset_id)
+    if not preset:
+        return jsonify({"error": {"message": "Preset not found."}}), 404
+    scripts_dir, refused = _plugin_update_target(preset)
+    if refused:
+        return refused
+    try:
+        return jsonify({"data": _preset_plugin_update_payload(preset, scripts_dir)}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error checking plugin updates for preset {preset_id}: {e}", exc_info=True)
+        return jsonify({"error": {"message": "Failed to check preset plugin updates"}}), 500
+
+
+@preset_api_bp.route('/<int:preset_id>/plugin-updates/apply', methods=['POST'], endpoint='apply_preset_plugin_updates_api')
+@jwt_required()
+def apply_preset_plugin_updates_api(preset_id):
+    """Copies the pool version of the selected outdated plugins into the
+    preset. Body: {"files": ["a.py", ...]} or {"all": true}. Synchronous:
+    a few local file copies, unlike the host apply which runs Ansible."""
+    preset = get_preset(preset_id)
+    if not preset:
+        return jsonify({"error": {"message": "Preset not found."}}), 404
+    scripts_dir, refused = _plugin_update_target(preset)
+    if refused:
+        return refused
+
+    data = request.get_json(silent=True) or {}
+    if data.get('all') is True:
+        filenames = None
+    else:
+        filenames = data.get('files')
+        if not isinstance(filenames, list) or not all(isinstance(f, str) for f in filenames):
+            return jsonify({"error": {"message": "files must be a list of filenames, or pass all: true"}}), 400
+        if not filenames:
+            return jsonify({"error": {"message": "Nothing selected to update"}}), 400
+
+    try:
+        updated, skipped = apply_preset_plugin_updates(preset.runtime, scripts_dir, filenames)
+        if updated:
+            update_preset(preset.id)  # touches last_updated
+        current_app.logger.info(
+            f"Preset '{preset.name}' (ID: {preset_id}) plugin updates applied: {updated}, skipped: {skipped}")
+        return jsonify({
+            "data": {"updated": updated, "skipped": skipped},
+            "message": f"Updated {len(updated)} plugin file(s) in preset '{preset.name}'.",
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error applying plugin updates for preset {preset_id}: {e}", exc_info=True)
+        return jsonify({"error": {"message": "Failed to apply preset plugin updates"}}), 500

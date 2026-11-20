@@ -121,7 +121,8 @@ Read-only diff of the host runtime's merged plugin pool (the built-in tier
 `.py` and `.ql-plugin.json` files at the top level of the pool are compared.
 
 - **Common pool:** the host's `/home/ql/assets/common/<pool>/`, hashed with
-  one ad-hoc `sha256sum` over SSH (15s connect timeout, 30s overall).
+  one `sha256sum` over plain ssh (15s connect timeout, 30s overall; the ssh
+  connection is kept for 60s, so a repeated check of the host is near instant).
 - **Each instance:** `configs/<host_name>/<instance_id>/scripts/`, hashed locally.
   Only files the instance already has are compared, so every entry is
   `modified`. A pool file missing from `scripts/` isn't reported, because the

@@ -1234,7 +1234,7 @@ function AddInstanceForm({
       await pluginsManagerRef.current.flushEdits();
     }
 
-    const checkedPluginNames = toQlxPluginNames(checkedPlugins);
+    const checkedPluginNames = toQlxPluginNames(checkedPlugins, pluginsAdapter.tree);
     const submitData = {
       name,
       host_id: parseInt(selectedHostId, 10),
