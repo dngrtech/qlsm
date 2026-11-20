@@ -69,6 +69,20 @@ class TestSerializeDatabase:
             assert data['format_version'] == 1
             assert data['addon_states'] == [_addon_state_row()]
 
+    def test_export_skips_addon_state_whose_host_or_instance_is_gone(self, app):
+        _seed(app)
+        with app.app_context():
+            db.session.add_all([
+                AddonState(id=41, addon_id='a', scope='host', scope_id=99, enabled=True, settings_json='{}'),
+                AddonState(id=42, addon_id='a', scope='instance', scope_id=99, enabled=True, settings_json='{}'),
+                AddonState(id=43, addon_id='a', scope='global', scope_id=0, enabled=True, settings_json='{}'),
+            ])
+            db.session.commit()
+
+            data = serialize_database()
+
+            assert [row['id'] for row in data['addon_states']] == [43]
+
 
 class TestReplaceDatabase:
     def test_round_trip(self, app):
