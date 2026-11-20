@@ -13,7 +13,7 @@ def _playbook_path_for(playbook_name):
     process = MagicMock()
     process.communicate.return_value = ('', '')
     process.wait.return_value = 0
-    with patch('ui.task_logic.ansible_runner.subprocess.Popen', return_value=process) as popen:
+    with patch('ui.task_logic.ansible_runner.subprocess.Popen', return_value=process) as popen,             patch('ui.task_logic.ansible_runner._end_db_transaction_before_playbook'):
         _run_host_ansible_playbook(host, playbook_name, capture_output=True)
     return popen.call_args[0][0][1]
 

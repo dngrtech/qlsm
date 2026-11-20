@@ -54,6 +54,7 @@ def reconcile_instance_after_host_setup(
     try:
         _prepare_instance_zmq(instance)
         cpu_affinity = ensure_instance_cpu_affinity(instance)
+        db.session.commit()  # end the write transaction before addon hooks and ansible
         extravars = {
             "host_name": instance.host.name,
             "port": instance.port,
@@ -108,4 +109,7 @@ def reconcile_instance_after_host_setup(
             "Instance reconciliation raised for instance_id %s",
             instance_id,
         )
+        # The exception may have come from the session itself; without a
+        # rollback the ERROR commit below fails too and the status is lost.
+        db.session.rollback()
         return _fail_reconciliation(instance, f"unexpected exception: {exc}")
