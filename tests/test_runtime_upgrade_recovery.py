@@ -251,7 +251,7 @@ def test_lock_expiry_keeps_the_mutation_blockade(app, client, world):
     headers = auth_headers(app, 'u')
     response = client.post(f'/api/instances/{world.ids["A"]}/stop', headers=headers)
     assert response.status_code == 409
-    assert 'being upgraded to minqlxtended' in response.get_json()['error']['message']
+    assert 'undergoing runtime maintenance' in response.get_json()['error']['message']
 
 
 def test_failure_callback_requests_recovery_and_reconciler_covers_enqueue_failure(world):

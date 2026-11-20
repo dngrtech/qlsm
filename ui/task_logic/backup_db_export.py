@@ -1,5 +1,7 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
-from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User
+from ui.models import (
+    AddonState, ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User,
+)
 from ui.runtime import CUSTOM, host_runtime, normalize_runtime
 
 DB_EXPORT_FORMAT_VERSION = 1
@@ -115,4 +117,5 @@ def serialize_database():
         'binary_metadata': [_binary_meta_row(r) for r in BinaryMetadata.query.order_by(BinaryMetadata.id).all()],
         'operators': [_operator_row(r) for r in Operator.query.order_by(Operator.id).all()],
         'notifications': [_notification_row(r) for r in Notification.query.order_by(Notification.id).all()],
+        'addon_states': [r.to_dict() for r in AddonState.query.order_by(AddonState.id).all()],
     }

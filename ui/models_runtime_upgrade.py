@@ -1,4 +1,4 @@
-"""Durable record of one minqlx -> minqlxtended host upgrade.
+"""Durable record of a builtin conversion or a pinned Custom release change.
 
 One row per attempt. The orchestrator owns the state machine, reservation and
 recovery; the snapshot module only writes the snapshot_* columns. Imported by

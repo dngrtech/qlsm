@@ -5,10 +5,11 @@ import zipfile
 
 import pytest
 from ui import db
-from ui.models import Host, ConfigPreset
+from ui.models import AddonState, Host
 from ui.backup_crypto import encrypt_archive
 from ui.task_logic.backup_export import build_backup_zip_bytes
 from ui.task_logic.backup_files import backup_file_trees
+from ui.task_logic.backup_import import _swap_tree as real_swap_tree
 from ui.task_logic.backup_import import restore_backup_archive, BackupRestoreError, BACKUP_SNAPSHOTS_DIR
 
 
@@ -165,22 +166,46 @@ class TestRestoreBackupArchive:
         file_mode = os.stat(os.path.join(BACKUP_SNAPSHOTS_DIR, snapshot_name)).st_mode & 0o777
         assert file_mode == 0o600
 
-    def test_rollback_on_db_failure_restores_old_file_trees(self, app, app_root, monkeypatch):
-        blob = _make_backup_with_host(app, app_root)
-        (app_root / 'terraform' / 'ssh-keys' / 'must_survive_rollback').write_text('x')
-
-        def _boom(_data):
-            raise RuntimeError('simulated failure after file swap')
-
-        monkeypatch.setattr('ui.task_logic.backup_import.replace_database', _boom)
-        _reject_crossing_ssh_mount(monkeypatch, app_root)
-
+    @pytest.mark.parametrize('failed_step', ['commit', 'filesystem-swap'])
+    def test_failure_rolls_back_addon_state_and_files(self, app, app_root, monkeypatch, failed_step):
+        ssh_key = app_root / 'terraform' / 'ssh-keys' / 'old_key'
         with app.app_context():
-            with pytest.raises(RuntimeError):
+            row = AddonState(addon_id='custom-provider', scope='global', enabled=True,
+                             settings_json='{"setting": "archived"}')
+            db.session.add(row)
+            db.session.commit()
+            blob = encrypt_archive(build_backup_zip_bytes(), None)
+            row.enabled = False
+            row.settings_json = '{"setting": "local"}'
+            db.session.commit()
+        ssh_key.write_text('LOCAL KEY')
+
+        def fail_with_replacement_pending():
+            row = AddonState.query.one()
+            assert row.enabled is True
+            assert row.settings == {'setting': 'archived'}
+            assert ssh_key.read_text() == 'OLD KEY'
+            raise RuntimeError('simulated failure with database and filesystem changes pending')
+
+        if failed_step == 'commit':
+            monkeypatch.setattr(db.session, 'commit', fail_with_replacement_pending)
+        else:
+            def fail_last_tree_swap(root, staged_dir, skip):
+                if os.path.abspath(root) == str(app_root / 'data' / 'addon-packages'):
+                    fail_with_replacement_pending()
+                return real_swap_tree(root, staged_dir, skip)
+
+            monkeypatch.setattr('ui.task_logic.backup_import._swap_tree', fail_last_tree_swap)
+        _reject_crossing_ssh_mount(monkeypatch, app_root)
+        with app.app_context():
+            with pytest.raises(RuntimeError, match='changes pending'):
                 restore_backup_archive(blob, None)
 
-        assert (app_root / 'terraform' / 'ssh-keys' / 'must_survive_rollback').exists()
-        assert not list((app_root / 'terraform' / 'ssh-keys').glob('.qlsm-restore-*'))
+            row = AddonState.query.one()
+            assert row.enabled is False
+            assert row.settings == {'setting': 'local'}
+        assert ssh_key.read_text() == 'LOCAL KEY'
+        assert not list(ssh_key.parent.glob('.qlsm-restore-*'))
 
     def test_restored_ssh_key_keeps_its_permissions(self, app, app_root):
         (app_root / 'terraform' / 'ssh-keys' / 'old_key').chmod(0o600)
@@ -230,10 +255,11 @@ class TestRestoreBackupArchive:
         blob = _make_backup_with_host(app, app_root)
         (app_root / 'terraform' / 'ssh-keys' / 'old_key').unlink()
 
-        def _boom(_data):
+        def _boom():
+            assert (app_root / 'terraform' / 'ssh-keys' / 'old_key').exists()
             raise RuntimeError('simulated failure after file swap')
 
-        monkeypatch.setattr('ui.task_logic.backup_import.replace_database', _boom)
+        monkeypatch.setattr(db.session, 'commit', _boom)
 
         with app.app_context():
             with pytest.raises(RuntimeError):
@@ -287,10 +313,10 @@ class TestRestoreBackupArchive:
         # _builtin alone, and must roll the custom preset back too.
         (app_root / 'configs' / 'presets' / 'custom' / 'server.cfg').write_text('changed after first restore')
 
-        def _boom(_data):
+        def _boom():
             raise RuntimeError('simulated failure')
 
-        monkeypatch.setattr('ui.task_logic.backup_import.replace_database', _boom)
+        monkeypatch.setattr(db.session, 'commit', _boom)
         with app.app_context():
             with pytest.raises(RuntimeError):
                 restore_backup_archive(blob, None)

@@ -30,8 +30,7 @@ function AddHostModal({ isOpen, onClose, onHostAdded }) {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(null);
   const [provider, setProvider] = useState('self');
-  // No default: the runtime changes later only via the one-way minqlxtended
-  // upgrade, so the operator picks it explicitly or the form does not submit.
+  // Require an explicit runtime choice before submitting.
   const [runtime, setRuntime] = useState('');
   const [runtimeError, setRuntimeError] = useState(null);
   const [runtimeProviderId, setRuntimeProviderId] = useState('');

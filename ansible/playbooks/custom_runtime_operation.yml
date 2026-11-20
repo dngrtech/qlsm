@@ -1,0 +1,149 @@
+---
+- name: Maintain a pinned Custom release
+  hosts: "{{ target_host_name }}"
+  become: true
+  gather_facts: false
+  vars:
+    ops_root: /var/lib/qlsm/runtime-ops
+    ops_dir: "{{ ops_root }}/ops/{{ operation_id }}/{{ instance_id | int }}"
+    unit_path: "/etc/systemd/system/qlds@{{ port | int }}.service"
+    qlds_dir: "/home/ql/qlds-{{ port | int }}"
+    op_helper: "{{ playbook_dir }}/../files/qlsm_runtime_op.py"
+    fence_args: "--operation-id {{ operation_id | quote }} --fencing-token {{ fencing_token | int }}"
+  tasks:
+    - name: Validate the release operation
+      ansible.builtin.assert:
+        that:
+          - custom_action in ['stage', 'inventory', 'apply', 'restore', 'start', 'stop', 'barrier', 'receipt', 'finalize']
+          - "operation_id is match('^[0-9a-f]{32}$')"
+          - "(fencing_token | string) is match('^[0-9]+$')"
+          - "custom_action not in ['inventory', 'apply', 'restore', 'start', 'stop'] or (port | int > 0 and port | int < 65536 and instance_id | int > 0)"
+
+    - name: Acquire and fence the operation
+      ansible.builtin.include_tasks: tasks/runtime_op_lock.yml
+      when: custom_action not in ['receipt', 'finalize']
+
+    - name: Run the requested step while holding the remote lock
+      when: custom_action not in ['receipt', 'finalize']
+      block:
+        - name: Check the existing immutable release before staging its successor
+          when: custom_action == 'stage'
+          ansible.builtin.command:
+            argv: [cat, "/var/lib/qlsm/custom-runtime/{{ custom_original_digest }}/.qlsm-release"]
+          changed_when: false
+          register: original_marker
+          failed_when: original_marker.rc != 0 or original_marker.stdout | trim != custom_original_digest
+
+        - name: Verify platform and publish the selected digest beside the original
+          ansible.builtin.include_tasks: tasks/install_custom_runtime.yml
+          when: custom_action == 'stage'
+
+        - name: Require an inactive systemd service before modifying a unit
+          when: custom_action in ['apply', 'restore']
+          ansible.builtin.command:
+            argv: [systemctl, is-active, "qlds@{{ port | int }}.service"]
+          register: service_state
+          changed_when: false
+          failed_when: service_state.rc != 3 or service_state.stdout | trim not in ['inactive', 'failed']
+
+        - name: Capture or replace only the systemd unit
+          when: custom_action in ['inventory', 'apply']
+          block:
+            - name: Create the private staging directory
+              ansible.builtin.file:
+                path: "{{ item }}"
+                state: directory
+                owner: root
+                group: root
+                mode: '0700'
+              loop:
+                - "{{ ops_root }}/ops"
+                - "{{ ops_root }}/ops/{{ operation_id }}"
+                - "{{ ops_dir }}"
+                - "{{ ops_dir }}/stage"
+
+            - name: Stage the captured unit
+              ansible.builtin.copy:
+                src: "{{ unit_src }}"
+                dest: "{{ ops_dir }}/stage/unit"
+                mode: '0600'
+              no_log: true
+              diff: false
+
+            - name: Stage the unit-only file plan
+              ansible.builtin.copy:
+                dest: "{{ ops_dir }}/stage/plan.json"
+                mode: '0600'
+                content: "{{ file_plan | to_json }}"
+              vars:
+                file_plan:
+                  operation_id: "{{ operation_id }}"
+                  instance_id: "{{ instance_id | int }}"
+                  ops_dir: "{{ ops_dir }}"
+                  qlds_dir: "{{ qlds_dir }}"
+                  record: true
+                  preserve_unit_permissions: true
+                  extra_destinations: ["{{ unit_path }}"]
+                  sources:
+                    - {kind: file, from: "{{ ops_dir }}/stage/unit", to: "{{ unit_path }}"}
+
+            - name: Capture the original or atomically install the selected unit
+              ansible.builtin.script:
+                cmd: >-
+                  {{ op_helper }} apply {{ fence_args }} --plan {{ (ops_dir ~ '/stage/plan.json') | quote }}
+                  {{ '--inventory-only' if custom_action == 'inventory' else '' }}
+                executable: /usr/bin/python3
+          always:
+            - name: Remove the temporary unit and plan
+              ansible.builtin.file:
+                path: "{{ ops_dir }}/stage"
+                state: absent
+
+        - name: Restore and verify the exact original systemd unit
+          when: custom_action == 'restore'
+          ansible.builtin.script:
+            cmd: >-
+              {{ op_helper }} restore {{ fence_args }} --ops-dir {{ ops_dir | quote }}
+              --qlds-dir {{ qlds_dir | quote }} --unit-path {{ unit_path | quote }} --exact-unit
+            executable: /usr/bin/python3
+
+        - name: Reload changed units
+          ansible.builtin.script:
+            cmd: "{{ op_helper }} service {{ fence_args }} --action daemon-reload"
+            executable: /usr/bin/python3
+          when: custom_action in ['restore', 'apply']
+
+        - name: Change the service state
+          ansible.builtin.script:
+            cmd: "{{ op_helper }} service {{ fence_args }} --action {{ custom_action }} --port {{ port | int }}"
+            executable: /usr/bin/python3
+          when: custom_action in ['start', 'stop']
+      always:
+        - ansible.builtin.include_tasks: tasks/runtime_op_release.yml
+
+    - name: Read the remote finalization receipt
+      when: custom_action == 'receipt'
+      ansible.builtin.script:
+        cmd: "{{ op_helper }} receipt {{ fence_args }}"
+        executable: /usr/bin/python3
+      changed_when: false
+      register: operation_receipt
+
+    - name: Report the remote receipt state
+      when: custom_action == 'receipt'
+      ansible.builtin.debug:
+        msg: "QLSM_CUSTOM_RECEIPT_{{ (operation_receipt.stdout | from_json).receipt }}"
+
+    - name: Close the remote operation record
+      when: custom_action == 'finalize'
+      ansible.builtin.script:
+        cmd: >-
+          {{ op_helper }} finalize {{ fence_args }}
+          {{ '--allow-unrecorded' if allow_unrecorded | bool else '' }}
+        executable: /usr/bin/python3
+      register: closed
+      failed_when: closed.rc != 0 or not (closed.stdout | from_json).finalized
+
+    - name: Report verified completion of this step
+      ansible.builtin.debug:
+        msg: QLSM_CUSTOM_STEP_VERIFIED

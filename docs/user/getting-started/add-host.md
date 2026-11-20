@@ -42,13 +42,23 @@ Only one `QLSM Host (self)` deployment may exist at a time.
 
 ## Custom Runtime
 
-Custom is available when adding a Standalone host and an installed runtime addon is enabled. The Add Host form shows the provider and approved build. Select the build shown in the form when creating a fresh host that meets the provider's OS, architecture and Python requirements.
+Choose **Custom** when adding a Standalone host with an installed, enabled runtime addon. Confirm the provider name and approved build shown in Add Host. A Custom host stays with its original provider and plugin API. The host must meet that release's OS, architecture, and Python requirements.
 
-QLSM pins that build on the host. Addon updates affect new hosts after QLSM restarts and the addon is active. **Re-run Host Setup** installs the existing host's pinned build. If the provider is missing, disabled or broken, the host stays listed with the reason. Restore the provider and the pinned release before rerunning setup.
+QLSM pins the provider, release digest, and plugin API. Installing a newer version of the addon makes its approved release available after QLSM restarts and the addon is active. Existing hosts keep their pins until you confirm a release change. **Re-run Host Setup** installs the pinned build. If the provider or pinned bundle is unavailable, restore it before rerunning setup.
 
-Preset compatibility follows the provider's plugin API. For example, a Custom runtime that declares minqlx uses the minqlx preset and plugin pool. Runtime changes to and from Custom are unavailable.
+The provider's plugin API determines which presets and plugins QLSM uses. The pinned addon supplies its Python plugin dependencies during setup. QLSM skips the built-in per-instance requirements file on Custom hosts.
 
-The pinned addon supplies Python plugin dependencies during host setup. QLSM skips per-instance `scripts/requirements.txt` on Custom hosts.
+### Update or roll back a Custom release
+
+1. Open the host's **Host Details** and click **Update Custom runtime**.
+2. Review the pinned build and SHA-256, the available release choices, and the affected instance states. An approved update must come from the same provider and match the pinned release's plugin API and platform. When a previous release from a successful change is available for the current pin, you can choose that release to roll back.
+3. Confirm the selected release and monitor host status and [Host Logs](../operations/host-logs.md). If the host or available releases changed after you opened the preview, reload it and review the choices again.
+
+The host must be **Active**, its provider and pinned bundle must be available, and each instance must be **Running** or **Stopped**. QLSM stages the selected bundle before interrupting services and keeps both release bundles. During the change, running instances have downtime while QLSM updates their service definitions, restarts them, and verifies they are ready. Stopped instances stay stopped. QLSM preserves instance configs, plugins, and game data.
+
+If a change fails after QLSM starts stopping instances, QLSM attempts to restore the original pin, service definitions, and running or stopped states. If it cannot verify recovery, the host stays in **Error** and other host changes remain blocked while QLSM retries. Check **Host Logs** for progress.
+
+QLSM rejects global disable, uninstall, or replacement with a package that removes the runtime capability while any Custom host references the provider. This applies even when the host has no instances or is in **Error**. Release updates for the provider and scoped settings edits are still available.
 
 ## Standalone Workflow
 
