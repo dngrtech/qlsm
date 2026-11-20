@@ -1,7 +1,6 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
-from ui import db
 from ui.models import (
-    AddonScope, AddonState, ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User,
+    AddonState, ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User,
 )
 from ui.runtime import CUSTOM, host_runtime, normalize_runtime
 
@@ -105,30 +104,20 @@ def _notification_row(row):
     }
 
 
-def _addon_state_rows():
-    """Addon state rows, minus host/instance rows whose target no longer exists.
-
-    Deleting a host cascades its instances without clearing their instance-scope
-    rows, and the strict import rejects any row whose target isn't in the archive.
-    """
-    targets = {
-        AddonScope.HOST.value: {i for (i,) in db.session.query(Host.id)},
-        AddonScope.INSTANCE.value: {i for (i,) in db.session.query(QLInstance.id)},
-    }
-    rows = []
-    for row in AddonState.query.order_by(AddonState.id).all():
-        if row.scope in targets and row.scope_id not in targets[row.scope]:
-            continue
-        rows.append(row.to_dict())
-    return rows
-
-
 def serialize_database():
     """Return a JSON-serializable snapshot of every backed-up table."""
+    hosts = [_host_row(h) for h in Host.query.order_by(Host.id).all()]
+    instances = [_instance_row(i) for i in QLInstance.query.order_by(QLInstance.id).all()]
+    # Best-effort cleanup can leave scoped settings for deleted entities.
+    # Omit only those orphan scopes, using the actual exported entity snapshot.
+    scope_ids = {
+        'host': {row['id'] for row in hosts},
+        'instance': {row['id'] for row in instances},
+    }
     return {
         'format_version': DB_EXPORT_FORMAT_VERSION,
-        'hosts': [_host_row(h) for h in Host.query.order_by(Host.id).all()],
-        'instances': [_instance_row(i) for i in QLInstance.query.order_by(QLInstance.id).all()],
+        'hosts': hosts,
+        'instances': instances,
         'users': [_user_row(u) for u in User.query.order_by(User.id).all()],
         'presets': [_preset_row(p) for p in ConfigPreset.query.order_by(ConfigPreset.id).all()],
         'api_keys': [_api_key_row(k) for k in ApiKey.query.order_by(ApiKey.id).all()],
@@ -136,5 +125,6 @@ def serialize_database():
         'binary_metadata': [_binary_meta_row(r) for r in BinaryMetadata.query.order_by(BinaryMetadata.id).all()],
         'operators': [_operator_row(r) for r in Operator.query.order_by(Operator.id).all()],
         'notifications': [_notification_row(r) for r in Notification.query.order_by(Notification.id).all()],
-        'addon_states': _addon_state_rows(),
+        'addon_states': [r.to_dict() for r in AddonState.query.order_by(AddonState.id).all()
+                         if r.scope not in scope_ids or r.scope_id in scope_ids[r.scope]],
     }
