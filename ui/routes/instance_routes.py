@@ -30,6 +30,10 @@ from ui.task_lock import acquire_lock, release_lock
 from ui.pending_changes import (
     SOURCE_CONFIG_SAVE, diff_snapshots, list_pending_changes, record_pending_change, snapshot_dir,
 )
+from ui.preset_apply import PresetApplyError, build_preset_target, diff_preset_target, target_hash
+from ui.preset_keep_cvars import collect_keep_cvars
+from ui.routes.preset_api_routes import read_preset_payload
+from ui.database import get_preset
 from ui.admin_permissions import levels_from_entries, validate_admin_entries, strip_numeric_admin_lines
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
@@ -1562,6 +1566,159 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
     current_configs['factories'] = factories_content
 
     return jsonify({"data": current_configs})
+
+def _bad_request(message):
+    return jsonify({"error": {"message": message}}), 400
+
+
+def _string_list(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _preset_request(instance_id, data=None):
+    """Load the instance and, with `data`, validate a preview/apply body.
+
+    Returns (instance, preset, params, error); `error` is a ready response
+    tuple. `params` carries the validated optional fields.
+    """
+    instance = get_instance(instance_id)
+    if not instance or not instance.host:
+        return None, None, None, (jsonify({"error": {"message": "Instance or associated host not found."}}), 404)
+    if data is None:
+        return instance, None, None, None
+    if not isinstance(data, dict):
+        return None, None, None, _bad_request("Request body must be a JSON object")
+    preset_id = data.get('preset_id')
+    if not isinstance(preset_id, int) or isinstance(preset_id, bool):
+        return None, None, None, _bad_request("preset_id must be an integer")
+    params = {}
+    for key in ('accepted_replacements', 'keep_cvars'):
+        value = data.get(key)
+        if value is not None and not _string_list(value):
+            return None, None, None, _bad_request(f"{key} must be a list of strings")
+        params[key] = value
+    rejection = _reject_mutation_while_host_configuring(instance.host)
+    if rejection:
+        return None, None, None, rejection
+    preset = get_preset(preset_id)
+    if not preset:
+        return None, None, None, (jsonify({"error": {"message": "Preset not found."}}), 404)
+    return instance, preset, params, None
+
+
+def _drop_draft(target):
+    from ui.routes.draft_routes import _get_draft_base_path
+    draft_id = (target or {}).get('payload', {}).get('draft_id')
+    if draft_id:
+        shutil.rmtree(_get_draft_base_path(draft_id), ignore_errors=True)
+
+
+def _build_target(instance, preset, params):
+    """(target, error response). The target's draft is the caller's to hand on or drop."""
+    try:
+        return build_preset_target(
+            instance, preset, params['accepted_replacements'], params['keep_cvars']), None
+    except PresetApplyError as e:
+        return None, (jsonify({"error": {"message": e.message}}), e.status)
+
+
+@instance_api_bp.route('/<int:instance_id>/preset-keep-cvars', methods=['GET'], endpoint='get_instance_preset_keep_cvars_api')
+@jwt_required()
+def get_instance_preset_keep_cvars_api(instance_id):
+    """Cvars whose server.cfg lines a preset apply can keep on this instance."""
+    instance, _, _, error = _preset_request(instance_id)
+    if error:
+        return error
+    preset_id = request.args.get('preset_id', type=int)
+    preset = get_preset(preset_id) if preset_id is not None else None
+    if not preset:
+        return jsonify({"error": {"message": "Preset not found."}}), 404
+    try:
+        preset_payload = read_preset_payload(preset, plugin_api_for_host(instance.host))
+        return jsonify({"data": collect_keep_cvars(instance, preset_payload)})
+    except RuntimeUnavailable as error:
+        return jsonify({"error": {"message": str(error)}}), 409
+    except FileNotFoundError:
+        return jsonify({"error": {"message": "Preset configuration files not found."}}), 500
+
+
+@instance_api_bp.route('/<int:instance_id>/preset-preview', methods=['POST'], endpoint='preview_instance_preset_api')
+@jwt_required()
+def preview_instance_preset_api(instance_id):
+    """What loading a preset would change on this instance; changes nothing.
+
+    With `keep_draft` the scripts draft the target points at stays for the
+    editor's Save, otherwise it is deleted before returning.
+    """
+    data = request.get_json(silent=True)
+    instance, preset, params, error = _preset_request(instance_id, data)
+    if error:
+        return error
+    keep_draft = data.get('keep_draft', False)
+    if not isinstance(keep_draft, bool):
+        return _bad_request("keep_draft must be a boolean")
+
+    target, error = _build_target(instance, preset, params)
+    if error:
+        return error
+    try:
+        diff = diff_preset_target(instance, target)
+        preview_hash = target_hash(target)
+        payload = dict(target['payload'])
+    except Exception:
+        _drop_draft(target)
+        raise
+    if not keep_draft:
+        _drop_draft(target)
+        payload.pop('draft_id', None)
+    return jsonify({"data": {
+        "compatibility": target['compatibility'],
+        "needs_decision": target['needs_decision'],
+        "keep_cvars": target['keep_cvars'],
+        "kept_cvars": target['kept_cvars'],
+        "diff": diff,
+        "preview_hash": preview_hash,
+        "target": payload,
+    }})
+
+
+@instance_api_bp.route('/<int:instance_id>/apply-preset', methods=['POST'], endpoint='apply_instance_preset_api')
+@jwt_required()
+def apply_instance_preset_api(instance_id):
+    """Load a preset into this instance as a normal config save.
+
+    Rebuilds the target and refuses (409) when it no longer hashes to the
+    `preview_hash` the preview returned.
+    """
+    data = request.get_json(silent=True)
+    instance, preset, params, error = _preset_request(instance_id, data)
+    if error:
+        return error
+    restart = data.get('restart')
+    preview_hash = data.get('preview_hash')
+    if not isinstance(restart, bool):
+        return _bad_request("restart must be a boolean")
+    if not isinstance(preview_hash, str) or not preview_hash:
+        return _bad_request("preview_hash must be a string")
+
+    target, error = _build_target(instance, preset, params)
+    if error:
+        return error
+    try:
+        if target['needs_decision']:
+            _drop_draft(target)
+            return jsonify({"error": {"message": "Plugin compatibility needs a decision"}}), 422
+        if target_hash(target) != preview_hash:
+            _drop_draft(target)
+            return jsonify({"error": {"message": "Preset or server changed since the preview. Preview again."}}), 409
+        response, status = save_instance_config(instance, {**target['payload'], 'restart': restart})
+    except Exception:
+        _drop_draft(target)
+        raise
+    if status >= 400:
+        _drop_draft(target)
+    return response, status
+
 
 @instance_api_bp.route('/check-name', methods=['GET'])
 # This route is often used for frontend validation before form submission,

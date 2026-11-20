@@ -331,6 +331,36 @@ def dispatch_each(hook, scope_id, args_for, on_error=None, on_addon_done=None):
     return results
 
 
+def dispatch_by_addon(hook, scope_id, *args):
+    """dispatch_each() for a caller that needs to know which addon said what.
+
+    Returns `(addon_id, value)` pairs in alphabetical addon order, one per
+    handler call that did not raise. Unlike dispatch(), list values are not
+    flattened into one list: the pairing is the point. Same gates, same
+    logging of a raising handler (skipped, never propagated).
+    """
+    if hook not in HOOK_SCOPES:
+        raise ValueError(f'unknown hook "{hook}"')
+    pairs = []
+    for addon in sorted(get_addons().values(), key=lambda a: a.id):
+        if not addon.loaded or addon.ctx is None:
+            continue
+        handlers = addon.ctx.handlers.get(hook) or []
+        if not handlers:
+            continue
+        if not _gates_open(addon, hook, scope_id):
+            continue
+        for handler in handlers:
+            try:
+                value = handler(*args)
+            except Exception as e:
+                log.error('Addon %s hook %s failed: %s\n%s',
+                          addon.id, hook, e, traceback.format_exc())
+                continue
+            pairs.append((addon.id, value))
+    return pairs
+
+
 def cleanup_scope(scope, scope_id, commit=False):
     """Drop every addon's state for a host/instance that is being deleted."""
     from ui.addons.settings import delete_scope_rows
