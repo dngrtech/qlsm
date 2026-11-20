@@ -244,7 +244,7 @@ qlsm/
 
 ### Instance Deployment
 1. User submits form → `POST /api/instances`
-2. Instance record created; config files, selected plugins, and selected factories are written to `configs/<host>/<id>/`
+2. Instance record created; config files, selected plugins, and selected factories are written to `configs/<host>/<id>/`; addons' `instance.created` handlers run with their part of `addon_options` (failure-isolated)
 3. RQ task queued → `deploy_instance_logic()`
 4. Ansible `add_qlds_instance.yml` → Deploys to host
 5. Instance status → RUNNING

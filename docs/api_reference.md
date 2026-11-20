@@ -707,6 +707,8 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 
 `zmq_stats_password` and `zmq_rcon_password` are optional. When both are omitted or blank, QLSM generates them at deploy time, which is the behavior of every instance created before these fields existed. When supplied they are stored on the instance at creation and the deploy-time generator leaves them untouched. Both must be supplied together — sending only one is rejected with 400. Each must be 8 to 64 characters drawn from letters, digits, `-`, `_`, and `=`; that is the same alphabet QLSM's generator uses, chosen because a wider set gets mangled by the shell, Ansible extra-vars, or Quake argument parsing on the way to the systemd unit. The two values are allowed to be identical.
 
+`addon_options` is optional: `{"<addon_id>": {...}}`, the values each addon's Add Instance tab collected (`ui.add_instance_tabs`, see `addons/README.md`). Core checks only that it is an object of objects (400 otherwise, before any database write) and hands each addon its own entry in the `instance.created` hook, which runs after the instance and its config files exist and before the deploy is queued. A failing addon handler never fails the request.
+
 ### Update LAN Rate Request
 ```json
 {

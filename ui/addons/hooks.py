@@ -48,6 +48,23 @@ HOOK_SCOPES = {
     # operator edited by hand, which by definition happens without anyone
     # flipping an enable switch.
     'instance.config_applied': None,
+    # Fires once from POST /api/instances/ (instance_routes.py), after the
+    # instance row is committed and its config files are on disk, and before
+    # the first deploy is queued. Each handler gets (instance_id, options):
+    # `options` is that addon's own part of the request's `addon_options`
+    # (what its `add_instance_tabs` entry collected, {} when nothing was
+    # sent), never another addon's -- see dispatch_each(). Lets an addon
+    # prepare its per-instance state (enable layers, an id it reserves) so
+    # its instance.launch_args already reach the first deploy instead of
+    # needing a second apply + restart.
+    # Ungated: a brand-new instance has no instance-layer enable row yet, so
+    # gating on 'instance' would never fire, and the addon is exactly the one
+    # that decides whether to switch itself on for it (an "enable for new
+    # instances" setting, the operator's tab values). Runs synchronously in
+    # the request: handlers must be quick and must not enqueue deploys of
+    # their own; a handler that raises is logged and dropped and the instance
+    # is still created.
+    'instance.created': None,
     'instance.delete': None,   # cleanup must run even for a disabled addon
     # backup: one hook, not two -- backup_files.backup_file_trees() feeds both
     # the export and the restore, so a tree contributed once is handled in
