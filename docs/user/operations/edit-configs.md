@@ -237,6 +237,24 @@ Saving writes each edited cvar as a `set <cvar> "<value>"` line into `server.cfg
 This is available both when editing an existing instance's config and when deploying a new instance.
 
 
+## Load Preset
+
+**Load preset** in the config editor fills the form with a preset's configs, factories and plugin selection. A few values belong to the server, not to the preset, so the server keeps its own for them:
+
+- everything QLSM sets on the server's launch line: `sv_hostname`, the ports, the `zmq_` and Redis settings and the rest of the [managed cvars](#managed-servercfg-cvars). `qlx_plugins` is not among them: the plugin list comes from the preset.
+- cvars an addon reserves for the server. An addon declares them through the `preset.keep_cvars` hook (see the addons README).
+- plugin cvars the plugin's manifest marks `"per_server": true`, for settings that must differ on every server:
+
+```json
+{ "cvar": "qlx_myServerId", "label": "Server id", "type": "string", "default": "", "per_server": true }
+```
+
+For each of these cvars the server keeps the `set` lines it has in its own `server.cfg`; a cvar the server has no line for gets none from the preset. Only plugins enabled on the server or ticked in the preset are read for `per_server`.
+
+A hostname you typed into the **Hostname** field before loading is kept as well.
+
+A preset saved before QLSM recorded its plugin selection has no plugin list to load, so the server's plugins are left as they are.
+
 ## Factories
 
 The **Factories** tab controls factory files included in the deployment bundle.

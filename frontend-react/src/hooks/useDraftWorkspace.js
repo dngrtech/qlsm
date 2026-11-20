@@ -18,7 +18,10 @@ import {
 
 const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000;
 
-export function useDraftWorkspace({ source, preset, host, instanceId, active, targetRuntime, acceptedReplacements }) {
+// `existingDraftId`: a draft the server already made (a preset preview with
+// keep_draft) to work on instead of seeding a new one. It is owned like a
+// seeded one: discarded when replaced or unmounted unless committed/consumed.
+export function useDraftWorkspace({ source, preset, host, instanceId, active, targetRuntime, acceptedReplacements, existingDraftId }) {
   const [draftId, setDraftId] = useState(null);
   const [tree, setTree] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -60,10 +63,12 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active, ta
       setLoading(true);
       setError(null);
       try {
-        const { draft_id } = await createDraft({
-          source, preset, host, instanceId, targetRuntime,
-          acceptedReplacements: acceptedReplacementsList,
-        });
+        const { draft_id } = existingDraftId
+          ? { draft_id: existingDraftId }
+          : await createDraft({
+            source, preset, host, instanceId, targetRuntime,
+            acceptedReplacements: acceptedReplacementsList,
+          });
         if (cancelled) {
           discardDraft(draft_id).catch(() => {});
           return;
@@ -91,7 +96,7 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active, ta
         discardDraft(ownedDraftId).catch(() => {});
       }
     };
-  }, [active, source, preset, host, instanceId, targetRuntime, acceptedKey, stopHeartbeat, clearDraftState]);
+  }, [active, source, preset, host, instanceId, targetRuntime, acceptedKey, existingDraftId, stopHeartbeat, clearDraftState]);
 
   useEffect(() => {
     if (!draftId || !active) return;
