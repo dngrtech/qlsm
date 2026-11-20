@@ -20,8 +20,8 @@
 // "string" (anything else drops the entry); `min`/`max` only apply to
 // "number". `depends_on` names other root-level plugin files (e.g.
 // ["iouonegirl.py"]) this plugin needs; see pluginSelection.js — a dependency
-// gets no checkbox of its own and is enabled/disabled together with whichever
-// selected plugin(s) declare it.
+// gets no checkbox of its own and stays selected (kept on disk) together with
+// whichever selected plugin(s) declare it, but is never written to qlx_plugins.
 
 export function getPluginManifest(item) {
   return item?.plugin_manifest && typeof item.plugin_manifest === 'object'
