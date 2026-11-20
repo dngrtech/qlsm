@@ -29,7 +29,7 @@
         - name: Check the existing immutable release before staging its successor
           when: custom_action == 'stage'
           ansible.builtin.command:
-            argv: [cat, "/var/lib/qlsm/custom-runtime/{{ custom_original_digest }}/.qlsm-release"]
+            argv: [cat, "{{ runtime_shared_dir | dirname }}/{{ custom_original_digest }}/.qlsm-release"]
           changed_when: false
           register: original_marker
           failed_when: original_marker.rc != 0 or original_marker.stdout | trim != custom_original_digest

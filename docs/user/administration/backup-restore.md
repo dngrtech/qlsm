@@ -14,6 +14,8 @@ If you configure `ADDON_PACKAGES_DIR`, give installed add-ons a dedicated direct
 - Installed addon packages, retained Custom runtime releases and host pins, and addon enablement and settings at global, host, and instance scope.
 - Instance configs, non-built-in presets, plugins downloaded from [plugin repositories](../operations/plugin-repositories.md), and hook binaries.
 
+Stale addon settings for deleted hosts or instances are omitted from the archive. Export leaves source data unchanged and preserves valid settings even for addons that are no longer installed.
+
 Built-in presets and QLSM's built-in plugins are not included — they ship with QLSM itself and are restored from the Docker image on the new host.
 
 `REDIS_PASSWORD` and `SECRET_KEY` are intentionally **not** included. Each QLSM host generates its own, and a mismatch after restore only means you'll need to sign in again — it doesn't affect any data.

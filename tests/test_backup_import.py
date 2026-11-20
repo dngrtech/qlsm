@@ -1,11 +1,12 @@
 import errno
 import io
+import json
 import os
 import zipfile
 
 import pytest
 from ui import db
-from ui.models import AddonState, Host
+from ui.models import AddonState, Host, QLInstance
 from ui.backup_crypto import encrypt_archive
 from ui.task_logic.backup_export import build_backup_zip_bytes
 from ui.task_logic.backup_files import backup_file_trees
@@ -73,6 +74,48 @@ class TestRestoreBackupArchive:
             names = {h.name for h in Host.query.all()}
             assert names == {'original-host'}
             assert summary['qlsm_version'] == '1.0.0'
+
+    def test_round_trip_omits_orphan_addon_scopes_without_mutating_source(self, app, app_root):
+        from ui.addons.registry import get_addon
+
+        valid_states = [
+            (40, 'global', 0, True, {'label': 'global', 'nested': {'keep': [1, None]}}),
+            (41, 'host', 10, False, {'label': 'host'}),
+            (42, 'instance', 20, True, {'label': 'instance'}),
+        ]
+        orphan_states = [
+            (43, 'host', 20, True, {'label': 'removed-host'}),
+            (44, 'instance', 10, False, {'label': 'removed-instance'}),
+        ]
+        with app.app_context():
+            db.session.add(Host(id=10, name='retained-host', provider='standalone'))
+            db.session.flush()
+            db.session.add(QLInstance(id=20, name='retained-instance', hostname='server',
+                                      host_id=10, port=27960))
+            for row_id, scope, scope_id, enabled, settings in valid_states + orphan_states:
+                db.session.add(AddonState(
+                    id=row_id, addon_id='uninstalled-addon', scope=scope, scope_id=scope_id,
+                    enabled=enabled, settings_json=json.dumps(settings)))
+            db.session.commit()
+            assert get_addon('uninstalled-addon') is None
+            state_query = db.select(AddonState.__table__).order_by(AddonState.id)
+            source_rows = db.session.execute(state_query).all()
+
+            blob = encrypt_archive(build_backup_zip_bytes(), None)
+
+            # Export may omit stale scopes, but must leave every source row,
+            # including its raw settings and timestamps, untouched.
+            assert db.session.execute(state_query).all() == source_rows
+            db.session.remove()
+            summary = restore_backup_archive(blob, None)
+
+            assert summary['addon_state_restored'] is True
+            assert Host.query.one().id == 10
+            assert QLInstance.query.one().id == 20
+            restored = AddonState.query.order_by(AddonState.id).all()
+            assert [(row.id, row.scope, row.scope_id, row.enabled, row.settings)
+                    for row in restored] == valid_states
+            assert all(row.addon_id == 'uninstalled-addon' for row in restored)
 
     def test_restores_file_trees(self, app, app_root):
         (app_root / 'configs' / 'presets' / 'custom').mkdir(parents=True)
