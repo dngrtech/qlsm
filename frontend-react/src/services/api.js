@@ -1119,6 +1119,27 @@ export const setVultrKeySetting = async (key) => {
   return response.data.data;
 };
 
+// Deferred-restart default (Settings)
+export const getDeferRestartsSetting = async () => {
+  const response = await apiClient.get('/settings/defer-restarts');
+  return response.data.data; // { enabled: bool }
+};
+
+export const setDeferRestartsSetting = async (enabled) => {
+  const response = await apiClient.put('/settings/defer-restarts', { enabled });
+  return response.data.data;
+};
+
+// Changes synced to an instance without a restart
+export const getInstancePendingChanges = async (instanceId) => {
+  try {
+    const response = await apiClient.get(`/instances/${instanceId}/pending-changes`);
+    return response.data.data; // { instance_id, status, entries: [...] }
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to load pending changes');
+  }
+};
+
 export const getServerStatus = async () => {
   const response = await apiClient.get('/server-status');
   return response.data.data; // {instanceId: statusData}

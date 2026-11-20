@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getInstanceConfig: vi.fn(),
   getPresetById: vi.fn(),
   getPresets: vi.fn(),
+  getDeferRestartsSetting: vi.fn(),
   saveBinaryMeta: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -77,6 +78,7 @@ vi.mock('../../../services/api', () => ({
   getInstanceConfig: mocks.getInstanceConfig,
   getPresetById: mocks.getPresetById,
   getPresets: mocks.getPresets,
+  getDeferRestartsSetting: mocks.getDeferRestartsSetting,
   updateInstance: mocks.updateInstance,
   updateInstanceConfig: mocks.updateInstanceConfig,
   updatePreset: mocks.updatePreset,
@@ -400,6 +402,7 @@ describe('EditInstanceConfigModal preset saving', () => {
     });
     mocks.getPresetById.mockResolvedValue(null);
     mocks.getPresets.mockResolvedValue([]);
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: false });
     mocks.saveBinaryMeta.mockResolvedValue({});
     mocks.updateInstance.mockResolvedValue({});
     mocks.updateInstanceConfig.mockResolvedValue({ message: 'ok' });
@@ -1013,6 +1016,30 @@ describe('EditInstanceConfigModal preset saving', () => {
     await waitFor(() => expect(toggle).toBeDisabled());
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Changing hooks requires an instance restart')).toBeInTheDocument();
+  });
+
+  it('starts with restart off when Settings > Defer restarts is on', async () => {
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: true });
+    mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'running', name: 'i' });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        instanceId={1}
+        onClose={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    const toggle = screen.getByRole('button', { name: /toggle restart after save/i });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'));
+    expect(toggle).not.toBeDisabled();
+
+    // A change that needs a restart still forces it on.
+    fireEvent.click(screen.getByText('Mock Toggle c.so'));
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
+    expect(toggle).toBeDisabled();
   });
 
   it('keeps restart off and disabled when hooks change on a STOPPED instance', async () => {

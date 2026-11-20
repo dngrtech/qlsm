@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 
 from ui import db
 from ui.models import InstanceStatus, QLInstance
+from ui.pending_changes import clear_pending_changes
 from ui.task_logic.common import append_log
 from ui.task_logic.service_runtime import observation_has_fresh_status
 
@@ -88,6 +89,8 @@ def _reconcile_observation(instance_id, observation):
     if not changed:
         return True, False, False
 
+    # The new invocation loaded every deferred change; drop their records.
+    clear_pending_changes(snapshot.id)
     promoted = db.session.get(QLInstance, snapshot.id, populate_existing=True)
     if promoted is not None:
         append_log(promoted, RESTART_CONFIRMED_LOG)

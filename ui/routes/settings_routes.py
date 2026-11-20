@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required
 from ui import db
 from ui.models import ApiKey
 from ui.vultr_settings import get_vultr_api_key, set_vultr_api_key
+from ui.pending_changes import get_defer_restarts, set_defer_restarts
 
 settings_api_bp = Blueprint('settings_api_routes', __name__)
 
@@ -78,3 +79,24 @@ def update_vultr_key_setting():
     current_app.logger.info('Vultr API key updated via Settings.')
     return jsonify({'data': {'key': get_vultr_api_key() or None}, 'message': 'Vultr API key updated.'})
 
+
+
+@settings_api_bp.route('/defer-restarts', methods=['GET'])
+@jwt_required()
+def get_defer_restarts_setting():
+    """Whether config saves and plugin updates default to "no restart"."""
+    return jsonify({'data': {'enabled': get_defer_restarts()}})
+
+
+@settings_api_bp.route('/defer-restarts', methods=['PUT'])
+@jwt_required()
+def update_defer_restarts_setting():
+    """Turn the deferred-restart default on or off."""
+    data = request.get_json(silent=True) or {}
+    enabled = data.get('enabled')
+    if not isinstance(enabled, bool):
+        return jsonify({'error': {'message': 'enabled must be a boolean.'}}), 400
+    set_defer_restarts(enabled)
+    db.session.commit()
+    current_app.logger.info(f'Defer restarts set to {enabled} via Settings.')
+    return jsonify({'data': {'enabled': get_defer_restarts()}, 'message': 'Restart setting updated.'})
