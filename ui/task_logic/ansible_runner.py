@@ -23,6 +23,20 @@ class SimpleAnsibleResult:
         return self._stdout
 
 
+def _end_db_transaction_before_playbook():
+    """Commit before a playbook runs so no SQLite write lock spans it.
+
+    Task code changes rows before a run (status, logs, cpu affinity) and the
+    next query autoflushes them, which opens a write transaction. Left open,
+    it is held for the whole ansible run (tens of seconds) and every other
+    writer -- the web app, the other workers -- waits busy_timeout and fails
+    with "database is locked". Nothing a caller does relies on rolling those
+    changes back after the run, so commit them here. A failure propagates:
+    the caller's except path records it.
+    """
+    db.session.commit()
+
+
 def _drain_remaining(process, stdout_lines, stderr_lines):
     """Drain any remaining output from subprocess pipes after process exits."""
     for line in process.stdout:
@@ -118,6 +132,8 @@ def _run_ansible_playbook(instance, playbook_name, extravars=None):
         log.debug(f"Passing extra vars as JSON: {json_extravars}")
         cmd.extend(['-e', json_extravars])
 
+    _end_db_transaction_before_playbook()
+
     try:
         log.info(f"Executing Ansible: {' '.join(cmd)}")
 
@@ -181,6 +197,8 @@ def _run_host_ansible_playbook(host, playbook_name, extravars=None, capture_outp
         json_extravars = json.dumps(base_extravars)
         log.debug(f"Passing extra vars as JSON: {json_extravars}")
         cmd.extend(['-e', json_extravars])
+
+    _end_db_transaction_before_playbook()
 
     try:
         log.info(f"Executing Ansible for host {host.name}: {' '.join(cmd)}")
