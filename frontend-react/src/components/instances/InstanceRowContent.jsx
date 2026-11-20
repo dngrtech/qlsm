@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Zap, Users } from 'lucide-react';
 import StatusIndicator from '../StatusIndicator';
 import InstanceActionsMenu from '../InstanceActionsMenu';
+import PendingChangesModal from './PendingChangesModal';
 import { isLanRateForcedOn } from '../../utils/lanRateCompatibility';
 
 export default function InstanceRowContent({
@@ -28,6 +30,8 @@ export default function InstanceRowContent({
           runtime: inst.host_runtime ?? host?.runtime ?? null,
           runtime_forces_lan_rate: inst.host_runtime_forces_lan_rate ?? host?.runtime_forces_lan_rate,
         });
+    const [pendingOpen, setPendingOpen] = useState(false);
+    const isUpdated = inst.status?.toLowerCase() === 'updated';
 
     return (
         <>
@@ -75,10 +79,33 @@ export default function InstanceRowContent({
                 }
             </span>
             <div className="instance-status-cell flex items-center gap-4">
-                <StatusIndicator
-                    status={inst.status}
-                    pollableStatuses={pollableStatuses}
-                />
+                {isUpdated ? (
+                    <button
+                        type="button"
+                        onClick={() => setPendingOpen(true)}
+                        className="rounded-full focus:outline-none focus:ring-2 focus:ring-[var(--accent-info)]"
+                        title="Restart required - show pending changes"
+                        aria-label="Show pending changes"
+                    >
+                        <StatusIndicator
+                            status={inst.status}
+                            pollableStatuses={pollableStatuses}
+                        />
+                    </button>
+                ) : (
+                    <StatusIndicator
+                        status={inst.status}
+                        pollableStatuses={pollableStatuses}
+                    />
+                )}
+                {pendingOpen && (
+                    <PendingChangesModal
+                        isOpen={pendingOpen}
+                        onClose={() => setPendingOpen(false)}
+                        instance={inst}
+                        onRestart={(id, name) => onRestart(id, name)}
+                    />
+                )}
                 {['running', 'updated'].includes(
                     inst.status?.toLowerCase()
                 ) &&

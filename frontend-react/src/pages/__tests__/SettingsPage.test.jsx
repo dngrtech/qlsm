@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   revokeApiKey: vi.fn(),
   getVultrKeySetting: vi.fn(),
   setVultrKeySetting: vi.fn(),
+  getDeferRestartsSetting: vi.fn(),
+  setDeferRestartsSetting: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
 }));
@@ -19,6 +21,8 @@ vi.mock('../../services/api', () => ({
   revokeApiKey: mocks.revokeApiKey,
   getVultrKeySetting: mocks.getVultrKeySetting,
   setVultrKeySetting: mocks.setVultrKeySetting,
+  getDeferRestartsSetting: mocks.getDeferRestartsSetting,
+  setDeferRestartsSetting: mocks.setDeferRestartsSetting,
 }));
 
 vi.mock('../../components/NotificationProvider', () => ({
@@ -31,6 +35,7 @@ describe('SettingsPage Vultr key field', () => {
     mocks.getApiKey.mockResolvedValue(null);
     mocks.getVultrKeySetting.mockResolvedValue({ key: null });
     mocks.setVultrKeySetting.mockResolvedValue({ key: 'new-vultr-key' });
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: false });
   });
 
   it('saves the Vultr key and shows a success notification', async () => {
@@ -43,5 +48,29 @@ describe('SettingsPage Vultr key field', () => {
       expect(mocks.setVultrKeySetting).toHaveBeenCalledWith('new-vultr-key');
       expect(mocks.showSuccess).toHaveBeenCalled();
     });
+  });
+});
+
+describe('SettingsPage Defer restarts toggle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getApiKey.mockResolvedValue(null);
+    mocks.getVultrKeySetting.mockResolvedValue({ key: null });
+  });
+
+  it('shows the stored value and saves the flipped one', async () => {
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: false });
+    mocks.setDeferRestartsSetting.mockResolvedValue({ enabled: true });
+    render(<SettingsPage />);
+
+    const toggle = screen.getByRole('button', { name: /toggle defer restarts/i });
+    await waitFor(() => expect(mocks.getDeferRestartsSetting).toHaveBeenCalled());
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
+    expect(mocks.setDeferRestartsSetting).toHaveBeenCalledWith(true);
+    expect(mocks.showSuccess).toHaveBeenCalled();
   });
 });

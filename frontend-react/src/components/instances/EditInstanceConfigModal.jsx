@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { X, LoaderCircle, Zap, AlertTriangle, Settings, Code2, LayoutGrid, Save, FolderOpen, RotateCw, Webhook, Crown } from 'lucide-react';
 import { python } from '@codemirror/lang-python';
-import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent, fetchInstanceHooks, getInstanceAdmins } from '../../services/api';
+import { getInstanceConfig, updateInstanceConfig, getInstanceById, getPresets, getPresetById, createPreset, updatePreset, getFactoryTree, getFactoryContent, fetchInstanceHooks, getInstanceAdmins, getDeferRestartsSetting } from '../../services/api';
 import { getBinaryMeta, saveBinaryMeta } from '../../services/draftApi';
 import ExpandedEditorModal from '../ExpandedEditorModal';
 import ConfirmationModal from '../ConfirmationModal';
@@ -125,6 +125,8 @@ function EditInstanceConfigModal({
 
   // Restart on Save state
   const [restartAfterSave, setRestartAfterSave] = useState(true);
+  // What the toggle starts at: on, unless Settings > Defer restarts is on.
+  const [defaultRestartAfterSave, setDefaultRestartAfterSave] = useState(true);
 
   // Unsaved changes state
   const [isDirty, setIsDirty] = useState(false);
@@ -419,14 +421,22 @@ function EditInstanceConfigModal({
 
         // Reset restart toggle to default (true) when opening
         setRestartAfterSave(true);
+        setDefaultRestartAfterSave(true);
 
         try {
-          const [instanceDetails, configData, presetsData] = await Promise.all([
+          const [instanceDetails, configData, presetsData, deferSetting] = await Promise.all([
             getInstanceById(instanceId),
             getInstanceConfig(instanceId),
             getPresets(),
+            // Optional: without it the toggle keeps its usual default (on).
+            getDeferRestartsSetting().catch(() => null),
           ]);
           if (cancelled) return;
+
+          if (deferSetting?.enabled) {
+            setRestartAfterSave(false);
+            setDefaultRestartAfterSave(false);
+          }
 
           // Store raw plugin names — they'll be resolved to full tree paths
           // once the draft tree loads (via the effect below).
@@ -596,7 +606,7 @@ function EditInstanceConfigModal({
     currentInstanceName !== originalInstanceName ||
     serverHostname !== originalServerHostname ||
     lanRateEnabled !== originalLanRateEnabled ||
-    restartAfterSave !== true ||
+    restartAfterSave !== defaultRestartAfterSave ||
     selectedPresetId !== '';
 
   useEffect(() => {
