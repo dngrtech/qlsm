@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.63.1` | 2026-11-25 | [#282](https://github.com/dngrtech/qlsm/pull/282) | Documentation deployments now retry once after a failure and use a unique upload for each workflow attempt. |
 | `v1.63.0` | 2026-11-25 | [#278](https://github.com/dngrtech/qlsm/pull/278) | Saving a config or updating plugins without a restart now records what changed: click the **Updated** badge to review the pending files and settings, then restart. A new **Defer restarts** setting makes **Restart after saving** and **Restart to apply** start off by default; hook and 99k LAN rate changes still restart. |
 | `v1.62.0` | 2026-11-25 | [#277](https://github.com/dngrtech/qlsm/pull/277) | Tasks no longer hold the database write lock while Ansible runs, so other actions stop failing with "database is locked" during a long deploy or restart. A task that still cannot save its result now leaves the instance or host in **Error** instead of stuck in a busy state, and restarts queued by plugin and Workshop updates are protected the same way as a manual restart. |
 | `v1.61.0` | 2026-11-25 | [#279](https://github.com/dngrtech/qlsm/pull/279) | Enabled addons can add their own tabs to the Add Instance form, with host-specific options whose defaults are sent even when a tab stays unopened, and prepare the new instance before its first deploy. |
