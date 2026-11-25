@@ -13,7 +13,7 @@ from ui import db
 from ui.addons.manifest import ADDON_ID_MAX, ADDON_ID_RE
 from ui.models import (
     AddonScope, AddonState, ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
-    InstanceStatus, Notification, Operator, QLFilterStatus, QLInstance, User,
+    InstanceStatus, Notification, Operator, PendingInstanceChange, QLFilterStatus, QLInstance, User,
 )
 from ui.runtime import CUSTOM, normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
@@ -138,6 +138,9 @@ def replace_database(data):
     # mid-wipe (QLInstance.host_id -> Host.id).
     AddonState.query.delete()
     BinaryMetadata.query.delete()
+    # Not backed up: pending-restart records describe the old install's
+    # running servers and point at instance ids about to be replaced.
+    PendingInstanceChange.query.delete()
     QLInstance.query.delete()
     Host.query.delete()
     ConfigPreset.query.delete()

@@ -127,6 +127,9 @@ def apply_instance_hooks_logic(instance_id, restart_service=True):
         return False
 
     instance.status = InstanceStatus.RUNNING if restart_service else InstanceStatus.STOPPED
+    if restart_service:
+        from ui.pending_changes import clear_pending_changes
+        clear_pending_changes(instance.id, synced_only=True)
     append_log(instance, "apply_instance_hooks completed")
     db.session.commit()
     return True

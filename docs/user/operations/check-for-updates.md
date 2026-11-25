@@ -30,13 +30,14 @@ If everything already matches, the modal says **no updates available**.
 
 - **Common plugin pool** is ticked when it has changes.
 - **Updated** files are ticked. Updating them replaces the instance's copy, **including any edits you made to that file in the plugin editor**. Untick a file you've customized and want to keep.
-- **Restart to apply** is ticked for running instances. An instance only picks up plugin changes when it restarts, and only instances with at least one ticked file are restarted.
+- **Restart to apply** is ticked for running instances, unless **Defer restarts** is on under **Settings** → **Instance Restarts**: then it starts unticked for every instance. It is always unticked and greyed out for stopped instances. An instance only picks up plugin changes when it restarts, and only instances with at least one ticked file are restarted.
+- **Update Selected** stays off until QLSM has read the **Defer restarts** setting, so the ticks you see are the ones that will be sent.
 
 Click **Update Selected** to apply your choices.
 
 ## When Changes Take Effect
 
-- **Instance files** take effect when the instance restarts. If you leave **restart to apply** unticked, they apply on the next manual or [scheduled restart](auto-restart.md).
+- **Instance files** take effect when the instance restarts. If you leave **restart to apply** unticked on a running instance, QLSM syncs the files to the host right away and the instance shows **Updated** until its next manual or [scheduled restart](auto-restart.md). Click the **Updated** badge to see the pending plugin files with a diff, and **Restart now** to apply them (see [Pending changes](edit-configs.md#pending-changes)). If the instance is busy with another operation, the files stay staged in QLSM and apply on its next restart.
 - **The common plugin pool** refreshes on the host right away, but running instances don't restart for it. Each instance picks up the refreshed pool on its next restart.
 - Stopped instances are never restarted. They use the updated files the next time you start them.
 

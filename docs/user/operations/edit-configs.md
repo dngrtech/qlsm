@@ -90,6 +90,22 @@ next scheduled auto-restart. An instance that was already stopped remains
 When a managed or manual restart is requested through QLSM, the instance returns
 to **Running** promptly after Ansible completes.
 
+**Restart after saving** starts on, unless **Defer restarts** is on under
+**Settings** → **Instance Restarts**: then it starts off for every save. Some
+changes always restart a running or **Updated** instance whatever the toggle
+says, and the toggle is greyed out with the reason: changing hooks (the old
+hooks would stay loaded otherwise) and switching **99k LAN Rate**.
+
+### Pending changes
+
+An **Updated** instance has its status badge as a button. Click it to open
+**Pending changes**: every save, plugin update or Workshop update made since
+the last restart, oldest first, with the changed files as a diff (binary and
+very large files by name only) and changed settings such as the server
+hostname, enabled plugins, enabled hooks or 99k LAN rate. **Restart now**
+applies them all. Any restart clears the list: this button, a scheduled
+auto-restart, a crash or a host reboot.
+
 ## Managed `server.cfg` Cvars
 
 QLSM applies several runtime cvars outside the raw `server.cfg` text during deploy, restart, and config apply.

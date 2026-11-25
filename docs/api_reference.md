@@ -188,7 +188,10 @@ the host to be `ACTIVE` and takes the host lock.
   any existing copy. Names are reduced to their basename and must exist in the
   pool. Unknown names, and ids that aren't instances of this host, are skipped.
 - `restart_instances`: instance ids to restart afterwards. Stopped instances are
-  never restarted.
+  never restarted. A running instance that got files but is not in this list
+  has them synced to the host right away without a restart
+  (`apply_instance_config` with `restart=False`), gets a pending-change record
+  and shows `UPDATED` until it restarts.
 
 At least one of `update_common_pool` or a non-empty `instances` is required.
 
@@ -674,6 +677,7 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 | `/instances/<id>/stop` | POST | Stop instance service |
 | `/instances/<id>/config` | GET | Get instance config files |
 | `/instances/<id>/config` | PUT | Update config and apply (triggers Ansible sync) |
+| `/instances/<id>/pending-changes` | GET | Changes synced without a restart, not live yet |
 | `/instances/<id>/hooks` | GET | List available LD_PRELOAD hook shared objects |
 | `/instances/<id>/hooks/files` | POST | Upload a new hook `.so` file |
 | `/instances/<id>/hooks/files/<filename>` | GET/PUT/PATCH/DELETE | Download, replace, rename, or delete a hook file |
@@ -806,6 +810,43 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 `config_folders` is returned alongside the flat `configs` map. It lists every managed subfolder present in the instance config directory, nested up to 3 levels deep (excluding the reserved `scripts`, `factories`, and `user-hooks` folders).
 
 `PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `enabled_hooks`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles subfolders at any depth up to 3 levels: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed. When `draft_id` is present, its `user-hooks/` directory is copied into the instance's `user-hooks/` directory. When `enabled_hooks` is present (typically from a loaded preset), `ld_preload_hooks` is fully replaced with that list filtered to hooks that actually exist on disk after the copy — same replace-on-load semantics as `checked_plugins`/`checked_factories`. When `enabled_hooks` is omitted, the instance's current hook enablement (managed separately via the Hooks tab) is left untouched.
+
+### Pending Changes (GET /instances/<id>/pending-changes)
+
+A save with `restart: false` on an instance that is not stopped (and that nothing forces to restart) records what it changed: the instance directory is snapshotted before the files are overwritten and diffed after. Plugin updates and workshop updates applied without a restart add records too. A save's or plugin update's record is listed only once its sync job got the files to the host (it is published together with `UPDATED`, or with `STOPPED` when the instance is stopped); if the sync cannot be queued or fails, the record stays hidden and is published by the next sync of the instance. Records accumulate, oldest first, and are dropped once the instance actually restarts — a restart/start/deploy from QLSM, a config apply with restart, or the runtime reconciliation that promotes `UPDATED` to `RUNNING` after an external restart (a record not yet synced is kept by a start and by the reconciliation).
+
+```json
+{
+  "data": {
+    "instance_id": 3,
+    "status": "updated",
+    "entries": [
+      {
+        "id": 1,
+        "instance_id": 3,
+        "source": "config_save",
+        "created_at": "2026-10-19T12:00:00",
+        "settings": [{"field": "hostname", "before": "Old", "after": "New"}],
+        "files": [
+          {
+            "path": "server.cfg",
+            "change": "modified",
+            "diff": "--- a/server.cfg
++++ b/server.cfg
+@@ ...",
+            "truncated": false,
+            "binary": false,
+            "sha256_before": "...",
+            "sha256_after": "..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`source` is `config_save`, `plugin_update` or `workshop_update`. `change` is `added`, `modified` or `removed`. Text files carry a unified diff capped at 20000 characters per file (`truncated: true` when cut); binaries and files over 512 KiB carry only their hashes (`binary: true`, `diff: null`). `created_at` is UTC.
 
 ### LD_PRELOAD Hooks
 
@@ -1539,6 +1580,8 @@ qlsm's own process, not the servers it manages. Used to activate addons: they re
 | `/settings/api-key` | DELETE | Revoke (delete) the current API key |
 | `/settings/vultr-key` | GET | Get the configured Vultr API key |
 | `/settings/vultr-key` | PUT | Set (or clear) the Vultr API key |
+| `/settings/defer-restarts` | GET | `{"enabled": bool}`: whether saves and plugin updates default to no restart (default `false`) |
+| `/settings/defer-restarts` | PUT | Set it: body `{"enabled": bool}`; `400` if the body is not a JSON object or `enabled` is not a boolean |
 | `/settings/backup/export` | POST | Export the full instance state as a downloadable `.qlsmbak` archive |
 | `/settings/backup/import` | POST | Wipe and restore the full instance state from an uploaded `.qlsmbak` archive |
 
