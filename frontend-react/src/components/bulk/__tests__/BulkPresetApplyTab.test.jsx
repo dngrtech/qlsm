@@ -190,9 +190,9 @@ describe('BulkPresetApplyTab', () => {
 
     await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(3));
-    expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, { ...keep, restart: true, preview_hash: 'd21' });
+    expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, { ...keep, restart: true, preview_hash: 'd21', confirm_restart: true });
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
-      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h11',
+      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h11', confirm_restart: true,
     });
   });
 
@@ -227,12 +227,12 @@ describe('BulkPresetApplyTab', () => {
 
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(2));
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
-      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h11',
+      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h11', confirm_restart: true,
     });
     // The server never starts a stopped one (it re-reads the status under
     // the lock), so the request just carries the operator's choice.
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(12, {
-      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h12',
+      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h12', confirm_restart: false,
     });
 
     // A queued server is never sent twice.
@@ -250,7 +250,7 @@ describe('BulkPresetApplyTab', () => {
 
     await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
-      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11',
+      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11', confirm_restart: false,
     }));
   });
 
@@ -272,7 +272,7 @@ describe('BulkPresetApplyTab', () => {
     expect(screen.getByLabelText(/restart servers to apply/i).checked).toBe(false);
     await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
-      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11',
+      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11', confirm_restart: false,
     }));
   });
 
@@ -301,7 +301,7 @@ describe('BulkPresetApplyTab', () => {
 
     await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(2));
-    expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, { ...decided, restart: true, preview_hash: 'h21' });
+    expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, { ...decided, restart: true, preview_hash: 'h21', confirm_restart: true });
   });
 
   it('unticking a replacement re-previews with [] and the server is applied', async () => {
@@ -323,7 +323,7 @@ describe('BulkPresetApplyTab', () => {
     await screen.findByText('server.cfg');
     await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, {
-      ...decided, restart: true, preview_hash: 'h21',
+      ...decided, restart: true, preview_hash: 'h21', confirm_restart: true,
     }));
   });
 
@@ -499,5 +499,66 @@ describe('BulkPresetApplyTab', () => {
     expect(document.getElementById('bulk-panel-plugins').getAttribute('aria-labelledby')).toBe(plugins.id);
     fireEvent.keyDown(plugins, { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: /apply preset/i }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('a hook change restarts a live server even with restart off: it is shown and confirmed', async () => {
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: true });
+    const hooksReordered = { before: ['a.so', 'b.so'], after: ['b.so', 'a.so'] };
+    mocks.previewPresetApply.mockImplementation(async (id) => preview(id, {
+      diff: { files: [], plugins: null, hooks: hooksReordered, admins: null, lan_rate: null, unchanged: false },
+    }));
+    await renderTab();
+    await waitFor(() => expect(screen.getByLabelText(/restart servers to apply/i).disabled).toBe(false));
+    expect(screen.getByLabelText(/restart servers to apply/i).checked).toBe(false);
+    tick('a1');
+    await preview_();
+    expect(await screen.findByText(/order changed/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    expect(screen.getByText('1 server on 1 host will restart.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /restart and apply/i }));
+    await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
+      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11', confirm_restart: true,
+    }));
+  });
+
+  it('a server refusing an unconfirmed restart says so on its row', async () => {
+    mocks.applyPresetToInstance.mockRejectedValue({
+      error: { message: 'This apply restarts the server (a restart was asked for, or its hooks change). Confirm the restart and apply again.' },
+      status: 409,
+    });
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: true });
+    await renderTab();
+    await waitFor(() => expect(screen.getByLabelText(/restart servers to apply/i).disabled).toBe(false));
+    tick('a1');
+    await preview_();
+    await screen.findByText('server.cfg');
+    await applyConfirmed();
+    await waitFor(() => expect(screen.getByTestId('preset-result-11').textContent).toBe('restart not confirmed, apply again'));
+  });
+
+  it('a host that becomes Active while the dialog is open can be ticked', async () => {
+    const provisioning = hosts.map(h => (h.id === 2 ? { ...h, status: 'PROVISIONING' } : h));
+    const { rerender } = render(<BulkActionsModal isOpen onClose={() => {}} hosts={provisioning} />);
+    fireEvent.click(screen.getByRole('tab', { name: /apply preset/i }));
+    await screen.findByLabelText('Preset');
+    expect(screen.queryByLabelText('Server b1')).toBeNull();
+    tick('a1');
+    rerender(<BulkActionsModal isOpen onClose={() => {}} hosts={hosts} />);
+    expect(screen.getByLabelText('Server b1')).toBeTruthy();
+    expect(screen.getByLabelText('Server a1').checked).toBe(true);
+  });
+
+  it('a server whose admin list could not be read says so and still applies', async () => {
+    mocks.previewPresetApply.mockImplementation(async (id) => preview(id, {
+      admins: { before: null, after: null, error: 'SSH unreachable' },
+    }));
+    await renderTab();
+    tick('a1');
+    await preview_();
+    const row = await screen.findByTestId('preset-row-11');
+    await waitFor(() => expect(within(row).getByText(/admins not changed/i)).toBeTruthy());
+    await applyConfirmed();
+    await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(1));
   });
 });

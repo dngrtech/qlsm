@@ -247,7 +247,8 @@ def test_apply_changing_hooks_on_an_updated_instance_forces_a_restart(client, he
     with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
          patch('ui.routes.instance_routes.enqueue_task',
                return_value=MagicMock(id='job-1')) as enqueue:
-        response = _apply(client, headers, instance, preset, preview['preview_hash'], restart=False)
+        response = _apply(client, headers, instance, preset, preview['preview_hash'], restart=False,
+                          confirm_restart=True)
 
     assert response.status_code == 202, response.get_json()
     assert enqueue.call_args.kwargs['restart'] is True
@@ -442,3 +443,33 @@ def test_a_live_admin_change_after_the_apply_read_it_is_refused(client, headers,
         response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=False)
     assert response.status_code == 409, response.get_json()
     enqueue.assert_not_called()
+
+
+@pytest.mark.parametrize('status, restart, hooks_change, confirm, expected', [
+    ('RUNNING', False, True, False, 409),   # forced hook restart, unconfirmed
+    ('UPDATED', False, True, False, 409),
+    ('RUNNING', False, True, True, 202),
+    ('RUNNING', True, False, False, 409),   # asked-for restart, unconfirmed
+    ('RUNNING', True, False, True, 202),
+    ('STOPPED', True, True, False, 202),    # a stopped server is never started
+    ('RUNNING', False, False, False, 202),  # nothing restarts
+])
+def test_apply_refuses_an_unconfirmed_restart_of_a_live_server(
+        client, headers, env, status, restart, hooks_change, confirm, expected):  # noqa: F811
+    from ui.models import InstanceStatus
+
+    host = _host()
+    instance = _instance(host, server_cfg='', status=InstanceStatus[status], ld_preload_hooks='old.so')
+    hooks = os.path.join('configs', host.name, str(instance.id), 'user-hooks')
+    os.makedirs(hooks, exist_ok=True)
+    for name in ('old.so', 'new.so'):
+        with open(os.path.join(hooks, name), 'wb') as f:
+            f.write(b'\x7fELF')
+    preset = _preset(env, enabled_hooks=['new.so'] if hooks_change else ['old.so'])
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash,
+                                      restart=restart, confirm_restart=confirm)
+    assert response.status_code == expected, response.get_json()
+    if expected == 409:
+        enqueue.assert_not_called()
+        assert 'Confirm the restart' in response.get_json()['error']['message']

@@ -16,6 +16,12 @@ import { ConfirmRestart, restartSummary } from './confirmRestart';
 const CONCURRENCY = 4;
 // apply-preset's 409 when the rebuilt target no longer matches the preview.
 const STALE_HASH = 'Preset or server changed since the preview. Preview again.';
+// apply-preset's 409 when the server would restart and the request did not confirm it.
+const RESTART_NOT_CONFIRMED = 'This apply restarts the server (a restart was asked for, or its hooks change). Confirm the restart and apply again.';
+const isLive = (inst) => ['running', 'updated'].includes(inst.status?.toLowerCase());
+// The hook list changes, order included: the save then restarts a live server.
+const hooksChange = (diff) => Boolean(diff?.hooks)
+    && JSON.stringify(diff.hooks.before || []) !== JSON.stringify(diff.hooks.after || []);
 // The plugin selection is what a preset changes; it is never kept.
 const NEVER_KEPT = 'qlx_plugins';
 
@@ -45,6 +51,7 @@ function mergeHosts(prev, next) {
 
 function applyErrorText(err) {
     if (err?.error?.message === STALE_HASH) return 'preview again';
+    if (err?.error?.message === RESTART_NOT_CONFIRMED) return 'restart not confirmed, apply again';
     if (err?.status === 409) return 'busy';
     return errorText(err, 'Failed to apply preset');
 }
@@ -56,12 +63,15 @@ function BeforeAfter({ label, part }) {
     if (!part) return null;
     const on = newIn(part.before, part.after);
     const off = newIn(part.after, part.before);
-    if (on.length === 0 && off.length === 0) return null;
+    const reordered = on.length === 0 && off.length === 0
+        && JSON.stringify(part.before || []) !== JSON.stringify(part.after || []);
+    if (on.length === 0 && off.length === 0 && !reordered) return null;
     return (
         <div className="text-xs text-[var(--text-muted)]">
             {label}:
             {on.length > 0 && <span className="ml-1 font-mono text-[var(--accent-primary)]">+{on.join(', +')}</span>}
             {off.length > 0 && <span className="ml-1 font-mono text-[var(--accent-danger)]">-{off.join(', -')}</span>}
+            {reordered && <span className="ml-1">order changed: <span className="font-mono">{(part.after || []).join(', ')}</span></span>}
         </div>
     );
 }
@@ -154,10 +164,14 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
 
     useEffect(() => { onApplyingChange?.(applying); }, [applying, onApplyingChange]);
 
+    // Status from the latest polled host data (a host can become Active
+    // while the dialog is open); the list itself and the ticks stay by id.
+    const liveHosts = useMemo(() => new Map((hosts || []).map(h => [h.id, h])), [hosts]);
+    const hostActive = (host) => isActive(liveHosts.get(host.id) || host);
     const tickedServers = useMemo(() => hostList
-        .filter(isActive)
+        .filter(h => isActive(liveHosts.get(h.id) || h))
         .flatMap(host => (host.instances || []).map(inst => ({ host, inst })))
-        .filter(s => ticked.has(s.inst.id)), [hostList, ticked]);
+        .filter(s => ticked.has(s.inst.id)), [hostList, ticked, liveHosts]);
 
     // keep_cvars of every ticked server, fetched once per server and preset.
     useEffect(() => {
@@ -400,9 +414,15 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
         }
         return inst;
     };
-    const restartText = restart
-        ? restartSummary(applyJobs.filter(({ inst }) => !isStopped(liveStatus(inst))).map(({ host, inst }) => ({ hostId: host.id, id: inst.id })))
-        : null;
+    // Servers this apply restarts: every live one when restart is ticked,
+    // and a live one whose hooks change even when it is not (the save
+    // forces that restart). Each of them is sent with confirm_restart.
+    const restartsServer = ({ inst }) => {
+        const live = isLive(liveStatus(inst));
+        return live && (Boolean(restart) || hooksChange(rows[inst.id]?.preview?.diff));
+    };
+    const restartJobs = applyJobs.filter(restartsServer);
+    const restartText = restartSummary(restartJobs.map(({ host, inst }) => ({ hostId: host.id, id: inst.id })));
 
     const requestApply = () => {
         if (restartText) setConfirming(true);
@@ -412,6 +432,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
     const handleApply = async () => {
         setConfirming(false);
         setApplying(true);
+        const confirmed = new Set(restartJobs.map(({ inst }) => inst.id));
         await runLimited(applyJobs, CONCURRENCY, async ({ inst }) => {
             const row = rows[inst.id];
             let result;
@@ -420,6 +441,9 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
                     ...row.body,
                     restart: Boolean(restart),
                     preview_hash: row.preview.preview_hash,
+                    // The server refuses an unconfirmed restart, judged on
+                    // its status at apply time.
+                    confirm_restart: confirmed.has(inst.id),
                 });
                 result = { ok: true, text: 'queued' };
             } catch (err) {
@@ -469,7 +493,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
                 )}
 
                 {hostList.filter(h => (h.instances || []).length > 0).map(host => {
-                    const active = isActive(host);
+                    const active = hostActive(host);
                     const ids = (host.instances || []).map(i => i.id);
                     const n = ids.filter(id => ticked.has(id)).length;
                     return (
@@ -486,7 +510,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
                                 )}
                                 <span className="text-sm font-medium text-[var(--text-primary)]">{host.name}</span>
                                 <span className="text-xs font-mono text-[var(--text-muted)]">{runtimeLabel(host.runtime)}</span>
-                                {!active && <span className="text-xs text-[var(--text-muted)]">Host is {host.status}, not available</span>}
+                                {!active && <span className="text-xs text-[var(--text-muted)]">Host is {(liveHosts.get(host.id) || host).status}, not available</span>}
                             </div>
                             {active && (host.instances || []).map(inst => {
                                 const row = ticked.has(inst.id) ? rows[inst.id] : null;
@@ -505,6 +529,11 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
                                                 {inst.name} <span className="font-mono text-[var(--text-muted)]">:{inst.port}</span>
                                             </span>
                                             <RowStatus row={row} />
+                                            {row?.phase === 'ready' && row.preview.admins?.error && (
+                                                <span className="text-xs text-amber-500" title={row.preview.admins.error}>
+                                                    admins not changed: list unreadable
+                                                </span>
+                                            )}
                                             {result && (
                                                 <span
                                                     data-testid={`preset-result-${inst.id}`}

@@ -1620,6 +1620,9 @@ def _preset_request(instance_id, data=None):
     return instance, preset, params, None
 
 
+RESTART_NOT_CONFIRMED = "This apply restarts the server (a restart was asked for, or its hooks change). Confirm the restart and apply again."
+
+
 def _drop_draft(target):
     from ui.routes.draft_routes import _get_draft_base_path
     draft_id = (target or {}).get('payload', {}).get('draft_id')
@@ -1717,8 +1720,11 @@ def apply_instance_preset_api(instance_id):
         return error
     restart = data.get('restart')
     preview_hash = data.get('preview_hash')
+    confirm_restart = data.get('confirm_restart', False)
     if not isinstance(restart, bool):
         return _bad_request("restart must be a boolean")
+    if not isinstance(confirm_restart, bool):
+        return _bad_request("confirm_restart must be a boolean")
     if not isinstance(preview_hash, str) or not preview_hash:
         return _bad_request("preview_hash must be a string")
 
@@ -1733,6 +1739,23 @@ def apply_instance_preset_api(instance_id):
         target_part = target_hash(target)
         admins_before = (target.get('admins') or {}).get('before')
         wanted_lan_rate = target['payload'].get('lan_rate_enabled')
+        wanted_hooks = target['payload'].get('enabled_hooks')
+        draft_id = target['payload'].get('draft_id')
+
+        def _hooks_change(locked_instance):
+            # What the save will enable (enabled_hooks filtered against the
+            # hook files on disk once the preset draft's are merged in)
+            # against what the server runs now; order counts.
+            if wanted_hooks is None:
+                return False
+            from ui.routes.draft_routes import _get_draft_source, _get_draft_user_hooks_path
+            names = set()
+            own = os.path.join('configs', locked_instance.host.name, str(locked_instance.id), 'user-hooks')
+            for folder in (own, _get_draft_user_hooks_path(draft_id) if draft_id and _get_draft_source(draft_id) == 'preset' else None):
+                if folder and os.path.isdir(folder):
+                    names.update(os.listdir(folder))
+            after = ','.join(n for n in wanted_hooks if n in names) or None
+            return after != (locked_instance.ld_preload_hooks or None)
 
         def _check_under_lock(locked_instance):
             # Under the instance lock, on the re-read row: nothing another
@@ -1756,6 +1779,13 @@ def apply_instance_preset_api(instance_id):
                     and locked_instance.status != InstanceStatus.STOPPED
                     and not restart):
                 return "Changing 99k LAN rate on a running server needs a restart. Apply it with restart."
+            # A running (or Updated) server restarts when asked to, and also
+            # when its hooks change, whatever `restart` says. Either way the
+            # operator must have confirmed it for this server, judged on its
+            # status now, not on what the dialog saw when it opened.
+            live = locked_instance.status in (InstanceStatus.RUNNING, InstanceStatus.UPDATED)
+            if live and (restart or _hooks_change(locked_instance)) and not confirm_restart:
+                return RESTART_NOT_CONFIRMED
             return None
 
         response, status = save_instance_config(
