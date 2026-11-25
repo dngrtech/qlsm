@@ -139,3 +139,55 @@ def test_force_update_workshop_host_not_found(app):
     with app.app_context():
         result = force_update_workshop_logic(99999, '123456', [])
         assert result is False
+
+
+def _workshop_restart_with_lock_denied(app, during_playbook):
+    """Workshop update asked to restart one RUNNING instance; another
+    operation holds the instance lock by the time the restart is queued.
+    `during_playbook(instance_id)` runs while the playbook "runs"."""
+    from ui.database import db
+    from ui.models import QLInstance
+
+    host = create_host(name='ws-lock-denied', provider='vultr', status=HostStatus.ACTIVE)
+    inst = QLInstance(name='inst-1', port=27960, hostname='s1', host_id=host.id,
+                      status=InstanceStatus.RUNNING, logs='old log')
+    db.session.add(inst)
+    db.session.commit()
+    inst_id = inst.id
+
+    def _playbook(*args, **kwargs):
+        during_playbook(inst_id)
+        return True, 'ok', ''
+
+    with patch('ui.task_logic.ansible_workshop_update._run_host_ansible_playbook', side_effect=_playbook), \
+         patch('ui.task_logic.ansible_workshop_update.get_current_job'), \
+         patch('ui.task_lock.acquire_lock', return_value=False), \
+         patch('ui.tasks.enqueue_task') as enqueue:
+        assert force_update_workshop_logic(host.id, '123456', [inst_id]) is True
+    enqueue.assert_not_called()
+    db.session.expire_all()
+    return get_instance(inst_id)
+
+
+def test_workshop_restart_leaves_an_instance_another_operation_changed(app):
+    """A stop that ran (and finished) during the Workshop playbook owns the
+    instance now: its STOPPED status and log must survive."""
+    from ui.database import db, update_instance
+
+    def _stopped_meanwhile(inst_id):
+        update_instance(inst_id, status=InstanceStatus.STOPPED, logs='stop finished')
+
+    with app.app_context():
+        inst = _workshop_restart_with_lock_denied(app, _stopped_meanwhile)
+        assert inst.status == InstanceStatus.STOPPED
+        assert inst.logs == 'stop finished'
+
+
+def test_workshop_restart_clears_its_own_configuring_when_the_lock_is_busy(app):
+    """Nothing else touched the instance: Workshop's temporary CONFIGURING
+    is its own and goes back to the status before the update."""
+    with app.app_context():
+        inst = _workshop_restart_with_lock_denied(app, lambda _id: None)
+        assert inst.status == InstanceStatus.RUNNING
+        assert 'restart not queued' in inst.logs
+        assert inst.logs.endswith('old log')

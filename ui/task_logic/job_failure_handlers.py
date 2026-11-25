@@ -163,9 +163,15 @@ def host_job_failure_handler(job: Job, connection, type, value, traceback):
                 job.meta.get('locked_instance_ids', []) if job.meta else []
             )
             skip_reason = {}
+            from ui.task_lock import lock_superseded
 
             def _mark_failed():
-                # Status re-read on every attempt, like the instance handler.
+                # Re-checked on every attempt, like the instance handler: a
+                # newer operation (a deletion saving DELETING) can take the
+                # host lock during a retry backoff.
+                if lock_superseded('host', host_id, lock_token):
+                    skip_reason['why'] = 'superseded'
+                    return False
                 current = db.session.get(Host, host_id)
                 if current is None:
                     skip_reason['why'] = 'gone'

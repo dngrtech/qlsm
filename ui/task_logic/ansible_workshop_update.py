@@ -105,6 +105,12 @@ def force_update_workshop_logic(host_id, workshop_id, restart_instance_ids):
                         fallback_status=orig_state,
                         context=f"Workshop {workshop_id} updated",
                         previous_logs=original_instance_states[instance.id]['logs'],
+                        # Still Workshop's own temporary CONFIGURING (status
+                        # and the log line it wrote), not another operation's.
+                        still_ours=lambda fresh, marker=f"Updating Workshop item {workshop_id}...": (
+                            fresh.status == InstanceStatus.CONFIGURING
+                            and (fresh.logs or '').startswith(marker)
+                        ),
                     )
                 else:
                     update_instance(

@@ -174,7 +174,8 @@ def record_task_failure(apply_changes):
 RESTART_LOCK_TTL_SECONDS = 180
 
 
-def queue_instance_restart(instance, queued_log, fallback_status, context, previous_logs=None):
+def queue_instance_restart(instance, queued_log, fallback_status, context, previous_logs=None,
+                           still_ours=None):
     """Queue a restart of `instance` the way the restart endpoint does: take
     the instance lock, save RESTARTING, enqueue with the lock token and
     instance_job_failure_handler, and release the lock if the enqueue fails.
@@ -183,51 +184,77 @@ def queue_instance_restart(instance, queued_log, fallback_status, context, previ
     hosts at once, so a crashed or timed-out restart job must still land in
     the failure handler instead of leaving the instance in RESTARTING.
 
-    If the instance is busy (another operation holds its lock) or the enqueue
-    fails, the instance gets `fallback_status` and a log line saying the
-    restart was not queued. Log lines are prepended to `previous_logs`
+    `still_ours(fresh_instance)` says whether the instance's current row is
+    still what the calling update left it in (Workshop: its own temporary
+    CONFIGURING; plugin updates: the status it read). Without it, or when it
+    says no, another operation changed the instance since the caller read it
+    and owns it now: nothing is written, the restart is not queued.
+
+    If the lock is busy, the instance is left alone unless it is still ours;
+    then it gets `fallback_status` (the caller's own temporary status undone)
+    and a log line saying the restart was not queued. A failed enqueue does
+    the same under the lock. Log lines are prepended to `previous_logs`
     (default: the instance's current logs). Returns True when the restart was
     queued.
     """
     import uuid
 
+    from ui import db
     from ui.database import update_instance
-    from ui.models import InstanceStatus
+    from ui.models import InstanceStatus, QLInstance
     from ui.task_lock import acquire_lock, release_lock
     from ui.tasks import enqueue_task, restart_instance
     from ui.task_logic.job_failure_handlers import instance_job_failure_handler
 
     if previous_logs is None:
         previous_logs = instance.logs or ''
+    instance_id = instance.id
+
+    def _ours():
+        fresh = db.session.get(QLInstance, instance_id, populate_existing=True)
+        return fresh is not None and still_ours is not None and bool(still_ours(fresh))
+
     lock_token = str(uuid.uuid4())
     try:
-        locked = acquire_lock('instance', instance.id, lock_token, ttl=RESTART_LOCK_TTL_SECONDS)
+        locked = acquire_lock('instance', instance_id, lock_token, ttl=RESTART_LOCK_TTL_SECONDS)
     except Exception:
-        log.warning("%s: could not lock instance %s for a restart", context, instance.id, exc_info=True)
+        log.warning("%s: could not lock instance %s for a restart", context, instance_id, exc_info=True)
         locked = False
     if not locked:
-        update_instance(
-            instance.id,
-            status=fallback_status,
-            logs=f"{context}: another operation holds this instance, restart not queued. "
-                 f"Restart it when that operation finishes.\n{previous_logs}",
-        )
+        if _ours():
+            update_instance(
+                instance_id,
+                status=fallback_status,
+                logs=f"{context}: another operation holds this instance, restart not queued. "
+                     f"Restart it when that operation finishes.\n{previous_logs}",
+            )
+        else:
+            log.info("%s: instance %s is busy and was changed by another operation; "
+                     "restart not queued, instance left as it is", context, instance_id)
+        return False
+
+    if not _ours():
+        # The lock was free, but another operation already ran and changed
+        # the instance (a stop, say): restarting it would undo that.
+        release_lock('instance', instance_id, lock_token)
+        log.info("%s: instance %s was changed by another operation; restart not queued",
+                 context, instance_id)
         return False
 
     try:
-        update_instance(instance.id, status=InstanceStatus.RESTARTING, logs=f"{queued_log}\n{previous_logs}")
+        update_instance(instance_id, status=InstanceStatus.RESTARTING, logs=f"{queued_log}\n{previous_logs}")
         enqueue_task(
             restart_instance,
-            instance.id,
+            instance_id,
             lock_token=lock_token,
             on_failure=instance_job_failure_handler,
         )
         return True
     except Exception as exc:
-        release_lock('instance', instance.id, lock_token)
-        log.warning("%s: could not queue a restart for instance %s", context, instance.id, exc_info=True)
+        release_lock('instance', instance_id, lock_token)
+        log.warning("%s: could not queue a restart for instance %s", context, instance_id, exc_info=True)
         update_instance(
-            instance.id,
+            instance_id,
             status=fallback_status,
             logs=f"{context}: could not queue a restart ({exc}). Restart it manually.\n{previous_logs}",
         )

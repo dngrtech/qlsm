@@ -126,6 +126,9 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
                 queued_log="Plugin updates applied. Queuing restart...",
                 fallback_status=instance.status,
                 context="Plugin updates applied",
+                # Unchanged since this update read it; otherwise another
+                # operation owns the instance and its status stays.
+                still_ours=lambda fresh, seen=instance.status: fresh.status == seen,
             )
 
         return True

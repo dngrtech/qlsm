@@ -328,14 +328,35 @@ def _restart_instance_row():
 
 def test_bulk_restart_leaves_a_busy_instance_alone(file_db):
     instance = _restart_instance_row()
+    instance.status = InstanceStatus.STOPPED
+    instance.logs = 'stop finished'
+    db.session.commit()
     with patch('ui.task_lock.acquire_lock', return_value=False), \
             patch('ui.tasks.enqueue_task') as enqueue:
         assert common.queue_instance_restart(
-            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied') is False
+            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied',
+            still_ours=lambda fresh: fresh.status == InstanceStatus.RUNNING) is False
 
     enqueue.assert_not_called()
-    assert instance.status == InstanceStatus.RUNNING
-    assert 'restart not queued' in instance.logs
+    # Another operation owns the instance: status and log stay as it left them.
+    assert instance.status == InstanceStatus.STOPPED
+    assert instance.logs == 'stop finished'
+
+
+def test_bulk_restart_does_not_restart_an_instance_changed_meanwhile(file_db):
+    instance = _restart_instance_row()
+    instance.status = InstanceStatus.STOPPED
+    db.session.commit()
+    with patch('ui.task_lock.acquire_lock', return_value=True), \
+            patch('ui.task_lock.release_lock') as release, \
+            patch('ui.tasks.enqueue_task') as enqueue:
+        assert common.queue_instance_restart(
+            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied',
+            still_ours=lambda fresh: fresh.status == InstanceStatus.RUNNING) is False
+
+    enqueue.assert_not_called()
+    release.assert_called_once()
+    assert instance.status == InstanceStatus.STOPPED
 
 
 def test_bulk_restart_releases_the_lock_when_enqueue_fails(file_db):
@@ -344,7 +365,8 @@ def test_bulk_restart_releases_the_lock_when_enqueue_fails(file_db):
             patch('ui.task_lock.release_lock') as release, \
             patch('ui.tasks.enqueue_task', side_effect=RuntimeError('redis down')):
         assert common.queue_instance_restart(
-            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied') is False
+            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied',
+            still_ours=lambda fresh: True) is False
 
     release.assert_called_once()
     assert release.call_args.args[:2] == ('instance', instance.id)
