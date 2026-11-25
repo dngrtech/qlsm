@@ -47,11 +47,17 @@ export function mountEntriesForAddon(addon, point) {
       entry,
       panel,
       scope,
-      label: entry.label || addon.name || addon.id,
+      // A malformed manifest label (not a non-empty string) must not reach
+      // React as a child; fall back to the addon's name, then its id.
+      label: textOr(entry.label) || textOr(addon.name) || addon.id,
       icon: entry.icon,
     });
   });
   return out;
+}
+
+function textOr(value) {
+  return typeof value === 'string' && value.trim() ? value : null;
 }
 
 export function AddonsProvider({ children }) {

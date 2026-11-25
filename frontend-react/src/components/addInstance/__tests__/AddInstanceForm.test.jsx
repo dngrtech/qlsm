@@ -25,6 +25,21 @@ const mocks = vi.hoisted(() => ({
   useDraftWorkspace: vi.fn(),
   uploadDraftHook: vi.fn(),
   deleteDraftHook: vi.fn(),
+  addonMounts: [],
+  addonRequest: vi.fn(),
+  // Render the two required text inputs of the real InstanceBasicInfoForm.
+  basicInputs: false,
+}));
+
+vi.mock('../../../contexts/AddonsContext', () => ({
+  useAddonMounts: () => mocks.addonMounts,
+}));
+
+vi.mock('../../../services/addons', () => ({
+  addonRequest: mocks.addonRequest,
+  addonAssetUrl: vi.fn(),
+  addonDownload: vi.fn(),
+  saveBlob: vi.fn(),
 }));
 
 vi.mock('../../../hooks/useDraftWorkspace', () => ({
@@ -204,6 +219,8 @@ vi.mock('../../fileManager', () => ({
 
 vi.mock('../InstanceBasicInfoForm', () => ({
   default: ({
+    name,
+    onNameChange,
     hostname,
     onHostChange,
     onHostnameChange,
@@ -215,6 +232,12 @@ vi.mock('../InstanceBasicInfoForm', () => ({
   }) => (
     <div>
       <div>basic-info</div>
+      {mocks.basicInputs && (
+        <>
+          <input id="name" aria-label="Instance Name" value={name} onChange={onNameChange} required />
+          <input id="hostname" aria-label="Server Hostname" value={hostname} onChange={onHostnameChange} required />
+        </>
+      )}
       <div data-testid="hostname">{hostname}</div>
       <button type="button" onClick={() => onHostnameChange({ target: { value: 'My Server' } })}>Type Hostname</button>
       <button type="button" onClick={() => onHostnameChange({ target: { value: 'Default Name' } })}>Type Default Hostname</button>
@@ -325,6 +348,8 @@ describe('AddInstanceForm draft lifecycle', () => {
     mocks.fileManagerProps = [];
     mocks.draftAdapterPresets = [];
     mocks.draftAdapterAcceptedReplacementsByPreset = {};
+    mocks.addonMounts = [];
+    mocks.basicInputs = false;
     if (!AddInstanceForm) {
       ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
     }
@@ -2306,6 +2331,192 @@ describe('AddInstanceForm draft lifecycle', () => {
 
       await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
       expect(onSubmit.mock.calls[0][0].admins).toEqual([{ steam_id64: '76561198012345678', level: 2 }]);
+    });
+  });
+
+  describe('addon add_instance_tabs', () => {
+    const statsHubMount = () => {
+      const panel = {
+        kind: 'form',
+        load: 'GET add-instance?host_id={host_id}',
+        fields: [
+          { key: 'telemetry', type: 'bool', label: 'Send telemetry' },
+          { key: 'server_id', type: 'string', label: 'Server ID' },
+        ],
+      };
+      const addon = { id: 'stats-addon', name: 'Stats', ui: { panels: { tab: panel } } };
+      return {
+        key: 'stats-addon:add_instance_tabs:stats',
+        addon,
+        entry: { id: 'stats', label: 'Stats Hub', panel: 'tab' },
+        panel,
+        scope: 'host',
+        label: 'Stats Hub',
+        icon: 'radio',
+      };
+    };
+
+    const renderForm = (onSubmit) => render(
+      <AddInstanceForm
+        initialData={{
+          hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
+          presets: [],
+          defaultConfigContents: {
+            'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+          },
+        }}
+        initialHostId={null}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        isLoadingSubmit={false}
+        formError={null}
+        onServerCfgLintStatusChange={vi.fn()}
+        onDirtyStateChange={vi.fn()}
+      />
+    );
+
+    it('prefills the tab for the picked host and sends it as addon_options', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.addonRequest.mockResolvedValue({ telemetry: true, server_id: '' });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(mocks.addonRequest).toHaveBeenCalledWith(
+        'stats-addon', 'GET', 'add-instance?host_id=1',
+      ));
+
+      fireEvent.click(screen.getByRole('button', { name: /stats hub/i }));
+      await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
+      fireEvent.change(screen.getByLabelText('Server ID'), { target: { value: '77' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].addon_options).toEqual({
+        'stats-addon': { telemetry: true, server_id: '77' },
+      });
+    });
+
+    it('sends the defaults of a tab the operator never opened', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(mocks.addonRequest).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0].addon_options).toEqual({
+        'stats-addon': { telemetry: true, server_id: '' },
+      });
+    });
+
+    it.each([
+      ['Instance Name', 'name'],
+      ['Server Hostname', 'hostname'],
+    ])('names a blank %s instead of sending the request', async (label, id) => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.basicInputs = true;
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      const { container } = renderForm(onSubmit);
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /create instance/i })).toBeEnabled());
+      fireEvent.change(container.querySelector('#name'), { target: { value: 'my-instance' } });
+      fireEvent.change(container.querySelector('#hostname'), { target: { value: 'My Server' } });
+      fireEvent.change(container.querySelector(`#${id}`), { target: { value: '' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+
+      expect(await screen.findByText(new RegExp(`${label} is required`))).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(container.querySelector(`#${id}`));
+    });
+
+    it('sends the request once both required fields are filled', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.basicInputs = true;
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      const { container } = renderForm(onSubmit);
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /create instance/i })).toBeEnabled());
+      fireEvent.change(container.querySelector('#name'), { target: { value: 'my-instance' } });
+      fireEvent.change(container.querySelector('#hostname'), { target: { value: 'My Server' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({ name: 'my-instance', hostname: 'My Server' });
+    });
+
+    it('lets the form submit past hidden fields (noValidate)', () => {
+      mocks.addonMounts = [statsHubMount()];
+      const { container } = renderForm(vi.fn());
+      expect(container.querySelector('form')).toHaveAttribute('novalidate');
+    });
+
+    it('keeps Create Instance off while a tab loads its host prefill', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      let resolveLoad;
+      mocks.addonRequest.mockReturnValue(new Promise((resolve) => { resolveLoad = resolve; }));
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(mocks.addonRequest).toHaveBeenCalled());
+      expect(screen.getByRole('button', { name: /create instance/i })).toBeDisabled();
+
+      await act(async () => { resolveLoad({ telemetry: true }); });
+      await waitFor(() => expect(screen.getByRole('button', { name: /create instance/i })).toBeEnabled());
+    });
+
+    it('counts only operator edits of an addon tab as unsaved changes', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onDirty = vi.fn();
+      render(
+        <AddInstanceForm
+          initialData={{
+            hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
+            presets: [],
+            defaultConfigContents: {
+              'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+            },
+          }}
+          initialHostId={1}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={onDirty}
+        />
+      );
+      await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
+      // The prefill leaves the form clean.
+      await waitFor(() => expect(onDirty).toHaveBeenLastCalledWith(false));
+
+      fireEvent.click(screen.getByLabelText('Send telemetry'));
+      await waitFor(() => expect(onDirty).toHaveBeenLastCalledWith(true));
+    });
+
+    it('lets the tab row scroll instead of clipping addon tabs', () => {
+      mocks.addonMounts = [statsHubMount()];
+      renderForm(vi.fn());
+      const tab = screen.getByRole('button', { name: /stats hub/i });
+      expect(tab.parentElement.className).toMatch(/overflow-x-auto/);
+      expect(tab.parentElement.className).not.toMatch(/overflow-hidden/);
+    });
+
+    it('sends no addon_options when no addon contributes a tab', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('addon_options');
     });
   });
 });
