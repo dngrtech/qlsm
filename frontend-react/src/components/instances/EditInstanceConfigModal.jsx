@@ -194,6 +194,9 @@ function EditInstanceConfigModal({
   // The instance's own ticks (from its qlx_plugins against its own tree)
   // are known; a preset's selection never sets this.
   const instanceTicksResolvedRef = useRef(false);
+  // Drafts that hold a preset's own plugin set (a modern preset). The
+  // instance's ticks are never resolved against their trees.
+  const presetPluginDraftIdsRef = useRef(new Set());
   const hookLoadSeqRef = useRef(0);
 
   // Hooks tab state
@@ -335,9 +338,16 @@ function EditInstanceConfigModal({
   // Resolve raw qlx_plugins names to full tree paths once on initial load.
   // Only root-level files can match — a name that resolves solely to a
   // subfolder file is dropped and surfaced in the notice.
+  // Only against the instance's own draft tree: the draft the editor asks
+  // for (presetDraftId: a legacy preset's copy of the instance scripts, or
+  // none = the instance draft), loaded, and not a modern preset's draft the
+  // adapter may still show while it switches drafts.
   useEffect(() => {
     if (pluginsSyncedRef.current) return;
     if (rawQlxPlugins.length === 0 || pluginTree.length === 0) return;
+    if (!pluginDraftId || pluginsLoading || pluginsError) return;
+    if (presetPluginDraftIdsRef.current.has(pluginDraftId)) return;
+    if (presetDraftId && pluginDraftId !== presetDraftId) return;
     const { paths, droppedNames } = resolveRootPluginPaths(pluginTree, rawQlxPlugins);
     pluginsSyncedRef.current = true;
     instanceTicksResolvedRef.current = true;
@@ -349,7 +359,7 @@ function EditInstanceConfigModal({
     if (droppedNames.length > 0) {
       setDroppedPluginCount(droppedNames.length);
     }
-  }, [rawQlxPlugins, pluginTree]);
+  }, [rawQlxPlugins, pluginTree, pluginDraftId, pluginsLoading, pluginsError, presetDraftId]);
 
   // A loaded preset's plugin names, resolved against its own draft's tree
   // (not the instance's, which may still be showing) once that tree is in.
@@ -725,6 +735,7 @@ function EditInstanceConfigModal({
       // -- and an instance sync still waiting for its tree still runs.
       if (Array.isArray(target.checked_plugins)) {
         pluginsSyncedRef.current = true;
+        if (target.draft_id) presetPluginDraftIdsRef.current.add(target.draft_id);
         if (target.checked_plugins.length > 0) {
           setPendingPresetPlugins({ draftId: target.draft_id, names: target.checked_plugins });
         } else {

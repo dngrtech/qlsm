@@ -718,6 +718,43 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(mocks.updateInstanceConfig.mock.calls[0][1]).not.toHaveProperty('checked_plugins');
   });
 
+  it('a legacy preset while the modern preset\'s tree is still shown resolves against the instance tree', async () => {
+    // The maintainer's sequence: a modern preset is loaded before the
+    // instance's tree resolved; then a legacy preset while the adapter still
+    // shows the modern preset's draft (the draft transition); then the
+    // instance's own tree arrives. Save must send the instance's ticks.
+    let phase = 'initial';
+    const presetTree = [{ type: 'file', name: 'other.py', path: 'other.py' }];
+    mocks.useDraftWorkspace.mockImplementation(() => {
+      const existing = mocks.draftAdapterExistingDraftIds.at(-1);
+      if (existing === 'preset-draft-1') return { ...baseDraftWorkspace, draftId: 'preset-draft-1', tree: presetTree };
+      if (phase === 'initial') return { ...baseDraftWorkspace, tree: [], loading: true };
+      if (phase === 'transition') return { ...baseDraftWorkspace, draftId: 'preset-draft-1', tree: [...presetTree] };
+      return { ...baseDraftWorkspace, tree: [{ type: 'file', name: 'balance.py', path: 'balance.py' }] };
+    });
+    mocks.previewPresetApply
+      .mockResolvedValueOnce(mockPresetPreview('plugin-preset', { checked_plugins: ['other'] }))
+      .mockResolvedValueOnce(mockPresetPreview('plugin-preset', { draft_id: undefined }));
+    const props = { isOpen: true, onClose: vi.fn(), instanceId: 1, instanceName: 'Test123', onConfigSaved: vi.fn() };
+    const { rerender } = render(<EditInstanceConfigModal {...props} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledTimes(1));
+
+    phase = 'transition';
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledTimes(2));
+
+    phase = 'instance';
+    rerender(<EditInstanceConfigModal {...props} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].checked_plugins).toEqual(['balance']);
+  });
+
   it('the last preset load wins and a load for a closed editor lands nowhere', async () => {
     let resolveFirst;
     mocks.previewPresetApply
