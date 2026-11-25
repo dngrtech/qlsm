@@ -23,7 +23,7 @@ from ui import db
 from ui.backup_crypto import BackupDecryptError, decrypt_archive, encrypt_archive
 from ui.task_logic.backup_db_import import BackupImportError, replace_database
 from ui.task_logic.backup_export import BACKUP_MANIFEST_FORMAT_VERSION, build_backup_zip_bytes
-from ui.task_logic.backup_files import backup_file_trees, is_restore_child
+from ui.task_logic.backup_files import backup_archive_file_trees, is_restore_child
 
 BACKUP_SNAPSHOTS_DIR = 'backup_snapshots'
 MAX_RETAINED_SNAPSHOTS = 3
@@ -74,7 +74,7 @@ def _prune_old_snapshots():
         os.remove(os.path.join(BACKUP_SNAPSHOTS_DIR, name))
 
 
-def _write_safety_snapshot():
+def _write_safety_snapshot(trees):
     """Silently capture current state before any destructive step, purely
     as a recovery-of-last-resort if the restore fails partway. Never
     exposed in any UI list; best-effort only — must never block a
@@ -89,7 +89,7 @@ def _write_safety_snapshot():
         snapshot_path = os.path.join(BACKUP_SNAPSHOTS_DIR, f'pre-restore-{timestamp}.qlsmbak')
         fd = os.open(snapshot_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'wb') as f:
-            f.write(encrypt_archive(build_backup_zip_bytes(), None))
+            f.write(encrypt_archive(build_backup_zip_bytes(trees), None))
         _prune_old_snapshots()
     except Exception:
         pass
@@ -195,13 +195,16 @@ def _swap_tree(root, staged_dir, skip=None):
 
 def restore_backup_archive(blob, password):
     """Wipe and reload this QLSM instance's database and managed file
-    trees from an uploaded .qlsmbak archive. Raises BackupRestoreError for
-    any bad input, before touching anything on disk."""
+    trees from an uploaded .qlsmbak archive. Keep the database transaction
+    open until the staged file trees have been swapped successfully."""
     manifest, db_data, archive = _parse_archive(blob, password)
+    with archive, backup_archive_file_trees() as trees:
+        return _restore_parsed_archive(manifest, db_data, archive, trees)
 
-    _write_safety_snapshot()
 
-    trees = backup_file_trees()
+def _restore_parsed_archive(manifest, db_data, archive, trees):
+    _write_safety_snapshot(trees)
+
     staged_dirs = {}
     swapped = []
     committed = False
@@ -212,18 +215,19 @@ def restore_backup_archive(blob, password):
             staged_dirs[prefix] = staging
             _extract_tree(archive, prefix, staging)
 
+        replace_database(db_data)
+
         for prefix, root, skip in trees:
             swapped_children = _swap_tree(root, staged_dirs[prefix], skip)
             swapped.append((root, swapped_children))
 
-        replace_database(db_data)
         db.session.commit()
         committed = True
     except Exception:
         try:
             db.session.rollback()
         except Exception as error:
-            logger.warning('Failed to roll back database restore: %s', error)
+            logger.warning('Failed to roll back database restore (%s).', type(error).__name__)
         for root, swapped_children in reversed(swapped):
             _restore_displaced(root, swapped_children)
         raise
@@ -239,4 +243,6 @@ def restore_backup_archive(blob, password):
     return {
         'qlsm_version': manifest.get('qlsm_version'),
         'created_at': manifest.get('created_at'),
+        'restart_required': True,
+        'addon_state_restored': 'addon_states' in db_data,
     }

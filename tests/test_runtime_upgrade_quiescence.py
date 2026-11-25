@@ -46,8 +46,8 @@ def test_process_scan_reports_unknown_without_proc(tmp_path):
 
 def test_quiescence_state():
     assert quiescence_state(RuntimeObservation(None, None, True, 1, processes=1)) == 'active'
-    assert quiescence_state(RuntimeObservation(None, None, False, None, processes=0)) == 'inactive'
-    assert quiescence_state(RuntimeObservation(None, None, False, None, processes=2)) == 'stray_process'
+    assert quiescence_state(RuntimeObservation(None, None, False, None, processes=0, active_state='inactive')) == 'inactive'
+    assert quiescence_state(RuntimeObservation(None, None, False, None, processes=2, active_state='inactive')) == 'stray_process'
     assert quiescence_state(RuntimeObservation(None, None, False, None)) == 'unknown'
     assert quiescence_state(None) == 'unknown'
 
@@ -72,10 +72,19 @@ def test_probe_carries_process_counts_only_when_asked():
 
 def test_upgrade_service_state_uses_the_process_aware_probe():
     instance = SimpleNamespace(id=1, port=27960, host=SimpleNamespace(provider='vultr'))
-    observation = RuntimeObservation(None, None, False, None, processes=1)
+    observation = RuntimeObservation(None, None, False, None, processes=1, active_state='inactive')
     with patch('ui.task_logic.service_runtime.probe_host_runtime',
                return_value={'27960': observation}) as probe:
         assert UpgradeDeps().service_state(instance) == 'stray_process'
     assert probe.call_args.kwargs['with_processes'] is True
     with patch('ui.task_logic.service_runtime.probe_host_runtime', return_value=None):
         assert UpgradeDeps().service_state(instance) == 'unknown'
+
+
+def test_partial_or_transitioning_systemd_records_are_unknown():
+    for raw in (None, '', 'activating', 'deactivating', 'reloading', 'maintenance'):
+        observation = parse_runtime_probe_output(json.dumps({'1': {'active_state': raw, 'processes': 0}}))['1']
+        assert quiescence_state(observation) == 'unknown', raw
+    for raw in ('failed', 'inactive'):
+        observation = parse_runtime_probe_output(json.dumps({'1': {'active_state': raw, 'processes': 0}}))['1']
+        assert quiescence_state(observation) == 'inactive'

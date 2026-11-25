@@ -68,7 +68,7 @@ def test_directory_is_named_after_the_manifest_id_not_the_folder(packages):
     assert not os.path.isdir(os.path.join(packages, 'some-random-folder-name'))
 
 
-def test_reinstall_replaces_the_previous_copy(packages):
+def test_reinstall_replaces_the_previous_copy(packages, app_context):
     install_addon_zip(good_zip(extra={'old.txt': 'old'}), packages)
     install_addon_zip(good_zip(extra={'new.txt': 'new'}), packages)
     installed = os.path.join(packages, 'uploaded-addon')
@@ -189,7 +189,7 @@ def test_rejects_a_suspicious_compression_ratio(packages):
 
 # ---- uninstall + scan --------------------------------------------------
 
-def test_uninstall_removes_the_directory(packages):
+def test_uninstall_removes_the_directory(packages, app_context):
     install_addon_zip(good_zip(), packages)
     assert uninstall_addon('uploaded-addon', packages) is True
     assert not os.path.exists(os.path.join(packages, 'uploaded-addon'))
@@ -224,3 +224,26 @@ def test_scan_ignores_a_directory_without_a_manifest(packages):
 
 def test_scan_of_a_missing_directory_is_empty(tmp_path):
     assert scan_installed_ids(str(tmp_path / 'nope')) == set()
+
+
+def test_duplicate_normalized_asset_paths_are_rejected(packages):
+    blob = good_zip(extra={'docs/readme.txt': 'readme', 'docs/./readme.txt': 'readme'})
+    with pytest.raises(AddonInstallError, match='duplicate'):
+        install_addon_zip(blob, packages)
+    assert not os.listdir(packages)
+
+
+def test_validates_staged_manifest_before_publishing(packages, monkeypatch):
+    from ui.addons import install
+
+    # Simulate a mismatch reported by the independent staged-manifest reader.
+    read = install.read_manifest
+
+    def changed_manifest(directory):
+        manifest, errors = read(directory)
+        return dict(manifest, id='another-addon'), errors
+
+    monkeypatch.setattr(install, 'read_manifest', changed_manifest)
+    with pytest.raises(AddonInstallError, match='[Mm]anifest'):
+        install_addon_zip(good_zip(), packages)
+    assert not os.listdir(packages)

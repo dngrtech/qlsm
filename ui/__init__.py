@@ -241,6 +241,8 @@ def create_app(test_config=None):
     
     # Register resource-specific API blueprints
     api_bp.register_blueprint(host_api_bp, url_prefix='/hosts')
+    from ui.routes.custom_runtime_update_routes import custom_runtime_update_bp
+    api_bp.register_blueprint(custom_runtime_update_bp, url_prefix='/hosts')
     from ui.routes.host_runtime_upgrade_routes import host_runtime_upgrade_bp
     api_bp.register_blueprint(host_runtime_upgrade_bp, url_prefix='/hosts')
     api_bp.register_blueprint(instance_api_bp, url_prefix='/instances')

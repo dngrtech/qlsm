@@ -1,5 +1,7 @@
 """Serialize every backed-up DB table to a JSON-safe snapshot."""
-from ui.models import ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User
+from ui.models import (
+    AddonState, ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, Notification, Operator, QLInstance, User,
+)
 from ui.runtime import CUSTOM, host_runtime, normalize_runtime
 
 DB_EXPORT_FORMAT_VERSION = 1
@@ -104,10 +106,18 @@ def _notification_row(row):
 
 def serialize_database():
     """Return a JSON-serializable snapshot of every backed-up table."""
+    hosts = [_host_row(h) for h in Host.query.order_by(Host.id).all()]
+    instances = [_instance_row(i) for i in QLInstance.query.order_by(QLInstance.id).all()]
+    # Best-effort cleanup can leave scoped settings for deleted entities.
+    # Omit only those orphan scopes, using the actual exported entity snapshot.
+    scope_ids = {
+        'host': {row['id'] for row in hosts},
+        'instance': {row['id'] for row in instances},
+    }
     return {
         'format_version': DB_EXPORT_FORMAT_VERSION,
-        'hosts': [_host_row(h) for h in Host.query.order_by(Host.id).all()],
-        'instances': [_instance_row(i) for i in QLInstance.query.order_by(QLInstance.id).all()],
+        'hosts': hosts,
+        'instances': instances,
         'users': [_user_row(u) for u in User.query.order_by(User.id).all()],
         'presets': [_preset_row(p) for p in ConfigPreset.query.order_by(ConfigPreset.id).all()],
         'api_keys': [_api_key_row(k) for k in ApiKey.query.order_by(ApiKey.id).all()],
@@ -115,4 +125,6 @@ def serialize_database():
         'binary_metadata': [_binary_meta_row(r) for r in BinaryMetadata.query.order_by(BinaryMetadata.id).all()],
         'operators': [_operator_row(r) for r in Operator.query.order_by(Operator.id).all()],
         'notifications': [_notification_row(r) for r in Notification.query.order_by(Notification.id).all()],
+        'addon_states': [r.to_dict() for r in AddonState.query.order_by(AddonState.id).all()
+                         if r.scope not in scope_ids or r.scope_id in scope_ids[r.scope]],
     }

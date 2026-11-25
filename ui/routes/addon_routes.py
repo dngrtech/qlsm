@@ -11,9 +11,13 @@ import os
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 
+from ui import db
 from ui.addons import catalog, get_addon, get_addons
 from ui.addons.manifest import IMAGE_EXTENSIONS
 from ui.addons.settings import AddonSettingsError
+from ui.addons.runtime_protection import (
+    RuntimeProviderConflict, check_provider_dependencies, lock_provider_state, provider_lifecycle_lock,
+)
 from ui.models import Host, QLInstance
 
 addon_api_bp = Blueprint('addon_routes', __name__)
@@ -52,9 +56,9 @@ def _scope_args():
         scope_id = int(raw_id)
     except (TypeError, ValueError):
         return None, None, (jsonify({"error": {"message": 'scope_id must be an integer'}}), 400)
-    if scope == 'host' and Host.query.get(scope_id) is None:
+    if scope == 'host' and db.session.get(Host, scope_id, populate_existing=True) is None:
         return None, None, (jsonify({"error": {"message": f'Host {scope_id} not found'}}), 404)
-    if scope == 'instance' and QLInstance.query.get(scope_id) is None:
+    if scope == 'instance' and db.session.get(QLInstance, scope_id, populate_existing=True) is None:
         return None, None, (jsonify({"error": {"message": f'Instance {scope_id} not found'}}), 404)
     return scope, scope_id, None
 
@@ -138,6 +142,8 @@ def install_addon_api():
 
     try:
         manifest = install_addon_zip(upload.read(), packages_dir)
+    except RuntimeProviderConflict as e:
+        return jsonify({"error": e.to_error()}), 409
     except AddonInstallError as e:
         return jsonify({"error": {"message": str(e)}}), 400
     except Exception as e:
@@ -169,17 +175,20 @@ def uninstall_addon_api(addon_id):
     from ui.addons.install import AddonInstallError, uninstall_addon
 
     addon = get_addon(addon_id)
-    if addon is not None and addon.source == 'bundled':
-        return jsonify({"error": {
-            "message": "This addon ships with QLSM and cannot be uninstalled."
-        }}), 400
-
     packages_dir = current_app.config.get('ADDON_PACKAGES_DIR')
     if not packages_dir:
         return jsonify({"error": {"message": "ADDON_PACKAGES_DIR is not configured."}}), 500
 
     try:
+        if addon is not None and addon.source == 'bundled':
+            with provider_lifecycle_lock(addon_id, packages_dir):
+                check_provider_dependencies(addon_id, 'uninstall')
+            return jsonify({"error": {
+                "message": "This addon ships with QLSM and cannot be uninstalled."
+            }}), 400
         removed = uninstall_addon(addon_id, packages_dir)
+    except RuntimeProviderConflict as e:
+        return jsonify({"error": e.to_error()}), 409
     except AddonInstallError as e:
         return jsonify({"error": {"message": str(e)}}), 400
 
@@ -221,29 +230,31 @@ def update_addon_state_api(addon_id):
     addon, error = _resolve(addon_id)
     if error:
         return error
-    scope, scope_id, error = _scope_args()
-    if error:
-        return error
-
     body = request.get_json(silent=True) or {}
     settings = addon.ctx.settings
     try:
+        lock_provider_state(addon_id)
+        scope, scope_id, error = _scope_args()
+        if error:
+            db.session.rollback()
+            return error
         if 'settings' in body:
             settings.set(scope, scope_id, body['settings'], commit=False)
         if 'enabled' in body:
             settings.set_enabled(scope, scope_id, bool(body['enabled']), commit=False)
+        db.session.commit()
+    except RuntimeProviderConflict as e:
+        db.session.rollback()
+        return jsonify({"error": e.to_error()}), 409
     except AddonSettingsError as e:
-        from ui import db
         db.session.rollback()
         return jsonify({"error": {"message": str(e)}}), 400
-    except Exception as e:
-        from ui import db
+    except Exception:
         db.session.rollback()
-        current_app.logger.error(f'Addon {addon_id} state update failed: {e}', exc_info=True)
+        # Database exceptions may include the submitted settings as SQL parameters.
+        current_app.logger.error('Addon %s state update failed.', addon_id)
         return jsonify({"error": {"message": 'Failed to update addon state'}}), 500
 
-    from ui import db
-    db.session.commit()
     return jsonify({"data": {
         "addon_id": addon_id,
         "scope": scope,

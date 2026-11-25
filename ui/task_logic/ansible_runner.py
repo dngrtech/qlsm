@@ -154,7 +154,7 @@ def _run_ansible_playbook(instance, playbook_name, extravars=None):
         return None, error_msg
 
 
-def _run_host_ansible_playbook(host, playbook_name, extravars=None, capture_output=False):
+def _run_host_ansible_playbook(host, playbook_name, extravars=None, capture_output=False, *, inventory_path=None):
     """
     Helper function to run an Ansible playbook via direct subprocess call, targeting a Host.
     Accepts the host object directly.
@@ -170,7 +170,7 @@ def _run_host_ansible_playbook(host, playbook_name, extravars=None, capture_outp
     # join, not an f-string: an addon passes the absolute path of a playbook in
     # its own package directory, and join keeps that instead of nesting it.
     playbook_path = os.path.abspath(os.path.join('ansible/playbooks', playbook_name))
-    inventory_path = os.path.abspath('ansible/inventory/')
+    inventory_path = inventory_path or os.path.abspath('ansible/inventory/')
 
     base_extravars = {
         'target_host_name': host.name,

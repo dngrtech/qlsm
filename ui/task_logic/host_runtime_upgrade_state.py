@@ -52,7 +52,7 @@ def _now():
     return datetime.datetime.utcnow()
 
 
-def claim_operation(operation_id, job_id):
+def claim_operation(operation_id, job_id, *, forward=False):
     """Take ownership: CAS fencing_token -> token+1 and record `job_id`.
 
     Returns the new token, or None when another execution won the race or the
@@ -62,10 +62,19 @@ def claim_operation(operation_id, job_id):
     if op is None or op.is_terminal:
         return None
     old = op.fencing_token or 0
+    conditions = []
+    if op.original_runtime == 'custom':
+        # Only the job assigned by reservation/reconciliation may claim it.
+        if op.rq_job_id and op.rq_job_id != job_id:
+            return None
+        conditions.append(HostRuntimeUpgradeOperation.rq_job_id == op.rq_job_id)
+        if forward:
+            conditions.append(HostRuntimeUpgradeOperation.fencing_token == 0)
     result = db.session.execute(
         update(HostRuntimeUpgradeOperation)
         .where(HostRuntimeUpgradeOperation.id == operation_id,
-               HostRuntimeUpgradeOperation.fencing_token == old)
+               HostRuntimeUpgradeOperation.fencing_token == old,
+               HostRuntimeUpgradeOperation.state.notin_(TERMINAL_STATES), *conditions)
         .values(fencing_token=old + 1, rq_job_id=job_id, updated_at=_now()))
     db.session.commit()
     if result.rowcount != 1:
@@ -127,13 +136,18 @@ class Execution:
             raise StaleExecution(f'operation {self.operation_id} is already {self.op.state}')
         if self.locked:
             try:
-                self.deps.locks.renew(self.operation_id, self.lock_token, self.op.host_id,
-                                      self.instance_ids())
+                renewed = self.deps.locks.renew(self.operation_id, self.lock_token, self.op.host_id,
+                                                self.instance_ids())
             except Exception:
+                renewed = False
                 log.exception('Could not renew execution locks of upgrade %s', self.operation_id)
+            if not renewed and self.op.original_runtime == 'custom':
+                raise StaleExecution('Custom operation execution locks could not be renewed')
 
     # --- locks -----------------------------------------------------------------------
     def instance_ids(self):
+        if self.op.original_runtime == 'custom':
+            return sorted(int(item['instance_id']) for item in self.inputs()['instances'])
         return sorted(int(key) for key in (self.outcomes().get('instances') or {})) or \
             sorted(int(item['instance_id']) for item in self.inputs().get('instances') or [])
 
@@ -165,6 +179,8 @@ class Execution:
 
     def originals(self):
         """{instance_id: 'running' | 'stopped'} from the immutable capture."""
+        if self.op.original_runtime == 'custom':
+            return {row['instance_id']: row['status'] for row in self.inputs()['instances']}
         return {int(key): value for key, value in json.loads(self.op.original_instance_states_json or '{}').items()}
 
     def instance_outcome(self, instance_id):

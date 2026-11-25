@@ -361,7 +361,7 @@ def test_post_409_when_already_reserved(app, client, headers, world, locks, enqu
 
     resp = _post(client, headers, host_id, {'fingerprint': fp, 'accepted_replacements': {}})
     assert resp.status_code == 409
-    assert 'being upgraded' in _error(resp)
+    assert 'undergoing runtime maintenance' in _error(resp)
     assert locks.held == {}
     assert len(_ops()) == 1 and enqueued == []
 

@@ -16,7 +16,11 @@ import shutil
 import tempfile
 import zipfile
 
+from flask import has_app_context
+
 from ui.addons.manifest import MANIFEST_FILENAME, read_manifest, validate_manifest
+from ui.addons.runtime_protection import check_provider_dependencies, provider_lifecycle_lock
+from ui.custom_runtime import RELEASES_DIR
 
 # Bounds, all deliberately generous for a metadata + small-payload package and
 # still far below anything that could exhaust the container.
@@ -65,6 +69,7 @@ def _inspect(zf):
 
     total = 0
     members = []
+    paths = set()
     for info in infos:
         if _is_symlink(info):
             raise AddonInstallError(f'Archive contains a symlink: {info.filename!r}')
@@ -73,6 +78,9 @@ def _inspect(zf):
             continue
         if info.is_dir() or info.filename.endswith('/'):
             continue
+        if path in paths:
+            raise AddonInstallError(f'Archive contains a duplicate file destination: {path!r}')
+        paths.add(path)
         total += info.file_size
         if total > MAX_UNCOMPRESSED_BYTES:
             raise AddonInstallError('Archive expands to more than the allowed size.')
@@ -80,24 +88,23 @@ def _inspect(zf):
             raise AddonInstallError(f'Archive member {path!r} has a suspicious compression ratio.')
         members.append((info, path))
 
-    manifests = [p for _, p in members if p.split('/')[-1] == MANIFEST_FILENAME]
+    manifests = [(info, path) for info, path in members if path.split('/')[-1] == MANIFEST_FILENAME]
     if not manifests:
         raise AddonInstallError(f'Archive has no {MANIFEST_FILENAME}.')
 
     # Prefer the shallowest manifest; deeper ones belong to nested examples.
-    manifests.sort(key=lambda p: p.count('/'))
-    manifest_path = manifests[0]
+    manifest_info, manifest_path = min(manifests, key=lambda member: member[1].count('/'))
     depth = manifest_path.count('/')
     if depth > 1:
         raise AddonInstallError(
             f'{MANIFEST_FILENAME} must be at the archive root or one folder deep.')
     root_prefix = manifest_path[:-len(MANIFEST_FILENAME)]  # '' or 'folder/'
-    return root_prefix, members, manifest_path
+    return root_prefix, members, manifest_info
 
 
-def read_manifest_from_zip(zf, manifest_path):
+def read_manifest_from_zip(zf, manifest_info):
     try:
-        raw = zf.read(manifest_path)
+        raw = zf.read(manifest_info)
     except KeyError:
         raise AddonInstallError(f'Could not read {MANIFEST_FILENAME} from the archive.')
     try:
@@ -121,8 +128,8 @@ def read_manifest_from_blob(blob):
     except zipfile.BadZipFile:
         raise AddonInstallError('The file is not a valid .zip archive.')
     with zf:
-        _root_prefix, _members, manifest_path = _inspect(zf)
-        return read_manifest_from_zip(zf, manifest_path)
+        _root_prefix, _members, manifest_info = _inspect(zf)
+        return read_manifest_from_zip(zf, manifest_info)
 
 
 def install_addon_zip(blob, packages_dir):
@@ -142,64 +149,78 @@ def install_addon_zip(blob, packages_dir):
         raise AddonInstallError('The uploaded file is not a valid .zip archive.')
 
     with zf:
-        root_prefix, members, manifest_path = _inspect(zf)
-        manifest = read_manifest_from_zip(zf, manifest_path)
+        root_prefix, members, manifest_info = _inspect(zf)
+        manifest = read_manifest_from_zip(zf, manifest_info)
         addon_id = manifest['id']
 
-        os.makedirs(packages_dir, exist_ok=True)
-        target = os.path.join(packages_dir, addon_id)
-
-        # Stage a sibling of the target so the final move stays on one
-        # filesystem, then swap. Same pattern as the global backup restore.
-        staging = tempfile.mkdtemp(prefix=f'.{addon_id}.staging-', dir=packages_dir)
-        try:
-            extracted = 0
-            for info, path in members:
-                if root_prefix and not path.startswith(root_prefix):
-                    continue  # stray file outside the package folder
-                relative = path[len(root_prefix):] if root_prefix else path
-                if not relative:
-                    continue
-                destination = os.path.join(staging, *relative.split('/'))
-                os.makedirs(os.path.dirname(destination), exist_ok=True)
-                with zf.open(info) as source, open(destination, 'wb') as out:
-                    shutil.copyfileobj(source, out, length=64 * 1024)
-                extracted += 1
-
-            if not extracted:
-                raise AddonInstallError('Archive contained no files to install.')
-            if not os.path.isfile(os.path.join(staging, MANIFEST_FILENAME)):
-                raise AddonInstallError(f'{MANIFEST_FILENAME} did not survive extraction.')
-
-            if 'custom_runtime' in manifest:
-                from ui.custom_runtime import retain_release
-                try:
-                    retain_release(packages_dir, staging, manifest)
-                except ValueError as error:
-                    raise AddonInstallError(str(error)) from error
-
-            # Move the old copy aside rather than deleting it, so a failed
-            # swap can put it back -- an upgrade must never be able to leave
-            # the operator with no addon at all.
-            previous = None
-            if os.path.exists(target):
-                previous = os.path.join(packages_dir, f'.{addon_id}.previous-{os.getpid()}')
-                shutil.rmtree(previous, ignore_errors=True)
-                os.rename(target, previous)
-            try:
-                os.rename(staging, target)
-            except OSError:
-                if previous is not None:
-                    os.rename(previous, target)
-                raise
-            staging = None
-            if previous is not None:
-                shutil.rmtree(previous, ignore_errors=True)
-        finally:
-            if staging is not None:
-                shutil.rmtree(staging, ignore_errors=True)
+        with provider_lifecycle_lock(addon_id, packages_dir):
+            _install_members(zf, root_prefix, members, manifest, packages_dir)
 
     return manifest
+
+
+def _install_members(zf, root_prefix, members, manifest, packages_dir):
+    addon_id = manifest['id']
+    os.makedirs(packages_dir, exist_ok=True)
+    target = os.path.join(packages_dir, addon_id)
+
+    # Stage a sibling of the target so the final move stays on one
+    # filesystem, then swap. Same pattern as the global backup restore.
+    staging = tempfile.mkdtemp(prefix=f'.{addon_id}.staging-', dir=packages_dir)
+    try:
+        extracted = 0
+        for info, path in members:
+            if root_prefix and not path.startswith(root_prefix):
+                continue  # stray file outside the package folder
+            relative = path[len(root_prefix):] if root_prefix else path
+            if not relative:
+                continue
+            destination = os.path.join(staging, *relative.split('/'))
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            with zf.open(info) as source, open(destination, 'wb') as out:
+                shutil.copyfileobj(source, out, length=64 * 1024)
+            extracted += 1
+
+        if not extracted:
+            raise AddonInstallError('Archive contained no files to install.')
+        staged_manifest, errors = read_manifest(staging)
+        if errors:
+            raise AddonInstallError('Staged manifest is invalid: ' + '; '.join(errors))
+        if staged_manifest != manifest:
+            raise AddonInstallError('Staged manifest differs from the inspected manifest.')
+
+        # A new offline package may be staged without a database. Replacing
+        # either an installed package or retained release requires a live check.
+        retained = os.path.join(packages_dir, RELEASES_DIR, addon_id)
+        if has_app_context() or os.path.lexists(target) or os.path.lexists(retained):
+            check_provider_dependencies(addon_id, 'replace', retains_runtime='custom_runtime' in staged_manifest)
+        if 'custom_runtime' in staged_manifest:
+            from ui.custom_runtime import retain_release
+            try:
+                retain_release(packages_dir, staging, staged_manifest)
+            except ValueError as error:
+                raise AddonInstallError(str(error)) from error
+
+        # Move the old copy aside rather than deleting it, so a failed
+        # swap can put it back -- an upgrade must never be able to leave
+        # the operator with no addon at all.
+        previous = None
+        if os.path.exists(target):
+            previous = os.path.join(packages_dir, f'.{addon_id}.previous-{os.getpid()}')
+            shutil.rmtree(previous, ignore_errors=True)
+            os.rename(target, previous)
+        try:
+            os.rename(staging, target)
+        except OSError:
+            if previous is not None:
+                os.rename(previous, target)
+            raise
+        staging = None
+        if previous is not None:
+            shutil.rmtree(previous, ignore_errors=True)
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 def uninstall_addon(addon_id, packages_dir):
@@ -213,10 +234,16 @@ def uninstall_addon(addon_id, packages_dir):
     target = os.path.abspath(os.path.join(root, addon_id))
     if target == root or not target.startswith(root + os.sep):
         raise AddonInstallError('Invalid addon id.')
-    if not os.path.isdir(target):
-        return False
-    shutil.rmtree(target)
-    return True
+    with provider_lifecycle_lock(addon_id, packages_dir):
+        installed = os.path.isdir(target)
+        # Live callers need dependency details even after an external removal.
+        # A missing offline target remains a no-op without a database context.
+        if has_app_context() or installed:
+            check_provider_dependencies(addon_id, 'uninstall')
+        if not installed:
+            return False
+        shutil.rmtree(target)
+        return True
 
 
 def scan_installed_ids(packages_dir):
