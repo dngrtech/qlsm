@@ -914,7 +914,7 @@ function EditInstanceConfigModal({
         config_folders: cfgFolders,
         factories: serializeFactories().files,
         draft_id: pluginDraftId,
-        checked_plugins: toQlxPluginNames(checkedPlugins),
+        checked_plugins: toQlxPluginNames(checkedPlugins, pluginTree),
       };
       if (hooksLoaded) {
         configPayload.enabled_hooks = hookEnabledOrder;

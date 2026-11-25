@@ -243,6 +243,35 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
     per-addon return values otherwise. A handler that raises is logged and
     skipped: an addon must not be able to abort a deploy it merely decorates.
     """
+    return dispatch_each(hook, scope_id, lambda addon_id: (args, kwargs))
+
+
+# Hooks whose arguments can carry secrets (a backup's contents, the values an
+# operator typed into an add-instance tab, a password field included). An
+# exception message or traceback can echo them, so these log the exception
+# type only.
+REDACTED_ERROR_HOOKS = frozenset({'backup.export', 'instance.created'})
+
+
+def dispatch_each(hook, scope_id, args_for, on_error=None, on_addon_done=None):
+    """dispatch(), but every addon's handlers get arguments of their own.
+
+    `args_for(addon_id)` returns the `(args, kwargs)` that addon's handlers
+    are called with. For a hook that carries per-addon input -- the values an
+    addon's own add-instance tab collected, say -- where handing every addon
+    everyone's input would leak one addon's form data (a secret field
+    included) into another's handler.
+
+    `on_error(addon_id, exc)` runs after a handler raised and was logged, so
+    the caller can undo what it left half done (e.g. roll back a session the
+    handler broke) before the next addon runs. Its own failure is logged and
+    swallowed.
+
+    `on_addon_done(addon_id, ok)` runs once after all of an addon's handlers,
+    `ok` False when any of them raised, so the caller can settle that addon's
+    outcome on its own (commit what it did, or drop it) before the next addon
+    runs. Its own failure is logged and swallowed.
+    """
     if hook not in HOOK_SCOPES:
         raise ValueError(f'unknown hook "{hook}"')
     results = []
@@ -255,16 +284,29 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
         if not _gates_open(addon, hook, scope_id):
             continue
         slow_after = SLOW_HANDLER_SECONDS.get(hook)
+        args, kwargs = args_for(addon.id)
+        addon_ok = True
         for handler in handlers:
             started = time.monotonic()
             try:
                 value = handler(*args, **kwargs)
             except Exception as e:
-                if hook == 'backup.export':
+                addon_ok = False
+                if hook in REDACTED_ERROR_HOOKS:
                     log.error('Addon %s hook %s failed (%s).', addon.id, hook, type(e).__name__)
                 else:
                     log.error('Addon %s hook %s failed: %s\n%s',
                               addon.id, hook, e, traceback.format_exc())
+                if on_error is not None:
+                    try:
+                        on_error(addon.id, e)
+                    except Exception as cleanup_error:
+                        if hook in REDACTED_ERROR_HOOKS:
+                            log.error('Addon %s hook %s cleanup failed (%s).',
+                                      addon.id, hook, type(cleanup_error).__name__)
+                        else:
+                            log.error('Addon %s hook %s cleanup failed: %s',
+                                      addon.id, hook, cleanup_error)
                 continue
             finally:
                 elapsed = time.monotonic() - started
@@ -276,6 +318,16 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
                     results.extend(value if isinstance(value, (list, tuple)) else [value])
             else:
                 results.append(value)
+        if on_addon_done is not None:
+            try:
+                on_addon_done(addon.id, addon_ok)
+            except Exception as done_error:
+                if hook in REDACTED_ERROR_HOOKS:
+                    log.error('Addon %s hook %s settle failed (%s).',
+                              addon.id, hook, type(done_error).__name__)
+                else:
+                    log.error('Addon %s hook %s settle failed: %s',
+                              addon.id, hook, done_error)
     return results
 
 

@@ -90,8 +90,9 @@ graph TD
         * `ui/task_logic/ansible_instance_mgmt.py`: Instance deploy/restart/delete/config-sync logic.
         * `ui/task_logic/ansible_qlfilter_mgmt.py`: QLFilter install/uninstall/check.
         * `ui/task_logic/ansible_workshop_update.py`: Force workshop item update on host.
-        * `ui/task_logic/plugin_update_check.py`: "Check for Updates" diff of the merged plugin pool (built-in tier plus operator tier, see `plugin_pool.py`) against the host's common pool (ad-hoc SSH hash listing) and each instance's `scripts/` (local). Hashing and diffing live in `ui/update_checks.py`.
+        * `ui/task_logic/plugin_update_check.py`: "Check for Updates" diff of the merged plugin pool (built-in tier plus operator tier, see `plugin_pool.py`) against the host's common pool (one `sha256sum` listing over plain ssh, `ssh_command.py`) and each instance's `scripts/` (local). Hashing and diffing live in `ui/update_checks.py`.
         * `ui/task_logic/ansible_plugin_update.py`: Applies selected plugin updates (common pool refresh via `update_common_plugins.yml`, per-instance file copies, optional restarts).
+        * `ui/preset_plugin_updates.py`: The same diff for user presets: the plugin copies in `configs/presets/<name>/scripts/` vs the merged pool for the preset's runtime (same-name root files only), and a synchronous apply that copies the selected pool files in. Served by `GET /api/presets/plugin-updates`, `GET /api/presets/<id>/plugin-updates` and `POST /api/presets/<id>/plugin-updates/apply`. Built-in presets are refused; `flask sync-plugin-pool` keeps those in step.
         * `ui/task_logic/standalone_host_setup.py` / `standalone_host_remove.py`: Lifecycle for user-provided (non-Terraform) hosts.
     * **Plugin Manifests & Repositories:**
         * `ui/plugin_manifest.py`: Reads an optional `<plugin>.ql-plugin.json` sidecar next to a `.py` plugin, supplying the description and editable cvar list the Plugins tab shows. The Plugins tab lists every plugin by filename; the manifest label only appears in the row's info tooltip and on the Plugin Repositories page (next to the filename). The shared pool is the source of truth over a preset or instance copy.
@@ -168,6 +169,7 @@ qlsm/
 │       └── common.py            # Shared utilities (append_log, etc.)
 │   ├── plugin_manifest.py       # Reads <plugin>.ql-plugin.json sidecars (label/description/cvars)
 │   ├── plugin_pool.py           # Shared plugin pool: built-in tier (ql-assets/data/) + operator tier (data/shared-plugins/)
+│   ├── preset_plugin_updates.py # Check for Updates for user presets (preset scripts vs pool)
 │   ├── plugin_repositories.py   # External repos: fetch qlsm-repository.json, download plugins/install addons
 │   ├── addons/                  # Addon system: discovery, load, settings, hooks -- see Addon System below
 │   │   ├── manifest.py          # Parse/validate qlsm-addon.json
@@ -245,7 +247,7 @@ qlsm/
 
 ### Instance Deployment
 1. User submits form → `POST /api/instances`
-2. Instance record created; config files, selected plugins, and selected factories are written to `configs/<host>/<id>/`
+2. Instance record created; config files, selected plugins, and selected factories are written to `configs/<host>/<id>/`; addons' `instance.created` handlers run with their part of `addon_options` (failure-isolated)
 3. RQ task queued → `deploy_instance_logic()`
 4. Ansible `add_qlds_instance.yml` → Deploys to host
 5. Instance status → RUNNING

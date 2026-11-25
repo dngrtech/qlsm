@@ -32,7 +32,7 @@ from ui.update_checks import (
 )
 from ui.plugin_pool import pool_file_hashes, pool_package_hashes
 from ui.runtime import plugin_api_for_host, runtime_paths
-from .ansible_runner import run_host_ansible_adhoc
+from .ssh_command import run_host_ssh_command
 
 COMMON_ASSETS_REMOTE_DIR = "/home/ql/assets/common"
 
@@ -57,10 +57,10 @@ def check_common_pool(host):
     the host was unreachable."""
     remote_dir = _common_pool_remote_dir(host)
     source = _pool_hashes(host)
-    success, stdout, stderr = run_host_ansible_adhoc(
+    success, stdout, stderr = run_host_ssh_command(
         host,
-        module_args=f"find {remote_dir} -maxdepth 1 -type f "
-                    f"\\( -name '*.py' -o -name '*.ql-plugin.json' \\) -exec sha256sum {{}} +",
+        f"find {remote_dir} -maxdepth 1 -type f "
+        f"\\( -name '*.py' -o -name '*.ql-plugin.json' \\) -exec sha256sum {{}} +",
     )
     if not success:
         return None, stderr or "Failed to read remote plugin pool state"
@@ -71,11 +71,19 @@ def check_common_pool(host):
 
 def check_instance_selected_plugins(host, instance):
     """Diffs the merged pool vs this instance's own scripts snapshot
-    (configs/{host}/{instance}/scripts/) — purely local, no SSH needed.
-    Only files present in both are compared, so every change is "modified"
-    (see module docstring for why missing pool files aren't reported)."""
-    scripts_dir = _instance_scripts_dir(host.name, instance.id)
-    source = _pool_hashes(host)
+    (configs/{host}/{instance}/scripts/) — purely local, no SSH needed."""
+    return check_selected_plugins(
+        plugin_api_for_host(host), _instance_scripts_dir(host.name, instance.id),
+    )
+
+
+def check_selected_plugins(runtime, scripts_dir):
+    """Diffs the merged pool of `runtime` (a plugin API: minqlx or
+    minqlxtended) vs a scripts folder holding its own plugin copies -- an
+    instance's or a user preset's. Only files present in both are compared,
+    so every root change is "modified" (see module docstring for why missing
+    pool files aren't reported)."""
+    source = pool_file_hashes(runtime, extensions=PLUGIN_EXTENSIONS)
     target = hash_local_tree(scripts_dir, extensions=PLUGIN_EXTENSIONS)
     shared = source.keys() & target.keys()
     changes = diff_trees({n: source[n] for n in shared}, {n: target[n] for n in shared})
@@ -83,13 +91,13 @@ def check_instance_selected_plugins(host, instance):
     # A package-style plugin (match_restore.py + restore/) keeps helper
     # modules in a subfolder. The flat comparison above never sees them, so a
     # new match_restore.py could sit next to an old restore/ for ever. Compare
-    # every helper folder the instance already carries against the same folder
-    # in the pool; a pool file new to such a folder is "added" (the package is
-    # only loadable as a whole). Files only the instance has are not reported:
-    # apply never deletes.
+    # every helper folder the scripts dir already carries against the same
+    # folder in the pool; a pool file new to such a folder is "added" (the
+    # package is only loadable as a whole). Files only the scripts dir has
+    # are not reported: apply never deletes.
     package_dirs = _instance_package_dirs(scripts_dir)
     if package_dirs:
-        source_pkg = pool_package_hashes(plugin_api_for_host(host), package_dirs, extensions=PLUGIN_EXTENSIONS)
+        source_pkg = pool_package_hashes(runtime, package_dirs, extensions=PLUGIN_EXTENSIONS)
         target_pkg = hash_package_trees(scripts_dir, package_dirs, extensions=PLUGIN_EXTENSIONS)
         changes += [c for c in diff_trees(source_pkg, target_pkg) if c["change"] != "removed"]
     return sorted(changes, key=lambda c: c["name"])

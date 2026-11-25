@@ -295,6 +295,64 @@ def _read_default_config(filename):
         return None
 
 
+def _validate_addon_options(addon_options):
+    """`addon_options` on create: {<addon_id>: {...}}, what each addon's
+    add-instance tab collected. Only the shape is checked here; what the
+    values mean is the addon's business (its instance.created handler).
+    Returns (options, error_message)."""
+    if addon_options is None:
+        return {}, None
+    if not isinstance(addon_options, dict):
+        return None, "addon_options must be an object keyed by addon id"
+    for addon_id, options in addon_options.items():
+        if not isinstance(options, dict):
+            return None, f'addon_options["{addon_id}"] must be an object'
+    return addon_options, None
+
+
+def _dispatch_instance_created(instance_id, addon_options):
+    """Run every addon's instance.created handler with its own options.
+
+    Never raises: an addon must not be able to stop an instance from being
+    created. Each addon's outcome is settled before the next one runs: its
+    work is committed when all its handlers succeeded, and rolled back when
+    one raised (logged by the registry, exception type only), so a failing
+    addon can neither ride along with nor roll back another addon's work.
+    The settings API keeps committing on its own (`commit=True`).
+    """
+    # Whatever the route still holds in the session (ld_preload_hooks) is
+    # committed first, so a rollback after a failing handler cannot drop it.
+    db.session.commit()
+
+    def _settle(addon_id, ok):
+        if not ok:
+            db.session.rollback()
+            return
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(
+                f"Addon {addon_id} instance.created changes could not be saved "
+                f"for instance {instance_id} ({type(e).__name__})."
+            )
+
+    try:
+        from ui.addons import dispatch_each
+
+        dispatch_each(
+            'instance.created', instance_id,
+            lambda addon_id: ((instance_id, dict(addon_options.get(addon_id) or {})), {}),
+            on_error=lambda addon_id, exc: db.session.rollback(),
+            on_addon_done=_settle,
+        )
+    except Exception as e:  # registry unavailable, e.g. outside an app context
+        db.session.rollback()
+        current_app.logger.warning(
+            f"Addon hook instance.created skipped for instance {instance_id} ({type(e).__name__})."
+        )
+
+
 @instance_api_bp.route('/', methods=['POST'], endpoint='add_instance_api')
 @jwt_required()
 def add_instance_api():
@@ -341,6 +399,10 @@ def add_instance_api():
     if redis_db_err:
         return jsonify({"error": {"message": redis_db_err}}), 400
 
+    addon_options, addon_options_err = _validate_addon_options(data.get('addon_options'))
+    if addon_options_err:
+        return jsonify({"error": {"message": addon_options_err}}), 400
+
     zmq_stats_password, stats_pwd_err = validate_zmq_password(
         data.get('zmq_stats_password'), 'ZMQ Stats Password'
     )
@@ -368,6 +430,7 @@ def add_instance_api():
     if len(hostname) > 64:
         return jsonify({"error": {"message": "Server Hostname must be 64 characters or fewer."}}), 400
 
+    create_lock_token = None  # held from before the addon hooks until the queue handoff
     try:
         port_int = int(port)
         host_id_int = int(host_id)
@@ -503,28 +566,35 @@ def add_instance_api():
                 shutil.copytree(default_factories_dir, instance_factories_dir, dirs_exist_ok=True)
                 current_app.logger.info(f"Copied default factories to {instance_factories_dir} for instance {instance.id}")
 
-        # Acquire entity lock before enqueue
+        # Take the instance lock before the addon hooks run and hold it
+        # through the queue handoff (or the failure cleanup below), so a
+        # delete cannot race the hooks or the first deploy.
         lock_token = str(uuid.uuid4())
         if not acquire_lock('instance', instance.id, lock_token, ttl=1260):
             return jsonify({"error": {"message": f'Another operation is running on this instance. Please wait for it to complete.'}}), 409
+        create_lock_token = lock_token
+
+        # Addons prepare their per-instance state now, before the deploy is
+        # queued, so what they contribute to the deploy (launch args,
+        # plugins) is already there on the first run.
+        _dispatch_instance_created(instance.id, addon_options)
 
         # Update status to DEPLOYING and enqueue task. The admin list rides along
         # to the deploy task, which writes it to Redis once; QLSM keeps no copy.
-        try:
-            update_instance(instance.id, status=InstanceStatus.DEPLOYING)
-            job = enqueue_task(
-                deploy_instance, instance.id,
-                admin_levels=levels_from_entries(admin_entries),
-                lock_token=lock_token, on_failure=instance_job_failure_handler,
-            )
-        except Exception as enqueue_err:
-            release_lock('instance', instance.id, lock_token)
-            update_instance(instance.id, status=InstanceStatus.IDLE)
-            raise enqueue_err
+        # An exception here reaches the cleanup below, which deletes the
+        # instance (addon state included) and then releases the lock.
+        update_instance(instance.id, status=InstanceStatus.DEPLOYING)
+        job = enqueue_task(
+            deploy_instance, instance.id,
+            admin_levels=levels_from_entries(admin_entries),
+            lock_token=lock_token, on_failure=instance_job_failure_handler,
+        )
         if job:
+            create_lock_token = None  # the deploy task releases it from here on
             current_app.logger.info(f"Enqueued job {job.id} for deploy_instance for instance {instance.id}")
             return jsonify({"data": instance.to_dict(), "message": f'Instance "{name}" created, configuration saved, and deployment task queued.'}), 201
         else:
+            create_lock_token = None
             release_lock('instance', instance.id, lock_token)
             current_app.logger.error(f"Failed to enqueue deploy_instance task for instance {instance.id}")
             update_instance(instance.id, status=InstanceStatus.ERROR)
@@ -550,13 +620,24 @@ def add_instance_api():
         # Attempt to clean up instance if it was created before the error
         if 'instance' in locals() and instance and instance.id:
             try:
+                # Addon state first: it is keyed by instance id without a
+                # foreign key, and SQLite can hand the same id to the next
+                # instance created.
+                from ui.addons import cleanup_scope
+                cleanup_scope('instance', instance.id)
                 delete_instance(instance.id) # This might also fail, but worth a try
                 # Also attempt to remove the config directory
                 if 'instance_config_dir' in locals() and os.path.exists(instance_config_dir):
                     shutil.rmtree(instance_config_dir)
             except Exception as cleanup_err:
+                db.session.rollback()
                 current_app.logger.error(f"Failed to cleanup instance/configs for {instance.id if 'instance' in locals() and instance else 'unknown instance'} after error: {cleanup_err}")
         return jsonify({"error": {"message": f'An unexpected error occurred: {str(e)}'}}), 500
+    finally:
+        # Every path that did not hand the lock to the deploy task (an error,
+        # after the cleanup above) releases it here.
+        if create_lock_token:
+            release_lock('instance', instance.id, create_lock_token)
 
 @instance_api_bp.route('/', methods=['GET'], endpoint='list_instances_api')
 @jwt_required()

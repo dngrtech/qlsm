@@ -44,6 +44,16 @@ describe('AddonsContext', () => {
     expect(await screen.findByText('Good settings')).toBeInTheDocument();
   });
 
+  it('falls back to the addon id when a label is not a non-empty string', async () => {
+    listAddons.mockResolvedValue([{
+      ...HEALTHY,
+      name: { bad: true },
+      ui: { ...HEALTHY.ui, host_menu: [{ id: 'h', label: { bad: true }, panel: 'p' }] },
+    }]);
+    renderWith(<MountList point="host_menu" />);
+    expect(await screen.findByText('good')).toBeInTheDocument();
+  });
+
   it('omits an addon that failed to load', async () => {
     listAddons.mockResolvedValue([{ ...HEALTHY, loaded: false }]);
     renderWith(<MountList point="host_menu" />);

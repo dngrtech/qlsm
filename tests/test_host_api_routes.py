@@ -1668,6 +1668,19 @@ def test_apply_plugin_updates_invalid_restart_instances(client, app):
     assert 'list of integers' in response.get_json()['error']['message']
 
 
+@pytest.mark.parametrize('body', [[1], 'update', 5])
+def test_apply_plugin_updates_rejects_a_non_object_body(client, app, body):
+    with app.app_context():
+        host = create_host(name=f'plugins-apply-nonobj-{type(body).__name__}', provider='vultr',
+                           status=HostStatus.ACTIVE)
+        host_id = host.id
+
+    headers = auth_headers(app, DEFAULT_USER)
+    response = client.post(f'/api/hosts/{host_id}/plugin-updates/apply', headers=headers, json=body)
+    assert response.status_code == 400
+    assert 'JSON object' in response.get_json()['error']['message']
+
+
 def test_apply_plugin_updates_nothing_selected(client, app):
     """Neither common pool nor any instance selection returns 400."""
     with app.app_context():

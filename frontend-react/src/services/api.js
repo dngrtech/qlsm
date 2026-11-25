@@ -659,6 +659,37 @@ export const downloadPreset = async (presetId) => {
   }
 };
 
+// Preset plugin updates: the preset's own plugin copies vs the plugin pool.
+export const checkPresetPluginUpdates = async (presetId) => {
+  try {
+    const response = await apiClient.get(`/presets/${presetId}/plugin-updates`);
+    return response.data.data; // { preset_id, name, runtime, plugin_changes, plugins }
+  } catch (error) {
+    console.error(`Failed to check plugin updates for preset ${presetId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to check plugin updates for preset ${presetId}`);
+  }
+};
+
+export const checkAllPresetPluginUpdates = async () => {
+  try {
+    const response = await apiClient.get('/presets/plugin-updates');
+    return response.data.data; // [{ preset_id, name, runtime, plugin_changes, plugins }]
+  } catch (error) {
+    console.error('Failed to check preset plugin updates:', error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error('Failed to check preset plugin updates');
+  }
+};
+
+export const applyPresetPluginUpdates = async (presetId, data) => {
+  try {
+    const response = await apiClient.post(`/presets/${presetId}/plugin-updates/apply`, data);
+    return response.data; // { data: { updated, skipped }, message }
+  } catch (error) {
+    console.error(`Failed to apply plugin updates for preset ${presetId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to apply plugin updates for preset ${presetId}`);
+  }
+};
+
 export const importPreset = async (file, { name, overwritePresetId } = {}) => {
   try {
     const formData = new FormData();

@@ -1513,7 +1513,11 @@ def apply_plugin_updates_api(host_id):
         current_app.logger.warning(f"Apply plugin updates API: Host ID {host_id} is not in ACTIVE state (current: {host.status.value}).")
         return jsonify({"error": {"message": f"Host must be in ACTIVE state to apply plugin updates. Current state: {host.status.value}"}}), 400
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({"error": {"message": "Request body must be a JSON object"}}), 400
 
     apply_common_pool = bool(data.get('update_common_pool', False))
 

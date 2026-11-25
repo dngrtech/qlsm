@@ -45,3 +45,17 @@ describe('AddonField select', () => {
     expect(onChange).toHaveBeenCalledWith('display', 'plain');
   });
 });
+
+describe('AddonField ids', () => {
+  it('gives two rendered fields with the same key their own id', () => {
+    const field = { key: 'server_id', type: 'string', label: 'Server ID' };
+    render(
+      <>
+        <AddonField field={field} value="" onChange={vi.fn()} />
+        <AddonField field={field} value="" onChange={vi.fn()} />
+      </>,
+    );
+    const [first, second] = screen.getAllByLabelText('Server ID');
+    expect(first.id).not.toBe(second.id);
+  });
+});
