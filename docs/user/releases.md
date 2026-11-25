@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.65.0` | 2026-11-25 | [#284](https://github.com/dngrtech/qlsm/pull/284) | **Bulk actions** on the Servers page update plugins on every Active host, or apply one preset to many servers with a preview per server, in one dialog. Restarts are confirmed first, including the ones a hook change forces. |
 | `v1.64.0` | 2026-11-25 | [#283](https://github.com/dngrtech/qlsm/pull/283) | Loading a preset into a server now goes through a server-side preview: per-server cvars (an addon's, or a plugin's marked `per_server`) and the hostname are kept, the admin list is compared with the server's instead of replaced, and an apply refuses when the preset or the server changed since the preview. |
 | `v1.63.1` | 2026-11-25 | [#282](https://github.com/dngrtech/qlsm/pull/282) | Documentation deployments now retry once after a failure and use a unique upload for each workflow attempt. |
 | `v1.63.0` | 2026-11-25 | [#278](https://github.com/dngrtech/qlsm/pull/278) | Saving a config or updating plugins without a restart now records what changed: click the **Updated** badge to review the pending files and settings, then restart. A new **Defer restarts** setting makes **Restart after saving** and **Restart to apply** start off by default; hook and 99k LAN rate changes still restart. |
