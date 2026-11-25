@@ -10,6 +10,7 @@ from ui.database import get_host, update_host, get_instance, update_instance
 from ui.pending_changes import SOURCE_WORKSHOP_UPDATE, record_pending_change
 from . import service_runtime
 from .ansible_runner import _run_host_ansible_playbook
+from .common import queue_instance_restart
 
 
 log = logging.getLogger(__name__)
@@ -89,7 +90,6 @@ def force_update_workshop_logic(host_id, workshop_id, restart_instance_ids):
             )
 
             # Now handle instances
-            from ui.tasks import restart_instance
             for instance in host.instances:
                 orig_state = original_instance_states[instance.id]["status"]
 
@@ -100,12 +100,19 @@ def force_update_workshop_logic(host_id, workshop_id, restart_instance_ids):
                         logs=f"Workshop {workshop_id} updated while stopped; service left stopped.\n{original_instance_states[instance.id]['logs']}"
                     )
                 elif instance.id in restart_instance_ids:
-                    update_instance(
-                        instance.id,
-                        status=InstanceStatus.RESTARTING,
-                        logs=f"Workshop {workshop_id} updated. Queuing restart...\n{original_instance_states[instance.id]['logs']}"
+                    queue_instance_restart(
+                        instance,
+                        queued_log=f"Workshop {workshop_id} updated. Queuing restart...",
+                        fallback_status=orig_state,
+                        context=f"Workshop {workshop_id} updated",
+                        previous_logs=original_instance_states[instance.id]['logs'],
+                        # Still Workshop's own temporary CONFIGURING (status
+                        # and the log line it wrote), not another operation's.
+                        still_ours=lambda fresh, marker=f"Updating Workshop item {workshop_id}...": (
+                            fresh.status == InstanceStatus.CONFIGURING
+                            and (fresh.logs or '').startswith(marker)
+                        ),
                     )
-                    restart_instance.queue(instance.id)
                 else:
                     # update_instance below commits this record too.
                     record_pending_change(

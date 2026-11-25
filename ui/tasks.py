@@ -43,6 +43,10 @@ from ui.task_logic.host_runtime_upgrade import upgrade_host_runtime_logic
 from ui.task_logic.host_runtime_upgrade_recovery import recover_host_runtime_logic
 
 # Import RQ library
+import inspect
+
+from rq.job import Callback
+
 from ui import rq
 
 
@@ -50,6 +54,11 @@ RERUN_CLOUD_SETUP_TIMEOUT = 3600
 RERUN_STANDALONE_SETUP_TIMEOUT = 1200
 RERUN_SETUP_LOCK_RELEASE_BUFFER = 60
 RUNTIME_UPGRADE_TIMEOUT = 3600
+# RQ gives a failure callback 60s by default. The handlers save ERROR with
+# commit_with_retry, whose worst case on a locked SQLite database is
+# DB_LOCKED_RETRY_BUDGET_SECONDS (~93s), then release the entity locks;
+# leave room for both plus app start-up.
+FAILURE_CALLBACK_TIMEOUT = 180
 
 
 def enqueue_task(task_func, *args, on_failure=None, **kwargs):
@@ -76,6 +85,9 @@ def enqueue_task(task_func, *args, on_failure=None, **kwargs):
     lock_token = kwargs.get('lock_token')
     if lock_token:
         meta['lock_token'] = lock_token
+
+    if inspect.isfunction(on_failure):
+        on_failure = Callback(on_failure, timeout=FAILURE_CALLBACK_TIMEOUT)
 
     locked_instance_ids = kwargs.get('locked_instance_ids')
     if locked_instance_ids is not None:

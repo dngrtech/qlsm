@@ -47,7 +47,9 @@ def _configure_success(monkeypatch, probe):
         ansible_workshop_update, "service_runtime", runtime, raising=False
     )
     queue = MagicMock()
-    monkeypatch.setattr("ui.tasks.restart_instance.queue", queue)
+    monkeypatch.setattr("ui.task_lock.acquire_lock", MagicMock(return_value=True))
+    monkeypatch.setattr("ui.task_lock.release_lock", MagicMock())
+    monkeypatch.setattr("ui.tasks.enqueue_task", queue)
     return queue
 
 
