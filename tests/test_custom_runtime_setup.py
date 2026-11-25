@@ -9,7 +9,7 @@ from ui.addons.install import install_addon_zip
 from ui.task_logic.standalone_host_setup import _setup_playbook_extra_vars
 
 
-def test_custom_setup_uses_pinned_digest_after_new_release_is_approved(app, tmp_path):
+def test_custom_setup_uses_pinned_digest_after_new_release_is_approved(app, tmp_path, app_context):
     packages = tmp_path / "packages"
     original, digest = runtime_package()
     install_addon_zip(original, packages)
@@ -135,3 +135,28 @@ def test_custom_platform_assert_uses_os_release_version_id():
             custom_host_platform={"stdout": json.dumps(actual)}
         )
         assert all(condition(**values) for condition in conditions) is safe_tar_filter
+
+
+def test_superseded_stager_cannot_publish_after_dependency_install(tmp_path, monkeypatch):
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    path = Path(__file__).resolve().parents[1] / "ansible/files/install_custom_runtime.py"
+    spec = importlib.util.spec_from_file_location("staging_installer", path)
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    package, digest = runtime_package()
+    bundle = tmp_path / "bundle"
+    with ZipFile(BytesIO(package)) as archive:
+        bundle.write_bytes(archive.read("assets/runtime.tar.gz"))
+    current = [1]
+    def own():
+        if current[0] != 1:
+            raise RuntimeError("superseded")
+    def takeover(*args):
+        current[0] = 2
+    monkeypatch.setattr(installer, "_install_dependencies", takeover)
+    root = tmp_path / "releases"
+    with pytest.raises(RuntimeError, match="superseded"):
+        installer.install(bundle, digest, root, "requirements.txt", "launch.sh", [], verify_owner=own)
+    assert not (root / digest).exists()

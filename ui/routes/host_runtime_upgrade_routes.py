@@ -250,7 +250,7 @@ def _reserve(host_id, fingerprint, answers, uploads, instance_ids):
     except IntegrityError:
         # Another request inserted this host's nonterminal operation first.
         db.session.rollback()
-        raise _Rejected(f'Host {host.name} is already being upgraded to minqlxtended.', 409) from None
+        raise _Rejected(blocked_message(host.name), 409) from None
     return op.id
 
 

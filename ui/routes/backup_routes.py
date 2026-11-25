@@ -23,6 +23,8 @@ def _locked_response():
 @backup_api_bp.route('/export', methods=['POST'])
 @jwt_required()
 def export_backup():
+    from ui.addons.runtime_protection import RuntimeProviderConflict
+
     data = request.get_json(silent=True) or {}
     password = data.get('password') or None
     if password is not None and not isinstance(password, str):
@@ -31,11 +33,19 @@ def export_backup():
     with backup_maintenance_lock(str(uuid4())) as acquired:
         if not acquired:
             return _locked_response()
+        # Reservations outlive Redis execution locks, but their recovery
+        # journals are not exported. The maintenance lock prevents any new
+        # reservation while we check and capture a stable host state.
+        if reserved_host_ids():
+            return jsonify({'error': {'message': 'Cannot export a backup while a host runtime upgrade '
+                                                 'or its rollback is in progress.'}}), 409
 
         try:
             blob, filename = build_backup_archive(password)
+        except RuntimeProviderConflict as e:
+            return jsonify({'error': e.to_error()}), 409
         except Exception as e:
-            current_app.logger.error('Error building backup archive: %s', e, exc_info=True)
+            current_app.logger.error('Error building backup archive (%s).', type(e).__name__)
             return jsonify({'error': {'message': 'Failed to build backup archive.'}}), 500
 
         current_app.logger.info('Global backup exported (encrypted=%s).', bool(password))
@@ -52,6 +62,8 @@ def export_backup():
 @backup_api_bp.route('/import', methods=['POST'])
 @jwt_required()
 def import_backup():
+    from ui.addons.runtime_protection import RuntimeProviderConflict
+
     if 'file' not in request.files:
         return jsonify({'error': {'message': 'No file provided'}}), 400
     upload = request.files['file']
@@ -82,11 +94,17 @@ def import_backup():
 
         try:
             summary = restore_backup_archive(blob, password)
+        except RuntimeProviderConflict as e:
+            return jsonify({'error': e.to_error()}), 409
         except (BackupRestoreError, BackupImportError) as e:
             return jsonify({'error': {'message': str(e)}}), 400
         except Exception as e:
-            current_app.logger.error('Error restoring backup: %s', e, exc_info=True)
+            current_app.logger.error('Error restoring backup (%s).', type(e).__name__)
             return jsonify({'error': {'message': 'Failed to restore backup.'}}), 500
 
     current_app.logger.warning('Global backup restored — prior state was wiped and replaced.')
-    return jsonify({'data': summary, 'message': 'Backup restored successfully.'})
+    message = ('Backup restored successfully. Restart all QLSM application and worker processes '
+               'before managing restored hosts.')
+    if not summary['addon_state_restored']:
+        message += ' This archive predates add-on state backups. Enable and configure add-ons after restarting.'
+    return jsonify({'data': summary, 'message': message})

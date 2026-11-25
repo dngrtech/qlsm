@@ -62,6 +62,10 @@ function AddHostFormFields({
   const isStandalone = provider === 'standalone';
   const isSelf = provider === 'self';
   const isVultrUnavailable = provider === 'vultr' && !vultrConfigured;
+  const isCustom = isStandalone && runtime === 'custom';
+  const selectedRelease = isCustom
+    ? runtimeProviders.find(({ provider_id }) => provider_id === runtimeProviderId)
+    : null;
 
   return (
     <>
@@ -102,8 +106,7 @@ function AddHostFormFields({
         }}
       />
 
-      {/* Runtime -- changes later only via the one-way minqlxtended upgrade,
-          so nothing is pre-selected: the operator picks, QLSM never picks for them. */}
+      {/* Host runtime is an explicit choice. */}
       <div data-testid="runtime-picker">
         <label className={labelClass}>Server Runtime</label>
         <fieldset
@@ -168,12 +171,7 @@ function AddHostFormFields({
         {isStandalone && !runtimeProviders.length && customUnavailableReason && (
           <p className="mt-1.5 text-xs text-theme-secondary">{customUnavailableReason}</p>
         )}
-        {isStandalone && runtime === 'custom' && runtimeProviders.length === 1 && (
-          <p className="mt-1.5 text-sm text-theme-secondary">
-            {runtimeProviders[0].label} <span>{runtimeProviders[0].build}</span>
-          </p>
-        )}
-        {isStandalone && runtime === 'custom' && runtimeProviders.length > 1 && (
+        {isCustom && runtimeProviders.length > 1 && (
           <label className="mt-2 block text-sm text-theme-primary">
             Runtime provider
             <select
@@ -188,6 +186,18 @@ function AddHostFormFields({
             </select>
           </label>
         )}
+        {selectedRelease && (
+          <section aria-label="Selected Custom release" className="mt-2 rounded-lg border border-[var(--surface-border)] bg-[var(--surface-elevated)] px-3 py-2">
+            <p className="text-sm font-semibold text-theme-primary">{selectedRelease.label}</p>
+            <p className="text-xs text-theme-secondary">Build <span className="font-mono">{selectedRelease.build}</span></p>
+          </section>
+        )}
+        {isCustom && (
+          <p className="mt-1.5 text-xs text-theme-secondary">
+            QLSM pins the selected release to this host. Open Update Custom runtime in Host Details
+            to apply an approved release or roll back to an available previous release.
+          </p>
+        )}
         {runtimeError && (
           <p
             id="runtime-error"
@@ -198,15 +208,16 @@ function AddHostFormFields({
             {runtimeError}
           </p>
         )}
-        <p
-          data-testid="runtime-immutable-warning"
-          className="mt-1.5 text-xs"
-          style={{ color: 'var(--accent-warning, var(--text-muted))' }}
-        >
-          After the host is created, the runtime changes only through the Upgrade to
-          minqlxtended action, which moves a minqlx host on Ubuntu 24.04 or newer to
-          minqlxtended. It cannot be moved back.
-        </p>
+        {runtime === 'minqlx' && (
+          <p
+            data-testid="runtime-immutable-warning"
+            className="mt-1.5 text-xs"
+            style={{ color: 'var(--accent-warning, var(--text-muted))' }}
+          >
+            On Ubuntu 24.04 or newer, the Upgrade to minqlxtended action performs a
+            one-way conversion from minqlx.
+          </p>
+        )}
       </div>
 
       {/* Cloud provider fields */}
