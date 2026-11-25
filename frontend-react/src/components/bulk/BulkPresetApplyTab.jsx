@@ -25,8 +25,6 @@ const hooksChange = (diff) => Boolean(diff?.hooks)
 // The plugin selection is what a preset changes; it is never kept.
 const NEVER_KEPT = 'qlx_plugins';
 
-// The API sends InstanceStatus values lowercase ("stopped").
-const isStopped = (inst) => inst.status?.toLowerCase() === 'stopped';
 const isActive = (host) => String(host.status).toUpperCase() === 'ACTIVE';
 const errorText = (err, fallback) => err?.error?.message || err?.message || fallback;
 
