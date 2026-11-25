@@ -244,3 +244,30 @@ def test_apply_changing_hooks_on_an_updated_instance_forces_a_restart(client, he
 
     assert response.status_code == 202, response.get_json()
     assert enqueue.call_args.kwargs['restart'] is True
+
+
+def test_deferred_apply_lists_its_change_only_once_synced(client, headers, setup):
+    """The apply goes through save_instance_config: without a restart its
+    pending record is staged and stays hidden until the sync job publishes
+    it, so a sync that never ran does not show the preset as on the host."""
+    from ui.models import InstanceStatus, QLInstance
+    from ui.pending_changes import publish_pending_changes
+
+    instance, preset = setup
+    with client.application.app_context():
+        db.session.get(QLInstance, instance.id).status = InstanceStatus.RUNNING
+        db.session.commit()
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')) as enqueue:
+        response = _apply(client, headers, instance, preset, preview_hash, restart=False)
+    assert response.status_code == 202, response.get_json()
+    assert enqueue.call_args.kwargs['restart'] is False
+
+    url = f'/api/instances/{instance.id}/pending-changes'
+    assert client.get(url, headers=headers).get_json()['data']['entries'] == []
+    with client.application.app_context():
+        publish_pending_changes(instance.id)  # what the sync job does on the host
+        db.session.commit()
+    [entry] = client.get(url, headers=headers).get_json()['data']['entries']
+    assert any(f['path'] == 'server.cfg' for f in entry['files'])
