@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PresetPluginUpdatesModal from '../PresetPluginUpdatesModal';
@@ -120,5 +120,48 @@ describe('PresetPluginUpdatesModal', () => {
     const helper = await screen.findByRole('checkbox', { name: /restore\/items\.py/ });
     expect(helper).toBeChecked();
     expect(screen.getByText(/helper file, update available/)).toBeInTheDocument();
+  });
+
+  it('accepts the result when the page passes the preset id as a string', async () => {
+    // EditPresetPage takes the id from the route (/presets/edit/3): "3".
+    mocks.checkPresetPluginUpdates.mockResolvedValue(staleResult);
+    render(<PresetPluginUpdatesModal isOpen onClose={() => {}} preset={{ id: '3', name: 'duel' }} />);
+    const stale = await screen.findByRole('checkbox', { name: /stale\.py/ });
+    expect(stale).toBeChecked();
+    expect(screen.getByRole('button', { name: /update selected/i })).toBeEnabled();
+  });
+
+  it('keeps an Apply that finishes after the dialog moved on out of the next session', async () => {
+    const user = userEvent.setup();
+    let resolveApply;
+    let resolveCheckB;
+    mocks.checkPresetPluginUpdates
+      .mockResolvedValueOnce(staleResult)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveCheckB = resolve; }));
+    mocks.applyPresetPluginUpdates.mockReturnValue(new Promise((resolve) => { resolveApply = resolve; }));
+    const onApplied = vi.fn();
+    const { rerender } = render(
+      <PresetPluginUpdatesModal isOpen onClose={() => {}} preset={{ id: 3, name: 'duel' }} onApplied={onApplied} />,
+    );
+    await screen.findByRole('checkbox', { name: /stale\.py/ });
+    await user.click(screen.getByRole('button', { name: /update selected/i }));
+    await waitFor(() => expect(mocks.applyPresetPluginUpdates).toHaveBeenCalledWith(3, { files: ['stale.py'] }));
+
+    // Closed while A's apply runs, then preset B opened.
+    rerender(<PresetPluginUpdatesModal isOpen={false} onClose={() => {}} preset={{ id: 3, name: 'duel' }} onApplied={onApplied} />);
+    rerender(<PresetPluginUpdatesModal isOpen onClose={() => {}} preset={{ id: 4, name: 'ca' }} onApplied={onApplied} />);
+    await waitFor(() => expect(mocks.checkPresetPluginUpdates).toHaveBeenCalledWith(4));
+
+    await act(async () => {
+      resolveApply({ data: { updated: ['stale.py'], skipped: [] }, message: "Updated 1 plugin file(s) in preset 'duel'." });
+    });
+    // A's success is not B's, and A's re-check does not run in B's dialog.
+    expect(screen.queryByText(/Updated 1 plugin file/)).not.toBeInTheDocument();
+    expect(mocks.checkPresetPluginUpdates).toHaveBeenCalledTimes(2);
+
+    // B's own check still lands.
+    await act(async () => { resolveCheckB({ ...staleResult, preset_id: 4, name: 'ca' }); });
+    expect(await screen.findByText(/^ca \(minqlx\)/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /update selected/i })).toBeEnabled();
   });
 });

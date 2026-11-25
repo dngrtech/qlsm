@@ -19,9 +19,17 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
     const [selected, setSelected] = useState(new Set());
 
     const presetId = preset?.id;
+    // The Presets page passes a number, EditPresetPage the route's string
+    // ("3"); the API answers with a number. Compare them as strings.
+    const presetKey = presetId == null ? null : String(presetId);
+    const isThisPreset = (id) => id != null && String(id) === presetKey;
     // Every check gets a number; only the latest one may land. A check for
     // preset A that finishes after the operator opened preset B is dropped.
     const checkSeq = useRef(0);
+    // One session per opening of the dialog for one preset. An Apply that
+    // finishes in a later session (the dialog was closed, or reopened for
+    // another preset) shows nothing there and does not re-check.
+    const sessionRef = useRef(0);
 
     const runCheck = useCallback(async () => {
         if (presetId == null) return;
@@ -30,7 +38,7 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
         setError(null);
         try {
             const data = await checkPresetPluginUpdates(presetId);
-            if (seq !== checkSeq.current || data?.preset_id !== presetId) return;
+            if (seq !== checkSeq.current || !isThisPreset(data?.preset_id)) return;
             setResult(data);
             setSelected(new Set((data.plugin_changes || []).map(c => c.name)));
         } catch (err) {
@@ -39,13 +47,17 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
         } finally {
             if (seq === checkSeq.current) setChecking(false);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [presetId]);
 
     useEffect(() => {
+        sessionRef.current += 1;
         if (isOpen) {
             setResult(null);
             setSelected(new Set());
             setMessage(null);
+            setError(null);
+            setApplying(false);
             runCheck();
         } else {
             checkSeq.current += 1; // a check still running for a closed modal is dropped
@@ -53,7 +65,7 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
     }, [isOpen, runCheck]);
 
     // Apply only what is shown for the preset that is open.
-    const resultMatches = result != null && result.preset_id === presetId;
+    const resultMatches = result != null && isThisPreset(result.preset_id);
 
     const toggle = (name) => {
         setSelected(prev => {
@@ -66,17 +78,22 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!resultMatches) return;
+        const session = sessionRef.current;
+        const current = () => session === sessionRef.current;
         setApplying(true);
         setError(null);
         try {
             const response = await applyPresetPluginUpdates(presetId, { files: Array.from(selected) });
-            setMessage(response.message || 'Plugins updated.');
+            // The page's own list (update counts) is refreshed either way.
             if (onApplied) onApplied(response.data);
+            if (!current()) return;
+            setMessage(response.message || 'Plugins updated.');
             await runCheck();
         } catch (err) {
+            if (!current()) return;
             setError(err.error?.message || err.message || 'Failed to apply plugin updates.');
         } finally {
-            setApplying(false);
+            if (current()) setApplying(false);
         }
     };
 
