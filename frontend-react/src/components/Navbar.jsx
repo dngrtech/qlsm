@@ -7,7 +7,7 @@ import NotificationBell from './NotificationBell';
 import { useAuth } from '../contexts/AuthContext';
 import { useAddonMounts } from '../contexts/AddonsContext';
 import { resolveAddonIcon } from './addons/addonIcons';
-import { Settings, Users, ChevronDown, Terminal, LogOut, Server, SlidersHorizontal, Menu as MenuIcon, BookOpen, Archive, ShieldCheck, FileText, PackagePlus, Puzzle } from 'lucide-react';
+import { Settings, Users, ChevronDown, Terminal, LogOut, Server, SlidersHorizontal, Menu as MenuIcon, BookOpen, Archive, ShieldCheck, FileText, PackagePlus, Puzzle, Layers } from 'lucide-react';
 
 function Navbar() {
   const navigate = useNavigate();
@@ -151,6 +151,17 @@ function Navbar() {
                         >
                           <Puzzle size={16} strokeWidth={2} />
                           <span>Addons</span>
+                        </Link>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <Link
+                          to="/presets"
+                          className={`navbar-dropdown-item ${active ? 'navbar-dropdown-item-active' : ''}`}
+                        >
+                          <Layers size={16} strokeWidth={2} />
+                          <span>Presets</span>
                         </Link>
                       )}
                     </Menu.Item>
@@ -302,6 +313,17 @@ function Navbar() {
                         >
                           <Puzzle size={16} strokeWidth={2} />
                           <span>Addons</span>
+                        </Link>
+                      )}
+                    </Menu.Item>
+                    <Menu.Item>
+                      {({ active }) => (
+                        <Link
+                          to="/presets"
+                          className={`navbar-dropdown-item ${active || location.pathname.startsWith('/presets') ? 'navbar-dropdown-item-active' : ''}`}
+                        >
+                          <Layers size={16} strokeWidth={2} />
+                          <span>Presets</span>
                         </Link>
                       )}
                     </Menu.Item>

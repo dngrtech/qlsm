@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.60.0` | 2026-11-25 | [#280](https://github.com/dngrtech/qlsm/pull/280) | **Check for Updates** now also covers user presets, including the helper files of package-style plugins, from a **Plugin Updates** button on each preset. The host check reads the plugin pool over plain SSH, which is much faster than before. |
 | `v1.59.0` | 2026-11-20 | [#281](https://github.com/dngrtech/qlsm/pull/281) | Custom runtime hosts can now be updated to another approved release, or rolled back, from the host. Removing or disabling an addon that a host's runtime depends on is refused, and backups now include add-on settings. |
 | `v1.58.0` | 2026-11-17 | [#276](https://github.com/dngrtech/qlsm/pull/276) | New standalone hosts can use a **Custom** runtime supplied by an enabled addon. QLSM pins the selected build on the host and uses the provider's plugin API to choose compatible presets and plugins. |
 | `v1.57.1` | 2026-11-11 | [#275](https://github.com/dngrtech/qlsm/pull/275) | Fixed self-host SSH failing on installs made with `git clone`, where `~/.qlsm-ssh` ended up owned by root. Existing installs are repaired on the next `docker compose up`. |
