@@ -21,7 +21,7 @@ export const PLUGIN_HINT_TEXT = {
   subfolder: "Plugins in subfolders can't be enabled directly. Import them from a plugin in the root folder instead.",
   'package-marker': "__init__.py marks a package and can't be enabled as a plugin.",
   'abstract-module': "This file is a shared library imported by other plugins, not a plugin itself. Loading it directly does nothing.",
-  'plugin-dependency': "This file is a helper required by another enabled plugin, so it's enabled automatically and can't be toggled on its own.",
+  'plugin-dependency': "This file is a helper required by another enabled plugin. It is kept with that plugin, can't be toggled on its own and is not added to qlx_plugins.",
 };
 
 // depends_on entries a plugin's manifest declares, normalized to bare root
@@ -174,8 +174,13 @@ export function resolveRootPluginPaths(tree = [], rawNames = []) {
   };
 }
 
-export function toQlxPluginNames(checked = []) {
+// `tree` is optional: pass it so a dependency-only helper module stays out of
+// qlx_plugins. It has no plugin class, so minqlx fails to load it with a
+// PluginLoadError at every start; it only has to sit on disk for the plugin
+// that imports it. It stays in the checked set, which is UI state.
+export function toQlxPluginNames(checked = [], tree = null) {
+  const libraryNames = tree ? collectDependencyFilenames(tree) : null;
   return Array.from(checked)
-    .filter(path => isEnableablePluginPath(path))
+    .filter(path => isEnableablePluginPath(path, libraryNames))
     .map(path => path.replace(/\.py$/, ''));
 }

@@ -41,8 +41,18 @@ def _copy_selected_plugin_files(host, instance, filenames):
     filename lists. A name is a bare filename (os.path.basename applied
     defensively — this list ultimately comes from a JSON request body) or a
     forward-slash path into a plugin's helper package ('restore/items.py')."""
-    runtime = plugin_api_for_host(host)
-    dest_dir = os.path.abspath(os.path.join('configs', host.name, str(instance.id), 'scripts'))
+    return copy_selected_plugin_files(
+        plugin_api_for_host(host),
+        os.path.join('configs', host.name, str(instance.id), 'scripts'),
+        filenames,
+    )
+
+
+def copy_selected_plugin_files(runtime, scripts_dir, filenames):
+    """_copy_selected_plugin_files for any scripts folder (an instance's, a
+    user preset's) and the merged pool of `runtime` (a plugin API). Same
+    rules for bare names and package members; returns (applied, skipped)."""
+    dest_dir = os.path.abspath(scripts_dir)
     os.makedirs(dest_dir, exist_ok=True)
 
     applied, skipped = [], []

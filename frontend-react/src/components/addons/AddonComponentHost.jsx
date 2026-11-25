@@ -27,8 +27,11 @@ import { publishAddonRuntime } from './publishAddonRuntime';
  * lets an addon replace a purpose-built screen without losing its chrome
  * (title, width, header actions), which the generic shell cannot express.
  * Undefined for every other mount point.
+ *
+ * `addInstance` is the same idea for a tab in the Add Instance form (see
+ * AddonAddInstanceTab.jsx): the form, not the component, holds the values.
  */
-function AddonComponentHost({ addon, entry, scope, scopeId, modal }) {
+function AddonComponentHost({ addon, entry, scope, scopeId, modal, addInstance }) {
   const [Component, setComponent] = useState(null);
   const [error, setError] = useState(null);
 
@@ -109,6 +112,10 @@ function AddonComponentHost({ addon, entry, scope, scopeId, modal }) {
     manifest: addon,
     // Only for `renders: "modal"` entries; undefined everywhere else.
     modal,
+    // Only for an `add_instance_tabs` entry: { hostId, values, onChange }.
+    // The tab has no instance to save to yet, so its values ride along with
+    // the create request instead; undefined everywhere else.
+    addInstance,
   };
 
   return <Component ctx={ctx} />;

@@ -121,7 +121,8 @@ Read-only diff of the host runtime's merged plugin pool (the built-in tier
 `.py` and `.ql-plugin.json` files at the top level of the pool are compared.
 
 - **Common pool:** the host's `/home/ql/assets/common/<pool>/`, hashed with
-  one ad-hoc `sha256sum` over SSH (15s connect timeout, 30s overall).
+  one `sha256sum` over plain ssh (15s connect timeout, 30s overall; the ssh
+  connection is kept for 60s, so a repeated check of the host is near instant).
 - **Each instance:** `configs/<host_name>/<instance_id>/scripts/`, hashed locally.
   Only files the instance already has are compared, so every entry is
   `modified`. A pool file missing from `scripts/` isn't reported, because the
@@ -726,6 +727,8 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 `redis_db` is an optional integer, range 1-8 (`MAX_INSTANCES_PER_HOST`). Omitted means the instance's Redis DB is derived from its port at read time (`resolve_redis_db()`), matching every instance created before this field existed. Out-of-range or non-integer values are rejected with 400. Duplicates on the same host are allowed — there is no uniqueness check, since sharing a DB across instances is a deliberate, supported choice. Selection happens only at creation; there is no path to change it afterward.
 
 `zmq_stats_password` and `zmq_rcon_password` are optional. When both are omitted or blank, QLSM generates them at deploy time, which is the behavior of every instance created before these fields existed. When supplied they are stored on the instance at creation and the deploy-time generator leaves them untouched. Both must be supplied together — sending only one is rejected with 400. Each must be 8 to 64 characters drawn from letters, digits, `-`, `_`, and `=`; that is the same alphabet QLSM's generator uses, chosen because a wider set gets mangled by the shell, Ansible extra-vars, or Quake argument parsing on the way to the systemd unit. The two values are allowed to be identical.
+
+`addon_options` is optional: `{"<addon_id>": {...}}`, the values each addon's Add Instance tab collected (`ui.add_instance_tabs`, see `addons/README.md`). Core checks only that it is an object of objects (400 otherwise, before any database write) and hands each addon its own entry in the `instance.created` hook, which runs after the instance and its config files exist and before the deploy is queued. A failing addon handler never fails the request.
 
 ### Update LAN Rate Request
 ```json
