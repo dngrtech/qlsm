@@ -90,7 +90,10 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
     const [unkept, setUnkept] = useState(() => new Set()); // lower-cased cvar names
     const [added, setAdded] = useState([]);
     const [addInput, setAddInput] = useState('');
-    const [restart, setRestart] = useState(true);
+    // null until Settings > Defer restarts has loaded: the default comes
+    // from it, so the checkbox and Apply wait instead of starting on "restart"
+    // and flipping when the setting arrives.
+    const [restart, setRestart] = useState(null);
     const [rows, setRows] = useState({}); // { [instId]: { phase, preview, body, reason } }
     const [questions, setQuestions] = useState([]); // [{ runtime, compatibility, servers }]
     const [pending, setPending] = useState(0);
@@ -110,9 +113,10 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
         getPresets()
             .then((list) => { if (!cancelled) setPresets(list || []); })
             .catch((err) => { if (!cancelled) setPresetsError(errorText(err, 'Failed to load presets.')); });
+        setRestart(null);
         getDeferRestartsSetting()
             .then((setting) => { if (!cancelled) setRestart(!setting?.enabled); })
-            .catch(() => { /* keep the default */ });
+            .catch(() => { if (!cancelled) setRestart(true); });
         return () => { cancelled = true; };
     }, [isOpen]);
 
@@ -491,7 +495,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
 
             <div className="flex justify-end items-center gap-3 mt-6 pt-4 border-t border-[var(--surface-border)]">
                 <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer" title="Stopped servers are never started">
-                    <input type="checkbox" checked={restart} disabled={busy} onChange={() => setRestart(r => !r)} />
+                    <input type="checkbox" checked={Boolean(restart)} disabled={busy || restart === null} onChange={() => setRestart(r => !r)} />
                     Restart servers to apply
                 </label>
                 <button type="button" onClick={onClose} className="btn btn-secondary" disabled={applying}>
@@ -507,7 +511,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
                 >
                     Preview
                 </button>
-                <button type="button" onClick={handleApply} className="btn btn-primary" disabled={applyJobs.length === 0 || busy}>
+                <button type="button" onClick={handleApply} className="btn btn-primary" disabled={applyJobs.length === 0 || busy || restart === null}>
                     {applying ? 'Applying...' : 'Apply'}
                 </button>
             </div>

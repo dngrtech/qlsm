@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BulkActionsModal from '../BulkActionsModal';
@@ -239,6 +239,28 @@ describe('BulkPresetApplyTab', () => {
     await preview_();
     await screen.findByText('server.cfg');
 
+    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
+      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11',
+    }));
+  });
+
+  it('waits for the Defer restarts setting before restart and Apply are usable', async () => {
+    let resolveSetting;
+    mocks.getDeferRestartsSetting.mockReturnValue(new Promise((resolve) => { resolveSetting = resolve; }));
+    await renderTab();
+    tick('a1');
+    await preview_();
+    await screen.findByText('server.cfg');
+
+    const restart = screen.getByLabelText(/restart servers to apply/i);
+    expect(restart.checked).toBe(false);
+    expect(restart.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /^apply$/i }).disabled).toBe(true);
+
+    await act(async () => { resolveSetting({ enabled: true }); });
+    await waitFor(() => expect(screen.getByLabelText(/restart servers to apply/i).disabled).toBe(false));
+    expect(screen.getByLabelText(/restart servers to apply/i).checked).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
       preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11',

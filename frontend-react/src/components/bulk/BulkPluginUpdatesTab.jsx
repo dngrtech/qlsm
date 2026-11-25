@@ -8,8 +8,9 @@ import {
 import runLimited from './runLimited';
 
 const CONCURRENCY = 4;
-// Each check is an Ansible run inside the web container; more of them at once
-// slow every other request (a preset preview) down to the 30s check timeout.
+// Each check reads the host's plugin pool over plain ssh (about a second, far
+// less with a warm ControlMaster) and holds one web thread meanwhile; two at a
+// time leaves the other threads free for the rest of the UI.
 const CHECK_CONCURRENCY = 2;
 const CHANGE_LABEL = { added: 'new', modified: 'updated', removed: 'removed upstream' };
 
