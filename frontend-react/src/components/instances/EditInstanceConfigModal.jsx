@@ -77,22 +77,6 @@ const withServerHostname = (serverCfg, hostname) => {
 };
 const setsEqual = (a, b) => a.size === b.size && [...a].every(value => b.has(value));
 
-// The admin list a preset load leaves: `changes` (a preview's admin_changes,
-// level 0 = revoke) applied to the server's list, so Save diffs back to them.
-const applyAdminChanges = (entries, changes) => {
-  const levels = new Map(changes.map((change) => [change.steam_id64, Number(change.level)]));
-  const next = (entries || [])
-    .filter((entry) => levels.get(entry.steam_id64) !== 0)
-    .map((entry) => (levels.has(entry.steam_id64) ? { ...entry, level: levels.get(entry.steam_id64) } : entry));
-  const present = new Set(next.map((entry) => entry.steam_id64));
-  changes.forEach((change) => {
-    if (Number(change.level) !== 0 && !present.has(change.steam_id64)) {
-      next.push({ steam_id64: change.steam_id64, level: Number(change.level) });
-    }
-  });
-  return next;
-};
-
 function EditInstanceConfigModal({
   isOpen,
   onClose,
