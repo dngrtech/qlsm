@@ -505,7 +505,7 @@ def test_save_without_restart_records_lan_rate_change(
 
 # --- a deferred save is published only once its files reach the host ------
 
-def _run_sync(app, monkeypatch, instance_id, rc):
+def _run_sync(app, monkeypatch, instance_id, rc, previous_status='running'):
     """apply_instance_config_logic(restart=False) against the real database,
     with the playbook answering `rc`."""
     from ui.task_logic import ansible_instance_mgmt, service_runtime
@@ -526,7 +526,7 @@ def _run_sync(app, monkeypatch, instance_id, rc):
         m.setattr('ui.task_logic.access_permission_sync.write_and_report_admin_levels', MagicMock())
         with app.app_context():
             ansible_instance_mgmt.apply_instance_config_logic(
-                instance_id, restart=False, previous_status='running',
+                instance_id, restart=False, previous_status=previous_status,
             )
 
 
@@ -604,3 +604,48 @@ def test_observed_restart_keeps_changes_not_yet_on_the_host(app, running_instanc
         rows = PendingInstanceChange.query.filter_by(instance_id=instance.id).all()
         assert [r.to_dict()['files'][0]['path'] for r in rows] == ['staged.cfg']
         assert rows[0].synced is False
+
+
+def _run_start(app, monkeypatch, instance_id):
+    from ui.task_logic import ansible_instance_mgmt
+    from ui.task_logic.ansible_runner import SimpleAnsibleResult
+
+    with monkeypatch.context() as m:
+        m.setattr(ansible_instance_mgmt, 'get_current_job', MagicMock(return_value=MagicMock(id='job')))
+        m.setattr(ansible_instance_mgmt, '_run_ansible_playbook',
+                  MagicMock(return_value=(SimpleAnsibleResult(0, 'out', ''), None)))
+        with app.app_context():
+            ansible_instance_mgmt.start_instance_logic(instance_id)
+
+
+def test_retry_while_stopped_publishes_the_staged_change_so_start_clears_it(
+    client, app, headers, running_instance, tmp_path, monkeypatch
+):
+    """Failed deferred sync, the operator stops the instance and saves again
+    without a restart: that sync carries the staged files to the host and
+    leaves the instance STOPPED. The record is synced now, so the next start
+    (which loads the files) drops it instead of resurfacing it later."""
+    monkeypatch.chdir(tmp_path)
+    instance_dir = tmp_path / 'configs' / running_instance.host_name / str(running_instance.id)
+    instance_dir.mkdir(parents=True)
+    (instance_dir / 'server.cfg').write_text('set g_gametype 1\n')
+    body = {'configs': _configs(**{'server.cfg': 'set g_gametype 4\n'}), 'restart': False}
+
+    _put_config(client, headers, running_instance.id, body)
+    _run_sync(app, monkeypatch, running_instance.id, rc=4)  # host unreachable
+
+    with app.app_context():
+        db.session.get(QLInstance, running_instance.id).status = InstanceStatus.STOPPED
+        db.session.commit()
+    _put_config(client, headers, running_instance.id, body)
+    _run_sync(app, monkeypatch, running_instance.id, rc=0, previous_status='stopped')
+
+    with app.app_context():
+        assert db.session.get(QLInstance, running_instance.id).status == InstanceStatus.STOPPED
+        rows = PendingInstanceChange.query.filter_by(instance_id=running_instance.id).all()
+        assert rows and all(row.synced for row in rows)
+
+    _run_start(app, monkeypatch, running_instance.id)
+    with app.app_context():
+        assert db.session.get(QLInstance, running_instance.id).status == InstanceStatus.RUNNING
+        assert PendingInstanceChange.query.filter_by(instance_id=running_instance.id).count() == 0

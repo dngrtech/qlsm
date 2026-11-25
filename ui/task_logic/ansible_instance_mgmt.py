@@ -752,10 +752,13 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
             if restart:
                 # The restart made every earlier deferred change live too.
                 clear_pending_changes(instance.id)
-            elif final_status == InstanceStatus.UPDATED:
+            else:
                 # The staged records (config saves, plugin updates) reached
                 # the host with this sync: publish them in the same commit as
-                # UPDATED and its runtime baseline.
+                # the final status (UPDATED with its runtime baseline, or
+                # STOPPED). Also for a stopped instance: the next start loads
+                # the files and clears synced records, so one left staged
+                # would resurface later as pending although it is live.
                 publish_pending_changes(instance.id)
             instance.status = final_status
             db.session.commit()
