@@ -33,6 +33,13 @@ const hostCheck = (instId, file) => ({
   },
 });
 
+// Apply, then the restart confirmation when the action restarts servers.
+const applyConfirmed = async (name = /^apply$/i) => {
+  fireEvent.click(screen.getByRole('button', { name }));
+  const confirm = screen.queryByRole('button', { name: /restart and apply/i });
+  if (confirm) fireEvent.click(confirm);
+};
+
 const clickCheck = () => fireEvent.click(screen.getByRole('button', { name: /check for updates/i }));
 
 const renderModal = () => {
@@ -54,7 +61,7 @@ describe('BulkPluginUpdatesTab', () => {
     renderModal();
     await screen.findByText('y.py');
     fireEvent.click(screen.getByLabelText(/^x\.py/));
-    fireEvent.click(screen.getByRole('button', { name: /update selected/i }));
+    await applyConfirmed(/update selected/i);
     await waitFor(() => expect(screen.getByTestId('apply-result-host-2').textContent).toBe('queued'));
 
     fireEvent.click(screen.getByRole('tab', { name: /apply preset/i }));
@@ -103,7 +110,7 @@ describe('BulkPluginUpdatesTab', () => {
     renderModal();
     await screen.findByText('y.py');
 
-    fireEvent.click(screen.getByRole('button', { name: /update selected/i }));
+    await applyConfirmed(/update selected/i);
 
     await waitFor(() => expect(mocks.applyPluginUpdates).toHaveBeenCalledTimes(2));
     expect(mocks.applyPluginUpdates).toHaveBeenCalledWith(1, {
@@ -127,7 +134,7 @@ describe('BulkPluginUpdatesTab', () => {
     renderModal();
     await screen.findByText('y.py');
 
-    fireEvent.click(screen.getByRole('button', { name: /update selected/i }));
+    await applyConfirmed(/update selected/i);
 
     expect(await screen.findByText('Host is busy with another task')).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText('queued').length).toBeGreaterThanOrEqual(1));
@@ -177,10 +184,10 @@ describe('BulkPluginUpdatesTab', () => {
     await screen.findByText('y.py');
     const button = screen.getByRole('button', { name: /update selected/i });
 
-    fireEvent.click(button);
+    await applyConfirmed(/update selected/i);
     await screen.findByText('busy');
     await waitFor(() => expect(button.disabled).toBe(false));
-    fireEvent.click(button);
+    await applyConfirmed(/update selected/i);
     await waitFor(() => expect(mocks.applyPluginUpdates).toHaveBeenCalledTimes(3));
 
     expect(mocks.applyPluginUpdates.mock.calls.filter(([id]) => id === 1)).toHaveLength(1);
@@ -253,7 +260,7 @@ describe('BulkPluginUpdatesTab', () => {
     const { rerender } = renderModal();
     await screen.findByText('y.py');
     fireEvent.click(screen.getByLabelText(/^y\.py/)); // only host 1 is sent
-    fireEvent.click(screen.getByRole('button', { name: /update selected/i }));
+    await applyConfirmed(/update selected/i);
     await waitFor(() => expect(mocks.applyPluginUpdates).toHaveBeenCalledTimes(1));
 
     rerender(<BulkActionsModal isOpen={false} onClose={() => {}} hosts={hosts} />);
@@ -266,5 +273,26 @@ describe('BulkPluginUpdatesTab', () => {
     expect(screen.queryByTestId('apply-result-host-1')).toBeNull();
     expect(screen.getByLabelText(/^x\.py/)).toBeChecked();
     expect(screen.getByRole('button', { name: /update selected/i })).toBeEnabled();
+  });
+
+  it('asks before restarting running instances and locks the inputs while applying', async () => {
+    mocks.checkPluginUpdates.mockImplementation(async (id) => (id === 1 ? hostCheck(11, 'x.py') : hostCheck(22, 'y.py')));
+    let resolveApply;
+    mocks.applyPluginUpdates.mockReturnValue(new Promise((resolve) => { resolveApply = resolve; }));
+    const onClose = vi.fn();
+    render(<BulkActionsModal isOpen onClose={onClose} hosts={hosts} />);
+    clickCheck();
+    await screen.findByText('y.py');
+
+    fireEvent.click(screen.getByRole('button', { name: /update selected/i }));
+    expect(screen.getByText('2 servers on 2 hosts will restart.')).toBeTruthy();
+    expect(mocks.applyPluginUpdates).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /restart and apply/i }));
+    await waitFor(() => expect(mocks.applyPluginUpdates).toHaveBeenCalled());
+
+    expect(screen.getByLabelText(/^x\.py/)).toBeDisabled();
+    screen.getAllByRole('button', { name: /^close$/i }).forEach(b => fireEvent.click(b));
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => { resolveApply({ message: 'queued' }); });
   });
 });

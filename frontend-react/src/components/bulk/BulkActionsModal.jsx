@@ -12,9 +12,32 @@ const TABS = [
 
 function BulkActionsModal({ isOpen, onClose, hosts }) {
     const [tab, setTab] = useState('plugins');
+    // Which tabs are applying right now. While any is, no way of closing the
+    // dialog works (Escape, the backdrop, X or a tab's Close): closing drops
+    // the results the running apply is still filling in.
+    const [applyingTabs, setApplyingTabs] = useState({});
+    const applying = Object.values(applyingTabs).some(Boolean);
+    const applyingFor = (id) => (value) => setApplyingTabs(prev => (
+        Boolean(prev[id]) === Boolean(value) ? prev : { ...prev, [id]: Boolean(value) }
+    ));
+    const handleClose = () => { if (!applying) onClose(); };
+
+    // Arrow keys move between tabs (WAI-ARIA tabs pattern).
+    const onTabKeyDown = (e) => {
+        const index = TABS.findIndex(t => t.id === tab);
+        let next = null;
+        if (e.key === 'ArrowRight') next = (index + 1) % TABS.length;
+        if (e.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = TABS.length - 1;
+        if (next === null) return;
+        e.preventDefault();
+        setTab(TABS[next].id);
+        document.getElementById(`bulk-tab-${TABS[next].id}`)?.focus();
+    };
 
     return (
-        <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
+        <Dialog open={isOpen} as="div" className="relative z-50" onClose={handleClose}>
             <DialogBackdrop transition className="modal-backdrop fixed inset-0 transition data-[enter]:ease-out data-[enter]:duration-300 data-[leave]:ease-in data-[leave]:duration-200 data-[closed]:opacity-0" />
 
             <div className="fixed inset-0 overflow-y-auto scrollbar-thick">
@@ -28,18 +51,21 @@ function BulkActionsModal({ isOpen, onClose, hosts }) {
                             <span className="font-display text-base font-semibold tracking-wider uppercase text-[var(--text-primary)]">
                                 Bulk actions
                             </span>
-                            <button type="button" onClick={onClose} className="ml-auto logs-modal-close-btn" aria-label="Close">
+                            <button type="button" onClick={handleClose} disabled={applying} className="ml-auto logs-modal-close-btn" aria-label="Close">
                                 <X size={18} />
                             </button>
                         </Dialog.Title>
 
-                        <div role="tablist" className="flex gap-1 mb-4 border-b border-[var(--surface-border)]">
+                        <div role="tablist" aria-label="Bulk actions" onKeyDown={onTabKeyDown} className="flex gap-1 mb-4 border-b border-[var(--surface-border)]">
                             {TABS.map(t => (
                                 <button
                                     key={t.id}
+                                    id={`bulk-tab-${t.id}`}
                                     type="button"
                                     role="tab"
                                     aria-selected={tab === t.id}
+                                    aria-controls={`bulk-panel-${t.id}`}
+                                    tabIndex={tab === t.id ? 0 : -1}
                                     onClick={() => setTab(t.id)}
                                     className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider border-b-2 ${tab === t.id ? 'border-[var(--accent-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-muted)]'}`}
                                 >
@@ -52,11 +78,11 @@ function BulkActionsModal({ isOpen, onClose, hosts }) {
                             remount would drop the plugin check results and re-tick
                             what was already sent, and drop the preset previews.
                             The plugin checks run on their tab's Check button only. */}
-                        <div role="tabpanel" hidden={tab !== 'plugins'}>
-                            <BulkPluginUpdatesTab isOpen={isOpen} hosts={hosts} onClose={onClose} />
+                        <div role="tabpanel" id="bulk-panel-plugins" aria-labelledby="bulk-tab-plugins" hidden={tab !== 'plugins'}>
+                            <BulkPluginUpdatesTab isOpen={isOpen} hosts={hosts} onClose={handleClose} onApplyingChange={applyingFor('plugins')} />
                         </div>
-                        <div role="tabpanel" hidden={tab !== 'preset'}>
-                            <BulkPresetApplyTab isOpen={isOpen} hosts={hosts} onClose={onClose} />
+                        <div role="tabpanel" id="bulk-panel-preset" aria-labelledby="bulk-tab-preset" hidden={tab !== 'preset'}>
+                            <BulkPresetApplyTab isOpen={isOpen} hosts={hosts} onClose={handleClose} onApplyingChange={applyingFor('preset')} />
                         </div>
                     </Dialog.Panel>
                 </div>

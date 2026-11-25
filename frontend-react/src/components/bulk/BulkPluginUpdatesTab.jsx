@@ -6,6 +6,7 @@ import {
     getDeferRestartsSetting,
 } from '../../services/api';
 import runLimited from './runLimited';
+import { ConfirmRestart, restartSummary } from './confirmRestart';
 
 const CONCURRENCY = 4;
 // Each check reads the host's plugin pool over plain ssh (about a second, far
@@ -50,7 +51,7 @@ function ApplyResult({ id, result }) {
 
 // Update plugins on every ACTIVE host in one place. Presets are updated on
 // the Presets page. Each host is independent: a failure is shown on its row only.
-function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
+function BulkPluginUpdatesTab({ isOpen, hosts, onClose, onApplyingChange }) {
     const [loading, setLoading] = useState(false);
     const [hostRows, setHostRows] = useState({}); // { [hostId]: { phase, reason, result } }
     const [hostSel, setHostSel] = useState({}); // { [hostId]: { pool, files, restart } }
@@ -114,6 +115,7 @@ function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
         setApplyResults({});
         setLoading(false);
         setApplying(false);
+        setConfirming(false);
     }, [isOpen]);
 
     useEffect(() => () => { openRef.current += 1; }, []);
@@ -205,7 +207,25 @@ function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
         .map(h => ({ host: h, payload: buildHostPayload(h.id) }))
         .filter(j => j.payload);
 
+    const [confirming, setConfirming] = useState(false);
+    useEffect(() => { onApplyingChange?.(applying); }, [applying, onApplyingChange]);
+
+    // Running instances this apply would restart (a stopped one never is).
+    const restartTargets = hostJobs.flatMap(({ host, payload }) => payload.restart_instances
+        .filter(id => {
+            const inst = (hostRows[host.id]?.result?.instances || []).find(i => i.id === id);
+            return inst && !isStopped(inst);
+        })
+        .map(id => ({ hostId: host.id, id })));
+    const restartText = restartSummary(restartTargets);
+
+    const requestApply = () => {
+        if (restartText) setConfirming(true);
+        else handleApply();
+    };
+
     const handleApply = async () => {
+        setConfirming(false);
         // Scoped to this opening of the dialog, like the checks: closing it
         // drops the results, so a host answering later must not write its
         // result, untick or "done" into the next opening.
@@ -234,7 +254,7 @@ function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
 
     return (
         <div>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin pr-2">
+            <fieldset disabled={applying} className="space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin pr-2">
                 {hostList.length === 0 && !loading && (
                     <p className="text-xs text-[var(--text-muted)] py-6 text-center">No hosts to check.</p>
                 )}
@@ -353,16 +373,19 @@ function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
                         <Loader2 size={14} className="animate-spin" /> Checking hosts...
                     </div>
                 )}
-            </div>
+            </fieldset>
 
-            <div className="flex justify-end items-center gap-3 mt-6 pt-4 border-t border-[var(--surface-border)]">
-                <button type="button" onClick={onClose} className="btn btn-secondary">
+            <div className="flex flex-wrap justify-end items-center gap-3 mt-6 pt-4 border-t border-[var(--surface-border)]">
+                {confirming && restartText && (
+                    <ConfirmRestart text={restartText} onConfirm={handleApply} onCancel={() => setConfirming(false)} />
+                )}
+                <button type="button" onClick={onClose} className="btn btn-secondary" disabled={applying}>
                     Close
                 </button>
                 <button type="button" onClick={handleCheck} className="btn btn-secondary" disabled={loading || applying || hostList.length === 0}>
                     {checked ? 'Check again' : 'Check for updates'}
                 </button>
-                <button type="button" onClick={handleApply} className="btn btn-primary" disabled={loading || applying || hostJobs.length === 0}>
+                <button type="button" onClick={requestApply} className="btn btn-primary" disabled={loading || applying || confirming || hostJobs.length === 0}>
                     {applying ? 'Updating...' : 'Update Selected'}
                 </button>
             </div>

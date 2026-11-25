@@ -70,7 +70,7 @@ To check every host at once, click **Bulk actions** in the header of the **Serve
 
 - Each host has its own box with the same choices as the single-host window: the **Common plugin pool**, the changed files of each instance, and **Restart to apply** per instance. Everything outdated is ticked at first, and **Restart to apply** starts off for stopped instances and for every instance when **Defer restarts** is on in Settings.
 - A host that already matches says **up to date**.
-- Click **Update Selected** to send the ticked updates. Up to four hosts are processed at a time.
+- Click **Update Selected** to send the ticked updates. If running instances would restart, QLSM first says how many on how many hosts and waits for **Restart and apply**. Up to four hosts are processed at a time, and the dialog cannot be closed until they are done.
 - Each host reports on its own row. A failure on one row does not stop the others. A host that was sent shows **queued** and is unticked, so a second click does not send it again. Updating a file replaces the copy, including your edits, exactly as in the single-host window; untick files you want to keep.
 
 Verify the result the same way as for a single host, under [Verification](#verification).

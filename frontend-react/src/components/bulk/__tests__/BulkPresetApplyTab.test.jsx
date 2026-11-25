@@ -70,6 +70,13 @@ const renderTab = async () => {
 
 const tick = (name) => fireEvent.click(screen.getByLabelText(`Server ${name}`));
 
+// Apply, then the restart confirmation when the action restarts servers.
+const applyConfirmed = async (name = /^apply$/i) => {
+  fireEvent.click(screen.getByRole('button', { name }));
+  const confirm = screen.queryByRole('button', { name: /restart and apply/i });
+  if (confirm) fireEvent.click(confirm);
+};
+
 // Waits for the keep_cvars of the ticked servers to load, then previews.
 const preview_ = async () => {
   const button = screen.getByRole('button', { name: /^preview$/i });
@@ -129,10 +136,11 @@ describe('BulkPresetApplyTab', () => {
 
     await preview_();
 
-    const body = { preset_id: 5, keep_cvars: ['sv_tags', 'qlx_foo', 'g_motd'] };
+    // Each server keeps its own cvars (minus the unticked, plus the added):
+    // a1's list is not sent to b1 and the other way round.
     await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledTimes(2));
-    expect(mocks.previewPresetApply).toHaveBeenCalledWith(11, body);
-    expect(mocks.previewPresetApply).toHaveBeenCalledWith(21, body);
+    expect(mocks.previewPresetApply).toHaveBeenCalledWith(11, { preset_id: 5, keep_cvars: ['sv_tags', 'g_motd'] });
+    expect(mocks.previewPresetApply).toHaveBeenCalledWith(21, { preset_id: 5, keep_cvars: ['qlx_foo', 'g_motd'] });
   });
 
   it('unchanged servers are not applied', async () => {
@@ -147,7 +155,7 @@ describe('BulkPresetApplyTab', () => {
     const row = await screen.findByTestId('preset-row-11');
     await waitFor(() => expect(within(row).getByText('no changes')).toBeTruthy());
     await screen.findByText('server.cfg');
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
 
     await waitFor(() => expect(screen.getByTestId('preset-result-21').textContent).toBe('queued'));
     expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(1);
@@ -180,7 +188,7 @@ describe('BulkPresetApplyTab', () => {
     expect(mocks.previewPresetApply).toHaveBeenCalledWith(31, keep);
     expect(mocks.previewPresetApply).not.toHaveBeenCalledWith(11, keep);
 
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(3));
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, { ...keep, restart: true, preview_hash: 'd21' });
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
@@ -202,7 +210,7 @@ describe('BulkPresetApplyTab', () => {
     const row = await screen.findByTestId('preset-row-21');
     await waitFor(() => expect(within(row).getByText(/compatibility not confirmed/i)).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
     await waitFor(() => expect(screen.getByTestId('preset-result-11').textContent).toBe('queued'));
     expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(1);
     expect(mocks.previewPresetApply).toHaveBeenCalledTimes(2);
@@ -215,15 +223,16 @@ describe('BulkPresetApplyTab', () => {
     await preview_();
     await waitFor(() => expect(screen.getAllByText('server.cfg').length).toBe(2));
 
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
 
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(2));
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
       preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h11',
     });
-    // A stopped server is not started by the apply.
+    // The server never starts a stopped one (it re-reads the status under
+    // the lock), so the request just carries the operator's choice.
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(12, {
-      preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h12',
+      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h12',
     });
 
     // A queued server is never sent twice.
@@ -239,7 +248,7 @@ describe('BulkPresetApplyTab', () => {
     await preview_();
     await screen.findByText('server.cfg');
 
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
       preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11',
     }));
@@ -261,7 +270,7 @@ describe('BulkPresetApplyTab', () => {
     await act(async () => { resolveSetting({ enabled: true }); });
     await waitFor(() => expect(screen.getByLabelText(/restart servers to apply/i).disabled).toBe(false));
     expect(screen.getByLabelText(/restart servers to apply/i).checked).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
       preset_id: 5, keep_cvars: [], restart: false, preview_hash: 'h11',
     }));
@@ -290,7 +299,7 @@ describe('BulkPresetApplyTab', () => {
     await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(21, decided));
     await waitFor(() => expect(within(screen.getByTestId('preset-row-21')).queryByText('needs decision')).toBeNull());
 
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(2));
     expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, { ...decided, restart: true, preview_hash: 'h21' });
   });
@@ -312,7 +321,7 @@ describe('BulkPresetApplyTab', () => {
     const decided = { preset_id: 5, keep_cvars: [], accepted_replacements: [] };
     await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(21, decided));
     await screen.findByText('server.cfg');
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(21, {
       ...decided, restart: true, preview_hash: 'h21',
     }));
@@ -341,8 +350,8 @@ describe('BulkPresetApplyTab', () => {
     expect(mocks.getPresetKeepCvars.mock.calls.filter(([id]) => id === 11)).toHaveLength(1);
 
     fireEvent.click(button);
-    const body = { preset_id: 5, keep_cvars: ['qlx_id11', 'qlx_id21'] };
-    await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(21, body));
+    await waitFor(() => expect(mocks.previewPresetApply).toHaveBeenCalledWith(21, { preset_id: 5, keep_cvars: ['qlx_id21'] }));
+    expect(mocks.previewPresetApply).toHaveBeenCalledWith(11, { preset_id: 5, keep_cvars: ['qlx_id11'] });
   });
 
   it('a stale row is not sent again by Apply', async () => {
@@ -357,7 +366,7 @@ describe('BulkPresetApplyTab', () => {
     await waitFor(() => expect(screen.getAllByText('server.cfg').length).toBe(2));
 
     const apply = screen.getByRole('button', { name: /^apply$/i });
-    fireEvent.click(apply);
+    await applyConfirmed();
     await waitFor(() => expect(screen.getByTestId('preset-result-11').textContent).toBe('preview again'));
     await waitFor(() => expect(screen.getByTestId('preset-result-21').textContent).toBe('queued'));
     expect(apply.disabled).toBe(true);
@@ -393,10 +402,102 @@ describe('BulkPresetApplyTab', () => {
     await preview_();
     await waitFor(() => expect(screen.getAllByText('server.cfg').length).toBe(3));
 
-    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await applyConfirmed();
 
     await waitFor(() => expect(screen.getByTestId('preset-result-11').textContent).toBe('preview again'));
     expect(screen.getByTestId('preset-result-21').textContent).toBe('busy');
     expect(screen.getByTestId('preset-result-31').textContent).toBe('Plugin compatibility needs a decision');
+  });
+
+  it('asks before an apply that restarts running servers', async () => {
+    await renderTab();
+    tick('a1');
+    tick('b1');
+    await preview_();
+    await waitFor(() => expect(screen.getAllByText('server.cfg').length).toBe(2));
+
+    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    expect(screen.getByText('2 servers on 2 hosts will restart.')).toBeTruthy();
+    expect(mocks.applyPresetToInstance).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(mocks.applyPresetToInstance).not.toHaveBeenCalled();
+
+    await applyConfirmed();
+    await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(2));
+  });
+
+  it('no dialog close works while an apply runs', async () => {
+    let resolveApply;
+    mocks.applyPresetToInstance.mockReturnValue(new Promise((resolve) => { resolveApply = resolve; }));
+    const onClose = vi.fn();
+    render(<BulkActionsModal isOpen onClose={onClose} hosts={hosts} />);
+    fireEvent.click(screen.getByRole('tab', { name: /apply preset/i }));
+    const select = await screen.findByLabelText('Preset');
+    await screen.findByRole('option', { name: /duel/ });
+    fireEvent.change(select, { target: { value: '5' } });
+    tick('a1');
+    await preview_();
+    await screen.findByText('server.cfg');
+    await applyConfirmed();
+    await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(1));
+
+    fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' });
+    screen.getAllByRole('button', { name: 'Close' }).forEach(b => fireEvent.click(b));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => { resolveApply({ message: 'queued' }); });
+    await waitFor(() => expect(screen.getByTestId('preset-result-11').textContent).toBe('queued'));
+    fireEvent.click(screen.getAllByRole('button', { name: /^close$/i }).find(b => !b.disabled));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('asks the compatibility question once per plugin runtime, not per runtime name', async () => {
+    // A Custom host whose plugins run on minqlxtended and a minqlxtended host:
+    // one plugin runtime, one question.
+    const mixed = [
+      hosts[1],
+      { id: 4, name: 'delta', status: 'ACTIVE', runtime: 'custom', runtime_plugin_api: 'minqlxtended',
+        instances: [{ id: 41, name: 'd1', port: 27960, status: 'running' }] },
+    ];
+    mocks.previewPresetApply.mockImplementation(async (id) => preview(id, { compatibility, needs_decision: true }));
+    render(<BulkActionsModal isOpen onClose={() => {}} hosts={mixed} />);
+    fireEvent.click(screen.getByRole('tab', { name: /apply preset/i }));
+    const select = await screen.findByLabelText('Preset');
+    await screen.findByRole('option', { name: /duel/ });
+    fireEvent.change(select, { target: { value: '5' } });
+    tick('b1');
+    tick('d1');
+    await preview_();
+    await screen.findByText(/won.t carry over/i);
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    await waitFor(() => expect(screen.queryByText(/won.t carry over/i)).toBeNull());
+  });
+
+  it('servers that appear after the dialog opened can be ticked, the ticks stay', async () => {
+    const { rerender } = render(<BulkActionsModal isOpen onClose={() => {}} hosts={[{ ...hosts[0], instances: [] }]} />);
+    fireEvent.click(screen.getByRole('tab', { name: /apply preset/i }));
+    await screen.findByLabelText('Preset');
+    rerender(<BulkActionsModal isOpen onClose={() => {}} hosts={hosts} />);
+    tick('a1');
+    rerender(<BulkActionsModal isOpen onClose={() => {}} hosts={hosts.map(h => ({ ...h }))} />);
+    expect(screen.getByLabelText('Server a1').checked).toBe(true);
+    expect(screen.getByLabelText('Server b1')).toBeTruthy();
+  });
+
+  it('a Defer restarts setting that cannot be read leaves restart off and says so', async () => {
+    mocks.getDeferRestartsSetting.mockRejectedValue(new Error('down'));
+    await renderTab();
+    await waitFor(() => expect(screen.getByLabelText(/restart servers to apply/i).disabled).toBe(false));
+    expect(screen.getByLabelText(/restart servers to apply/i).checked).toBe(false);
+    expect(screen.getByText(/could not read the defer restarts setting/i)).toBeTruthy();
+  });
+
+  it('the tabs follow the ARIA tabs pattern', async () => {
+    render(<BulkActionsModal isOpen onClose={() => {}} hosts={hosts} />);
+    const plugins = screen.getByRole('tab', { name: /update plugins/i });
+    expect(plugins.getAttribute('aria-controls')).toBe('bulk-panel-plugins');
+    expect(document.getElementById('bulk-panel-plugins').getAttribute('aria-labelledby')).toBe(plugins.id);
+    fireEvent.keyDown(plugins, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: /apply preset/i }).getAttribute('aria-selected')).toBe('true');
   });
 });

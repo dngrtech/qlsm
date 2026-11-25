@@ -7,10 +7,11 @@ import {
     applyPresetToInstance,
     getDeferRestartsSetting,
 } from '../../services/api';
-import { runtimeLabel } from '../../constants/runtimes';
+import { pluginRuntimeForHost, runtimeLabel } from '../../constants/runtimes';
 import PresetCompatibilityDialog from '../presetManager/PresetCompatibilityDialog';
 import { FileChange } from '../instances/PendingChangesModal';
 import runLimited from './runLimited';
+import { ConfirmRestart, restartSummary } from './confirmRestart';
 
 const CONCURRENCY = 4;
 // apply-preset's 409 when the rebuilt target no longer matches the preview.
@@ -22,6 +23,25 @@ const NEVER_KEPT = 'qlx_plugins';
 const isStopped = (inst) => inst.status?.toLowerCase() === 'stopped';
 const isActive = (host) => String(host.status).toUpperCase() === 'ACTIVE';
 const errorText = (err, fallback) => err?.error?.message || err?.message || fallback;
+
+// The host list as it was at open, plus hosts and servers that appeared
+// since (the page may still have been loading them). Existing entries are
+// left as they were: a poll changing a status must not re-filter the ticked
+// servers and throw the previews away.
+function mergeHosts(prev, next) {
+    const byId = new Map(prev.map(h => [h.id, h]));
+    (next || []).forEach(host => {
+        const known = byId.get(host.id);
+        if (!known) {
+            byId.set(host.id, host);
+            return;
+        }
+        const ids = new Set((known.instances || []).map(i => i.id));
+        const added = (host.instances || []).filter(i => !ids.has(i.id));
+        if (added.length > 0) byId.set(host.id, { ...known, instances: [...(known.instances || []), ...added] });
+    });
+    return Array.from(byId.values());
+}
 
 function applyErrorText(err) {
     if (err?.error?.message === STALE_HASH) return 'preview again';
@@ -80,7 +100,7 @@ function RowStatus({ row }) {
 // Load one preset into many servers: preview each server's diff on the server
 // side, ask the runtime compatibility question once per runtime, then apply
 // what was previewed. Each server is independent: a failure stays on its row.
-function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
+function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
     const [hostList, setHostList] = useState([]);
     const [presets, setPresets] = useState([]);
     const [presetsError, setPresetsError] = useState(null);
@@ -99,6 +119,8 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
     const [pending, setPending] = useState(0);
     const [applying, setApplying] = useState(false);
     const [results, setResults] = useState({}); // { [instId]: { ok, text } }
+    const [settingError, setSettingError] = useState(null);
+    const [confirming, setConfirming] = useState(false);
 
     // The servers are the hosts as they were at open: the Servers page polls
     // and replaces its host list, which must not wipe the ticks.
@@ -114,11 +136,23 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
             .then((list) => { if (!cancelled) setPresets(list || []); })
             .catch((err) => { if (!cancelled) setPresetsError(errorText(err, 'Failed to load presets.')); });
         setRestart(null);
+        setSettingError(null);
         getDeferRestartsSetting()
             .then((setting) => { if (!cancelled) setRestart(!setting?.enabled); })
-            .catch(() => { if (!cancelled) setRestart(true); });
+            .catch(() => {
+                // Unknown setting: never default to restarting servers.
+                if (cancelled) return;
+                setRestart(false);
+                setSettingError('Could not read the Defer restarts setting, so restart starts off.');
+            });
         return () => { cancelled = true; };
     }, [isOpen]);
+
+    useEffect(() => {
+        if (isOpen) setHostList(prev => mergeHosts(prev, hosts));
+    }, [isOpen, hosts]);
+
+    useEffect(() => { onApplyingChange?.(applying); }, [applying, onApplyingChange]);
 
     const tickedServers = useMemo(() => hostList
         .filter(isActive)
@@ -166,7 +200,23 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
         return Array.from(byName.values());
     }, [tickedServers, keepByServer, added]);
 
-    const keepCvars = keepList.filter(e => !unkept.has(e.cvar.toLowerCase())).map(e => e.cvar);
+    // Each server keeps its own cvars (the list fetched for it), minus the
+    // ones unticked here, plus the ones added here. One merged list for all
+    // would make a server without its own line for a cvar drop the preset's
+    // line too (merge_keep_cvars keeps only what the server has).
+    const keepFor = (instId) => {
+        const names = new Map();
+        (keepByServer[instId]?.entries || []).forEach(({ cvar }) => {
+            const key = cvar.toLowerCase();
+            if (key !== NEVER_KEPT && !unkept.has(key)) names.set(key, cvar);
+        });
+        added.forEach(cvar => {
+            const key = cvar.toLowerCase();
+            if (!unkept.has(key) && !names.has(key)) names.set(key, cvar);
+        });
+        return Array.from(names.values());
+    };
+    const keepCvars = tickedServers.map(s => [s.inst.id, keepFor(s.inst.id)]);
     const keepLoading = tickedServers.some(s => (keepByServer[s.inst.id]?.phase || 'loading') === 'loading');
     const keepErrors = tickedServers.filter(s => keepByServer[s.inst.id]?.phase === 'error');
 
@@ -238,13 +288,13 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
 
     // --- preview ---
 
-    const bodyFor = (accepted) => ({
+    const bodyFor = (instId, accepted) => ({
         preset_id: Number(presetId),
-        keep_cvars: keepCvars,
+        keep_cvars: keepFor(instId),
         ...(accepted ? { accepted_replacements: accepted } : {}),
     });
 
-    const previewServers = async (servers, body) => {
+    const previewServers = async (servers, accepted) => {
         setPending(n => n + 1);
         setRows(prev => {
             const next = { ...prev };
@@ -254,6 +304,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
         const done = {};
         await runLimited(servers, CONCURRENCY, async (s) => {
             let row;
+            const body = bodyFor(s.inst.id, accepted);
             try {
                 row = { phase: 'ready', preview: await previewPresetApply(s.inst.id, body), body };
             } catch (err) {
@@ -270,7 +321,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
         const servers = tickedServers;
         setResults({});
         setQuestions([]);
-        const done = await previewServers(servers, bodyFor());
+        const done = await previewServers(servers);
         // One question per runtime, for every server whose preset plugins get
         // stripped (as the editor asks whenever the list is not empty, so a
         // plugin with no replacement is never dropped silently). The group's
@@ -280,7 +331,9 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
             const row = done[s.inst.id];
             const stripped = row?.phase === 'ready' ? row.preview.compatibility?.stripped || [] : [];
             if (stripped.length === 0) return;
-            const runtime = runtimeLabel(s.host.runtime);
+            // The plugin runtime the compatibility is about (a Custom host's
+            // provider API), not the host's runtime name.
+            const runtime = row.preview.compatibility?.target_runtime || pluginRuntimeForHost(s.host);
             if (!groups.has(runtime)) {
                 groups.set(runtime, { runtime, compatibility: { ...row.preview.compatibility, stripped: [] }, servers: [] });
             }
@@ -308,7 +361,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
         const q = question;
         if (!q) return;
         setQuestions(prev => prev.slice(1));
-        await previewServers(q.servers, bodyFor(Array.from(tickedPaths || [])));
+        await previewServers(q.servers, Array.from(tickedPaths || []));
     };
 
     const handleCancelCompatibility = () => {
@@ -338,7 +391,26 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
             && !result?.stale;
     });
 
+    // Running servers this apply restarts, by their current status (the page
+    // keeps polling it); the server never starts a stopped one either way.
+    const liveStatus = (inst) => {
+        for (const host of hostsRef.current || []) {
+            const found = (host.instances || []).find(i => i.id === inst.id);
+            if (found) return found;
+        }
+        return inst;
+    };
+    const restartText = restart
+        ? restartSummary(applyJobs.filter(({ inst }) => !isStopped(liveStatus(inst))).map(({ host, inst }) => ({ hostId: host.id, id: inst.id })))
+        : null;
+
+    const requestApply = () => {
+        if (restartText) setConfirming(true);
+        else handleApply();
+    };
+
     const handleApply = async () => {
+        setConfirming(false);
         setApplying(true);
         await runLimited(applyJobs, CONCURRENCY, async ({ inst }) => {
             const row = rows[inst.id];
@@ -346,7 +418,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
             try {
                 await applyPresetToInstance(inst.id, {
                     ...row.body,
-                    restart: restart && !isStopped(inst),
+                    restart: Boolean(restart),
                     preview_hash: row.preview.preview_hash,
                 });
                 result = { ok: true, text: 'queued' };
@@ -493,7 +565,11 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
                 )}
             </fieldset>
 
-            <div className="flex justify-end items-center gap-3 mt-6 pt-4 border-t border-[var(--surface-border)]">
+            {settingError && <p className="mt-2 text-xs text-amber-500">{settingError}</p>}
+            <div className="flex flex-wrap justify-end items-center gap-3 mt-6 pt-4 border-t border-[var(--surface-border)]">
+                {confirming && restartText && (
+                    <ConfirmRestart text={restartText} onConfirm={handleApply} onCancel={() => setConfirming(false)} />
+                )}
                 <label className="mr-auto flex items-center gap-1.5 text-xs text-[var(--text-muted)] cursor-pointer" title="Stopped servers are never started">
                     <input type="checkbox" checked={Boolean(restart)} disabled={busy || restart === null} onChange={() => setRestart(r => !r)} />
                     Restart servers to apply
@@ -511,7 +587,7 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose }) {
                 >
                     Preview
                 </button>
-                <button type="button" onClick={handleApply} className="btn btn-primary" disabled={applyJobs.length === 0 || busy || restart === null}>
+                <button type="button" onClick={requestApply} className="btn btn-primary" disabled={applyJobs.length === 0 || busy || confirming || restart === null}>
                     {applying ? 'Applying...' : 'Apply'}
                 </button>
             </div>
