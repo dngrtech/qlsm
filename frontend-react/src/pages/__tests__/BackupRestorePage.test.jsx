@@ -114,6 +114,29 @@ describe('BackupRestorePage import', () => {
     expect(screen.getByText(/permanently wipe/i)).toBeInTheDocument();
   });
 
+  it.each([true, false])('keeps restart guidance visible after import with addon_state_restored=%s', async (addonStateRestored) => {
+    mocks.importBackup.mockResolvedValue({
+      message: 'Backup restored successfully.',
+      data: { restart_required: true, addon_state_restored: addonStateRestored },
+    });
+    render(<BackupRestorePage />);
+    selectFile();
+    const confirmation = screen.getByLabelText(/type restore to confirm/i);
+    fireEvent.change(confirmation, { target: { value: 'RESTORE' } });
+    fireEvent.click(screen.getByRole('button', { name: /^import backup$/i }));
+
+    const guidance = await screen.findByRole('alert');
+    expect(confirmation).toHaveValue('');
+    expect(guidance).toHaveTextContent(/restart.*all.*application.*worker/i);
+    if (addonStateRestored) {
+      expect(guidance).not.toHaveTextContent(/re-enable.*configure/i);
+    } else {
+      expect(guidance).toHaveTextContent(/re-enable.*configure/i);
+    }
+    fireEvent.change(confirmation, { target: { value: 'RE' } });
+    expect(guidance).toBeVisible();
+  });
+
   it('warns when the restored backup was made on a different QLSM version', async () => {
     mocks.importBackup.mockResolvedValue({ message: 'Backup restored successfully.', data: { qlsm_version: '0.0.1-does-not-match' } });
     render(<BackupRestorePage />);

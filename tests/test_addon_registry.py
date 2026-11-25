@@ -320,14 +320,16 @@ def test_hook_stops_firing_when_the_host_layer_is_switched_off(hook_app):
     assert registry.dispatch('instance.launch_args', instance_id, instance_id) == []
 
 
-def test_a_raising_hook_cannot_abort_the_operation(addon_app):
-    """An addon decorating a deploy must not be able to fail that deploy."""
+def test_raising_backup_hook_is_isolated_and_its_settings_are_not_logged(addon_app, caplog, monkeypatch):
     build, packages, _ = addon_app
-    write_addon(packages, 'angry', manifest={'id': 'angry', 'version': '1.0.0'}, backend='''
+    write_addon(packages, 'angry', manifest={
+        'id': 'angry', 'version': '1.0.0',
+        'settings': {'global': [{'key': 'token', 'type': 'secret'}]},
+    }, backend='''
         def register(ctx):
             @ctx.on('backup.export')
             def boom():
-                raise RuntimeError("hook exploded")
+                raise RuntimeError(ctx.settings.get('global')['token'])
     ''')
     write_addon(packages, 'calm', manifest={'id': 'calm', 'version': '1.0.0'}, backend='''
         def register(ctx):
@@ -336,9 +338,17 @@ def test_a_raising_hook_cannot_abort_the_operation(addon_app):
                 return ['addon-packages/calm']
     ''')
     app = build()
+    monkeypatch.setattr(registry.log, 'handlers', [*registry.log.handlers, caplog.handler])
+    marker = 'synthetic-backup-hook-secret'
     with app.app_context():
+        registry.get_addon('angry').ctx.settings.set('global', values={'token': marker})
         # backup.export is ungated (HOOK_SCOPES None), so both are attempted
         assert registry.dispatch('backup.export') == ['addon-packages/calm']
+    if marker in caplog.text:
+        pytest.fail('The backup hook exception exposed an add-on setting in core logs.')
+    assert 'Addon angry hook backup.export failed' in caplog.text
+    assert 'RuntimeError' in caplog.text
+    assert 'Traceback' not in caplog.text
 
 
 def test_an_addon_owned_list_hook_is_flattened_not_nested(addon_app):

@@ -129,6 +129,9 @@ def recover_host_runtime_logic(operation_id, *, deps=None, job_id=None):
     if not execution.locked:
         return f'pending: execution locks of runtime upgrade {operation_id} are held elsewhere'
     try:
+        if execution.op.original_runtime == 'custom':
+            from .custom_runtime_update import recover
+            return recover(execution)
         if execution.op.state == 'preparing':
             # Quiescing intent is persisted before anything is stopped, so
             # nothing live changed: discard the preparation.
@@ -140,6 +143,9 @@ def recover_host_runtime_logic(operation_id, *, deps=None, job_id=None):
         db.session.rollback()
         return f'pending: {exc}'
     except Exception as exc:
+        if op.original_runtime == 'custom':
+            mark_recovery_required(execution, 'Custom release recovery was interrupted.', state='recovery_required')
+            return 'pending: Custom release recovery was interrupted'
         if is_job_timeout(exc):
             # Stop work in this job; the reconciler hands it to a new one.
             mark_recovery_required(execution, f'recovery worker timed out: {exc}')
@@ -161,7 +167,8 @@ def handle_upgrade_job_failure(job, exc_type, value, *, deps=None):
         return None
     if op.rq_job_id not in (None, job.id):
         return None  # a newer job already owns it
-    reason = f'{getattr(exc_type, "__name__", exc_type)}: {value}'
+    reason = ('Custom release worker interrupted' if op.original_runtime == 'custom'
+              else f'{getattr(exc_type, "__name__", exc_type)}: {value}')
     return request_recovery(op.id, deps=deps, expected_job_id=op.rq_job_id, reason=reason)
 
 

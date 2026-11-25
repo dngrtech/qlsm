@@ -360,6 +360,12 @@ A plugin that merely fails to load inside a running server is not a failure.
 -   [ ] `python3-config --ldflags --embed` contains `-lpython3.12` on stock Ubuntu 24.04.
 -   [x] A new instance on an upgraded host gets its own venv under `/home/ql/runtime-deps/minqlxtended/instances/<id>`, its unit carries `QLSM_PYTHON_DEPS`, and a restart does not use system pip.
 
+## Custom Runtime Lifecycle
+
+A Standalone host with `runtime = custom` is pinned to one approved release of an addon-provided runtime. `POST /api/hosts/<id>/custom-runtime-update` (see `docs/api_reference.md`) updates it or rolls it back to the previous release. It reuses `HostRuntimeUpgradeOperation` and its reservation, reconciler and recovery, so the guards above apply. Code: `ui/custom_runtime_update.py` (preview and captured inputs), `ui/routes/custom_runtime_update_routes.py` (reservation) and `ui/task_logic/custom_runtime_update.py` / `custom_runtime_remote.py` (worker and remote steps). After the remote operation is finalized there is no rollback; a later readiness failure leaves the host in `ERROR` for the reconciler.
+
+**Provider protection.** `ui/addons/runtime_protection.py` takes a provider lifecycle lock and refuses to remove or disable a provider that hosts depend on (`runtime_provider_in_use`, with `dependent_hosts`). Backups take the same maintenance lock, and backup export skips add-on state rows whose host or instance no longer exists so the strict import can always restore them.
+
 ## Testing Framework
 
 The project uses pytest for testing, with fixtures defined in `tests/conftest.py`:

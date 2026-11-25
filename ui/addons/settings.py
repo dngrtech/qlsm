@@ -14,6 +14,9 @@ import json
 
 from ui import db
 from ui.models import AddonState, AddonScope, QLInstance
+from ui.addons.runtime_protection import (
+    check_provider_dependencies, lock_provider_state, lock_scoped_state_cleanup,
+)
 
 GLOBAL_SCOPE_ID = 0  # sentinel: SQLite treats NULLs as distinct in UNIQUE
 
@@ -177,6 +180,7 @@ class AddonSettings:
                 f'unknown setting(s) for scope "{_scope_value(scope)}": {", ".join(sorted(unknown))}'
             )
 
+        lock_provider_state(self.addon_id)
         row = self._row(scope, scope_id, create=True)
         stored = dict(row.settings)
         for key, value in values.items():
@@ -193,6 +197,10 @@ class AddonSettings:
         host is off stores the intent but leaves `is_enabled()` False, which is
         what lets the UI show "on, blocked by host" instead of silently lying.
         """
+        scope = _scope_value(scope)
+        lock_provider_state(self.addon_id)
+        if scope == AddonScope.GLOBAL.value and not enabled:
+            check_provider_dependencies(self.addon_id, 'disable')
         row = self._row(scope, scope_id, create=True)
         row.enabled = bool(enabled)
         if commit:
@@ -208,6 +216,9 @@ def delete_scope_rows(scope, scope_id, commit=False):
     `scope` -- see the AddonState docstring.
     """
     scope = _scope_value(scope)
+    if scope not in (AddonScope.HOST.value, AddonScope.INSTANCE.value):
+        raise AddonSettingsError('Only host or instance settings can be removed by scope cleanup.')
+    lock_scoped_state_cleanup()
     deleted = AddonState.query.filter_by(scope=scope, scope_id=int(scope_id)).delete()
     if commit:
         db.session.commit()

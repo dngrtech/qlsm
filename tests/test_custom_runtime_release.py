@@ -62,7 +62,7 @@ def activate(addon_app, packages):
         get_addon(PROVIDER).ctx.settings.set_enabled("global", 0)
 
 
-def test_replacing_addon_retains_old_release(app, tmp_path):
+def test_replacing_addon_retains_old_release(app, tmp_path, app_context):
     from ui.custom_runtime import approved_release, pinned_release
 
     packages = tmp_path / "packages"
@@ -78,7 +78,7 @@ def test_replacing_addon_retains_old_release(app, tmp_path):
         assert hashlib.sha256(old.bundle_path.read_bytes()).hexdigest() == old_digest
 
 
-def test_invalid_runtime_bundle_keeps_previous_package(tmp_path):
+def test_invalid_runtime_bundle_keeps_previous_package(tmp_path, app_context):
     packages = tmp_path / "packages"
     first, old_digest = runtime_package()
     install_addon_zip(first, packages)

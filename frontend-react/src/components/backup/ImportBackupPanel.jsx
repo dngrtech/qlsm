@@ -13,6 +13,7 @@ function ImportBackupPanel() {
   const [password, setPassword] = useState('');
   const [confirmText, setConfirmText] = useState('');
   const [importing, setImporting] = useState(false);
+  const [restoreNotice, setRestoreNotice] = useState(null);
   const { showSuccess, showError } = useNotification();
 
   const canImport = Boolean(file) && confirmText === CONFIRM_PHRASE && !importing;
@@ -23,7 +24,13 @@ function ImportBackupPanel() {
     try {
       const result = await importBackup(file, password || undefined);
       const restoredVersion = result.data?.qlsm_version;
-      const baseMessage = result.message || 'Backup restored successfully. Please log in again.';
+      const restartRequired = result.data?.restart_required === true;
+      if (restartRequired) {
+        setRestoreNotice({ needsAddonSetup: result.data.addon_state_restored === false });
+      }
+      const baseMessage = restartRequired
+        ? 'Backup restored successfully.'
+        : result.message || 'Backup restored successfully. Please log in again.';
       const message = restoredVersion && restoredVersion !== CURRENT_VERSION
         ? `${baseMessage} (Backup was made on QLSM v${restoredVersion}; this host is running v${CURRENT_VERSION}.)`
         : baseMessage;
@@ -42,13 +49,28 @@ function ImportBackupPanel() {
   return (
     <div className="users-table-container">
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '360px' }}>
+        {restoreNotice && (
+          <div role="alert" className="alert-warning text-sm text-theme-primary">
+            <p className="font-semibold">Backup restored. Restart QLSM.</p>
+            <p className="mt-1">
+              Restart all QLSM application and worker processes before managing restored hosts.
+              Sign in after the restart with the restored credentials.
+            </p>
+            {restoreNotice.needsAddonSetup && (
+              <p className="mt-2">
+                This older backup omitted add-on state. After restarting QLSM, re-enable and
+                configure the restored add-ons and Custom runtime providers you use.
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex items-start gap-3 rounded-lg border border-red-200 dark:border-[#FF3366]/30 bg-red-100 dark:bg-[#FF3366]/10 p-3">
           <AlertTriangle className="w-5 h-5 text-red-600 dark:text-[#FF3366] flex-shrink-0 mt-0.5" strokeWidth={2} />
           <span className="text-sm font-medium text-red-700 dark:text-[#FF3366]">
             Importing will permanently wipe this QLSM instance&apos;s database, SSH keys,
-            Terraform state, instance configs, presets, and plugin binaries, and replace
-            all of it with the contents of the uploaded backup. This cannot be undone
-            from the UI.
+            Terraform state, instance configs, presets, plugin binaries, and addons.
+            It replaces them with the archive contents. Plan to restart all QLSM
+            application and worker processes after import.
           </span>
         </div>
 
