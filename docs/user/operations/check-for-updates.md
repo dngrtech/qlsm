@@ -53,6 +53,7 @@ A preset keeps its own copies of the plugins it was saved with, and every new in
 1. Open **Settings > Presets**.
 2. Click **Plugin Updates** on a preset card. The button shows a count when some of the preset's plugins differ from the version QLSM has in its plugin pool. **Plugins & Updates** on the preset's edit page opens the same window.
 3. The window lists every plugin file in the preset: **update available**, **up to date**, or **not in plugin pool** (a plugin only this preset has; it is never touched).
+   A plugin that keeps helper modules in a folder of its own (for example `match_restore.py` with `restore/`) also lists the changed helper files, marked **helper file**. They are ticked with the rest, so a refreshed plugin never ends up next to an old helper.
 4. Tick the files to refresh and click **Update Selected**. The preset's copies are replaced right away, including any edits you made to them. Existing instances are not changed; use the host check above for those.
 
 Built-in presets are updated with QLSM releases and have no **Plugin Updates** button.

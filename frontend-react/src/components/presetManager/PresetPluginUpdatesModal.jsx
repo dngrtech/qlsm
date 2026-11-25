@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { PackageCheck, X, Loader2, AlertTriangle } from 'lucide-react';
 import { checkPresetPluginUpdates, applyPresetPluginUpdates } from '../../services/api';
 
 const STATUS_LABEL = { outdated: 'update available', current: 'up to date', local: 'not in plugin pool' };
+const HELPER_LABEL = { added: 'helper file, new', modified: 'helper file, update available' };
 
 // Check for Updates for one user preset: the plugin copies saved in the
 // preset vs the plugin pool for the preset's runtime. Same look as the host
@@ -18,29 +19,41 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
     const [selected, setSelected] = useState(new Set());
 
     const presetId = preset?.id;
+    // Every check gets a number; only the latest one may land. A check for
+    // preset A that finishes after the operator opened preset B is dropped.
+    const checkSeq = useRef(0);
 
     const runCheck = useCallback(async () => {
         if (presetId == null) return;
+        const seq = ++checkSeq.current;
         setChecking(true);
         setError(null);
         try {
             const data = await checkPresetPluginUpdates(presetId);
+            if (seq !== checkSeq.current || data?.preset_id !== presetId) return;
             setResult(data);
             setSelected(new Set((data.plugin_changes || []).map(c => c.name)));
         } catch (err) {
+            if (seq !== checkSeq.current) return;
             setError(err.error?.message || err.message || 'Failed to check plugin updates.');
         } finally {
-            setChecking(false);
+            if (seq === checkSeq.current) setChecking(false);
         }
     }, [presetId]);
 
     useEffect(() => {
         if (isOpen) {
             setResult(null);
+            setSelected(new Set());
             setMessage(null);
             runCheck();
+        } else {
+            checkSeq.current += 1; // a check still running for a closed modal is dropped
         }
     }, [isOpen, runCheck]);
+
+    // Apply only what is shown for the preset that is open.
+    const resultMatches = result != null && result.preset_id === presetId;
 
     const toggle = (name) => {
         setSelected(prev => {
@@ -52,6 +65,7 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!resultMatches) return;
         setApplying(true);
         setError(null);
         try {
@@ -66,8 +80,13 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
         }
     };
 
-    const plugins = result?.plugins || [];
-    const outdatedCount = (result?.plugin_changes || []).length;
+    const plugins = resultMatches ? (result.plugins || []) : [];
+    const outdatedCount = resultMatches ? (result.plugin_changes || []).length : 0;
+    // Files inside a plugin's helper package (restore/items.py): not root
+    // plugins, but refreshed together with them.
+    const helperChanges = resultMatches
+        ? (result.plugin_changes || []).filter(c => c.name.includes('/'))
+        : [];
 
     return (
         <Dialog open={isOpen} as="div" className="relative z-50" onClose={onClose}>
@@ -91,13 +110,13 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
 
                         <form onSubmit={handleSubmit}>
                             <div className="space-y-4 max-h-[60vh] overflow-y-auto scrollbar-thin pr-2">
-                                {result && (
+                                {resultMatches && (
                                     <p className="text-xs text-[var(--text-muted)]">
                                         {result.name} ({result.runtime}): plugin files saved in the preset, compared with the plugin pool.
                                     </p>
                                 )}
 
-                                {checking && !result && (
+                                {checking && !resultMatches && (
                                     <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] py-6 justify-center">
                                         <Loader2 size={16} className="animate-spin" /> Checking {preset?.name} against the plugin pool...
                                     </div>
@@ -114,13 +133,13 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
                                     <p className="text-xs text-green-600 dark:text-green-400">{message}</p>
                                 )}
 
-                                {result && plugins.length === 0 && (
+                                {resultMatches && plugins.length === 0 && (
                                     <p className="text-xs text-[var(--text-muted)] py-6 text-center">
                                         This preset holds no plugin files of its own.
                                     </p>
                                 )}
 
-                                {result && plugins.length > 0 && outdatedCount === 0 && (
+                                {resultMatches && plugins.length > 0 && outdatedCount === 0 && (
                                     <p className="text-xs text-[var(--text-muted)] text-center">
                                         Every plugin in this preset already matches the plugin pool.
                                     </p>
@@ -142,6 +161,19 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
                                                 </label>
                                             </li>
                                         ))}
+                                        {helperChanges.map(c => (
+                                            <li key={c.name}>
+                                                <label className="flex items-center gap-2 text-xs font-mono cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selected.has(c.name)}
+                                                        onChange={() => toggle(c.name)}
+                                                    />
+                                                    <span className="text-[var(--text-primary)]">{c.name}</span>
+                                                    <span className="text-[var(--text-muted)] opacity-60">({HELPER_LABEL[c.change] || c.change})</span>
+                                                </label>
+                                            </li>
+                                        ))}
                                     </ul>
                                 )}
                             </div>
@@ -150,7 +182,7 @@ function PresetPluginUpdatesModal({ isOpen, onClose, preset, onApplied }) {
                                 <button type="button" onClick={onClose} className="btn btn-secondary">
                                     Close
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={checking || applying || selected.size === 0}>
+                                <button type="submit" className="btn btn-primary" disabled={checking || applying || !resultMatches || selected.size === 0}>
                                     {applying ? 'Updating...' : 'Update Selected'}
                                 </button>
                             </div>

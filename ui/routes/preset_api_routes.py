@@ -1690,7 +1690,11 @@ def apply_preset_plugin_updates_api(preset_id):
     if refused:
         return refused
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({"error": {"message": "Request body must be a JSON object"}}), 400
     if data.get('all') is True:
         filenames = None
     else:

@@ -10,8 +10,8 @@
 import logging
 import os
 import shlex
+import stat
 import subprocess
-import tempfile
 
 from ui.task_logic.access_permission_sync import _ssh_target_for_host
 
@@ -20,10 +20,38 @@ log = logging.getLogger(__name__)
 CONTROL_PERSIST_SECONDS = 60
 
 
+# Unix socket paths are capped at 104 bytes (macOS; 108 on Linux). ssh
+# expands %C to a 40-char hash and, while it sets up the master, binds a
+# temporary socket with a further 17-byte suffix, so the directory may take
+# at most 104 - 1 - 40 - 17 = 46 bytes. gettempdir() is far longer on macOS
+# (/var/folders/...), so the sockets live in a short fixed directory.
+SOCKET_PATH_MAX = 104
+CONTROL_PATH_OVERHEAD = 1 + 40 + 17  # "/" + %C + ssh's temporary suffix
+CONTROL_DIR_BASE = '/tmp'
+
+
 def _control_dir():
-    # Unix socket paths are capped at ~104 bytes; %C below is a 40-char hash.
-    path = os.path.join(tempfile.gettempdir(), 'qlsm-ssh')
-    os.makedirs(path, mode=0o700, exist_ok=True)
+    """A private directory for the ControlMaster sockets, or None when none
+    is usable (no POSIX uid, path too long, not ours or not private): the
+    caller then runs plain ssh without connection sharing."""
+    getuid = getattr(os, 'getuid', None)
+    if getuid is None:
+        return None
+    path = os.path.join(CONTROL_DIR_BASE, f'qlsm-ssh-{getuid()}')
+    if len(path.encode()) + CONTROL_PATH_OVERHEAD > SOCKET_PATH_MAX:
+        return None
+    try:
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        info = os.lstat(path)
+    except OSError:
+        log.warning("ssh control directory %s unusable; using plain ssh", path, exc_info=True)
+        return None
+    # Someone else's directory, a symlink or a group/world-accessible one
+    # would let another local user reach or hijack the shared connection.
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077):
+        log.warning("ssh control directory %s is not private; using plain ssh", path)
+        return None
     return path
 
 
@@ -31,7 +59,7 @@ def build_host_ssh_command(host, command, connect_timeout=15, become=True):
     """argv running `command` (a shell string) on `host`, as root via
     `sudo -n` when `become` (what Ansible's --become did)."""
     remote = f"sudo -n sh -c {shlex.quote(command)}" if become else command
-    return [
+    argv = [
         'ssh',
         '-i', os.path.abspath(host.ssh_key_path),
         '-p', str(host.ssh_port),
@@ -39,13 +67,15 @@ def build_host_ssh_command(host, command, connect_timeout=15, become=True):
         '-o', 'BatchMode=yes',
         '-o', 'LogLevel=ERROR',
         '-o', f'ConnectTimeout={connect_timeout}',
-        '-o', 'ControlMaster=auto',
-        '-o', f'ControlPath={_control_dir()}/%C',
-        '-o', f'ControlPersist={CONTROL_PERSIST_SECONDS}',
-        '-l', host.ssh_user,
-        _ssh_target_for_host(host),
-        remote,
     ]
+    control_dir = _control_dir()
+    if control_dir:
+        argv += [
+            '-o', 'ControlMaster=auto',
+            '-o', f'ControlPath={control_dir}/%C',
+            '-o', f'ControlPersist={CONTROL_PERSIST_SECONDS}',
+        ]
+    return argv + ['-l', host.ssh_user, _ssh_target_for_host(host), remote]
 
 
 def run_host_ssh_command(host, command, timeout=30, connect_timeout=15, become=True):

@@ -119,7 +119,7 @@ def test_apply_never_writes_a_path_outside_scripts(client, app):
     assert resp.get_json()['data'] == {'updated': [], 'skipped': ['../a.py']}
 
 
-@pytest.mark.parametrize('body', [{}, {'files': []}, {'files': 'a.py'}, {'files': [1]}])
+@pytest.mark.parametrize('body', [{}, {'files': []}, {'files': 'a.py'}, {'files': [1]}, [1], 'all', 5])
 def test_apply_rejects_bad_selection(client, app, body):
     preset_id, _ = _make_preset(app, 'bad')
     resp = client.post(f'/api/presets/{preset_id}/plugin-updates/apply',
@@ -160,3 +160,31 @@ def test_check_all_lists_user_presets_only(client, app):
 def test_requires_auth(client, app):
     preset_id, _ = _make_preset(app, 'anon')
     assert client.get(f'/api/presets/{preset_id}/plugin-updates').status_code == 401
+
+
+def test_check_and_apply_cover_a_stale_helper_package(client, app):
+    """match_restore.py + restore/: refreshing the plugin must not leave an
+    old helper behind, and the check must keep reporting it until it is."""
+    _write(os.path.join(MINQLX_POOL, 'match_restore.py'), 'v2')
+    _write(os.path.join(MINQLX_POOL, 'restore', 'items.py'), 'items v2')
+    _write(os.path.join(MINQLX_POOL, 'restore', 'new_helper.py'), 'new')
+    preset_id, path = _make_preset(app, 'pkg', scripts={
+        'match_restore.py': 'v2',
+        os.path.join('restore', 'items.py'): 'items v1',
+    })
+    headers = auth_headers(app, USER)
+
+    data = client.get(f'/api/presets/{preset_id}/plugin-updates', headers=headers).get_json()['data']
+    assert data['plugin_changes'] == [
+        {'name': 'restore/items.py', 'change': 'modified'},
+        {'name': 'restore/new_helper.py', 'change': 'added'},
+    ]
+
+    resp = client.post(f'/api/presets/{preset_id}/plugin-updates/apply', headers=headers, json={'all': True})
+    assert resp.status_code == 200
+    assert resp.get_json()['data']['updated'] == ['restore/items.py', 'restore/new_helper.py']
+    assert _read(os.path.join(path, 'scripts', 'restore', 'items.py')) == 'items v2'
+    assert _read(os.path.join(path, 'scripts', 'restore', 'new_helper.py')) == 'new'
+
+    data = client.get(f'/api/presets/{preset_id}/plugin-updates', headers=headers).get_json()['data']
+    assert data['plugin_changes'] == []
