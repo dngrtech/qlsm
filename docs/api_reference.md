@@ -831,14 +831,21 @@ Server-side "Load preset" for one instance, the same result as loading the prese
     "kept_cvars": ["sv_tags"],
     "diff": {"files": [], "plugins": null, "hooks": null, "admins": null, "lan_rate": null, "unchanged": true},
     "preview_hash": "<sha256>",
+    "admins": null,
     "target": {"hostname": "...", "configs": {}, "config_folders": [], "factories": {}}
   }
 }
 ```
 
-`target` is a `PUT /instances/<id>/config` body. It carries a `draft_id` only with `keep_draft: true`, so the editor can save it; otherwise the draft is deleted before the response. A legacy preset (no recorded `checked_plugins`) makes no draft at all: the target has no `draft_id`, so the instance keeps its `scripts/` as well as its `qlx_plugins`.
+`target` is a `PUT /instances/<id>/config` body. With `keep_draft: true`, the response includes a `draft_id` if QLSM created a draft. Otherwise, QLSM deletes any temporary draft before responding. A legacy preset without `checked_plugins` preserves the instance's plugin selection and scripts. If that preset bundles hook files, QLSM uses a draft to copy the hooks while preserving those scripts.
 
-`POST /instances/<id>/apply-preset` takes the same body plus `restart` (bool) and `preview_hash` (the preview's). It rebuilds the target and saves it like `PUT /instances/<id>/config` (202 on success, `restart` passed through, 409 when another operation holds the instance). It returns 422 `Plugin compatibility needs a decision` when a replacement still needs the operator's decision (`accepted_replacements` omitted; any list, even `[]`, counts as the decision), and 409 `Preset or server changed since the preview. Preview again.` when the rebuilt target no longer hashes to `preview_hash`. Both preview and apply return 400 for a malformed body, 404 for an unknown instance or preset, and 409 while the host is being set up.
+When a preset includes admins, `admins.before` and `admins.after` report the live and resulting lists. If QLSM cannot read the live list, both are `null`, `admins.error` explains the failure, and QLSM skips the admin changes.
+
+`POST /instances/<id>/apply-preset` requires `preset_id`, a boolean `restart`, and the `preview_hash` from the preview. Send the same `accepted_replacements` and `keep_cvars` choices used in that preview. Set `confirm_restart: true` after the operator confirms a restart. It defaults to `false`. A hook change can force a restart on a running or Updated instance even with `restart: false`. Stopped instances stay stopped.
+
+A successful apply returns 202. It returns 409 if the preset or server state has changed, if a restart would be queued without confirmation, or if a 99k LAN rate change on a non-stopped instance is requested with `restart: false`. It also returns 409 if another operation holds the instance. An unresolved plugin compatibility decision returns 422.
+
+Both preview and apply return 400 for a malformed body, 404 for an unknown instance or preset, and 409 while the host is being set up.
 
 ### Pending Changes (GET /instances/<id>/pending-changes)
 

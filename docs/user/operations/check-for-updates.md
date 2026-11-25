@@ -68,6 +68,8 @@ Built-in presets are updated with QLSM releases and have no **Plugin Updates** b
 
 To check every host at once, click **Bulk actions** in the header of the **Servers** page and stay on the **Update plugins** tab. Click **Check for updates** to run the same check as above on every **Active** host, two hosts at a time; nothing is checked until you click it. The results stay while the dialog is open, also when you switch to **Apply preset** and back; **Check again** runs the check anew. Closing the dialog stops the hosts not checked yet and drops the results. Presets are not part of this tab.
 
+![Bulk Actions Update plugins tab with results for two hosts](../images/bulk-actions-update-plugins.png)
+
 - Each host has its own box with the same choices as the single-host window: the **Common plugin pool**, the changed files of each instance, and **Restart to apply** per instance. Everything outdated is ticked at first, and **Restart to apply** starts off for stopped instances and for every instance when **Defer restarts** is on in Settings.
 - A host that already matches says **up to date**.
 - Click **Update Selected** to send the ticked updates. If running instances would restart, QLSM first says how many on how many hosts and waits for **Restart and apply**. Up to four hosts are processed at a time, and the dialog cannot be closed until they are done.

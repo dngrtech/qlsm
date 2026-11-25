@@ -253,7 +253,7 @@ For each of these cvars the server keeps the `set` lines it has in its own `serv
 
 A hostname you typed into the **Hostname** field before loading is kept as well.
 
-A preset saved before QLSM recorded its plugin selection has no plugin list to load, so the server's plugins are left as they are.
+A legacy preset without a recorded plugin selection keeps the server’s enabled plugins and scripts. It can still add bundled hook files.
 
 A preset with an admin list no longer replaces the server's admins: QLSM compares it with the list it reads from the server, and **Owner & Admins** then shows the server's admins with the preset's changes applied (added, re-levelled, and removed where the preset leaves someone out). Save writes only those changes. If the server's admin list cannot be read, the preset's admins are not loaded and you are told so; the rest of the preset still loads.
 
@@ -263,11 +263,13 @@ While a preset is loading, **Load** is disabled; only the last load you started 
 
 **Bulk actions** in the header of the **Servers** page, tab **Apply preset**, loads one preset into many servers at once. It works like [Load Preset](#load-preset) for each server, with a preview before anything is changed.
 
-1. Choose a preset, then tick the servers. A host box selects all of its servers. Only servers on **Active** hosts can be ticked.
-2. **Keep each server's own value of** lists the cvars each server keeps instead of taking the preset's value, with the source next to each name (for example an addon or a plugin manifest with `"per_server": true`; see [Load Preset](#load-preset) for the rules). The list shows every cvar any ticked server keeps; each server still keeps only its own (a cvar it has no line for gets the preset's line). If a server's list cannot be read, its row says why and **Preview** stays off until **Retry** reads it. Untick a cvar to let the preset overwrite it, or type a name and click **Add** to keep one more. `qlx_plugins` is never kept.
-3. Click **Preview**. QLSM builds the result for each server and shows what would change: plugins and hooks added or removed, admins, 99k LAN rate, and changed files. A server the preset would not change says **no changes** and is skipped.
-4. If some of the preset's plugins can't run on a server's runtime, QLSM asks the compatibility question once for each runtime, not once per server, and lists every such plugin of that runtime's servers, also the ones with no replacement that would be dropped. Those servers say **needs decision** until it is answered. Cancelling it leaves them unapplied, and they show why.
-5. Tick or untick **Restart servers to apply** (it starts off when **Defer restarts** is on in Settings, or when that setting cannot be read; stopped servers are never started, also when one was stopped after the dialog opened), then click **Apply**. If running servers would restart, QLSM first says how many on how many hosts and waits for **Restart and apply**. A server whose hooks change (also only their order, which the preview shows) restarts even with the box unticked, so it is counted there too; the server checks this again at apply time and refuses a restart nobody confirmed. A server whose admin list cannot be read gets no admin changes and says so on its row; the rest of the preset still applies.
+![Bulk Actions Apply preset tab with a preview for two servers](../images/bulk-actions-apply-preset.png)
+
+1. Choose a preset, then select the servers. A host checkbox selects all of its servers. Only servers on **Active** hosts can be selected.
+2. **Keep each server's own value of** lists the cvars collected across the selected servers, with their sources. Each server keeps the cvars collected for it and any names you add. If a kept cvar has no line in that server’s `server.cfg`, the preset’s line is omitted. Clear a cvar’s checkbox to use the preset’s value. If a server’s list fails to load, use **Retry** before previewing. The preset controls `qlx_plugins`.
+3. Click **Preview**. Review the plugin and hook changes, admin changes, 99k LAN rate, and file diffs for each server. QLSM skips rows marked **no changes**.
+4. If the preset contains incompatible plugins, QLSM asks you to review them once per runtime. The dialog also lists plugins that will be dropped because no replacement exists. Cancelling leaves the affected servers unapplied.
+5. Set **Restart servers to apply**, then click **Apply**. The restart setting starts off when **Defer restarts** is on or QLSM cannot read that setting. A 99k LAN rate change requires the restart option for servers that are still running. Hook changes, including reordering, can force a restart even with the option cleared. Review the restart count and click **Restart and apply** to confirm. Stopped servers stay stopped. If QLSM cannot read a server’s admin list, it skips the admin changes and reports this on the row.
 
 Changing the preset, the ticked servers or the kept cvars discards the previews, so preview again before applying. Up to four servers are previewed or applied at a time.
 
