@@ -571,6 +571,17 @@ def _admin_levels(entries):
     return sorted([str(e.get('steam_id64')), int(e.get('level', 0))] for e in entries)
 
 
+def admin_levels_unchanged(instance, admins_before):
+    """True when the server's live admin list still has the levels the
+    target was built against. An unreadable list now (or then) counts as
+    changed unless both reads failed: the target made no admin changes
+    for an unreadable list, and still makes none."""
+    current, _names, _error = read_live_admins(instance)
+    if admins_before is None or current is None:
+        return admins_before is None and current is None
+    return _admin_levels(current) == _admin_levels(admins_before)
+
+
 def instance_state_hash(instance, admins_before=None, files=None):
     """sha256 of what a preset apply would overwrite on this instance: its
     config directory (every file's content) and the saved settings the

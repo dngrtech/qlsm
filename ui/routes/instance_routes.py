@@ -1740,6 +1740,13 @@ def apply_instance_preset_api(instance_id):
             state = instance_state_hash(locked_instance, admins_before=admins_before)
             if hashlib.sha256(f'{target_part}:{state}'.encode('utf-8')).hexdigest() != expected:
                 return "Preset or server changed since the preview. Preview again."
+            # The target's admin list was read before the lock was taken; an
+            # in-game change between that read and now would be overwritten
+            # by levels computed against the older list. Read it again here.
+            if target.get('admins') is not None:
+                from ui.preset_apply import admin_levels_unchanged
+                if not admin_levels_unchanged(locked_instance, admins_before):
+                    return "Preset or server changed since the preview. Preview again."
             # A running server keeps its launch flags until it restarts:
             # switching 99k LAN rate without one would leave the network
             # rules and the process disagreeing. A stopped one picks it up

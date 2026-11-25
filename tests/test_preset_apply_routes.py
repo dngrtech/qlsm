@@ -421,3 +421,24 @@ def test_lan_rate_change_needs_a_restart_on_a_live_server(client, headers, env, 
     else:
         enqueue.assert_not_called()
         assert 'restart' in response.get_json()['error']['message'].lower()
+
+
+def test_a_live_admin_change_after_the_apply_read_it_is_refused(client, headers, env):  # noqa: F811
+    """The maintainer's sequence: preview and apply both read A=1; A goes to
+    3 after the apply's read, before it takes the lock. The admin baseline
+    is read again under the lock, so the apply refuses instead of queueing
+    the preset's level 4 over a level it never saw."""
+    from ui import preset_apply
+
+    host = _host()
+    instance = _instance(host, server_cfg='')
+    preset = _preset(env, admins=[{'steam_id64': '76561198000000001', 'level': 4}])
+    level1 = ([{'steam_id64': '76561198000000001', 'level': 1}], {}, None)
+    level3 = ([{'steam_id64': '76561198000000001', 'level': 3}], {}, None)
+    with patch.object(preset_apply, 'read_live_admins', return_value=level1):
+        preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    # Apply: the target is built against level 1, the under-lock read sees 3.
+    with patch.object(preset_apply, 'read_live_admins', side_effect=[level1, level3, level3]):
+        response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=False)
+    assert response.status_code == 409, response.get_json()
+    enqueue.assert_not_called()
