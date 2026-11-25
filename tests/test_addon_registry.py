@@ -520,3 +520,19 @@ def test_instance_created_fires_for_a_globally_disabled_addon(addon_app):
     with app.app_context():
         assert registry.get_addon('quiet').globally_enabled is False
         assert registry.dispatch('instance.created', 3, 3, {}) == [3]
+
+
+def test_dispatch_by_addon_shares_the_slow_handler_warning(addon_app):
+    build, packages, _ = addon_app
+    write_addon(packages, 'slow', manifest={'id': 'slow', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('preset.keep_cvars')
+            def keep(instance):
+                return ["a"]
+    ''')
+    app = build()
+    with app.app_context(), patch.object(registry, '_gates_open', return_value=True), \
+            patch.dict(registry.SLOW_HANDLER_SECONDS, {'preset.keep_cvars': -1}), \
+            patch.object(registry, 'log') as log:
+        assert registry.dispatch_by_addon('preset.keep_cvars', 1, object()) == [('slow', ['a'])]
+    assert any('took' in str(call.args[0]) for call in log.warning.call_args_list)

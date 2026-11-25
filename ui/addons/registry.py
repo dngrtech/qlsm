@@ -253,6 +253,62 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
 REDACTED_ERROR_HOOKS = frozenset({'backup.export', 'instance.created'})
 
 
+def _log_addon_failure(addon_id, hook, what, exc, with_traceback=False):
+    """One place for how a failing addon is logged. Hooks in
+    REDACTED_ERROR_HOOKS get the exception type only: their arguments can
+    carry secrets, and the message or traceback can echo them."""
+    if hook in REDACTED_ERROR_HOOKS:
+        log.error('Addon %s hook %s %s (%s).', addon_id, hook, what, type(exc).__name__)
+    elif with_traceback:
+        log.error('Addon %s hook %s %s: %s\n%s', addon_id, hook, what, exc, traceback.format_exc())
+    else:
+        log.error('Addon %s hook %s %s: %s', addon_id, hook, what, exc)
+
+
+def _handler_results(hook, scope_id, args_for, on_error=None, on_addon_done=None):
+    """Yield `(addon_id, value)` for every handler call of `hook` that did
+    not raise, addons in id order. The gates, the failure logging (redacted
+    where needed) and the slow-handler warning live here, for every
+    dispatch_* below."""
+    if hook not in HOOK_SCOPES:
+        raise ValueError(f'unknown hook "{hook}"')
+    for addon in sorted(get_addons().values(), key=lambda a: a.id):
+        if not addon.loaded or addon.ctx is None:
+            continue
+        handlers = addon.ctx.handlers.get(hook) or []
+        if not handlers:
+            continue
+        if not _gates_open(addon, hook, scope_id):
+            continue
+        slow_after = SLOW_HANDLER_SECONDS.get(hook)
+        args, kwargs = args_for(addon.id)
+        addon_ok = True
+        for handler in handlers:
+            started = time.monotonic()
+            try:
+                value = handler(*args, **kwargs)
+            except Exception as e:
+                addon_ok = False
+                _log_addon_failure(addon.id, hook, 'failed', e, with_traceback=True)
+                if on_error is not None:
+                    try:
+                        on_error(addon.id, e)
+                    except Exception as cleanup_error:
+                        _log_addon_failure(addon.id, hook, 'cleanup failed', cleanup_error)
+                continue
+            finally:
+                elapsed = time.monotonic() - started
+                if slow_after is not None and elapsed > slow_after:
+                    log.warning('Addon %s hook %s handler took %.1fs (warn threshold %ds)',
+                                addon.id, hook, elapsed, slow_after)
+            yield addon.id, value
+        if on_addon_done is not None:
+            try:
+                on_addon_done(addon.id, addon_ok)
+            except Exception as done_error:
+                _log_addon_failure(addon.id, hook, 'settle failed', done_error)
+
+
 def dispatch_each(hook, scope_id, args_for, on_error=None, on_addon_done=None):
     """dispatch(), but every addon's handlers get arguments of their own.
 
@@ -272,62 +328,13 @@ def dispatch_each(hook, scope_id, args_for, on_error=None, on_addon_done=None):
     outcome on its own (commit what it did, or drop it) before the next addon
     runs. Its own failure is logged and swallowed.
     """
-    if hook not in HOOK_SCOPES:
-        raise ValueError(f'unknown hook "{hook}"')
     results = []
-    for addon in sorted(get_addons().values(), key=lambda a: a.id):
-        if not addon.loaded or addon.ctx is None:
-            continue
-        handlers = addon.ctx.handlers.get(hook) or []
-        if not handlers:
-            continue
-        if not _gates_open(addon, hook, scope_id):
-            continue
-        slow_after = SLOW_HANDLER_SECONDS.get(hook)
-        args, kwargs = args_for(addon.id)
-        addon_ok = True
-        for handler in handlers:
-            started = time.monotonic()
-            try:
-                value = handler(*args, **kwargs)
-            except Exception as e:
-                addon_ok = False
-                if hook in REDACTED_ERROR_HOOKS:
-                    log.error('Addon %s hook %s failed (%s).', addon.id, hook, type(e).__name__)
-                else:
-                    log.error('Addon %s hook %s failed: %s\n%s',
-                              addon.id, hook, e, traceback.format_exc())
-                if on_error is not None:
-                    try:
-                        on_error(addon.id, e)
-                    except Exception as cleanup_error:
-                        if hook in REDACTED_ERROR_HOOKS:
-                            log.error('Addon %s hook %s cleanup failed (%s).',
-                                      addon.id, hook, type(cleanup_error).__name__)
-                        else:
-                            log.error('Addon %s hook %s cleanup failed: %s',
-                                      addon.id, hook, cleanup_error)
-                continue
-            finally:
-                elapsed = time.monotonic() - started
-                if slow_after is not None and elapsed > slow_after:
-                    log.warning('Addon %s hook %s handler took %.1fs (warn threshold %ds)',
-                                addon.id, hook, elapsed, slow_after)
-            if hook in LIST_HOOKS:
-                if value:
-                    results.extend(value if isinstance(value, (list, tuple)) else [value])
-            else:
-                results.append(value)
-        if on_addon_done is not None:
-            try:
-                on_addon_done(addon.id, addon_ok)
-            except Exception as done_error:
-                if hook in REDACTED_ERROR_HOOKS:
-                    log.error('Addon %s hook %s settle failed (%s).',
-                              addon.id, hook, type(done_error).__name__)
-                else:
-                    log.error('Addon %s hook %s settle failed: %s',
-                              addon.id, hook, done_error)
+    for _addon_id, value in _handler_results(hook, scope_id, args_for, on_error, on_addon_done):
+        if hook in LIST_HOOKS:
+            if value:
+                results.extend(value if isinstance(value, (list, tuple)) else [value])
+        else:
+            results.append(value)
     return results
 
 
@@ -337,28 +344,10 @@ def dispatch_by_addon(hook, scope_id, *args):
     Returns `(addon_id, value)` pairs in alphabetical addon order, one per
     handler call that did not raise. Unlike dispatch(), list values are not
     flattened into one list: the pairing is the point. Same gates, same
-    logging of a raising handler (skipped, never propagated).
+    logging of a raising handler (skipped, never propagated), same
+    slow-handler warning: both go through _handler_results().
     """
-    if hook not in HOOK_SCOPES:
-        raise ValueError(f'unknown hook "{hook}"')
-    pairs = []
-    for addon in sorted(get_addons().values(), key=lambda a: a.id):
-        if not addon.loaded or addon.ctx is None:
-            continue
-        handlers = addon.ctx.handlers.get(hook) or []
-        if not handlers:
-            continue
-        if not _gates_open(addon, hook, scope_id):
-            continue
-        for handler in handlers:
-            try:
-                value = handler(*args)
-            except Exception as e:
-                log.error('Addon %s hook %s failed: %s\n%s',
-                          addon.id, hook, e, traceback.format_exc())
-                continue
-            pairs.append((addon.id, value))
-    return pairs
+    return list(_handler_results(hook, scope_id, lambda addon_id: (args, {})))
 
 
 def cleanup_scope(scope, scope_id, commit=False):

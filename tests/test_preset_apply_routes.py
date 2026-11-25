@@ -7,7 +7,9 @@ from flask_jwt_extended import create_access_token
 
 from ui import db
 from ui.models import HostStatus
-from tests.test_preset_apply import _host, _instance, _preset, _with_compatibility, env  # noqa: F401
+from tests.test_preset_apply import (  # noqa: F401
+    _add_preset_hook, _host, _instance, _preset, _with_compatibility, env,
+)
 
 
 @pytest.fixture
@@ -220,3 +222,25 @@ def test_bad_body_is_400(client, headers, setup, route, body):
     instance, _ = setup
     response = client.post(_url(instance, route), headers=headers, json=body)
     assert response.status_code == 400, response.get_json()
+
+
+def test_apply_changing_hooks_on_an_updated_instance_forces_a_restart(client, headers, env):  # noqa: F811
+    """An UPDATED instance still runs on its old files: a preset that changes
+    its hooks must restart it, or the previous hooks stay loaded (the same
+    rule as a config save, which the apply goes through)."""
+    from ui.models import InstanceStatus
+
+    host = _host()
+    instance = _instance(host, server_cfg='', status=InstanceStatus.UPDATED)
+    preset = _preset(env, enabled_hooks=['new.so'], checked_plugins=[])
+    _add_preset_hook(preset, 'new.so')
+    preview = _preview(client, headers, instance, preset).get_json()['data']
+    assert preview['diff']['hooks'] == {'before': [], 'after': ['new.so']}
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.enqueue_task',
+               return_value=MagicMock(id='job-1')) as enqueue:
+        response = _apply(client, headers, instance, preset, preview['preview_hash'], restart=False)
+
+    assert response.status_code == 202, response.get_json()
+    assert enqueue.call_args.kwargs['restart'] is True
