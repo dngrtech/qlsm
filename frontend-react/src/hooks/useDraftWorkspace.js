@@ -115,6 +115,7 @@ export function useDraftWorkspace({ source, preset, host, instanceId, active, ta
     try {
       const treeData = await getDraftTree(draftId);
       setTree(treeData);
+      setError(null);
     } catch (err) {
       setError(err.message || 'Failed to refresh tree');
     }

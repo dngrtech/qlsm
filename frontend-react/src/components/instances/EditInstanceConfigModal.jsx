@@ -192,6 +192,9 @@ function EditInstanceConfigModal({
   const pluginFileManagerRef = useRef(null);
   const { uploading, track: trackUploads } = useUploadBusy();
   const pluginsSyncedRef = useRef(false);
+  // The instance's own ticks (from its qlx_plugins against its own tree)
+  // are known; a preset's selection never sets this.
+  const instanceTicksResolvedRef = useRef(false);
   const hookLoadSeqRef = useRef(0);
 
   // Hooks tab state
@@ -254,7 +257,10 @@ function EditInstanceConfigModal({
     consume: consumePlugins,
     discard: discardPlugins,
     draftId: pluginDraftId,
+    error: pluginsError,
     hasChanges: pluginsHaveChanges,
+    loading: pluginsLoading,
+    refreshTree: refreshPluginTree,
     tree: pluginTree,
   } = pluginsAdapter;
   // Autocomplete in the config editor: engine cvars from the backend catalog,
@@ -317,6 +323,7 @@ function EditInstanceConfigModal({
     if (rawQlxPlugins.length === 0 || pluginTree.length === 0) return;
     const { paths, droppedNames } = resolveRootPluginPaths(pluginTree, rawQlxPlugins);
     pluginsSyncedRef.current = true;
+    instanceTicksResolvedRef.current = true;
     const nextCheckedPlugins = new Set(paths);
     setInitialCheckedPlugins(nextCheckedPlugins);
     if (paths.length > 0) {
@@ -329,14 +336,16 @@ function EditInstanceConfigModal({
 
   // A loaded preset's plugin names, resolved against its own draft's tree
   // (not the instance's, which may still be showing) once that tree is in.
+  // An empty tree is an answer too (none of the names exist); a failed
+  // request is not, and stays pending until Retry loads the tree.
   useEffect(() => {
     if (!pendingPresetPlugins) return;
-    if (pluginDraftId !== pendingPresetPlugins.draftId || pluginTree.length === 0) return;
+    if (pluginDraftId !== pendingPresetPlugins.draftId || pluginsLoading || pluginsError) return;
     const { paths, droppedNames } = resolveRootPluginPaths(pluginTree, pendingPresetPlugins.names);
     setPendingPresetPlugins(null);
     setCheckedPlugins(new Set(paths));
     setDroppedPluginCount(droppedNames.length);
-  }, [pendingPresetPlugins, pluginDraftId, pluginTree]);
+  }, [pendingPresetPlugins, pluginDraftId, pluginTree, pluginsLoading, pluginsError]);
 
   // Linter for server.cfg — no port validation in edit mode, but shows managed-cvar info tooltips
   const qlCfgLinterSource = useCallback(() => createQlCfgLinter([], () => {}), []);
@@ -707,9 +716,18 @@ function EditInstanceConfigModal({
         }
       } else {
         // A legacy preset keeps the instance's own plugins: back to its
-        // ticks, not the ones an earlier preset load left behind.
+        // ticks, not the ones an earlier preset load left behind. If they
+        // are not known yet (an earlier preset was loaded before the
+        // instance's tree arrived), they are resolved again when it does;
+        // until then Save leaves qlx_plugins alone.
         setPendingPresetPlugins(null);
-        if (pluginsSyncedRef.current) setCheckedPlugins(new Set(initialCheckedPlugins));
+        if (instanceTicksResolvedRef.current || rawQlxPlugins.length === 0) {
+          pluginsSyncedRef.current = true;
+          setCheckedPlugins(new Set(initialCheckedPlugins));
+        } else {
+          pluginsSyncedRef.current = false;
+          setCheckedPlugins(new Set());
+        }
       }
       setLoadedPresetName(presetName);
       // No draft_id = a legacy preset: the server leaves scripts/ as they are,
@@ -719,19 +737,17 @@ function EditInstanceConfigModal({
         setHookEnabledOrder(target.enabled_hooks);
         setHooksLoaded(true);
       }
-      // Absent admin_changes = the preset has no admin list (or it matches the
-      // server's): leave the current list alone.
-      // The changes apply to the server's whole list: the editor's own read
-      // if it is in, else the one the preview made. Without either the
-      // load leaves the admins alone rather than save a partial list (which
-      // would revoke admins the preset keeps).
-      if (Array.isArray(target.admin_changes)) {
-        const baseline = loadedAdminEntries ?? admins?.before ?? null;
-        if (baseline === null) {
+      // `admins` is present when the preset has an admin list: the live
+      // list the preview read and the list the load leaves. Both are used
+      // together, also when they are equal, so a second preset replaces
+      // whatever an earlier load staged and the change is never applied to
+      // an older read. No `admins` = no admin list: leave the current one.
+      if (admins) {
+        if (admins.before == null) {
           showError("The server's admin list could not be read, so the preset's admins were not loaded.");
         } else {
-          if (loadedAdminEntries === null) setLoadedAdminEntries(baseline);
-          setAdminEntries(applyAdminChanges(baseline, target.admin_changes));
+          setLoadedAdminEntries(admins.before);
+          setAdminEntries(admins.after || admins.before);
         }
       }
       // Absent = the preset pre-dates the setting; leave the toggle untouched.
@@ -761,7 +777,7 @@ function EditInstanceConfigModal({
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
-  }, [initialCheckedPlugins, loadedAdminEntries, originalLanRateEnabled, originalServerHostname, resetConfigs, resetFactories, serverHostname, showError, showSuccess]);
+  }, [initialCheckedPlugins, rawQlxPlugins, originalLanRateEnabled, originalServerHostname, resetConfigs, resetFactories, serverHostname, showError, showSuccess]);
 
   const previewPreset = useCallback((presetId, acceptedPaths) => previewPresetApply(instanceId, {
     preset_id: Number(presetId),
@@ -982,8 +998,12 @@ function EditInstanceConfigModal({
         config_folders: cfgFolders,
         factories: serializeFactories().files,
         draft_id: pluginDraftId,
-        checked_plugins: toQlxPluginNames(checkedPlugins, pluginTree),
       };
+      // Only a known selection is sent: before the instance's own ticks are
+      // resolved, sending the empty set would clear qlx_plugins.
+      if (pluginsSyncedRef.current || rawQlxPlugins.length === 0) {
+        configPayload.checked_plugins = toQlxPluginNames(checkedPlugins, pluginTree);
+      }
       if (hooksLoaded) {
         configPayload.enabled_hooks = hookEnabledOrder;
       }
@@ -1470,6 +1490,14 @@ function EditInstanceConfigModal({
                                 is no part of the instance config, so offering
                                 Save Configuration there would read as "save
                                 this tab" and could restart the instance. */}
+                            {pendingPresetPlugins && pluginsError && pluginDraftId === pendingPresetPlugins.draftId && (
+                              <span className="flex items-center gap-2 text-xs text-red-500">
+                                The preset&apos;s plugin list could not be loaded.
+                                <button type="button" className="btn btn-secondary" onClick={() => refreshPluginTree()}>
+                                  Retry
+                                </button>
+                              </span>
+                            )}
                             {!activeMainTab.startsWith('addon:') && (
                               <button
                                 type="submit"
