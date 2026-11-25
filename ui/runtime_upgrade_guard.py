@@ -11,7 +11,7 @@ from flask import jsonify
 from ui import db
 from ui.models_runtime_upgrade import TERMINAL_STATES, HostRuntimeUpgradeOperation
 
-BLOCKED_MESSAGE = ('Host {name} is being upgraded to minqlxtended; '
+BLOCKED_MESSAGE = ('Host {name} is undergoing runtime maintenance; '
                    'changes are blocked until it finishes.')
 
 

@@ -5,16 +5,21 @@ after the matching filesystem swap has also succeeded, so the database and
 on-disk state can never diverge from a partial restore.
 """
 import datetime
+import json
+
+from sqlalchemy import null
 
 from ui import db
+from ui.addons.manifest import ADDON_ID_MAX, ADDON_ID_RE
 from ui.models import (
-    ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
+    AddonScope, AddonState, ApiKey, AppSetting, BinaryMetadata, ConfigPreset, Host, HostStatus,
     InstanceStatus, Notification, Operator, PendingInstanceChange, QLFilterStatus, QLInstance, User,
 )
 from ui.runtime import CUSTOM, normalize_runtime
 from ui.task_logic.backup_db_export import DB_EXPORT_FORMAT_VERSION
 
 _REQUIRED_KEYS = ('hosts', 'instances', 'users', 'presets', 'api_keys', 'app_settings', 'binary_metadata')
+_SQLITE_MAX_ROW_ID = 2 ** 63 - 1
 
 
 class BackupImportError(ValueError):
@@ -54,15 +59,84 @@ def _host_from_row(row):
     )
 
 
+def _addon_states_from_export(data):
+    rows = data.get('addon_states', [])
+    if not isinstance(rows, list):
+        raise BackupImportError("db_export.json has an invalid 'addon_states' list.")
+    if not rows:
+        return []
+
+    scope_ids = {AddonScope.GLOBAL.value: {0}}
+    for scope, table in ((AddonScope.HOST, 'hosts'), (AddonScope.INSTANCE, 'instances')):
+        scope_ids[scope.value] = {
+            row['id'] for row in data[table]
+            if isinstance(row, dict) and type(row.get('id')) is int and 0 < row['id'] <= _SQLITE_MAX_ROW_ID
+        }
+
+    row_ids = set()
+    state_keys = set()
+    states = []
+    for index, row in enumerate(rows, start=1):
+        label = f'Invalid addon_states row {index}'
+        if not isinstance(row, dict):
+            raise BackupImportError(f'{label}: expected an object.')
+
+        row_id = row.get('id')
+        if type(row_id) is not int or not 0 < row_id <= _SQLITE_MAX_ROW_ID:
+            raise BackupImportError(f'{label}: invalid row ID.')
+        addon_id = row.get('addon_id')
+        if not isinstance(addon_id, str) or len(addon_id) > ADDON_ID_MAX or not ADDON_ID_RE.fullmatch(addon_id):
+            raise BackupImportError(f'{label}: invalid add-on ID.')
+
+        scope, scope_id = row.get('scope'), row.get('scope_id')
+        if not isinstance(scope, str) or scope not in scope_ids:
+            raise BackupImportError(f'{label}: unknown scope.')
+        if type(scope_id) is not int or scope_id not in scope_ids[scope]:
+            raise BackupImportError(f'{label}: invalid scope ID or missing scope target in the backup.')
+
+        state_key = (addon_id, scope, scope_id)
+        if row_id in row_ids or state_key in state_keys:
+            raise BackupImportError(f'{label}: duplicate row ID or add-on scope.')
+        row_ids.add(row_id)
+        state_keys.add(state_key)
+
+        enabled, settings = row.get('enabled'), row.get('settings')
+        if type(enabled) is not bool:
+            raise BackupImportError(f'{label}: enabled must be a boolean.')
+        if not isinstance(settings, dict):
+            raise BackupImportError(f'{label}: settings must be an object.')
+        try:
+            settings_json = json.dumps(settings)
+        except (TypeError, ValueError, RecursionError):
+            raise BackupImportError(f'{label}: invalid settings object.') from None
+
+        try:
+            timestamps = {
+                # Preserve explicit SQL NULL instead of invoking the model's default.
+                field: datetime.datetime.fromisoformat(row[field]) if row.get(field) is not None else null()
+                for field in ('created_at', 'updated_at')
+            }
+        except (TypeError, ValueError):
+            raise BackupImportError(f'{label}: invalid timestamp.') from None
+
+        states.append(AddonState(
+            id=row_id, addon_id=addon_id, scope=scope, scope_id=scope_id,
+            enabled=enabled, settings_json=settings_json, **timestamps,
+        ))
+    return states
+
+
 def replace_database(data):
     if not isinstance(data, dict) or data.get('format_version') != DB_EXPORT_FORMAT_VERSION:
         raise BackupImportError('Unsupported or missing db_export format_version.')
     for key in _REQUIRED_KEYS:
         if not isinstance(data.get(key), list):
             raise BackupImportError(f"db_export.json is missing or has an invalid '{key}' list.")
+    addon_states = _addon_states_from_export(data)
 
     # Children before parents so no foreign key is ever left dangling
     # mid-wipe (QLInstance.host_id -> Host.id).
+    AddonState.query.delete()
     BinaryMetadata.query.delete()
     # Not backed up: pending-restart records describe the old install's
     # running servers and point at instance ids about to be replaced.
@@ -141,4 +215,5 @@ def replace_database(data):
             resolved_at=_parse_dt(row.get('resolved_at')), read_at=_parse_dt(row.get('read_at')),
         ))
 
+    db.session.add_all(addon_states)
     db.session.flush()

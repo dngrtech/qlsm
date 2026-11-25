@@ -87,7 +87,9 @@ blueprint on a running app, so a freshly installed addon is listed as
 entry whose endpoints 404 with no explanation. Same for uninstall.
 
 Uninstall removes the package directory. It keeps the addon's `AddonState`
-rows, so reinstalling the same addon finds its settings again.
+rows, so reinstalling the same addon finds its settings again. Providers
+referenced by Custom hosts are subject to the [runtime provider lifecycle](#custom-runtime-providers)
+below.
 
 The upload is checked for archive size, total uncompressed size, entry count,
 per-member compression ratio, absolute/`..` paths, symlinks, and a valid
@@ -574,4 +576,33 @@ An installed addon can supply an optional `custom_runtime` object in `qlsm-addon
 
 Host setup installs the requirements as wheels only (`pip --only-binary=:all:`) into `deps/` inside the release directory. The launcher must add that directory to `sys.path` or `PYTHONPATH`. Pin exact versions so every host gets the same dependencies. `deps` and `.qlsm-release` are reserved top-level names. Tar member names must be plain relative paths, so build with `tar -czf bundle.tar.gz -C dir engine.so ...` rather than `tar -C dir -czf bundle.tar.gz .`, which adds a `./` prefix.
 
-The addon ZIP install validates the bundle and retains it by digest. Use the usual QLSM restart and enable flow to activate the approved release. A new Standalone host pins the active provider and displayed release. If its provider becomes unavailable, QLSM rejects runtime-dependent changes and keeps the host available for inspection.
+The addon installer validates the bundle and retains it by SHA-256. Use the usual
+QLSM restart and enable flow to activate the approved release. A new Standalone host
+pins the provider ID, displayed release digest, and plugin API. Publishing or
+installing a new release changes the approved build for new hosts. Existing hosts
+keep their pin until an operator confirms **Update Custom runtime** in Host Details.
+
+For an existing pin, an approved update must match the pinned release's plugin API
+and platform. QLSM keeps older retained bundles for existing pins and rollbacks.
+After a successful change, an operator can select the previous release while the
+current pin matches the recorded change and that bundle is still available. QLSM
+stages the release before downtime, replaces instance service definitions, and
+restarts and checks readiness for previously running instances. Stopped instances,
+instance configs, plugins, and data are preserved. If a failure occurs during the
+change, QLSM attempts to restore the original pin, units, and instance states and
+keeps the host reserved for recovery until it verifies restoration. See [Update or roll back a Custom release](../docs/user/getting-started/add-host.md#update-or-roll-back-a-custom-release).
+
+While any Custom host references a provider, QLSM rejects global disable,
+uninstall, and replacement with a package that removes `custom_runtime`. These
+requests return HTTP 409 and identify the dependent hosts. The same rule applies to
+uploaded ZIPs and repository installs. Compatible provider updates and scoped
+settings edits are allowed. If a provider or pinned bundle becomes unavailable,
+QLSM rejects runtime-dependent changes and keeps the host visible for inspection.
+
+A [global backup](../docs/user/administration/backup-restore.md) includes installed
+packages, retained runtime bundles, and `AddonState` rows with enablement and settings
+at their recorded scopes. Restore replaces the destination's addon state. A version-1
+archive without `addon_states` clears destination addon state and leaves the restored
+providers disabled by default. Restart all QLSM application and worker processes after
+any restore so they load the restored addons. For older archives, re-enable and
+configure the addons and providers you use after restarting.

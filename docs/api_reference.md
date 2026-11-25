@@ -493,12 +493,32 @@ Self provider:
 
 Self hosts create a standalone-style host record on the same physical machine that runs the Docker stack. Only one self host may exist. During creation, QLSM snapshots local OS detection into `Host.os_type` when available; if detection fails, `os_type` remains `null`.
 
-All three provider payloads above accept `runtime: "minqlx"` (the default) or `runtime: "minqlxtended"`. A new Standalone host can also use [Custom runtime](#custom-runtime-options). The API returns `400` for an unsupported runtime or provider combination. The minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade) is the only supported runtime change. For cloud hosts, a new host with either built-in runtime is provisioned on Ubuntu 24.04. minqlx cloud hosts created before v1.53.0 use Debian 12.
+All three provider payloads above accept `runtime: "minqlx"` (the default) or `runtime: "minqlxtended"`. A new Standalone host can also use [Custom runtime](#custom-runtime-options). The API returns `400` for an unsupported runtime or provider combination. The minqlx → minqlxtended [Runtime Upgrade](#runtime-upgrade) and the [Custom release update](#custom-release-update) are the only supported runtime changes. For cloud hosts, a new host with either built-in runtime is provisioned on Ubuntu 24.04. minqlx cloud hosts created before v1.53.0 use Debian 12.
 
 The Python 3.12 floor for `runtime: "minqlxtended"` is enforced differently per provider, because QLSM doesn't have the same evidence available at creation time for each:
 
 - **Standalone:** enforced synchronously. `POST /api/hosts` runs an SSH-based OS/Python detection before creating the row, and returns `400` immediately if the detected Python is older than 3.12 (or undetectable).
 - **Self:** *not* enforced at creation. Self-host creation only reads local `/etc/os-release`-style detection, which carries no Python version — there is no SSH session to probe, since the host *is* the QLSM server's own reachable target. `POST /api/hosts` returns `201` regardless of the host's actual Python version, the record is created, and asynchronous setup is queued. `ansible/playbooks/setup_host.yml` is the actual gate: it asserts the Python floor before building, and a self host whose Python is too old reaches `ERROR` status once that setup task runs and fails — after creation returned successfully, not instead of it.
+
+### Custom Release Update
+
+```
+GET  /api/hosts/<id>/custom-runtime-update
+POST /api/hosts/<id>/custom-runtime-update
+```
+
+Moves a Standalone host that uses a pinned Custom runtime to another approved release of the same provider, or back to the previous one, with a whole-host rollback if any step fails before the remote operation is finalized. It reuses the runtime-upgrade operation record, reservation and recovery.
+
+`GET` returns the preview: `data.eligibility` (`enabled`, `reason`), `current`, `target`, `rollback`, `fingerprint` and `reason`.
+
+`POST` body (all fields required): `action` (`"update"` or `"rollback"`), `fingerprint` and `target_sha256` (64 hex characters each), copied from the preview. Success is `202` with `data.operation_id` and `data.status: "configuring"`.
+
+Responses:
+
+- `400` — malformed body.
+- `404` — host not found.
+- `409` — the host does not use a pinned Custom runtime, is not eligible, is busy, or the release or host changed since the preview. A provider conflict returns `error.code` (for example `runtime_provider_in_use`) and `error.dependent_hosts`.
+- `500` — the operation could not be recorded or queued.
 
 ### Custom Runtime Options
 
@@ -1638,13 +1658,13 @@ Success response (`200 OK`):
 }
 ```
 
-`qlsm_version`/`created_at` are read from the archive's manifest, letting the caller warn if the backup came from a different QLSM version than the one running.
+`qlsm_version`/`created_at` are read from the archive's manifest, letting the caller warn if the backup came from a different QLSM version than the one running. The summary also carries `restart_required: true` (restart every QLSM application and worker process before managing restored hosts) and `addon_state_restored`, which is `false` for archives made before add-on state was backed up. Add-on state rows whose host or instance no longer exists are left out of exports.
 
 Responses:
 
 - `200 OK` — restore succeeded; body as above.
 - `400 Bad Request` — no file/empty file, file exceeds 500 MB, wrong password, or the archive is corrupt/not a QLSM backup (`BackupDecryptError`/`BackupRestoreError`/`BackupImportError` messages are returned as-is).
-- `409 Conflict` — a background task currently holds a lock; retry once it finishes.
+- `409 Conflict` — a background task or runtime operation holds a lock; retry once it finishes. Provider-conflict responses include `error.code` and `error.dependent_hosts`.
 - `500 Internal Server Error` — restore failed after validation passed; already-swapped files and the database are rolled back to their pre-restore state.
 
 ## Socket.IO RCON Events

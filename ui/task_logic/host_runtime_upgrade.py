@@ -78,10 +78,10 @@ def inputs_dir(op):
     return os.path.join(op.snapshot_path, 'inputs')
 
 
-def take_ownership(operation_id, job_id, deps):
+def take_ownership(operation_id, job_id, deps, *, forward=False):
     """Claim the operation (None if another execution won) and try to take its
     execution locks; check `execution.locked` before any side effect."""
-    token = claim_operation(operation_id, job_id)
+    token = claim_operation(operation_id, job_id, forward=forward)
     if token is None:
         return None
     execution = Execution(operation_id, token, job_id, deps)
@@ -402,6 +402,8 @@ def mark_recovery_required(execution, reason, *, state=None):
         op = execution.op
         if op is not None and not op.is_terminal:
             op.recovery_required = True
+            if op.original_runtime == 'custom' and execution.host:
+                execution.host.status = HostStatus.ERROR
             op.last_error = safe_error(reason)
             if state:
                 op.state = state
@@ -432,10 +434,13 @@ def upgrade_host_runtime_logic(operation_id, *, deps=None, job_id=None):
         # Redelivered or late: anything past preparation belongs to recovery.
         return recover_host_runtime_logic(operation_id, deps=deps, job_id=job_id)
 
-    execution = take_ownership(operation_id, job_id, deps)
+    execution = take_ownership(operation_id, job_id, deps, forward=True)
     if execution is None:
         return f'Error: could not take ownership of runtime upgrade {operation_id}'
     try:
+        if op.original_runtime == 'custom':
+            from .custom_runtime_update import run
+            return run(execution)
         if not execution.locked:
             return fail_preparation(execution, 'another operation is running on this host or one of '
                                     'its instances; try again when it finishes', cleanup_snapshot=False)
@@ -445,6 +450,9 @@ def upgrade_host_runtime_logic(operation_id, *, deps=None, job_id=None):
         db.session.rollback()
         return False
     except Exception as exc:
+        if op.original_runtime == 'custom':
+            mark_recovery_required(execution, 'Custom release worker interrupted; recovery pending.')
+            return f'Error: Custom release operation {operation_id} needs recovery'
         if is_job_timeout(exc):
             # Stop all work in this job; recovery resumes the rollback.
             mark_recovery_required(execution, f'worker timed out: {exc}')

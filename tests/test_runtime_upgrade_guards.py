@@ -16,7 +16,7 @@ from ui.runtime_upgrade_guard import (
     reserved_host_ids,
 )
 
-BLOCKED = 'Host gh is being upgraded to minqlxtended; changes are blocked until it finishes.'
+BLOCKED = 'Host gh is undergoing runtime maintenance; changes are blocked until it finishes.'
 
 
 @pytest.fixture

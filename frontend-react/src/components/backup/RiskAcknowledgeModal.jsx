@@ -7,6 +7,7 @@ const SENSITIVE_ITEMS = [
   'Your Vultr API key (full access to your cloud account)',
   'User login credentials (password hashes)',
   'Per-instance RCON and stats passwords',
+  'Addon settings, including any credentials stored in them',
   'Terraform state for every provisioned host',
 ];
 
@@ -40,7 +41,7 @@ function RiskAcknowledgeModal({ isOpen, onClose, onConfirm }) {
                   Export without a password?
                 </Dialog.Title>
                 <p className="mt-2 text-sm text-theme-secondary">
-                  The downloaded file will contain the following in plain, unencrypted text:
+                  Sensitive data in the downloaded file will be readable in plain text.
                 </p>
                 <ul className="mt-2 text-sm text-theme-secondary list-disc pl-5 space-y-1">
                   {SENSITIVE_ITEMS.map((item) => (

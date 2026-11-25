@@ -28,6 +28,7 @@ class RuntimeObservation:
     service_started_at: int | None
     # Engine processes for the port (only when probed with_processes=True).
     processes: int | None = None
+    active_state: str | None = None
 
 
 # Executed on the host by the probe (and in tests against a fake /proc).
@@ -46,13 +47,17 @@ def count_qlds_processes(ports, proc_root="/proc"):
         try:
             with open(os.path.join(proc_root, pid, "cmdline"), "rb") as handle:
                 argv = handle.read().split(b"\\0")
-        except OSError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
+        except OSError:
+            return None
         try:
             with open(os.path.join(proc_root, pid, "cgroup"), "rb") as handle:
                 cgroup = handle.read().decode(errors="replace")
+        except (FileNotFoundError, ProcessLookupError):
+            continue
         except OSError:
-            cgroup = ""
+            return None
         engine = bool(argv) and os.path.basename(argv[0].decode(errors="replace")).startswith("qzeroded")
         for port in ports:
             in_unit = "qlds@%d.service" % port in cgroup
@@ -287,7 +292,7 @@ def _observations_from_payload(payload):
             invocation_id=invocation_id,
             active=active,
             service_started_at=service_started_at,
-            processes=processes,
+            processes=processes, active_state=raw_observation.get("active_state"),
         )
     return observations
 
@@ -386,6 +391,6 @@ def quiescence_state(observation):
         return 'unknown'
     if observation.active:
         return 'active'
-    if observation.processes is None:
+    if observation.active_state not in ('inactive', 'failed') or observation.processes is None:
         return 'unknown'
     return 'stray_process' if observation.processes > 0 else 'inactive'

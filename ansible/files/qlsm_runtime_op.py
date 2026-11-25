@@ -243,6 +243,8 @@ def cmd_acquire(args):
     fd = _open_lock(args.base, terminal)
     try:
         token_path = os.path.join(args.base, TOKEN_NAME)
+        if os.path.exists(os.path.join(args.base, 'finalized-' + args.operation_id)):
+            raise Refused('operation %s was already finalized on this host' % args.operation_id)
         reason = token_decision(_read_json(token_path), args.operation_id,
                                 args.fencing_token, terminal)
         if reason:
@@ -281,27 +283,64 @@ def cmd_release(args):
     return {'released': True, 'holder_pid': pid, 'signalled': True}
 
 
+def cmd_receipt(args):
+    """Observe the receipt without reopening even an already finalized operation."""
+    _check_identity(args.operation_id, args.fencing_token)
+    fd = _open_lock(args.base)
+    try:
+        retired = os.path.join(args.base, 'finalized-' + args.operation_id)
+        record = _read_json(os.path.join(args.base, TOKEN_NAME)) or {}
+        matches = record.get('operation_id') == args.operation_id
+        if os.path.exists(retired) or (matches and record.get('state') == 'finalized'):
+            return {'receipt': 'closed'}
+        if matches and record.get('state') == 'active':
+            return {'receipt': 'open'}
+        return {'receipt': 'unrecorded'}
+    finally:
+        os.close(fd)
+
+
 def cmd_finalize(args):
     _check_identity(args.operation_id, args.fencing_token)
     fd = _open_lock(args.base)
     try:
         token_path = os.path.join(args.base, TOKEN_NAME)
         record = _read_json(token_path)
-        if not record:
-            return {'finalized': False, 'reason': 'no operation recorded on this host'}
-        if record.get('operation_id') != args.operation_id:
-            return {'finalized': False, 'reason': 'host is recorded for another operation'}
-        if record.get('state') == 'finalized':
+        retired = os.path.join(args.base, 'finalized-' + args.operation_id)
+        if os.path.exists(retired):
             return {'finalized': True, 'already': True}
-        reason = token_decision(record, args.operation_id, args.fencing_token, set())
-        if reason:
-            raise Refused(reason)
-        record.update({'state': 'finalized', 'fencing_token': args.fencing_token,
-                       'holder_pid': None, 'finalized_at': int(time.time())})
-        _write_json(token_path, record)
+        if not record or record.get('operation_id') != args.operation_id:
+            if not args.allow_unrecorded:
+                return {'finalized': False, 'reason': 'no matching operation recorded on this host'}
+        elif record.get('state') != 'finalized':
+            reason = token_decision(record, args.operation_id, args.fencing_token, set())
+            if reason:
+                raise Refused(reason)
+            record.update({'state': 'finalized', 'fencing_token': args.fencing_token,
+                           'holder_pid': None, 'finalized_at': int(time.time())})
+            _write_json(token_path, record)
+        # Keep a per-operation receipt after a later operation replaces .token.
+        # A delayed Ansible play must never reopen a closed operation.
+        _write_json(retired, {'fencing_token': args.fencing_token})
         return {'finalized': True}
     finally:
         os.close(fd)
+
+
+def cmd_check(args):
+    check_fence(args.base, args.operation_id, args.fencing_token)
+    return {'owned': True}
+
+
+def cmd_service(args):
+    check_fence(args.base, args.operation_id, args.fencing_token)
+    command = ['systemctl', args.action]
+    if args.action != 'daemon-reload':
+        if args.port is None or not 0 < args.port < 65536:
+            raise Refused('invalid service port')
+        command.append('qlds@%d.service' % args.port)
+    subprocess.run(command, check=True)
+    return {'completed': True}
 
 
 # --- apt additive-install guard -------------------------------------------------
@@ -713,12 +752,23 @@ def cmd_apply(args):
                 backup = os.path.join(files_dir, '%06d' % len(entries))
                 _write_file(backup, original, 0o600, None, None)
                 entry.update({'sha256': _sha256_bytes(original), 'mode': '%04o' % (st.st_mode & 0o777),
-                              'backup': backup})
+                              'backup': backup, 'gid': st.st_gid})
             entries[dest] = entry
         _write_json(manifest_path, manifest)
 
+    if args.inventory_only:
+        if not record:
+            raise Refused('inventory-only requires a recorded plan')
+        return {'applied': 0, 'recorded': True}
+
     check_fence(args.base, args.operation_id, args.fencing_token)
     for dest, data, mode, uid, gid in payload:
+        if plan.get('preserve_unit_permissions'):
+            if not record or dest not in unit_paths:
+                raise Refused('private unit installation requires a recorded unit destination')
+            entry = manifest['entries'][dest]
+            mode = int(entry['mode'], 8) & 0o640 if entry['existed'] else 0o600
+            gid = entry.get('gid', 0)
         _write_file(dest, data, mode, uid, gid, create_below=qlds_dir)
     return {'applied': len(payload), 'recorded': bool(record),
             'manifest': manifest_path if record else None}
@@ -732,12 +782,17 @@ def cmd_restore(args):
     unit_paths = {os.path.normpath(p) for p in args.unit_path or []}
     manifest_path = os.path.join(ops_dir, 'manifest.json')
     if _lstat(manifest_path) is None:
+        if args.exact_unit:
+            raise Refused('original unit inventory is missing')
         return {'restored': 0, 'removed': 0, 'kept': [], 'note': 'no inventory recorded'}
     manifest = json.loads(_read_file(manifest_path, _trusted_uids())[0].decode('utf-8'))
     if os.path.normpath(manifest.get('qlds_dir', '')) != qlds_dir:
         raise Refused('inventory belongs to another instance directory')
     files_dir = os.path.join(ops_dir, 'files')
     entries = manifest.get('entries') or {}
+    if args.exact_unit and (len(unit_paths) != 1 or set(entries) != unit_paths
+                            or manifest.get('created_dirs') or manifest.get('operation_id') != args.operation_id):
+        raise Refused('expected an inventory for exactly this operation and unit')
     # Validate everything before changing anything.
     for dest, entry in entries.items():
         if not _manifest_dest_ok(dest, qlds_dir, unit_paths):
@@ -759,7 +814,15 @@ def cmd_restore(args):
             if _sha256_bytes(data) != entry['sha256']:
                 raise Refused('backup of %s does not match its recorded sha256' % dest)
             mode = forced if forced is not None else int(entry['mode'], 8) & 0o777
+            if args.exact_unit:
+                mode = int(entry['mode'], 8) & 0o777
+                gid = entry['gid']
             _write_file(dest, data, mode, uid, gid, create_below=qlds_dir)
+            if args.exact_unit:
+                actual, info = _read_file(dest, _trusted_uids())
+                if (_sha256_bytes(actual) != entry['sha256'] or info.st_mode & 0o777 != mode
+                        or info.st_gid != gid):
+                    raise Refused('restored unit does not match its inventory')
             restored += 1
         else:
             current = _lstat(dest)
@@ -771,6 +834,8 @@ def cmd_restore(args):
                 removed += 1
             else:
                 kept.append(dest)  # changed since we wrote it: not ours to delete
+    if kept and args.exact_unit:
+        raise Refused('the original absence of the unit could not be restored')
     for directory in sorted(manifest.get('created_dirs') or [], key=len, reverse=True):
         try:
             _rmdir(directory)
@@ -782,11 +847,16 @@ def cmd_restore(args):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command')
-    for name in ('acquire', 'release', 'finalize'):
+    for name in ('acquire', 'release', 'finalize', 'receipt', 'check', 'service'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--base', default=DEFAULT_BASE)
         cmd.add_argument('--operation-id', required=True)
         cmd.add_argument('--fencing-token', type=int, required=True)
+        if name == 'service':
+            cmd.add_argument('--port', type=int)
+            cmd.add_argument('--action', choices=['start', 'stop', 'daemon-reload'], required=True)
+        if name == 'finalize':
+            cmd.add_argument('--allow-unrecorded', action='store_true')
         if name == 'acquire':
             cmd.add_argument('--terminal-ids', default='')
             cmd.add_argument('--ttl', type=int, default=4200)
@@ -798,6 +868,7 @@ def main(argv=None):
     apply_cmd.add_argument('--operation-id', required=True)
     apply_cmd.add_argument('--fencing-token', type=int, required=True)
     apply_cmd.add_argument('--plan', required=True)
+    apply_cmd.add_argument('--inventory-only', action='store_true')
     restore = sub.add_parser('restore')
     restore.add_argument('--base', default=DEFAULT_BASE)
     restore.add_argument('--operation-id', required=True)
@@ -805,9 +876,11 @@ def main(argv=None):
     restore.add_argument('--ops-dir', required=True)
     restore.add_argument('--qlds-dir', required=True)
     restore.add_argument('--unit-path', action='append')
+    restore.add_argument('--exact-unit', action='store_true')
     args = parser.parse_args(argv)
     handlers = {'acquire': cmd_acquire, 'release': cmd_release, 'finalize': cmd_finalize,
-                'apt-check': cmd_apt_check, 'apply': cmd_apply, 'restore': cmd_restore}
+                'apt-check': cmd_apt_check, 'apply': cmd_apply, 'restore': cmd_restore,
+                'service': cmd_service, 'check': cmd_check, 'receipt': cmd_receipt}
     if args.command not in handlers:
         parser.error('a subcommand is required')
     try:

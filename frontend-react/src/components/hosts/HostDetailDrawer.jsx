@@ -13,6 +13,7 @@ import { HostStatus, QLFILTER_STATUS } from '../../utils/statusEnums';
 import { copyToClipboard } from '../../utils/clipboard';
 import { runtimeLabel } from '../../constants/runtimes';
 import { validateHostName, HOST_NAME_MAX_LENGTH } from '../../utils/resourceValidation';
+import CustomRuntimeUpdateDialog from './CustomRuntimeUpdateDialog';
 
 const CHIP_BASE = 'shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase';
 const PERF_CHIP_STYLES = {
@@ -60,6 +61,7 @@ export default function HostDetailDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [customRuntimeHostId, setCustomRuntimeHostId] = useState(null);
   const [ipCopied, setIpCopied] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [applyNameToMachine, setApplyNameToMachine] = useState(false);
@@ -86,8 +88,15 @@ export default function HostDetailDrawer({
     // Don't clear data on close — keeps content visible during slide-out animation
   }, [open, host]);
 
+  const showCustomRuntimeAction = internalHost?.runtime === 'custom' && internalHost.provider === 'standalone';
+  const isCustomRuntimeDialogOpen = open && showCustomRuntimeAction && customRuntimeHostId === internalHost.id;
+
   useEffect(() => {
-    if (!open) return;
+    if (customRuntimeHostId !== null && !isCustomRuntimeDialogOpen) setCustomRuntimeHostId(null);
+  }, [customRuntimeHostId, isCustomRuntimeDialogOpen]);
+
+  useEffect(() => {
+    if (!open || isCustomRuntimeDialogOpen) return;
     const handleEscape = (e) => { if (e.key === 'Escape') onClose(); };
     const handleClickOutside = (e) => {
       if (isDeleteModalOpen) return;
@@ -96,7 +105,7 @@ export default function HostDetailDrawer({
     document.addEventListener('keydown', handleEscape);
     document.addEventListener('mousedown', handleClickOutside);
     return () => { document.removeEventListener('keydown', handleEscape); document.removeEventListener('mousedown', handleClickOutside); };
-  }, [open, onClose, isDeleteModalOpen]);
+  }, [open, onClose, isDeleteModalOpen, isCustomRuntimeDialogOpen]);
 
   const handleDeleteClick = () => {
     if (onDeleteHost && internalHost) {
@@ -418,6 +427,12 @@ export default function HostDetailDrawer({
                         </button>
                       );
                     })()}
+                    {showCustomRuntimeAction && (
+                      <button type="button" className="btn btn-secondary gap-1.5"
+                        onClick={() => setCustomRuntimeHostId(internalHost.id)}>
+                        <ArrowUpCircle size={14} /> Update Custom runtime
+                      </button>
+                    )}
                     <button type="button" onClick={handleDeleteClick} disabled={internalHost?.status === 'deleting'} className="btn btn-danger gap-1.5">
                       {internalHost?.is_standalone ? 'Remove' : 'Delete'}
                     </button>
@@ -428,6 +443,19 @@ export default function HostDetailDrawer({
           </div>
         </div>
       </Transition.Root>
+
+      {isCustomRuntimeDialogOpen && (
+        <CustomRuntimeUpdateDialog
+          key={internalHost.id}
+          host={internalHost}
+          onClose={() => setCustomRuntimeHostId(null)}
+          onStarted={(action) => {
+            setCustomRuntimeHostId(null);
+            addNotification(action === 'rollback' ? 'Custom runtime rollback queued.' : 'Custom runtime update queued.', 'success');
+            onHostUpdated?.(internalHost.id);
+          }}
+        />
+      )}
 
       <ConfirmationModal
         isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} onConfirm={handleConfirmDelete}
