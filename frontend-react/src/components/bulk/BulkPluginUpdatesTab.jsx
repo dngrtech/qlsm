@@ -113,6 +113,7 @@ function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
         setHostSel({});
         setApplyResults({});
         setLoading(false);
+        setApplying(false);
     }, [isOpen]);
 
     useEffect(() => () => { openRef.current += 1; }, []);
@@ -205,20 +206,25 @@ function BulkPluginUpdatesTab({ isOpen, hosts, onClose }) {
         .filter(j => j.payload);
 
     const handleApply = async () => {
+        // Scoped to this opening of the dialog, like the checks: closing it
+        // drops the results, so a host answering later must not write its
+        // result, untick or "done" into the next opening.
+        const open = openRef.current;
+        const current = () => openRef.current === open;
         setApplying(true);
         setApplyResults({});
-        const put = (key, value) => setApplyResults(prev => ({ ...prev, [key]: value }));
+        const put = (key, value) => { if (current()) setApplyResults(prev => ({ ...prev, [key]: value })); };
         await runLimited(hostJobs, CONCURRENCY, async ({ host, payload }) => {
             try {
                 await applyPluginUpdates(host.id, payload);
                 put(`host-${host.id}`, { ok: true, text: 'queued' });
                 // Done: untick so a second click never sends this host again.
-                setHostSel(prev => ({ ...prev, [host.id]: { ...prev[host.id], pool: false, files: {} } }));
+                if (current()) setHostSel(prev => ({ ...prev, [host.id]: { ...prev[host.id], pool: false, files: {} } }));
             } catch (err) {
                 put(`host-${host.id}`, { ok: false, text: errorText(err, 'Failed to apply plugin updates') });
             }
         });
-        setApplying(false);
+        if (current()) setApplying(false);
     };
 
     // --- render ---

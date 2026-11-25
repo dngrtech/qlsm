@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BulkActionsModal from '../BulkActionsModal';
@@ -242,5 +242,29 @@ describe('BulkPluginUpdatesTab', () => {
     await screen.findAllByText('r.py');
     boxes = screen.getAllByLabelText(/restart to apply/);
     expect(boxes.every((b) => !b.checked)).toBe(true);
+  });
+
+  it('an Apply that finishes after the dialog was closed and reopened shows nothing in the new one', async () => {
+    mocks.checkPluginUpdates.mockImplementation(async (id) => (id === 1 ? hostCheck(11, 'x.py') : hostCheck(22, 'y.py')));
+    let resolveApply;
+    mocks.applyPluginUpdates
+      .mockReturnValueOnce(new Promise((resolve) => { resolveApply = resolve; }))
+      .mockResolvedValue({ message: 'queued' });
+    const { rerender } = renderModal();
+    await screen.findByText('y.py');
+    fireEvent.click(screen.getByLabelText(/^y\.py/)); // only host 1 is sent
+    fireEvent.click(screen.getByRole('button', { name: /update selected/i }));
+    await waitFor(() => expect(mocks.applyPluginUpdates).toHaveBeenCalledTimes(1));
+
+    rerender(<BulkActionsModal isOpen={false} onClose={() => {}} hosts={hosts} />);
+    rerender(<BulkActionsModal isOpen onClose={() => {}} hosts={hosts} />);
+    clickCheck();
+    await screen.findByText('x.py');
+
+    await act(async () => { resolveApply({ message: 'queued' }); });
+    // The old session's result and untick do not land in the new session.
+    expect(screen.queryByTestId('apply-result-host-1')).toBeNull();
+    expect(screen.getByLabelText(/^x\.py/)).toBeChecked();
+    expect(screen.getByRole('button', { name: /update selected/i })).toBeEnabled();
   });
 });
