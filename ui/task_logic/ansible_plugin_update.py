@@ -29,6 +29,7 @@ from ui.database import get_host, update_host, update_instance
 from ui.plugin_pool import resolve_pool_file, resolve_pool_path
 from ui.runtime import plugin_api_for_host, runtime_extravars
 from .ansible_runner import _run_host_ansible_playbook
+from .common import queue_instance_restart
 
 
 log = logging.getLogger(__name__)
@@ -127,16 +128,18 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
         update_host(host.id, status=HostStatus.ACTIVE,
                      logs=f"{' '.join(summary_lines) or 'No changes applied.'}\n{original_host_logs}")
 
-        from ui.tasks import restart_instance
         for instance in host.instances:
             if instance.status == InstanceStatus.STOPPED or instance.id not in (restart_instance_ids or []):
                 continue
-            update_instance(
-                instance.id,
-                status=InstanceStatus.RESTARTING,
-                logs=f"Plugin updates applied. Queuing restart...\n{instance.logs or ''}"
+            queue_instance_restart(
+                instance,
+                queued_log="Plugin updates applied. Queuing restart...",
+                fallback_status=instance.status,
+                context="Plugin updates applied",
+                # Unchanged since this update read it; otherwise another
+                # operation owns the instance and its status stays.
+                still_ours=lambda fresh, seen=instance.status: fresh.status == seen,
             )
-            restart_instance.queue(instance.id)
 
         return True
 

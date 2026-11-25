@@ -1,7 +1,7 @@
 # <img src="docs/user/images/qlsm-logo.png" width="50" height="100" align="top" alt="QLSM logo"> Quake Live Server Management
 [![Buy me a beer 🍻](https://img.shields.io/badge/Buy%20me%20a%20coffee-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/dngrtech)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/eGdk5Me9S)
-[![Version](https://img.shields.io/badge/version-1.61.0-blue)](VERSION)
+[![Version](https://img.shields.io/badge/version-1.62.0-blue)](VERSION)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
 
 📚 **[User Guide](https://dngrtech.github.io/qlsm/)**

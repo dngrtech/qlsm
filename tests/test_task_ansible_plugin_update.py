@@ -13,8 +13,22 @@ MINQLX_PLUGINS_POOL_DIR = os.path.join('ql-assets', 'data', 'minqlx-plugins')
 
 @pytest.fixture
 def mock_restart_instance_queue():
-    with patch('ui.tasks.restart_instance.queue') as mock:
+    # Restarts go through enqueue_task under the instance lock
+    # (common.queue_instance_restart); yields the enqueue_task mock.
+    with patch('ui.task_lock.acquire_lock', return_value=True), \
+         patch('ui.task_lock.release_lock'), \
+         patch('ui.tasks.enqueue_task') as mock:
         yield mock
+
+
+def _assert_restart_queued(enqueue, instance_id):
+    from ui.tasks import restart_instance
+    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
+    enqueue.assert_called_once()
+    args, kwargs = enqueue.call_args
+    assert args == (restart_instance, instance_id)
+    assert kwargs['lock_token']
+    assert kwargs['on_failure'] is instance_job_failure_handler
 
 
 @pytest.fixture
@@ -102,7 +116,7 @@ def test_apply_instance_selected_plugin_copies_file_and_queues_restart(
 
         assert result is True
         mock_run_playbook.assert_not_called()  # no common pool refresh requested
-        mock_restart_instance_queue.assert_called_once_with(inst_id)
+        _assert_restart_queued(mock_restart_instance_queue, inst_id)
 
         dest = os.path.join('configs', host.name, str(inst_id), 'scripts', 'sample_plugin.py')
         assert os.path.isfile(dest)

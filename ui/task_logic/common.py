@@ -1,8 +1,24 @@
 import datetime
 import logging
+import time
+
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.attributes import flag_modified
 
 log = logging.getLogger(__name__)
+
+# SQLite already waits busy_timeout (30s) inside each attempt; these retries
+# only cover a writer that holds the lock longer than that.
+DB_LOCKED_RETRY_ATTEMPTS = 3
+DB_LOCKED_RETRY_BACKOFF_SECONDS = 1.0
+SQLITE_BUSY_TIMEOUT_SECONDS = 30
+# Worst case of one commit_with_retry() with the defaults: every attempt waits
+# the full busy_timeout, plus the backoff sleeps between attempts (1s + 2s).
+DB_LOCKED_RETRY_BUDGET_SECONDS = (
+    DB_LOCKED_RETRY_ATTEMPTS * SQLITE_BUSY_TIMEOUT_SECONDS
+    + DB_LOCKED_RETRY_BACKOFF_SECONDS
+    * (DB_LOCKED_RETRY_ATTEMPTS * (DB_LOCKED_RETRY_ATTEMPTS - 1) // 2)
+)
 
 
 def record_host_error(host_id, message, attempts=3):
@@ -95,3 +111,178 @@ def _reconcile_host_instances_after_setup(host):
             append_log(host, f"instance id={instance_id} reconciliation failed")
 
     return ok, failed
+
+
+def is_db_locked_error(exc):
+    """True for SQLite's "database is locked" (another writer holds the lock)."""
+    return isinstance(exc, OperationalError) and 'database is locked' in str(exc).lower()
+
+
+def commit_with_retry(apply_changes, attempts=DB_LOCKED_RETRY_ATTEMPTS,
+                      backoff=DB_LOCKED_RETRY_BACKOFF_SECONDS):
+    """Apply changes and commit, retrying while SQLite reports a locked database.
+
+    A failed commit needs a rollback, and the rollback drops the pending
+    changes, so they are passed in as `apply_changes` and re-applied in every
+    attempt. `apply_changes()` runs inside the attempt: after a rollback it
+    reads expired attributes, which can autoflush and hit the lock too.
+
+    `apply_changes()` may return False to skip the write (e.g. the record is
+    no longer eligible on a re-check); the session is rolled back and this
+    returns False. Otherwise it returns True once committed. Any other error,
+    or a lock that outlasts the last attempt, is raised after the rollback,
+    leaving the session usable.
+    """
+    from ui import db
+
+    for attempt in range(1, attempts + 1):
+        try:
+            if apply_changes() is False:
+                db.session.rollback()
+                return False
+            db.session.commit()
+            return True
+        except Exception as exc:
+            db.session.rollback()
+            if not is_db_locked_error(exc) or attempt >= attempts:
+                raise
+            log.warning(
+                "Commit hit a locked database (attempt %s/%s), retrying",
+                attempt, attempts,
+            )
+            time.sleep(backoff * attempt)
+    return False
+
+
+def record_task_failure(apply_changes):
+    """Persist a task's failure state from its except path.
+
+    The exception that got us here may have been the session itself (a
+    failed flush or commit), so roll back first: otherwise the next commit
+    fails with "transaction has been rolled back" and the status is lost.
+    If the failure state still cannot be committed, this raises, so RQ marks
+    the job failed and the job's on_failure handler gets its own chance to
+    move the record out of its transitional status.
+    """
+    from ui import db
+
+    db.session.rollback()
+    commit_with_retry(apply_changes)
+
+
+# Matches the instance restart endpoint (instance_routes.restart_instance_api).
+RESTART_LOCK_TTL_SECONDS = 180
+
+
+def queue_instance_restart(instance, queued_log, fallback_status, context, previous_logs=None,
+                           still_ours=None):
+    """Queue a restart of `instance` the way the restart endpoint does: take
+    the instance lock, save RESTARTING, enqueue with the lock token and
+    instance_job_failure_handler, and release the lock if the enqueue fails.
+
+    Bulk updates (plugins, Workshop) call this for many instances on many
+    hosts at once, so a crashed or timed-out restart job must still land in
+    the failure handler instead of leaving the instance in RESTARTING.
+
+    `still_ours(fresh_instance)` says whether the instance's current row is
+    still what the calling update left it in (Workshop: its own temporary
+    CONFIGURING; plugin updates: the status it read). Without it, or when it
+    says no, another operation changed the instance since the caller read it
+    and owns it now: nothing is written, the restart is not queued.
+
+    If the lock is busy, the instance is left alone unless it is still ours;
+    then it gets `fallback_status` (the caller's own temporary status undone)
+    and a log line saying the restart was not queued. A failed enqueue does
+    the same under the lock. Log lines are prepended to `previous_logs`
+    (default: the instance's current logs). Returns True when the restart was
+    queued.
+    """
+    import uuid
+
+    from ui import db
+    from ui.database import update_instance
+    from ui.models import InstanceStatus, QLInstance
+    from ui.task_lock import acquire_lock, release_lock
+    from ui.tasks import enqueue_task, restart_instance
+    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
+
+    if previous_logs is None:
+        previous_logs = instance.logs or ''
+    instance_id = instance.id
+
+    checked = {}
+
+    def _ours():
+        fresh = db.session.get(QLInstance, instance_id, populate_existing=True)
+        if fresh is None or still_ours is None:
+            return False
+        checked['status'], checked['logs'] = fresh.status, fresh.logs
+        return bool(still_ours(fresh))
+
+    def _write_fallback_if_unchanged(logs):
+        """One conditional UPDATE: only while the row still has the status
+        and logs _ours() just checked. Without the lock another operation
+        (a stop) can commit between that check and this write; then no row
+        matches and its newer state is left intact."""
+        from sqlalchemy import update
+
+        log_matches = (QLInstance.logs.is_(None) if checked['logs'] is None
+                       else QLInstance.logs == checked['logs'])
+        result = db.session.execute(
+            update(QLInstance)
+            .where(QLInstance.id == instance_id)
+            .where(QLInstance.status == checked['status'])
+            .where(log_matches)
+            .values(status=fallback_status, logs=logs)
+            .execution_options(synchronize_session=False)
+        )
+        db.session.commit()
+        db.session.expire_all()
+        return result.rowcount == 1
+
+    lock_token = str(uuid.uuid4())
+    try:
+        locked = acquire_lock('instance', instance_id, lock_token, ttl=RESTART_LOCK_TTL_SECONDS)
+    except Exception:
+        log.warning("%s: could not lock instance %s for a restart", context, instance_id, exc_info=True)
+        locked = False
+    if not locked:
+        if _ours():
+            written = _write_fallback_if_unchanged(
+                f"{context}: another operation holds this instance, restart not queued. "
+                f"Restart it when that operation finishes.\n{previous_logs}"
+            )
+            if not written:
+                log.info("%s: instance %s changed after the check; restart not queued, "
+                         "instance left as it is", context, instance_id)
+        else:
+            log.info("%s: instance %s is busy and was changed by another operation; "
+                     "restart not queued, instance left as it is", context, instance_id)
+        return False
+
+    if not _ours():
+        # The lock was free, but another operation already ran and changed
+        # the instance (a stop, say): restarting it would undo that.
+        release_lock('instance', instance_id, lock_token)
+        log.info("%s: instance %s was changed by another operation; restart not queued",
+                 context, instance_id)
+        return False
+
+    try:
+        update_instance(instance_id, status=InstanceStatus.RESTARTING, logs=f"{queued_log}\n{previous_logs}")
+        enqueue_task(
+            restart_instance,
+            instance_id,
+            lock_token=lock_token,
+            on_failure=instance_job_failure_handler,
+        )
+        return True
+    except Exception as exc:
+        release_lock('instance', instance_id, lock_token)
+        log.warning("%s: could not queue a restart for instance %s", context, instance_id, exc_info=True)
+        update_instance(
+            instance_id,
+            status=fallback_status,
+            logs=f"{context}: could not queue a restart ({exc}). Restart it manually.\n{previous_logs}",
+        )
+        return False
