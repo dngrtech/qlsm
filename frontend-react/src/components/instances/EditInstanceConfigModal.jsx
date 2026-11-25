@@ -77,6 +77,21 @@ const withServerHostname = (serverCfg, hostname) => {
 };
 const setsEqual = (a, b) => a.size === b.size && [...a].every(value => b.has(value));
 
+// `changes` (diffAdminLists output, level 0 = revoke) applied to `entries`.
+const applyAdminChanges = (entries, changes) => {
+  const levels = new Map(changes.map((change) => [change.steam_id64, Number(change.level)]));
+  const next = (entries || [])
+    .filter((entry) => levels.get(entry.steam_id64) !== 0)
+    .map((entry) => (levels.has(entry.steam_id64) ? { ...entry, level: levels.get(entry.steam_id64) } : entry));
+  const present = new Set(next.map((entry) => entry.steam_id64));
+  changes.forEach((change) => {
+    if (Number(change.level) !== 0 && !present.has(change.steam_id64)) {
+      next.push({ steam_id64: change.steam_id64, level: Number(change.level) });
+    }
+  });
+  return next;
+};
+
 function EditInstanceConfigModal({
   isOpen,
   onClose,
@@ -267,6 +282,8 @@ function EditInstanceConfigModal({
   // What the server currently has, for "Save as preset" on an untouched list.
   // Never passed back into OwnerAdminEditor.
   const [loadedAdminEntries, setLoadedAdminEntries] = useState(null);
+  const adminBaselineRef = useRef(null);
+  const adminStagedRef = useRef(null);
   // The admin read (an SSH round trip) starts the moment the modal opens and
   // runs alongside the config load without holding up the spinner. The
   // Owner & Admins tab and Save Preset both await this same request.
@@ -292,6 +309,22 @@ function EditInstanceConfigModal({
       return null;
     }
   }, [adminEntries, adminsPreload, instanceId, loadedAdminEntries]);
+
+  adminBaselineRef.current = loadedAdminEntries;
+  adminStagedRef.current = adminEntries;
+  // A new read of the server's admins (Refresh, or the first read arriving
+  // after a preset load) becomes the baseline. Staged edits are what Save
+  // sends, so they move onto the new baseline as edits: keeping the staged
+  // list as it is would turn every in-game change since the last read into
+  // a change Save makes (a new grant would be revoked).
+  const handleAdminEntriesLoaded = useCallback((next) => {
+    const base = adminBaselineRef.current;
+    const staged = adminStagedRef.current;
+    if (staged !== null && base !== null) {
+      setAdminEntries(applyAdminChanges(next, diffAdminLists(base, staged)));
+    }
+    setLoadedAdminEntries(next);
+  }, []);
 
   const warnIfPresetHasNoAdmins = useCallback((admins) => {
     if (admins === null && instanceId) {
@@ -1421,7 +1454,7 @@ function EditInstanceConfigModal({
                               instanceId={instanceId}
                               adminEntries={adminEntries}
                               onAdminEntriesChange={handleAdminEntriesChange}
-                              onAdminEntriesLoaded={setLoadedAdminEntries}
+                              onAdminEntriesLoaded={handleAdminEntriesLoaded}
                               adminsPreload={adminsPreload}
                             />
                           </div>

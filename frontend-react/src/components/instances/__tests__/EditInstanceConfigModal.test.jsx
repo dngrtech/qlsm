@@ -2259,6 +2259,27 @@ describe('EditInstanceConfigModal preset saving', () => {
       expect(mocks.updateInstanceConfig.mock.calls[0][1]).not.toHaveProperty('admin_changes');
     });
 
+    it('a Refresh after loading a preset keeps an in-game grant (no revocation on Save)', async () => {
+      // The maintainer's sequence: preset admins match live (A=3), B is
+      // granted in-game, Refresh reads A=3 + B=5, Save.
+      const live = [{ steam_id64: '76561198012345678', level: 3 }];
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('admins-preset', {}, {
+        admins: { before: live, after: live },
+      }));
+      renderModal();
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(screen.getByText('seeded:76561198012345678:3')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: 'load-server-admins' }));
+      await waitFor(() => expect(screen.getByText('seeded:76561198087654321:5')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+      await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalled());
+      expect(mocks.updateInstanceConfig.mock.calls[0][1]).not.toHaveProperty('admin_changes');
+    });
+
     it('a preset load with no readable admin list leaves the admins alone', async () => {
       mocks.previewPresetApply.mockResolvedValue(mockPresetPreview(
         'admins-preset', { admin_changes: [{ steam_id64: '76561198000000001', level: 1 }] },
