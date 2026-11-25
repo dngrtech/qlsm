@@ -364,3 +364,60 @@ def test_preview_returns_the_whole_resulting_admin_list(client, headers, env):  
     assert data['admins']['before'] == current
     assert sorted(data['admins']['after'], key=lambda e: e['steam_id64']) == [
         {'steam_id64': '76561198000000001', 'level': 5}, {'steam_id64': '76561198000000002', 'level': 3}]
+
+
+def test_a_save_between_the_preview_diff_and_its_hash_is_not_applied(client, headers, setup):
+    """Diff and hash come from one snapshot: a save landing between the two
+    reads must make the apply refuse, not overwrite what the preview never
+    showed."""
+    from ui.preset_apply import diff_preset_target as real_diff
+
+    instance, preset = setup
+    cfg = os.path.join('configs', instance.host.name, str(instance.id), 'server.cfg')
+
+    def _diff_then_save(*args, **kwargs):
+        diff = real_diff(*args, **kwargs)
+        with open(cfg, 'a', encoding='utf-8') as f:
+            f.write('set g_motd "saved meanwhile"\n')
+        return diff
+
+    with patch('ui.routes.instance_routes.diff_preset_target', side_effect=_diff_then_save):
+        preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=False)
+    assert response.status_code == 409, response.get_json()
+    enqueue.assert_not_called()
+
+
+def test_a_live_admin_level_change_after_the_preview_is_not_applied(client, headers, env):  # noqa: F811
+    """Same delta (A -> 5) against different live levels (3, then 4): the
+    observed levels are part of the hash."""
+    from ui import preset_apply
+
+    host = _host()
+    instance = _instance(host, server_cfg='')
+    preset = _preset(env, admins=[{'steam_id64': '76561198000000001', 'level': 5}])
+    with patch.object(preset_apply, 'read_live_admins',
+                      return_value=([{'steam_id64': '76561198000000001', 'level': 3}], {}, None)):
+        preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    with patch.object(preset_apply, 'read_live_admins',
+                      return_value=([{'steam_id64': '76561198000000001', 'level': 4}], {}, None)):
+        response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=False)
+    assert response.status_code == 409, response.get_json()
+    enqueue.assert_not_called()
+
+
+@pytest.mark.parametrize('status, expected', [('RUNNING', 409), ('UPDATED', 409), ('STOPPED', 202)])
+def test_lan_rate_change_needs_a_restart_on_a_live_server(client, headers, env, status, expected):  # noqa: F811
+    from ui.models import InstanceStatus
+
+    host = _host()
+    instance = _instance(host, server_cfg='', lan_rate_enabled=False, status=InstanceStatus[status])
+    preset = _preset(env, lan_rate_enabled=True)
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=False)
+    assert response.status_code == expected, response.get_json()
+    if expected == 202:
+        assert enqueue.call_args.kwargs['restart'] is False
+    else:
+        enqueue.assert_not_called()
+        assert 'restart' in response.get_json()['error']['message'].lower()

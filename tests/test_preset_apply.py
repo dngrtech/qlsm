@@ -279,13 +279,18 @@ def test_recorded_preset_values_are_carried(env):
     assert os.path.isfile(os.path.join(env, 'qlds-drafts', payload['draft_id'], 'scripts', 'a.py'))
 
 
-def test_unreadable_admin_list_only_adds(env):
+def test_unreadable_admin_list_changes_no_admins(env):
+    """A failed read is not an empty list: absolute levels against it would
+    re-level admins nobody saw. No admin changes for this server, the error
+    is reported, everything else still applies."""
     host = _host()
     instance = _instance(host)
-    preset = _preset(env, admins=[{'steam_id64': '76561198000000001', 'level': 5}])
+    preset = _preset(env, admins=[{'steam_id64': '76561198000000001', 'level': 5}], lan_rate_enabled=True)
     with patch.object(preset_apply, 'read_live_admins', return_value=(None, None, 'unreachable')):
         target = build_preset_target(instance, preset, None, [])
-    assert target['payload']['admin_changes'] == [{'steam_id64': '76561198000000001', 'level': 5}]
+    assert 'admin_changes' not in target['payload']
+    assert target['admins'] == {'before': None, 'after': None, 'error': 'unreachable'}
+    assert target['payload']['lan_rate_enabled'] is True
 
 
 def test_unsupported_lan_rate_is_clamped_off(env):
@@ -600,3 +605,33 @@ def test_target_hash_changes_with_a_preset_hook_binary(env):
     assert target_hash(build_preset_target(instance, preset, None, [])) == first
     _add_preset_hook(preset, 'h.so', b'\x7fELF-2')
     assert target_hash(build_preset_target(instance, preset, None, [])) != first
+
+
+def test_checked_plugin_missing_from_draft_and_pool_is_not_enabled(env):
+    host = _host()
+    instance = _instance(host)
+    preset = _preset(env, scripts={'a.py': '# a\n'}, checked_plugins=['a.py', 'ghost.py'])
+    target = build_preset_target(instance, preset, None, [])
+    assert target['payload']['checked_plugins'] == ['a']
+
+
+def test_hooks_of_a_preset_without_plugin_selection_are_copied(env):
+    """No checked_plugins, but hooks: the hook binaries still arrive, while
+    the server's own scripts and plugin selection stay as they are."""
+    host = _host()
+    instance = _instance(host, qlx_plugins='mine')
+    scripts = os.path.join('configs', host.name, str(instance.id), 'scripts')
+    os.makedirs(scripts)
+    with open(os.path.join(scripts, 'mine.py'), 'w', encoding='utf-8') as f:
+        f.write('# mine\n')
+    preset = _preset(env, scripts={'other.py': '# other\n'}, enabled_hooks=['new.so'])
+    _add_preset_hook(preset, 'new.so')
+    target = build_preset_target(instance, preset, None, [])
+    payload = target['payload']
+    assert 'checked_plugins' not in payload
+    assert payload.get('draft_id')
+    diff = diff_preset_target(instance, target)
+    changes = {e['path']: e['change'] for e in diff['files']}
+    assert changes.get('user-hooks/new.so') == 'added'
+    assert not [p for p in changes if p.startswith('scripts/')]
+    assert diff['hooks']['after'] == ['new.so']

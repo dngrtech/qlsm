@@ -187,10 +187,21 @@ def qlx_plugin_names(checked_paths, scripts_dir, runtime):
     """qlx_plugins names for checked plugin paths (partitionCheckedPaths +
     toQlxPluginNames): root .py files only, minus __init__.py, abstract
     modules and any file a plugin declares in depends_on."""
+    from ui.plugin_pool import list_shared_plugins
+
     libraries = _library_names(scripts_dir, runtime)
+    # A checked name whose file is neither in the draft nor in the shared
+    # pool would end up in qlx_plugins and fail to load on the server.
+    available = set(list_shared_plugins(runtime))
+    try:
+        available.update(
+            name for name in os.listdir(scripts_dir)
+            if os.path.isfile(os.path.join(scripts_dir, name)))
+    except OSError:
+        pass
     names = []
     for path in checked_paths or []:
-        if isinstance(path, str) and _enableable(path, libraries):
+        if isinstance(path, str) and _enableable(path, libraries) and path in available:
             name = path[:-3]
             if name not in names:
                 names.append(name)
@@ -362,19 +373,23 @@ def build_preset_target(instance, preset, accepted_replacements, keep_cvars):
         payload['enabled_hooks'] = preset_payload['enabled_hooks']
     preset_admins = preset_payload.get('admins')
     if isinstance(preset_admins, list):
-        # Unreadable server list: compare against nothing, so the apply only
-        # adds and re-levels and never revokes an admin it could not see.
-        current, _names, _error = read_live_admins(instance)
-        changes = diff_admin_lists(current or [], preset_admins)
-        if changes:
-            payload['admin_changes'] = changes
-        admins = {
-            # The server's list as read here (None when unreadable) and the
-            # list the load leaves, so the editor can show and save the
-            # whole result, not just the changes, even before its own read.
-            'before': current if current is not None else None,
-            'after': apply_admin_changes(current or [], changes),
-        }
+        current, _names, read_error = read_live_admins(instance)
+        if current is None:
+            # Unreadable server list: it is not an empty one. Absolute
+            # levels against it would re-level admins nobody saw, so this
+            # server gets no admin changes; the rest still applies.
+            admins = {'before': None, 'after': None,
+                      'error': read_error or 'The admin list could not be read.'}
+        else:
+            changes = diff_admin_lists(current, preset_admins)
+            if changes:
+                payload['admin_changes'] = changes
+            admins = {
+                # The server's list as read here and the list the load
+                # leaves, so the editor can show and save the whole result.
+                'before': current,
+                'after': apply_admin_changes(current, changes),
+            }
     else:
         admins = None
     if preset_payload.get('lan_rate_enabled') is not None:
@@ -402,6 +417,25 @@ def build_preset_target(instance, preset, accepted_replacements, keep_cvars):
         payload['draft_id'] = draft_id
         payload['checked_plugins'] = qlx_plugin_names(
             checked, _get_draft_scripts_path(draft_id), runtime)
+    elif _preset_has_hook_files(preset):
+        # No plugin selection, but hook binaries: they reach the server
+        # through a preset draft. Its scripts are the server's own, so the
+        # save (which replaces scripts/ with the draft's) changes nothing
+        # there, and without checked_plugins qlx_plugins stays as it is.
+        draft_id, error = create_draft_workspace({
+            'source': 'preset',
+            'preset': preset.name,
+            'target_runtime': runtime,
+            'accepted_replacements': accepted,
+        })
+        if error:
+            raise _draft_error(error)
+        draft_scripts = _get_draft_scripts_path(draft_id)
+        shutil.rmtree(draft_scripts, ignore_errors=True)
+        own_scripts = os.path.join(_instance_config_dir(instance), 'scripts')
+        if os.path.isdir(own_scripts):
+            shutil.copytree(own_scripts, draft_scripts)
+        payload['draft_id'] = draft_id
 
     return {
         'payload': payload,
@@ -411,6 +445,14 @@ def build_preset_target(instance, preset, accepted_replacements, keep_cvars):
         'keep_cvars': keep,
         'needs_decision': _needs_decision(compatibility, accepted, accepted_replacements is not None),
     }
+
+
+def _preset_has_hook_files(preset):
+    hooks = os.path.join(preset.path, 'user-hooks')
+    try:
+        return any(os.path.isfile(os.path.join(hooks, n)) for n in os.listdir(hooks))
+    except OSError:
+        return False
 
 
 def _instance_config_dir(instance):
@@ -446,6 +488,7 @@ def _target_files(instance, payload, work_dir):
     else:
         os.makedirs(copy_dir)
     before = snapshot_dir(copy_dir)
+    observed = {rel: entry['sha256'] for rel, entry in before.items()}
 
     _sync_configs_to_disk(copy_dir, payload['configs'], payload.get('config_folders'))
     if 'factories' in payload:
@@ -462,7 +505,7 @@ def _target_files(instance, payload, work_dir):
             _merge_draft_user_hooks_into_instance(_get_draft_user_hooks_path(draft_id), hooks_dir)
     enabled = payload.get('enabled_hooks')
     after_hooks = None if enabled is None else _filtered_enabled_hooks(enabled, hooks_dir)
-    return diff_snapshots(before, snapshot_dir(copy_dir)), after_hooks
+    return diff_snapshots(before, snapshot_dir(copy_dir)), after_hooks, observed
 
 
 def _admin_part(changes):
@@ -492,7 +535,10 @@ def diff_preset_target(instance, target):
     payload = target['payload']
     work_dir = tempfile.mkdtemp()
     try:
-        files, enabled_hooks = _target_files(instance, payload, work_dir)
+        files, enabled_hooks, observed = _target_files(instance, payload, work_dir)
+        # The preview hash is built from this same snapshot (preview_hash),
+        # so a save landing after it cannot slip past the apply unseen.
+        target['observed_files'] = observed
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -519,14 +565,28 @@ def diff_preset_target(instance, target):
     }
 
 
-def instance_state_hash(instance):
+def _admin_levels(entries):
+    if entries is None:
+        return None
+    return sorted([str(e.get('steam_id64')), int(e.get('level', 0))] for e in entries)
+
+
+def instance_state_hash(instance, admins_before=None, files=None):
     """sha256 of what a preset apply would overwrite on this instance: its
     config directory (every file's content) and the saved settings the
     apply changes. A change by someone else between preview and apply
     makes the apply refuse (409) instead of overwriting it. The status is
-    left out: the runtime reconciliation flips it on its own."""
+    left out: the runtime reconciliation flips it on its own.
+
+    `files` is a snapshot already taken ({rel: sha256}); without it the
+    config dir is read now. `admins_before` is the live admin list the
+    target was built against: the same requested change against other
+    live levels is a different apply."""
+    if files is None:
+        files = {rel: entry['sha256'] for rel, entry in snapshot_dir(_instance_config_dir(instance)).items()}
     state = {
-        'files': {rel: entry['sha256'] for rel, entry in snapshot_dir(_instance_config_dir(instance)).items()},
+        'files': files,
+        'admins': _admin_levels(admins_before),
         'hostname': instance.hostname,
         'qlx_plugins': instance.qlx_plugins,
         'ld_preload_hooks': instance.ld_preload_hooks,
@@ -539,8 +599,10 @@ def instance_state_hash(instance):
 def preview_hash(target, instance):
     """The hash a preview hands out and an apply must match: the target and
     the instance state it was built against."""
-    return hashlib.sha256(
-        f'{target_hash(target)}:{instance_state_hash(instance)}'.encode('utf-8')).hexdigest()
+    state = instance_state_hash(
+        instance, admins_before=(target.get('admins') or {}).get('before'),
+        files=target.get('observed_files'))
+    return hashlib.sha256(f'{target_hash(target)}:{state}'.encode('utf-8')).hexdigest()
 
 
 def target_hash(target):

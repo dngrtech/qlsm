@@ -1325,8 +1325,8 @@ def save_instance_config(instance, data, precondition=None, keep_stopped=False):
         original_hostname = instance.hostname
         original_qlx_plugins = instance.qlx_plugins
         if precondition is not None:
-            check, message = precondition
-            if not check(instance):
+            message = precondition(instance)
+            if message:
                 return jsonify({"error": {"message": message}}), 409
 
         checked_plugins = data.get('checked_plugins')
@@ -1731,20 +1731,29 @@ def apply_instance_preset_api(instance_id):
             return jsonify({"error": {"message": "Plugin compatibility needs a decision"}}), 422
         expected = data.get('preview_hash')
         target_part = target_hash(target)
+        admins_before = (target.get('admins') or {}).get('before')
+        wanted_lan_rate = target['payload'].get('lan_rate_enabled')
 
-        def _unchanged_since_preview(locked_instance):
+        def _check_under_lock(locked_instance):
             # Under the instance lock, on the re-read row: nothing another
             # operator saved since the preview may be overwritten.
-            return hashlib.sha256(
-                f'{target_part}:{instance_state_hash(locked_instance)}'.encode('utf-8')
-            ).hexdigest() == expected
+            state = instance_state_hash(locked_instance, admins_before=admins_before)
+            if hashlib.sha256(f'{target_part}:{state}'.encode('utf-8')).hexdigest() != expected:
+                return "Preset or server changed since the preview. Preview again."
+            # A running server keeps its launch flags until it restarts:
+            # switching 99k LAN rate without one would leave the network
+            # rules and the process disagreeing. A stopped one picks it up
+            # when it starts.
+            if (wanted_lan_rate is not None
+                    and bool(wanted_lan_rate) != bool(locked_instance.lan_rate_enabled)
+                    and locked_instance.status != InstanceStatus.STOPPED
+                    and not restart):
+                return "Changing 99k LAN rate on a running server needs a restart. Apply it with restart."
+            return None
 
         response, status = save_instance_config(
             instance, {**target['payload'], 'restart': restart},
-            precondition=(
-                _unchanged_since_preview,
-                "Preset or server changed since the preview. Preview again.",
-            ),
+            precondition=_check_under_lock,
             # The preset apply never starts a stopped server.
             keep_stopped=True,
         )
