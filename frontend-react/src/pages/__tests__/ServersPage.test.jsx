@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   NullComponent: () => null,
   RconConsole: vi.fn(() => null),
   RuntimeUpgradeDialog: vi.fn(),
+  BulkModal: vi.fn(),
   serversData: [],
   stats: { totalHosts: 1, totalInstances: 0, runningInstances: 0 },
 }));
@@ -210,6 +211,12 @@ vi.mock('../../components/RconConsoleModal', () => ({ default: mocks.RconConsole
 vi.mock('../../components/instances/LiveServerStatusModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/hosts/ForceUpdateWorkshopModal', () => ({ default: mocks.NullComponent }));
 vi.mock('../../components/hosts/HostAutoRestartScheduleModal', () => ({ default: mocks.NullComponent }));
+vi.mock('../../components/bulk/BulkActionsModal', () => ({
+  default: (props) => {
+    mocks.BulkModal(props);
+    return props.isOpen ? <div>bulk-actions-dialog</div> : null;
+  },
+}));
 
 describe('ServersPage', () => {
   beforeEach(() => {
@@ -243,6 +250,22 @@ describe('ServersPage', () => {
     expect(screen.getByRole('img', { name: 'QLFilter enabled' })).toHaveAttribute(
       'src',
       '/images/qlfilter-on.png'
+    );
+  });
+
+  it('shows a Bulk actions button that opens the dialog with the hosts', async () => {
+    render(
+      <MemoryRouter>
+        <ServersPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByText('bulk-actions-dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Bulk actions/ }));
+
+    expect(await screen.findByText('bulk-actions-dialog')).toBeInTheDocument();
+    expect(mocks.BulkModal).toHaveBeenCalledWith(
+      expect.objectContaining({ isOpen: true, hosts: mocks.serversData }),
     );
   });
 

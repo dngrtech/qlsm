@@ -1286,18 +1286,18 @@ def create_preset_api():
         return jsonify({"error": {"message": f"Error creating preset: {str(e)}"}}), 500
 
 
-@preset_api_bp.route('/<int:preset_id>', methods=['GET'], endpoint='get_preset_api')
-@jwt_required()
-def get_preset_api(preset_id):
-    """Returns a specific configuration preset with config content (reads from filesystem)."""
-    preset = get_preset(preset_id)
-    if not preset:
-        return jsonify({"error": {"message": "Preset not found."}}), 404
+def read_preset_payload(preset, target_runtime=None):
+    """Build the preset payload (metadata, configs, scripts, plugins...) from disk.
 
+    Raises FileNotFoundError when the preset folder is missing and ValueError
+    for an invalid target_runtime.
+    """
     # Check if preset folder exists
     if not os.path.exists(preset.path):
-        current_app.logger.error(f"Preset folder missing for preset {preset_id}: {preset.path}")
-        return jsonify({"error": {"message": "Preset configuration files not found."}}), 500
+        raise FileNotFoundError(preset.path)
+
+    if target_runtime is not None and not is_valid_runtime(target_runtime):
+        raise ValueError("Invalid target_runtime.")
 
     # Build response with metadata, config content, and scripts
     response_data = preset.to_dict()
@@ -1314,11 +1314,25 @@ def get_preset_api(preset_id):
     # Optional: classify this preset's plugins against the runtime of the host
     # it is about to be loaded onto. Absent, or equal to the preset's own
     # runtime, and the response is exactly what it has always been.
-    target_runtime = request.args.get('target_runtime')
-    if target_runtime is not None and not is_valid_runtime(target_runtime):
+    return apply_compatibility(response_data, preset.runtime, target_runtime)
+
+
+@preset_api_bp.route('/<int:preset_id>', methods=['GET'], endpoint='get_preset_api')
+@jwt_required()
+def get_preset_api(preset_id):
+    """Returns a specific configuration preset with config content (reads from filesystem)."""
+    preset = get_preset(preset_id)
+    if not preset:
+        return jsonify({"error": {"message": "Preset not found."}}), 404
+
+    try:
+        response_data = read_preset_payload(
+            preset, request.args.get('target_runtime'))
+    except FileNotFoundError:
+        current_app.logger.error(f"Preset folder missing for preset {preset_id}: {preset.path}")
+        return jsonify({"error": {"message": "Preset configuration files not found."}}), 500
+    except ValueError:
         return jsonify({"error": {"message": "Invalid target_runtime."}}), 400
-    response_data = apply_compatibility(
-        response_data, preset.runtime, target_runtime)
 
     return jsonify({"data": response_data})
 

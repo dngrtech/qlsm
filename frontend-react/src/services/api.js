@@ -707,6 +707,38 @@ export const importPreset = async (file, { name, overwritePresetId } = {}) => {
   }
 };
 
+// Preset apply: loading a preset into an existing instance, computed by the server.
+export const getPresetKeepCvars = async (instanceId, presetId) => {
+  try {
+    const response = await apiClient.get(`/instances/${instanceId}/preset-keep-cvars?preset_id=${encodeURIComponent(presetId)}`);
+    return response.data.data; // [{ cvar, sources }]
+  } catch (error) {
+    console.error(`Failed to get keep cvars for instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to get keep cvars for instance ${instanceId}`);
+  }
+};
+
+export const previewPresetApply = async (instanceId, body) => {
+  try {
+    const response = await apiClient.post(`/instances/${instanceId}/preset-preview`, body);
+    return response.data.data; // { compatibility, needs_decision, keep_cvars, kept_cvars, diff, preview_hash, target }
+  } catch (error) {
+    console.error(`Failed to preview preset for instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    throw error.response ? error.response.data : new Error(`Failed to preview preset for instance ${instanceId}`);
+  }
+};
+
+export const applyPresetToInstance = async (instanceId, body) => {
+  try {
+    const response = await apiClient.post(`/instances/${instanceId}/apply-preset`, body);
+    return response.data; // the PUT /instances/<id>/config response body
+  } catch (error) {
+    console.error(`Failed to apply preset to instance ${instanceId}:`, error.response ? error.response.data : error.message);
+    // The status tells a locked instance (409) apart from other failures.
+    throw error.response ? { ...error.response.data, status: error.response.status } : new Error(`Failed to apply preset to instance ${instanceId}`);
+  }
+};
+
 // Validate preset name availability
 export const validatePresetName = async (name) => {
   try {

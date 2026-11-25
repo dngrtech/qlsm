@@ -372,6 +372,37 @@ def register(ctx):
   partial result the way the rest of the addon does (the instance log, the
   addon's own status), not by raising.
 
+### Preset load (`preset.keep_cvars`)
+
+Loading a preset into a server (the config editor's **Load preset**, or
+`POST /api/instances/<id>/apply-preset`) replaces the server's `server.cfg`
+with the preset's, except for the cvars that belong to that server alone.
+Core keeps the server's own value for everything it sets on its launch line
+and for the plugin cvars marked `per_server` in a plugin manifest; this hook
+adds the names an addon reserves for the server (an id it hands out per
+instance, say):
+
+```python
+from ui.addons.hooks import HOOK_SCOPES
+
+def register(ctx):
+    if 'preset.keep_cvars' in HOOK_SCOPES:         # older cores lack it
+        @ctx.on('preset.keep_cvars')
+        def keep(instance):
+            return ['qlx_myAddonServerId']
+```
+
+- Scope `instance`, called with the instance; returns a list of cvar names.
+  It is a list hook: core asks each addon on its own (`dispatch_by_addon`)
+  so the preview can say which addon asked for each cvar, and only an addon
+  enabled for this instance is asked.
+- Names compare case-insensitively. Anything in the list that is not a
+  non-empty string is ignored, and `qlx_plugins` is never kept: the plugin
+  list is what a preset load is for.
+- A kept cvar keeps the `set` lines it has in the server's current
+  `server.cfg`; a server with no line for it gets none from the preset either.
+- A handler that raises is logged and skipped; the preset still loads.
+
 ## UI, tier 2 — the addon's own component
 
 Build it yourself and ship the built file in `ui/`:

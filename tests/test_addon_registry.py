@@ -460,6 +460,27 @@ def test_dispatch_each_gives_every_addon_its_own_arguments(addon_app):
     assert results == [('alpha', 7, {'token': 'a-secret'}), ('beta', 7, {'on': True})]
 
 
+def test_dispatch_by_addon_pairs_each_result_with_its_addon(addon_app):
+    build, packages, _ = addon_app
+    for addon_id in ('alpha', 'beta'):
+        write_addon(packages, addon_id, manifest={'id': addon_id, 'version': '1.0.0'}, backend='''
+            def register(ctx):
+                @ctx.on('preset.keep_cvars')
+                def keep(instance):
+                    return [ctx.addon_id + "_cvar", "second"]
+        ''')
+    write_addon(packages, 'angry', manifest={'id': 'angry', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('preset.keep_cvars')
+            def boom(instance):
+                raise RuntimeError("hook exploded")
+    ''')
+    app = build()
+    with app.app_context(), patch.object(registry, '_gates_open', return_value=True):
+        results = registry.dispatch_by_addon('preset.keep_cvars', 1, object())
+    assert results == [('alpha', ['alpha_cvar', 'second']), ('beta', ['beta_cvar', 'second'])]
+
+
 def test_dispatch_each_reports_a_raising_handler_and_carries_on(addon_app):
     build, packages, _ = addon_app
     write_addon(packages, 'angry', manifest={'id': 'angry', 'version': '1.0.0'}, backend='''
@@ -499,3 +520,39 @@ def test_instance_created_fires_for_a_globally_disabled_addon(addon_app):
     with app.app_context():
         assert registry.get_addon('quiet').globally_enabled is False
         assert registry.dispatch('instance.created', 3, 3, {}) == [3]
+
+
+def test_dispatch_by_addon_shares_the_slow_handler_warning(addon_app):
+    build, packages, _ = addon_app
+    write_addon(packages, 'slow', manifest={'id': 'slow', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('preset.keep_cvars')
+            def keep(instance):
+                return ["a"]
+    ''')
+    app = build()
+    with app.app_context(), patch.object(registry, '_gates_open', return_value=True), \
+            patch.dict(registry.SLOW_HANDLER_SECONDS, {'preset.keep_cvars': -1}), \
+            patch.object(registry, 'log') as log:
+        assert registry.dispatch_by_addon('preset.keep_cvars', 1, object()) == [('slow', ['a'])]
+    assert any('took' in str(call.args[0]) for call in log.warning.call_args_list)
+
+
+def test_dispatch_by_addon_runs_on_error_and_redacts_keep_cvars(addon_app):
+    build, packages, _ = addon_app
+    write_addon(packages, 'angry', manifest={'id': 'angry', 'version': '1.0.0'}, backend='''
+        def register(ctx):
+            @ctx.on('preset.keep_cvars')
+            def boom(instance):
+                raise RuntimeError("secret-token-123")
+    ''')
+    app = build()
+    failed = []
+    with app.app_context(), patch.object(registry, '_gates_open', return_value=True), \
+            patch.object(registry, 'log') as log:
+        assert registry.dispatch_by_addon(
+            'preset.keep_cvars', 1, object(),
+            on_error=lambda addon_id, exc: failed.append(addon_id)) == []
+    assert failed == ['angry']
+    logged = ' '.join(str(a) for call in log.method_calls for a in call.args)
+    assert 'RuntimeError' in logged and 'secret-token-123' not in logged

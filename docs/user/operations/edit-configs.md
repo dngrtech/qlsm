@@ -237,6 +237,44 @@ Saving writes each edited cvar as a `set <cvar> "<value>"` line into `server.cfg
 This is available both when editing an existing instance's config and when deploying a new instance.
 
 
+## Load Preset
+
+**Load preset** in the config editor fills the form with a preset's configs, factories and plugin selection. A few values belong to the server, not to the preset, so the server keeps its own for them:
+
+- everything QLSM sets on the server's launch line: `sv_hostname`, the ports, the `zmq_` and Redis settings and the rest of the [managed cvars](#managed-servercfg-cvars). `qlx_plugins` is not among them: the plugin list comes from the preset.
+- cvars an addon reserves for the server. An addon declares them through the `preset.keep_cvars` hook (see the addons README).
+- plugin cvars the plugin's manifest marks `"per_server": true`, for settings that must differ on every server:
+
+```json
+{ "cvar": "qlx_myServerId", "label": "Server id", "type": "string", "default": "", "per_server": true }
+```
+
+For each of these cvars the server keeps the `set` lines it has in its own `server.cfg`; a cvar the server has no line for gets none from the preset. Only plugins enabled on the server or ticked in the preset are read for `per_server`.
+
+A hostname you typed into the **Hostname** field before loading is kept as well.
+
+A legacy preset without a recorded plugin selection keeps the server’s enabled plugins and scripts. It can still add bundled hook files.
+
+A preset with an admin list no longer replaces the server's admins: QLSM compares it with the list it reads from the server, and **Owner & Admins** then shows the server's admins with the preset's changes applied (added, re-levelled, and removed where the preset leaves someone out). Save writes only those changes. If the server's admin list cannot be read, the preset's admins are not loaded and you are told so; the rest of the preset still loads.
+
+While a preset is loading, **Load** is disabled; only the last load you started is applied, and a load still running when you close the editor is dropped. **Save Configuration** stays disabled until the preset's plugin list has been matched to its files.
+
+## Bulk actions: Apply preset
+
+**Bulk actions** in the header of the **Servers** page, tab **Apply preset**, loads one preset into many servers at once. It works like [Load Preset](#load-preset) for each server, with a preview before anything is changed.
+
+![Bulk Actions Apply preset tab with a preview for two servers](../images/bulk-actions-apply-preset.png)
+
+1. Choose a preset, then select the servers. A host checkbox selects all of its servers. Only servers on **Active** hosts can be selected.
+2. **Keep each server's own value of** lists the cvars collected across the selected servers, with their sources. Each server keeps the cvars collected for it and any names you add. If a kept cvar has no line in that server’s `server.cfg`, the preset’s line is omitted. Clear a cvar’s checkbox to use the preset’s value. If a server’s list fails to load, use **Retry** before previewing. The preset controls `qlx_plugins`.
+3. Click **Preview**. Review the plugin and hook changes, admin changes, 99k LAN rate, and file diffs for each server. QLSM skips rows marked **no changes**.
+4. If the preset contains incompatible plugins, QLSM asks you to review them once per runtime. The dialog also lists plugins that will be dropped because no replacement exists. Cancelling leaves the affected servers unapplied.
+5. Set **Restart servers to apply**, then click **Apply**. The restart setting starts off when **Defer restarts** is on or QLSM cannot read that setting. A 99k LAN rate change requires the restart option for servers that are still running. Hook changes, including reordering, can force a restart even with the option cleared. Review the restart count and click **Restart and apply** to confirm. Stopped servers stay stopped. If QLSM cannot read a server’s admin list, it skips the admin changes and reports this on the row.
+
+Changing the preset, the ticked servers or the kept cvars discards the previews, so preview again before applying. Up to four servers are previewed or applied at a time.
+
+Each server reports on its own row, and a failure on one does not stop the others: **queued** means the change was sent, **busy** means the server is already being changed, and **preview again** means the preset or the server changed after the preview, so no changes were made and **Apply** does not send it again. Run **Preview** again, then **Apply**. The dialog cannot be closed while an apply is running.
+
 ## Factories
 
 The **Factories** tab controls factory files included in the deployment bundle.

@@ -66,6 +66,13 @@ HOOK_SCOPES = {
     # is still created.
     'instance.created': None,
     'instance.delete': None,   # cleanup must run even for a disabled addon
+    # Asked by the server-side preset apply (ui/preset_keep_cvars.py) with the
+    # instance: returns the names of cvars that are this server's own and a
+    # preset must not overwrite (an id the addon reserved for it, say). Core
+    # dispatches it per addon (dispatch_by_addon) so the preview can say which
+    # addon asked for each one. Gated at 'instance' like the other
+    # instance-level contributions: a disabled addon keeps nothing.
+    'preset.keep_cvars': 'instance',
     # backup: one hook, not two -- backup_files.backup_file_trees() feeds both
     # the export and the restore, so a tree contributed once is handled in
     # both directions.
@@ -127,6 +134,7 @@ LIST_HOOKS = frozenset({
     'instance.launch_args',
     'instance.plugins',
     'instance.ld_preload',
+    'preset.keep_cvars',
     'backup.export',
     'demo_management.file_kinds',
     'demo_management.match_groups',

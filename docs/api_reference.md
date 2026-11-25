@@ -678,6 +678,9 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 | `/instances/<id>/config` | GET | Get instance config files |
 | `/instances/<id>/config` | PUT | Update config and apply (triggers Ansible sync) |
 | `/instances/<id>/pending-changes` | GET | Changes synced without a restart, not live yet |
+| `/instances/<id>/preset-keep-cvars` | GET | Cvars a preset apply can keep on this instance (`?preset_id=`) |
+| `/instances/<id>/preset-preview` | POST | Diff of loading a preset into this instance; changes nothing |
+| `/instances/<id>/apply-preset` | POST | Load a preset into this instance as a config save |
 | `/instances/<id>/hooks` | GET | List available LD_PRELOAD hook shared objects |
 | `/instances/<id>/hooks/files` | POST | Upload a new hook `.so` file |
 | `/instances/<id>/hooks/files/<filename>` | GET/PUT/PATCH/DELETE | Download, replace, rename, or delete a hook file |
@@ -810,6 +813,39 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 `config_folders` is returned alongside the flat `configs` map. It lists every managed subfolder present in the instance config directory, nested up to 3 levels deep (excluding the reserved `scripts`, `factories`, and `user-hooks` folders).
 
 `PUT /instances/<id>/config` accepts the same generic `configs` map plus optional top-level `name`, `hostname`, `lan_rate_enabled`, `checked_plugins`, `draft_id`, `enabled_hooks`, `factories`, `config_folders`, and `restart`. When `configs` is present, QLSM syncs the managed config set and removes unprotected `.cfg`/`.txt` files omitted from the map. When `config_folders` is present, QLSM reconciles subfolders at any depth up to 3 levels: creating any listed that are missing, and removing any that are no longer listed (provided they contain only managed `.ent`/`.cfg`/`.txt` files — folders with unmanaged content are preserved). When `config_folders` is omitted entirely, existing subfolders are left untouched. When `factories` is omitted, existing factories are preserved; when it is present, omitted `.factories` files are removed. When `draft_id` is present, its `user-hooks/` directory is copied into the instance's `user-hooks/` directory. When `enabled_hooks` is present (typically from a loaded preset), `ld_preload_hooks` is fully replaced with that list filtered to hooks that actually exist on disk after the copy — same replace-on-load semantics as `checked_plugins`/`checked_factories`. When `enabled_hooks` is omitted, the instance's current hook enablement (managed separately via the Hooks tab) is left untouched.
+
+### Preset Apply (GET preset-keep-cvars, POST preset-preview, POST apply-preset)
+
+Server-side "Load preset" for one instance, the same result as loading the preset in the config editor.
+
+`GET /instances/<id>/preset-keep-cvars?preset_id=<n>` returns `{"data": [{"cvar": "sv_tags", "sources": ["launch args", "addon:<id>", "plugin:<file>"]}]}`: the cvars whose `server.cfg` lines the instance keeps instead of the preset's. 404 for an unknown instance or preset.
+
+`POST /instances/<id>/preset-preview` takes `{"preset_id": 1, "accepted_replacements": [], "keep_cvars": [], "keep_draft": false}`. Only `preset_id` is required. `accepted_replacements` and `keep_cvars` must be lists of strings (omit `keep_cvars` to use the collected list). Omitting `accepted_replacements` (or `null`) means no decision has been taken yet, so `needs_decision` is true while a stripped plugin with a replacement is not auto-accepted. Sending a list, even `[]`, is the operator's decision: `needs_decision` is false, the listed paths are taken and every other replacement is declined (that plugin is dropped). It changes nothing and returns:
+
+```json
+{
+  "data": {
+    "compatibility": {},
+    "needs_decision": false,
+    "keep_cvars": ["sv_tags"],
+    "kept_cvars": ["sv_tags"],
+    "diff": {"files": [], "plugins": null, "hooks": null, "admins": null, "lan_rate": null, "unchanged": true},
+    "preview_hash": "<sha256>",
+    "admins": null,
+    "target": {"hostname": "...", "configs": {}, "config_folders": [], "factories": {}}
+  }
+}
+```
+
+`target` is a `PUT /instances/<id>/config` body. With `keep_draft: true`, the response includes a `draft_id` if QLSM created a draft. Otherwise, QLSM deletes any temporary draft before responding. A legacy preset without `checked_plugins` preserves the instance's plugin selection and scripts. If that preset bundles hook files, QLSM uses a draft to copy the hooks while preserving those scripts.
+
+When a preset includes admins, `admins.before` and `admins.after` report the live and resulting lists. If QLSM cannot read the live list, both are `null`, `admins.error` explains the failure, and QLSM skips the admin changes.
+
+`POST /instances/<id>/apply-preset` requires `preset_id`, a boolean `restart`, and the `preview_hash` from the preview. Send the same `accepted_replacements` and `keep_cvars` choices used in that preview. Set `confirm_restart: true` after the operator confirms a restart. It defaults to `false`. A hook change can force a restart on a running or Updated instance even with `restart: false`. Stopped instances stay stopped.
+
+A successful apply returns 202. It returns 409 if the preset or server state has changed, if a restart would be queued without confirmation, or if a 99k LAN rate change on a non-stopped instance is requested with `restart: false`. It also returns 409 if another operation holds the instance. An unresolved plugin compatibility decision returns 422.
+
+Both preview and apply return 400 for a malformed body, 404 for an unknown instance or preset, and 409 while the host is being set up.
 
 ### Pending Changes (GET /instances/<id>/pending-changes)
 
