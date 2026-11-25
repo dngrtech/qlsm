@@ -60,7 +60,7 @@ def instance_job_failure_handler(job: Job, connection, type, value, traceback):
                 )
                 return
 
-            from ui.task_lock import lock_superseded
+            from ui.task_lock import lock_superseded, release_lock
             if lock_superseded('instance', instance_id, lock_token):
                 log.info(f"Instance {instance_id} lock held by a newer operation, skipping failure handling for job {job.id}")
                 return
@@ -74,23 +74,40 @@ def instance_job_failure_handler(job: Job, connection, type, value, traceback):
                 InstanceStatus.STOPPING,
                 InstanceStatus.DELETING,
             ]
-            
-            if instance.status in transitional_states:
-                error_message = f"Job {job.id} failed: {type.__name__}: {value}"
+            error_message = f"Job {job.id} failed: {type.__name__}: {value}"
+            skip_reason = {}
 
-                def _mark_failed():
-                    append_log(instance, f"Task failed (timeout or crash): {error_message}")
-                    instance.status = InstanceStatus.ERROR
+            def _mark_failed():
+                # Re-checked on every attempt: during a retry backoff a newer
+                # operation can take the lock and save its own status, which
+                # this stale callback must not overwrite with ERROR.
+                if lock_superseded('instance', instance_id, lock_token):
+                    skip_reason['why'] = 'superseded'
+                    return False
+                current = db.session.get(QLInstance, instance_id)
+                if current is None:
+                    skip_reason['why'] = 'gone'
+                    return False
+                if current.status not in transitional_states:
+                    skip_reason['why'] = current.status.value
+                    return False
+                append_log(current, f"Task failed (timeout or crash): {error_message}")
+                current.status = InstanceStatus.ERROR
 
-                commit_with_retry(_mark_failed)
-                log.info(f"Instance {instance_id} status updated to ERROR by failure handler")
-            else:
-                log.info(f"Instance {instance_id} already in terminal state {instance.status.value}, skipping update")
-
-            # Release entity lock if token is available (safety net)
-            if lock_token:
-                from ui.task_lock import release_lock
-                release_lock('instance', instance_id, lock_token)
+            try:
+                if commit_with_retry(_mark_failed):
+                    log.info(f"Instance {instance_id} status updated to ERROR by failure handler")
+                elif skip_reason.get('why') == 'superseded':
+                    log.info(f"Instance {instance_id} lock held by a newer operation, skipping failure handling for job {job.id}")
+                    return
+                else:
+                    log.info(f"Instance {instance_id} not in a transitional state ({skip_reason.get('why')}), skipping update")
+            finally:
+                # Release entity lock if token is available (safety net). It
+                # runs even when the status could not be saved; a newer owner's
+                # lock is left alone.
+                if lock_token and skip_reason.get('why') != 'superseded':
+                    release_lock('instance', instance_id, lock_token)
 
     except Exception as e:
         log.exception(f"Error in job failure handler for instance {instance_id}: {e}")
@@ -140,33 +157,42 @@ def host_job_failure_handler(job: Job, connection, type, value, traceback):
                 HostStatus.DELETING,
                 HostStatus.CONFIGURING,
             ]
-            
-            if host.status in transitional_states:
-                error_message = f"Job {job.id} failed: {type.__name__}: {value}"
-
-                def _mark_failed():
-                    append_log(host, f"Task failed (timeout or crash): {error_message}")
-                    host.status = HostStatus.ERROR
-
-                commit_with_retry(_mark_failed)
-                log.info(f"Host {host_id} status updated to ERROR by failure handler")
-            else:
-                log.info(f"Host {host_id} already in terminal state {host.status.value}, skipping update")
-
-            # Release rerun instance locks before the host lock so a crashed
-            # worker does not leave the next setup attempt blocked until TTL.
+            error_message = f"Job {job.id} failed: {type.__name__}: {value}"
             lock_token = job.meta.get('lock_token') if job.meta else None
             locked_instance_ids = (
                 job.meta.get('locked_instance_ids', []) if job.meta else []
             )
-            if lock_token:
-                from ui.task_lock import release_lock, release_locks
-                release_locks(
-                    'instance',
-                    locked_instance_ids,
-                    lock_token,
-                )
-                release_lock('host', host_id, lock_token)
+            skip_reason = {}
+
+            def _mark_failed():
+                # Status re-read on every attempt, like the instance handler.
+                current = db.session.get(Host, host_id)
+                if current is None:
+                    skip_reason['why'] = 'gone'
+                    return False
+                if current.status not in transitional_states:
+                    skip_reason['why'] = current.status.value
+                    return False
+                append_log(current, f"Task failed (timeout or crash): {error_message}")
+                current.status = HostStatus.ERROR
+
+            try:
+                if commit_with_retry(_mark_failed):
+                    log.info(f"Host {host_id} status updated to ERROR by failure handler")
+                else:
+                    log.info(f"Host {host_id} not updated by failure handler ({skip_reason.get('why')})")
+            finally:
+                # Release rerun instance locks before the host lock so a crashed
+                # worker does not leave the next setup attempt blocked until TTL.
+                # Token-checked releases, run even when the status save failed.
+                if lock_token:
+                    from ui.task_lock import release_lock, release_locks
+                    release_locks(
+                        'instance',
+                        locked_instance_ids,
+                        lock_token,
+                    )
+                    release_lock('host', host_id, lock_token)
 
     except Exception as e:
         log.exception(f"Error in job failure handler for host {host_id}: {e}")

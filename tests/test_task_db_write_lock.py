@@ -251,3 +251,102 @@ def test_deploy_raises_when_error_status_cannot_be_saved(
 
     assert mock_session.rollback.call_count >= 1
     assert instance.status == InstanceStatus.ERROR
+
+
+def test_commit_with_retry_retries_a_lock_hit_while_applying_changes():
+    """After a rollback, apply_changes() reads expired attributes and the
+    autoflush can hit the lock before commit(); that attempt is retried too."""
+    apply_changes = MagicMock(side_effect=[_locked_error(), None])
+    with patch.object(common.time, 'sleep') as sleep, \
+            patch('ui.db.session') as session:
+        assert common.commit_with_retry(apply_changes) is True
+
+    assert apply_changes.call_count == 2
+    session.commit.assert_called_once()
+    session.rollback.assert_called_once()
+    sleep.assert_called_once()
+
+
+def test_commit_with_retry_skips_the_write_when_apply_changes_declines():
+    with patch('ui.db.session') as session:
+        assert common.commit_with_retry(MagicMock(return_value=False)) is False
+
+    session.commit.assert_not_called()
+    session.rollback.assert_called_once()
+
+
+def test_failure_callback_timeout_covers_the_retry_budget():
+    from rq.job import Callback
+    from ui import tasks
+    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
+
+    assert tasks.FAILURE_CALLBACK_TIMEOUT > common.DB_LOCKED_RETRY_BUDGET_SECONDS
+    queue = MagicMock()
+    with patch.object(tasks.restart_instance.helper.rq, 'get_queue', return_value=queue):
+        tasks.enqueue_task(tasks.restart_instance, 7, lock_token='tok',
+                           on_failure=instance_job_failure_handler)
+
+    on_failure = queue.enqueue_call.call_args.kwargs['on_failure']
+    assert isinstance(on_failure, Callback)
+    assert on_failure.func is instance_job_failure_handler
+    assert on_failure.timeout == tasks.FAILURE_CALLBACK_TIMEOUT
+
+
+def test_delete_saves_error_when_the_pre_playbook_commit_is_locked(file_db):
+    """The runner commits before ansible starts; if that commit hits a lock,
+    the instance must leave DELETING so the operator can retry the delete."""
+    from ui.task_logic.ansible_instance_mgmt import delete_instance_logic
+
+    host = create_host(name='del-host', provider='vultr', region='ewr',
+                       machine_size='vhf-2c-2gb', status=HostStatus.ACTIVE,
+                       ip_address='10.0.0.1', ssh_user='root', ssh_key_path='key.pem')
+    instance = create_instance('del-inst', host.id, 27960, 'Delete test')
+    instance.status = InstanceStatus.DELETING
+    db.session.commit()
+    instance_id = instance.id
+
+    with patch(f'{TASK_LOGIC_MODULE}.get_current_job', return_value=MagicMock(id='job-del')), \
+            patch(f'{TASK_LOGIC_MODULE}._run_ansible_playbook', side_effect=_locked_error()):
+        result = delete_instance_logic(instance_id)
+
+    assert 'deletion' in result
+    db.session.expire_all()
+    saved = db.session.get(QLInstance, instance_id)
+    assert saved.status == InstanceStatus.ERROR
+    assert 'database is locked' in saved.logs
+
+
+def _restart_instance_row():
+    host = create_host(name='rs-host', provider='vultr', region='ewr',
+                       machine_size='vhf-2c-2gb', status=HostStatus.ACTIVE,
+                       ip_address='10.0.0.1', ssh_user='root', ssh_key_path='key.pem')
+    instance = create_instance('rs-inst', host.id, 27960, 'Restart test')
+    instance.status = InstanceStatus.RUNNING
+    db.session.commit()
+    return instance
+
+
+def test_bulk_restart_leaves_a_busy_instance_alone(file_db):
+    instance = _restart_instance_row()
+    with patch('ui.task_lock.acquire_lock', return_value=False), \
+            patch('ui.tasks.enqueue_task') as enqueue:
+        assert common.queue_instance_restart(
+            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied') is False
+
+    enqueue.assert_not_called()
+    assert instance.status == InstanceStatus.RUNNING
+    assert 'restart not queued' in instance.logs
+
+
+def test_bulk_restart_releases_the_lock_when_enqueue_fails(file_db):
+    instance = _restart_instance_row()
+    with patch('ui.task_lock.acquire_lock', return_value=True), \
+            patch('ui.task_lock.release_lock') as release, \
+            patch('ui.tasks.enqueue_task', side_effect=RuntimeError('redis down')):
+        assert common.queue_instance_restart(
+            instance, 'queued', InstanceStatus.RUNNING, 'Plugin updates applied') is False
+
+    release.assert_called_once()
+    assert release.call_args.args[:2] == ('instance', instance.id)
+    assert instance.status == InstanceStatus.RUNNING
+    assert 'could not queue a restart' in instance.logs

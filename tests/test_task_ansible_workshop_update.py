@@ -6,8 +6,20 @@ from ui.database import create_host, get_host, get_instance
 
 @pytest.fixture
 def mock_restart_instance_queue():
-    with patch('ui.tasks.restart_instance.queue') as mock:
+    # Restarts go through enqueue_task under the instance lock
+    # (common.queue_instance_restart); yields the enqueue_task mock.
+    with patch('ui.task_lock.acquire_lock', return_value=True),             patch('ui.task_lock.release_lock'),             patch('ui.tasks.enqueue_task') as mock:
         yield mock
+
+def _assert_restart_queued(enqueue, instance_id):
+    from ui.tasks import restart_instance
+    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
+    enqueue.assert_called_once()
+    args, kwargs = enqueue.call_args
+    assert args == (restart_instance, instance_id)
+    assert kwargs['lock_token']
+    assert kwargs['on_failure'] is instance_job_failure_handler
+
 
 @pytest.fixture
 def mock_run_playbook():
@@ -78,7 +90,7 @@ def test_force_update_workshop_success_with_restarts(app, mock_run_playbook, moc
         
         assert result is True
         mock_run_playbook.assert_called_once()
-        mock_restart_instance_queue.assert_called_once_with(inst1_id) # Should only queue inst-1 since inst-2 is STOPPED
+        _assert_restart_queued(mock_restart_instance_queue, inst1_id) # Should only queue inst-1 since inst-2 is STOPPED
         
         updated_host = get_host(host_id)
         assert updated_host.status == HostStatus.ACTIVE

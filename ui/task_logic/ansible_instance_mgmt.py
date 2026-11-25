@@ -889,18 +889,12 @@ def delete_instance_logic(instance_id):
 
     except Exception as e:
         log.exception(f"Outer exception in delete_instance for instance_id {instance_id}: {e}")
-        # Attempt to set ERROR status if instance object exists and DB delete hasn't happened
-        # This part is tricky because the DB delete might have failed above.
+        # The row was not deleted (the delete commit is the last step of the
+        # try), so leave DELETING for ERROR: RQ sees a returned job as a
+        # success, and an instance left in DELETING answers every later
+        # DELETE with 409. ERROR lets the operator retry the deletion.
         if instance:
-            failure_message = f"Task failed with outer exception: {e}"
-
-            def _mark_failed():
-                # Avoid overwriting DELETING status if already set by route
-                if instance.status != InstanceStatus.DELETING:
-                    instance.status = InstanceStatus.ERROR
-                append_log(instance, failure_message)
-
-            record_task_failure(_mark_failed)
+            _record_instance_failure(instance, f"Task failed with outer exception: {e}")
         # Return a generic error message for the job
         return f"Error during instance {instance_id} deletion: {e}"
 

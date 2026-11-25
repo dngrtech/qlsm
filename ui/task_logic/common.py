@@ -11,6 +11,14 @@ log = logging.getLogger(__name__)
 # only cover a writer that holds the lock longer than that.
 DB_LOCKED_RETRY_ATTEMPTS = 3
 DB_LOCKED_RETRY_BACKOFF_SECONDS = 1.0
+SQLITE_BUSY_TIMEOUT_SECONDS = 30
+# Worst case of one commit_with_retry() with the defaults: every attempt waits
+# the full busy_timeout, plus the backoff sleeps between attempts (1s + 2s).
+DB_LOCKED_RETRY_BUDGET_SECONDS = (
+    DB_LOCKED_RETRY_ATTEMPTS * SQLITE_BUSY_TIMEOUT_SECONDS
+    + DB_LOCKED_RETRY_BACKOFF_SECONDS
+    * (DB_LOCKED_RETRY_ATTEMPTS * (DB_LOCKED_RETRY_ATTEMPTS - 1) // 2)
+)
 
 
 def record_host_error(host_id, message, attempts=3):
@@ -115,18 +123,26 @@ def commit_with_retry(apply_changes, attempts=DB_LOCKED_RETRY_ATTEMPTS,
     """Apply changes and commit, retrying while SQLite reports a locked database.
 
     A failed commit needs a rollback, and the rollback drops the pending
-    changes, so they are passed in as `apply_changes` and re-applied before
-    every attempt. Any other error, or a lock that outlasts the last attempt,
-    is raised after the rollback, leaving the session usable.
+    changes, so they are passed in as `apply_changes` and re-applied in every
+    attempt. `apply_changes()` runs inside the attempt: after a rollback it
+    reads expired attributes, which can autoflush and hit the lock too.
+
+    `apply_changes()` may return False to skip the write (e.g. the record is
+    no longer eligible on a re-check); the session is rolled back and this
+    returns False. Otherwise it returns True once committed. Any other error,
+    or a lock that outlasts the last attempt, is raised after the rollback,
+    leaving the session usable.
     """
     from ui import db
 
     for attempt in range(1, attempts + 1):
-        apply_changes()
         try:
+            if apply_changes() is False:
+                db.session.rollback()
+                return False
             db.session.commit()
-            return
-        except OperationalError as exc:
+            return True
+        except Exception as exc:
             db.session.rollback()
             if not is_db_locked_error(exc) or attempt >= attempts:
                 raise
@@ -135,6 +151,7 @@ def commit_with_retry(apply_changes, attempts=DB_LOCKED_RETRY_ATTEMPTS,
                 attempt, attempts,
             )
             time.sleep(backoff * attempt)
+    return False
 
 
 def record_task_failure(apply_changes):
@@ -151,3 +168,67 @@ def record_task_failure(apply_changes):
 
     db.session.rollback()
     commit_with_retry(apply_changes)
+
+
+# Matches the instance restart endpoint (instance_routes.restart_instance_api).
+RESTART_LOCK_TTL_SECONDS = 180
+
+
+def queue_instance_restart(instance, queued_log, fallback_status, context, previous_logs=None):
+    """Queue a restart of `instance` the way the restart endpoint does: take
+    the instance lock, save RESTARTING, enqueue with the lock token and
+    instance_job_failure_handler, and release the lock if the enqueue fails.
+
+    Bulk updates (plugins, Workshop) call this for many instances on many
+    hosts at once, so a crashed or timed-out restart job must still land in
+    the failure handler instead of leaving the instance in RESTARTING.
+
+    If the instance is busy (another operation holds its lock) or the enqueue
+    fails, the instance gets `fallback_status` and a log line saying the
+    restart was not queued. Log lines are prepended to `previous_logs`
+    (default: the instance's current logs). Returns True when the restart was
+    queued.
+    """
+    import uuid
+
+    from ui.database import update_instance
+    from ui.models import InstanceStatus
+    from ui.task_lock import acquire_lock, release_lock
+    from ui.tasks import enqueue_task, restart_instance
+    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
+
+    if previous_logs is None:
+        previous_logs = instance.logs or ''
+    lock_token = str(uuid.uuid4())
+    try:
+        locked = acquire_lock('instance', instance.id, lock_token, ttl=RESTART_LOCK_TTL_SECONDS)
+    except Exception:
+        log.warning("%s: could not lock instance %s for a restart", context, instance.id, exc_info=True)
+        locked = False
+    if not locked:
+        update_instance(
+            instance.id,
+            status=fallback_status,
+            logs=f"{context}: another operation holds this instance, restart not queued. "
+                 f"Restart it when that operation finishes.\n{previous_logs}",
+        )
+        return False
+
+    try:
+        update_instance(instance.id, status=InstanceStatus.RESTARTING, logs=f"{queued_log}\n{previous_logs}")
+        enqueue_task(
+            restart_instance,
+            instance.id,
+            lock_token=lock_token,
+            on_failure=instance_job_failure_handler,
+        )
+        return True
+    except Exception as exc:
+        release_lock('instance', instance.id, lock_token)
+        log.warning("%s: could not queue a restart for instance %s", context, instance.id, exc_info=True)
+        update_instance(
+            instance.id,
+            status=fallback_status,
+            logs=f"{context}: could not queue a restart ({exc}). Restart it manually.\n{previous_logs}",
+        )
+        return False

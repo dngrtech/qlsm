@@ -274,3 +274,47 @@ def test_non_abandon_failure_with_superseded_lock_changes_nothing(_superseded, r
     _run_instance_handler(app, RuntimeError('boom'))
     assert _instance_status(app) == InstanceStatus.CONFIGURING
     release.assert_not_called()
+
+
+@patch('ui.task_lock.release_lock')
+def test_retry_rechecks_superseded_lock_before_writing(release):
+    """A newer operation can take the lock during a retry backoff; the stale
+    callback must not overwrite its status with ERROR on the next attempt."""
+    from sqlalchemy.exc import OperationalError
+    import sqlite3
+    from ui.task_logic import common
+
+    app = _handler_app(InstanceStatus.CONFIGURING)
+    superseded = iter([False, False, True])
+    real_commit = db.session.commit
+    commits = {'n': 0}
+
+    def _commit():
+        commits['n'] += 1
+        if commits['n'] == 1:
+            raise OperationalError('COMMIT', {}, sqlite3.OperationalError('database is locked'))
+        return real_commit()
+
+    with patch('ui.task_lock.lock_superseded', side_effect=lambda *a: next(superseded)), \
+            patch.object(common.time, 'sleep'), \
+            patch.object(db.session, 'commit', side_effect=_commit):
+        _run_instance_handler(app, RuntimeError('boom'))
+
+    assert _instance_status(app) == InstanceStatus.CONFIGURING
+    release.assert_not_called()
+
+
+@patch('ui.task_lock.lock_superseded', return_value=False)
+def test_lock_released_even_when_error_status_cannot_be_saved(_superseded):
+    from sqlalchemy.exc import OperationalError
+    import sqlite3
+    from ui.task_logic import common
+
+    app = _handler_app(InstanceStatus.RESTARTING)
+    locked = OperationalError('COMMIT', {}, sqlite3.OperationalError('database is locked'))
+    with patch('ui.task_lock.release_lock') as release, \
+            patch.object(common.time, 'sleep'), \
+            patch.object(db.session, 'commit', side_effect=locked):
+        _run_instance_handler(app, RuntimeError('boom'))
+
+    release.assert_called_once_with('instance', 1, 'tok')
