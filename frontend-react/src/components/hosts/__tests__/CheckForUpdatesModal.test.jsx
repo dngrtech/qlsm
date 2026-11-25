@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CheckForUpdatesModal from '../CheckForUpdatesModal';
 
@@ -63,7 +63,8 @@ describe('CheckForUpdatesModal', () => {
     const onSubmit = renderModal();
 
     const custom = await screen.findByLabelText(/custom.py/);
-    expect(custom).toBeChecked();
+    // Ticked once the restart setting has loaded.
+    await waitFor(() => expect(custom).toBeChecked());
     fireEvent.click(custom);
     expect(custom).not.toBeChecked();
 
