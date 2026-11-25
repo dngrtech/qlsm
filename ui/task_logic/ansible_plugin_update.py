@@ -15,16 +15,22 @@
 #    The next restart
 #    (queued here if the operator asked for one) picks it up via the
 #    existing "Sync instance-specific scripts" task, same as any other
-#    config change.
+#    config change. A running instance that is not restarted gets the
+#    files synced right away without a restart (apply_instance_config with
+#    restart=False) and a pending-change record, so it shows UPDATED.
 
 import logging
 import os
 import shutil
+import uuid
 
 from rq import get_current_job
 from flask import current_app
 
 from ui.models import HostStatus, InstanceStatus
+from ui import db
+from ui.pending_changes import SOURCE_PLUGIN_UPDATE, diff_snapshots, record_pending_change, snapshot_dir
+from ui.task_lock import acquire_lock, release_lock
 from ui.database import get_host, update_host, update_instance
 from ui.plugin_pool import resolve_pool_file, resolve_pool_path
 from ui.runtime import plugin_api_for_host, runtime_extravars
@@ -33,6 +39,10 @@ from .common import queue_instance_restart
 
 
 log = logging.getLogger(__name__)
+
+# Instances whose new plugin files are synced without a restart. A STOPPED
+# instance picks them up on its next start, as before.
+_DEFERRABLE_STATUSES = (InstanceStatus.RUNNING, InstanceStatus.UPDATED)
 
 
 def _copy_selected_plugin_files(host, instance, filenames):
@@ -83,6 +93,57 @@ def copy_selected_plugin_files(runtime, scripts_dir, filenames):
     return applied, skipped
 
 
+def _sync_without_restart(instance):
+    """Push the staged files to the host now, without a restart, so the
+    instance shows UPDATED with its pending changes -- the same state a
+    config save without a restart leaves behind. Before this the files sat
+    on the controller only and the instance stayed RUNNING with nothing to
+    show for it.
+
+    The pending-change record is staged (hidden) before this runs; the sync
+    job publishes it together with UPDATED once the files are on the host.
+    A busy instance or a failed sync leaves it staged for the next sync of
+    the instance, which carries the same files.
+    """
+    from ui.tasks import apply_instance_config, enqueue_task
+    from ui.task_logic.job_failure_handlers import instance_job_failure_handler
+
+    # Best effort: the files are already staged, and a later
+    # restart from QLSM syncs them anyway, so a busy instance or a failed
+    # enqueue must not fail the plugin update itself.
+    lock_token = str(uuid.uuid4())
+    try:
+        if not acquire_lock('instance', instance.id, lock_token, ttl=360):
+            current_app.logger.warning(
+                f"apply_plugin_updates_logic: instance {instance.id} is busy; plugin files "
+                "stay staged on the controller until its next restart."
+            )
+            return False
+    except Exception:
+        current_app.logger.warning(
+            f"apply_plugin_updates_logic: could not lock instance {instance.id} to sync "
+            "plugin files without a restart.", exc_info=True,
+        )
+        return False
+    try:
+        enqueue_task(
+            apply_instance_config,
+            instance.id,
+            restart=False,
+            previous_status=instance.status.value,
+            lock_token=lock_token,
+            on_failure=instance_job_failure_handler,
+        )
+        return True
+    except Exception:
+        release_lock('instance', instance.id, lock_token)
+        current_app.logger.warning(
+            f"apply_plugin_updates_logic: could not queue a config sync for instance "
+            f"{instance.id}.", exc_info=True,
+        )
+        return False
+
+
 def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, restart_instance_ids):
     """instance_selections: {instance_id: [filename, ...]}
     restart_instance_ids: instance ids to restart once updates are applied
@@ -115,13 +176,28 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
             summary_lines.append("Common plugin pool refreshed.")
 
         instances_by_id = {i.id: i for i in host.instances}
+        deferred_changes = {}  # {instance_id: changed files}
         for instance_id, filenames in (instance_selections or {}).items():
             instance = instances_by_id.get(instance_id)
             if not instance or not filenames:
                 continue
+            deferred = (
+                instance.id not in (restart_instance_ids or [])
+                and instance.status in _DEFERRABLE_STATUSES
+            )
+            scripts_dir = os.path.join('configs', host.name, str(instance.id), 'scripts')
+            before = snapshot_dir(scripts_dir, prefix='scripts/') if deferred else None
             applied, skipped = _copy_selected_plugin_files(host, instance, filenames)
             if applied:
                 summary_lines.append(f"{instance.name}: staged {', '.join(applied)}.")
+                changed = (
+                    diff_snapshots(before, snapshot_dir(scripts_dir, prefix='scripts/'))
+                    if deferred else []
+                )
+                if changed:
+                    record_pending_change(instance.id, SOURCE_PLUGIN_UPDATE, changed, synced=False)
+                    db.session.commit()
+                    deferred_changes[instance.id] = changed
             if skipped:
                 current_app.logger.warning(f"apply_plugin_updates_logic: skipped unknown files {skipped} for instance {instance_id}")
 
@@ -140,6 +216,9 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
                 # operation owns the instance and its status stays.
                 still_ours=lambda fresh, seen=instance.status: fresh.status == seen,
             )
+
+        for instance_id in deferred_changes:
+            _sync_without_restart(instances_by_id[instance_id])
 
         return True
 

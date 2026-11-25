@@ -27,6 +27,9 @@ from ui.tasks import deploy_instance, apply_instance_config, restart_instance, s
 from ui.task_logic.job_failure_handlers import instance_job_failure_handler
 from ui.task_logic.zmq_utils import validate_zmq_password
 from ui.task_lock import acquire_lock, release_lock
+from ui.pending_changes import (
+    SOURCE_CONFIG_SAVE, diff_snapshots, list_pending_changes, record_pending_change, snapshot_dir,
+)
 from ui.admin_permissions import levels_from_entries, validate_admin_entries, strip_numeric_admin_lines
 from ui.config_path_utils import (
     RESERVED_CONFIG_FOLDER_NAMES,
@@ -1203,6 +1206,22 @@ def _read_instance_config(host_name, instance_id, filename):
         current_app.logger.error(f"Error reading instance config file {config_path}: {e}")
         return f"# Error reading file: {e}" # Return error message in content
 
+@instance_api_bp.route('/<int:instance_id>/pending-changes', methods=['GET'], endpoint='get_instance_pending_changes_api')
+@jwt_required()
+def get_instance_pending_changes_api(instance_id):
+    """Changes synced to the host without a restart, oldest first. Cleared
+    when the instance restarts. Changes still only staged on the controller
+    (their sync has not reached the host) are not listed."""
+    instance = get_instance(instance_id)
+    if not instance:
+        return jsonify({"error": {"message": "Instance not found."}}), 404
+    return jsonify({"data": {
+        "instance_id": instance.id,
+        "status": instance.status.value if instance.status else None,
+        "entries": list_pending_changes(instance.id),
+    }})
+
+
 # Route for viewing/editing instance configuration files
 @instance_api_bp.route('/<int:instance_id>/config', methods=['GET', 'PUT'], endpoint='manage_instance_config_api')
 @jwt_required()
@@ -1292,6 +1311,8 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
         original_status = instance.status
         original_ld_preload_hooks = instance.ld_preload_hooks or None
         original_lan_rate_enabled = instance.lan_rate_enabled
+        original_hostname = instance.hostname
+        original_qlx_plugins = instance.qlx_plugins
 
         update_kwargs = dict(status=InstanceStatus.CONFIGURING)
         update_kwargs.update(metadata_update_kwargs)
@@ -1337,6 +1358,15 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 admin_changes, admin_error = validate_admin_entries(admin_changes_data)
                 if admin_error:
                     return jsonify({"error": {"message": admin_error}}), 400
+
+            # A save without a restart leaves the running server on the old
+            # files: snapshot them now, before they are overwritten, so the
+            # "Updated" badge can show what is pending.
+            may_defer = (
+                data.get('restart', True) is False
+                and original_status != InstanceStatus.STOPPED
+            )
+            files_before = snapshot_dir(instance_config_dir) if may_defer else None
 
             if configs_present:
                 _sync_configs_to_disk(
@@ -1412,10 +1442,51 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 and bool(data.get('lan_rate_enabled')) != original_lan_rate_enabled
             )
             if hooks_changed:
-                if original_status == InstanceStatus.RUNNING:
+                # UPDATED still runs (on older files): without a restart the
+                # previous hooks stay loaded.
+                if original_status in (InstanceStatus.RUNNING, InstanceStatus.UPDATED):
                     restart = True
                 elif original_status == InstanceStatus.STOPPED and not lan_rate_changed:
                     restart = False
+            if not restart and files_before is not None:
+                setting_changes = []
+                if 'hostname' in metadata_update_kwargs and metadata_update_kwargs['hostname'] != original_hostname:
+                    setting_changes.append({
+                        'field': 'hostname',
+                        'before': original_hostname,
+                        'after': metadata_update_kwargs['hostname'],
+                    })
+                if 'qlx_plugins' in update_kwargs and (update_kwargs['qlx_plugins'] or '') != (original_qlx_plugins or ''):
+                    setting_changes.append({
+                        'field': 'qlx_plugins',
+                        'before': original_qlx_plugins,
+                        'after': update_kwargs['qlx_plugins'],
+                    })
+                if hooks_changed:
+                    setting_changes.append({
+                        'field': 'ld_preload_hooks',
+                        'before': original_ld_preload_hooks,
+                        'after': update_kwargs.get('ld_preload_hooks'),
+                    })
+                if lan_rate_changed:
+                    setting_changes.append({
+                        'field': 'lan_rate_enabled',
+                        'before': 'on' if original_lan_rate_enabled else 'off',
+                        'after': 'on' if data.get('lan_rate_enabled') else 'off',
+                    })
+                # Staged: shown only once the sync job below got the files
+                # to the host (it publishes it with UPDATED). If the job is
+                # never queued or fails, the record stays hidden until a
+                # later sync of this instance carries the same files.
+                record_pending_change(
+                    instance.id,
+                    SOURCE_CONFIG_SAVE,
+                    diff_snapshots(files_before, snapshot_dir(instance_config_dir)),
+                    setting_changes,
+                    synced=False,
+                )
+                db.session.commit()
+
             reconcile_lan_rate_network = 'lan_rate_enabled' in data
             job = enqueue_task(
                 apply_instance_config,

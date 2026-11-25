@@ -15,6 +15,7 @@ from ui import db
 from ui.constants import resolve_redis_db
 from ui.models import QLInstance, InstanceStatus, Host # Need Host for cleanup path
 from ui.lan_rate_policy import effective_lan_rate
+from ui.pending_changes import clear_pending_changes, publish_pending_changes
 from ui.runtime import (
     CUSTOM, excluded_preloads_for_host, host_runtime, instance_runtime_extravars,
     log_filename_for_host, log_filename_pattern_for_host, plugin_api_for_host, runtime_paths,
@@ -364,6 +365,7 @@ def deploy_instance_logic(instance_id, admin_levels=None):
             # If rc is 0 and the specific message wasn't found, it's a success
             else: # not no_hosts_matched implicitly true here
                 instance.status = InstanceStatus.RUNNING
+                clear_pending_changes(instance.id)
                 append_log(instance, f"Task finished successfully. Status: RUNNING.")
                 db.session.commit()
                 log.info(f"Finished task deploy_instance for instance_id: {instance_id}. Status: RUNNING")
@@ -479,6 +481,7 @@ def restart_instance_logic(instance_id):
 
         if runner_result.rc == 0:
             instance.status = InstanceStatus.RUNNING
+            clear_pending_changes(instance.id)
             append_log(instance, f"Task finished successfully. Status: RUNNING.")
             db.session.commit()
             log.info(f"Finished task restart_instance for instance_id: {instance_id}. Status: RUNNING")
@@ -604,6 +607,7 @@ def start_instance_logic(instance_id):
 
         if runner_result.rc == 0:
             instance.status = InstanceStatus.RUNNING
+            clear_pending_changes(instance.id, synced_only=True)  # start does not sync files
             append_log(instance, f"Task finished successfully. Status: RUNNING.")
             db.session.commit()
             log.info(f"Finished task start_instance for instance_id: {instance_id}. Status: RUNNING")
@@ -746,6 +750,17 @@ def apply_instance_config_logic(instance_id, restart=True, reconcile_lan_rate_ne
                     )
                 instance.runtime_invocation_id = baseline
 
+            if restart:
+                # The restart made every earlier deferred change live too.
+                clear_pending_changes(instance.id)
+            else:
+                # The staged records (config saves, plugin updates) reached
+                # the host with this sync: publish them in the same commit as
+                # the final status (UPDATED with its runtime baseline, or
+                # STOPPED). Also for a stopped instance: the next start loads
+                # the files and clears synced records, so one left staged
+                # would resurface later as pending although it is live.
+                publish_pending_changes(instance.id)
             instance.status = final_status
             db.session.commit()
 
@@ -971,6 +986,7 @@ def reconfigure_instance_lan_rate_logic(instance_id):
 
         if runner_result.rc == 0:
             instance.status = InstanceStatus.RUNNING
+            clear_pending_changes(instance.id, synced_only=True)  # no config sync here
             lan_status = "enabled" if instance.lan_rate_enabled else "disabled"
             append_log(instance, f"Task finished successfully. LAN rate {lan_status}. Status: RUNNING.")
             db.session.commit()
