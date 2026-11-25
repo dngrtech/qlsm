@@ -8,7 +8,9 @@ from ui.database import create_host, get_host, get_instance
 def mock_restart_instance_queue():
     # Restarts go through enqueue_task under the instance lock
     # (common.queue_instance_restart); yields the enqueue_task mock.
-    with patch('ui.task_lock.acquire_lock', return_value=True),             patch('ui.task_lock.release_lock'),             patch('ui.tasks.enqueue_task') as mock:
+    with patch('ui.task_lock.acquire_lock', return_value=True), \
+         patch('ui.task_lock.release_lock'), \
+         patch('ui.tasks.enqueue_task') as mock:
         yield mock
 
 def _assert_restart_queued(enqueue, instance_id):
