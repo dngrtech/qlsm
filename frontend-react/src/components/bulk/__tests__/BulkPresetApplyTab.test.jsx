@@ -561,4 +561,26 @@ describe('BulkPresetApplyTab', () => {
     await applyConfirmed();
     await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledTimes(1));
   });
+
+  it.each(['error', 'unknown'])('asks before restarting a server in %s status', async (status) => {
+    const odd = hosts.map(h => (h.id === 1
+      ? { ...h, instances: [{ ...h.instances[0], status }, h.instances[1]] }
+      : h));
+    render(<BulkActionsModal isOpen onClose={() => {}} hosts={odd} />);
+    fireEvent.click(screen.getByRole('tab', { name: /apply preset/i }));
+    const select = await screen.findByLabelText('Preset');
+    await screen.findByRole('option', { name: /duel/ });
+    fireEvent.change(select, { target: { value: '5' } });
+    await waitFor(() => expect(screen.getByLabelText(/restart servers to apply/i).checked).toBe(true));
+    tick('a1');
+    await preview_();
+    await screen.findByText('server.cfg');
+
+    fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    expect(screen.getByText('1 server on 1 host will restart.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /restart and apply/i }));
+    await waitFor(() => expect(mocks.applyPresetToInstance).toHaveBeenCalledWith(11, {
+      preset_id: 5, keep_cvars: [], restart: true, preview_hash: 'h11', confirm_restart: true,
+    }));
+  });
 });

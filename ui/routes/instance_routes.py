@@ -1779,12 +1779,19 @@ def apply_instance_preset_api(instance_id):
                     and locked_instance.status != InstanceStatus.STOPPED
                     and not restart):
                 return "Changing 99k LAN rate on a running server needs a restart. Apply it with restart."
-            # A running (or Updated) server restarts when asked to, and also
-            # when its hooks change, whatever `restart` says. Either way the
-            # operator must have confirmed it for this server, judged on its
-            # status now, not on what the dialog saw when it opened.
-            live = locked_instance.status in (InstanceStatus.RUNNING, InstanceStatus.UPDATED)
-            if live and (restart or _hooks_change(locked_instance)) and not confirm_restart:
+            # Exactly the restarts the save will queue, judged on the status
+            # now: an asked-for restart of any server that is not stopped
+            # (one in ERROR or UNKNOWN can still be running a game; a
+            # stopped one is kept stopped), and the one a hook change forces
+            # on a running or Updated server whatever `restart` says. Each
+            # must have been confirmed for this server.
+            status_now = locked_instance.status
+            queues_restart = (
+                (restart and status_now != InstanceStatus.STOPPED)
+                or (status_now in (InstanceStatus.RUNNING, InstanceStatus.UPDATED)
+                    and _hooks_change(locked_instance))
+            )
+            if queues_restart and not confirm_restart:
                 return RESTART_NOT_CONFIRMED
             return None
 

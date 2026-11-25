@@ -415,9 +415,14 @@ function BulkPresetApplyTab({ isOpen, hosts, onClose, onApplyingChange }) {
     // Servers this apply restarts: every live one when restart is ticked,
     // and a live one whose hooks change even when it is not (the save
     // forces that restart). Each of them is sent with confirm_restart.
+    // The same rule as the server's check: an asked-for restart of any
+    // server that is not stopped (ERROR or UNKNOWN can still be running),
+    // and the restart a hook change forces on a running or Updated one.
     const restartsServer = ({ inst }) => {
-        const live = isLive(liveStatus(inst));
-        return live && (Boolean(restart) || hooksChange(rows[inst.id]?.preview?.diff));
+        const current = liveStatus(inst);
+        const stopped = current.status?.toLowerCase() === 'stopped';
+        return (Boolean(restart) && !stopped)
+            || (isLive(current) && hooksChange(rows[inst.id]?.preview?.diff));
     };
     const restartJobs = applyJobs.filter(restartsServer);
     const restartText = restartSummary(restartJobs.map(({ host, inst }) => ({ hostId: host.id, id: inst.id })));

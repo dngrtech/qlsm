@@ -117,7 +117,7 @@ def test_apply_with_matching_hash_queues_the_save(client, headers, setup):
     with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
          patch('ui.routes.instance_routes.enqueue_task',
                return_value=MagicMock(id='job-1')) as enqueue:
-        response = _apply(client, headers, instance, preset, preview_hash, restart=True)
+        response = _apply(client, headers, instance, preset, preview_hash, restart=True, confirm_restart=True)
     assert response.status_code == 202, response.get_json()
     enqueue.assert_called_once()
     assert enqueue.call_args.kwargs['restart'] is True
@@ -473,3 +473,29 @@ def test_apply_refuses_an_unconfirmed_restart_of_a_live_server(
     if expected == 409:
         enqueue.assert_not_called()
         assert 'Confirm the restart' in response.get_json()['error']['message']
+
+
+@pytest.mark.parametrize('status, confirm, expected', [
+    ('ERROR', False, 409),
+    ('UNKNOWN', False, 409),
+    ('IDLE', False, 409),
+    ('ERROR', True, 202),
+    ('STOPPED', False, 202),
+])
+def test_any_queued_restart_needs_confirmation(client, headers, env, status, confirm, expected):  # noqa: F811
+    """The maintainer's case: restart ticked on a server in ERROR (a failed
+    sync can leave it running a game) or UNKNOWN. The save restarts every
+    server that is not stopped, so every such restart must be confirmed."""
+    from ui.models import InstanceStatus
+
+    host = _host()
+    instance = _instance(host, server_cfg='', status=InstanceStatus[status])
+    preset = _preset(env, configs={'server.cfg': 'set g_motd "new"\n'})
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash,
+                                      restart=True, confirm_restart=confirm)
+    assert response.status_code == expected, response.get_json()
+    if expected == 202:
+        assert enqueue.call_args.kwargs['restart'] is (status != 'STOPPED')
+    else:
+        enqueue.assert_not_called()
