@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   deleteDraftHook: vi.fn(),
   addonMounts: [],
   addonRequest: vi.fn(),
+  // Render the two required text inputs of the real InstanceBasicInfoForm.
+  basicInputs: false,
 }));
 
 vi.mock('../../../contexts/AddonsContext', () => ({
@@ -217,6 +219,8 @@ vi.mock('../../fileManager', () => ({
 
 vi.mock('../InstanceBasicInfoForm', () => ({
   default: ({
+    name,
+    onNameChange,
     hostname,
     onHostChange,
     onHostnameChange,
@@ -228,6 +232,12 @@ vi.mock('../InstanceBasicInfoForm', () => ({
   }) => (
     <div>
       <div>basic-info</div>
+      {mocks.basicInputs && (
+        <>
+          <input id="name" aria-label="Instance Name" value={name} onChange={onNameChange} required />
+          <input id="hostname" aria-label="Server Hostname" value={hostname} onChange={onHostnameChange} required />
+        </>
+      )}
       <div data-testid="hostname">{hostname}</div>
       <button type="button" onClick={() => onHostnameChange({ target: { value: 'My Server' } })}>Type Hostname</button>
       <button type="button" onClick={() => onHostnameChange({ target: { value: 'Default Name' } })}>Type Default Hostname</button>
@@ -339,6 +349,7 @@ describe('AddInstanceForm draft lifecycle', () => {
     mocks.draftAdapterPresets = [];
     mocks.draftAdapterAcceptedReplacementsByPreset = {};
     mocks.addonMounts = [];
+    mocks.basicInputs = false;
     if (!AddInstanceForm) {
       ({ default: AddInstanceForm } = await import('../AddInstanceForm'));
     }
@@ -2401,6 +2412,44 @@ describe('AddInstanceForm draft lifecycle', () => {
       expect(onSubmit.mock.calls[0][0].addon_options).toEqual({
         'stats-addon': { telemetry: true, server_id: '' },
       });
+    });
+
+    it.each([
+      ['Instance Name', 'name'],
+      ['Server Hostname', 'hostname'],
+    ])('names a blank %s instead of sending the request', async (label, id) => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.basicInputs = true;
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      const { container } = renderForm(onSubmit);
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /create instance/i })).toBeEnabled());
+      fireEvent.change(container.querySelector('#name'), { target: { value: 'my-instance' } });
+      fireEvent.change(container.querySelector('#hostname'), { target: { value: 'My Server' } });
+      fireEvent.change(container.querySelector(`#${id}`), { target: { value: '' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+
+      expect(await screen.findByText(new RegExp(`${label} is required`))).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(container.querySelector(`#${id}`));
+    });
+
+    it('sends the request once both required fields are filled', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.basicInputs = true;
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      const { container } = renderForm(onSubmit);
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: /create instance/i })).toBeEnabled());
+      fireEvent.change(container.querySelector('#name'), { target: { value: 'my-instance' } });
+      fireEvent.change(container.querySelector('#hostname'), { target: { value: 'My Server' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /create instance/i }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({ name: 'my-instance', hostname: 'My Server' });
     });
 
     it('lets the form submit past hidden fields (noValidate)', () => {

@@ -57,6 +57,8 @@ import { normalizeFields, serializeValues, validateValues } from '../addons/pane
 import { useAddonMounts } from '../../contexts/AddonsContext';
 
 const CONFIG_FILES = ['server.cfg', 'mappool.txt', 'access.txt', 'workshop.txt'];
+// Inputs in InstanceBasicInfoForm (always visible) the submit checks itself.
+const REQUIRED_BASIC_FIELDS = [['name', 'Instance Name'], ['hostname', 'Server Hostname']];
 const NET_PORT_REGEX = /^(set\s+net_port\s+").*(".*)/m;
 const HOSTNAME_REGEX = /^(set\s+sv_hostname\s+").*(".*)/m;
 
@@ -1261,6 +1263,19 @@ function AddInstanceForm({
   const localHandleSubmit = async (e) => {
     e.preventDefault();
     if (uploading) return;
+    // The form is noValidate (hidden addon fields must not block it), so the
+    // browser no longer checks the two required basic fields: do it here,
+    // before anything is flushed or sent, and point at the field like the
+    // browser did.
+    for (const [id, label] of REQUIRED_BASIC_FIELDS) {
+      const input = e.currentTarget?.querySelector?.(`#${id}`);
+      if (input && !String(input.value || '').trim()) {
+        setInternalFormError(`${label} is required.`);
+        input.focus();
+        if (typeof input.reportValidity === 'function') input.reportValidity();
+        return;
+      }
+    }
     if (serverCfgHasLintErrors) { setInternalFormError("Please fix errors in server.cfg before submitting."); return; }
     setInternalFormError(null);
 
