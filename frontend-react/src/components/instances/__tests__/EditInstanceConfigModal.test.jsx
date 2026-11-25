@@ -1018,6 +1018,27 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(screen.getByText('Changing hooks requires an instance restart')).toBeInTheDocument();
   });
 
+  it('forces restart when hooks change on an UPDATED instance', async () => {
+    mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: true });
+    mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'updated', name: 'i' });
+
+    render(
+      <EditInstanceConfigModal
+        isOpen={true}
+        instanceId={1}
+        onClose={vi.fn()}
+        initialTab="hooks"
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText('hooks-tab')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Mock Toggle c.so'));
+    const toggle = screen.getByRole('button', { name: /toggle restart after save/i });
+    await waitFor(() => expect(toggle).toBeDisabled());
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Changing hooks requires an instance restart')).toBeInTheDocument();
+  });
+
   it('starts with restart off when Settings > Defer restarts is on', async () => {
     mocks.getDeferRestartsSetting.mockResolvedValue({ enabled: true });
     mocks.getInstanceById.mockResolvedValue({ host_name: 'h', lan_rate_enabled: false, status: 'running', name: 'i' });

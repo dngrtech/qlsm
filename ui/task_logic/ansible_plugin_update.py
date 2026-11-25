@@ -27,11 +27,8 @@ import uuid
 from rq import get_current_job
 from flask import current_app
 
-from ui import db
 from ui.models import HostStatus, InstanceStatus
-from ui.pending_changes import (
-    SOURCE_PLUGIN_UPDATE, diff_snapshots, record_pending_change, snapshot_dir,
-)
+from ui.pending_changes import SOURCE_PLUGIN_UPDATE, diff_snapshots, snapshot_dir
 from ui.task_lock import acquire_lock, release_lock
 from ui.database import get_host, update_host, update_instance
 from ui.plugin_pool import resolve_pool_file, resolve_pool_path
@@ -84,16 +81,22 @@ def _copy_selected_plugin_files(host, instance, filenames):
     return applied, skipped
 
 
-def _sync_without_restart(instance):
+def _sync_without_restart(instance, changed):
     """Push the staged files to the host now, without a restart, so the
     instance shows UPDATED with its pending changes -- the same state a
     config save without a restart leaves behind. Before this the files sat
     on the controller only and the instance stayed RUNNING with nothing to
-    show for it."""
+    show for it.
+
+    The pending-change record travels with the sync job and is committed
+    together with UPDATED once the files are on the host. Recording it here
+    first let a restart seen in between clear it before the plugin arrived,
+    and a busy instance (no sync) kept a record for a change not yet synced.
+    """
     from ui.tasks import apply_instance_config, enqueue_task
     from ui.task_logic.job_failure_handlers import instance_job_failure_handler
 
-    # Best effort: the files are already staged and recorded, and a later
+    # Best effort: the files are already staged, and a later
     # restart from QLSM syncs them anyway, so a busy instance or a failed
     # enqueue must not fail the plugin update itself.
     lock_token = str(uuid.uuid4())
@@ -118,6 +121,7 @@ def _sync_without_restart(instance):
             previous_status=instance.status.value,
             lock_token=lock_token,
             on_failure=instance_job_failure_handler,
+            pending_change={'source': SOURCE_PLUGIN_UPDATE, 'files': changed},
         )
         return True
     except Exception:
@@ -161,7 +165,7 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
             summary_lines.append("Common plugin pool refreshed.")
 
         instances_by_id = {i.id: i for i in host.instances}
-        deferred_instance_ids = []
+        deferred_changes = {}  # {instance_id: changed files}
         for instance_id, filenames in (instance_selections or {}).items():
             instance = instances_by_id.get(instance_id)
             if not instance or not filenames:
@@ -180,9 +184,7 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
                     if deferred else []
                 )
                 if changed:
-                    record_pending_change(instance.id, SOURCE_PLUGIN_UPDATE, changed)
-                    db.session.commit()
-                    deferred_instance_ids.append(instance.id)
+                    deferred_changes[instance.id] = changed
             if skipped:
                 current_app.logger.warning(f"apply_plugin_updates_logic: skipped unknown files {skipped} for instance {instance_id}")
 
@@ -200,8 +202,8 @@ def apply_plugin_updates_logic(host_id, apply_common_pool, instance_selections, 
             )
             restart_instance.queue(instance.id)
 
-        for instance_id in deferred_instance_ids:
-            _sync_without_restart(instances_by_id[instance_id])
+        for instance_id, changed in deferred_changes.items():
+            _sync_without_restart(instances_by_id[instance_id], changed)
 
         return True
 

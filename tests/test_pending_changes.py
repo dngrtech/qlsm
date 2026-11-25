@@ -247,14 +247,23 @@ def test_apply_config_clears_records_only_with_restart(monkeypatch, app, restart
     monkeypatch.setattr('ui.task_logic.access_permission_sync.write_and_report_admin_levels', MagicMock())
     clear = MagicMock()
     monkeypatch.setattr(ansible_instance_mgmt, 'clear_pending_changes', clear)
+    record = MagicMock()
+    monkeypatch.setattr(ansible_instance_mgmt, 'record_pending_change', record)
+    pending = {'source': 'plugin_update', 'files': [{'path': 'scripts/a.py'}]}
 
     try:
-        ansible_instance_mgmt.apply_instance_config_logic(12, restart=restart)
+        ansible_instance_mgmt.apply_instance_config_logic(12, restart=restart, pending_change=pending)
     finally:
         monkeypatch.undo()
         ctx.pop()
 
     assert clear.called is cleared
+    # A deferred sync records the caller's entry with the UPDATED commit.
+    if restart:
+        record.assert_not_called()
+    else:
+        record.assert_called_once_with(12, 'plugin_update', [{'path': 'scripts/a.py'}], [])
+        assert instance.status == InstanceStatus.UPDATED
 
 
 def test_restart_clears_records(monkeypatch, app):
@@ -338,11 +347,38 @@ def test_plugin_update_without_restart_records_and_syncs(app, tmp_path, monkeypa
         enqueue.assert_called_once()
         assert enqueue.call_args.kwargs['restart'] is False
 
-        [entry] = list_pending_changes(running_instance.id)
-        [change] = entry['files']
-        assert entry['source'] == 'plugin_update'
+        # Nothing is recorded before the sync reached the host: the entry
+        # travels with the sync job and is committed with UPDATED.
+        assert list_pending_changes(running_instance.id) == []
+        pending = enqueue.call_args.kwargs['pending_change']
+        [change] = pending['files']
+        assert pending['source'] == 'plugin_update'
         assert change['path'] == 'scripts/sample_plugin.py'
         assert '+VERSION = 2' in change['diff']
+
+
+def test_plugin_update_on_a_busy_instance_records_nothing(app, tmp_path, monkeypatch, running_instance):
+    from ui.task_logic.ansible_plugin_update import apply_plugin_updates_logic
+
+    monkeypatch.chdir(tmp_path)
+    pool = tmp_path / 'ql-assets' / 'data' / 'minqlx-plugins'
+    pool.mkdir(parents=True)
+    (pool / 'sample_plugin.py').write_text('VERSION = 2\n')
+    scripts = tmp_path / 'configs' / running_instance.host_name / str(running_instance.id) / 'scripts'
+    scripts.mkdir(parents=True)
+    (scripts / 'sample_plugin.py').write_text('VERSION = 1\n')
+
+    with app.app_context():
+        host_id = db.session.get(QLInstance, running_instance.id).host_id
+        with patch('ui.task_logic.ansible_plugin_update.get_current_job'), \
+             patch('ui.task_logic.ansible_plugin_update.acquire_lock', return_value=False), \
+             patch('ui.tasks.enqueue_task') as enqueue:
+            assert apply_plugin_updates_logic(
+                host_id, False, {running_instance.id: ['sample_plugin.py']}, []
+            ) is True
+
+        enqueue.assert_not_called()
+        assert list_pending_changes(running_instance.id) == []
 
 
 def test_plugin_update_with_restart_records_nothing(app, tmp_path, monkeypatch, running_instance):
@@ -407,3 +443,49 @@ def test_plugin_update_with_identical_file_neither_records_nor_syncs(app, tmp_pa
             apply_plugin_updates_logic(host_id, False, {running_instance.id: ['sample_plugin.py']}, [])
         enqueue.assert_not_called()
         assert list_pending_changes(running_instance.id) == []
+
+
+@pytest.mark.parametrize('body', [[1, 2], 'enabled', 5])
+def test_defer_restarts_rejects_a_non_object_body(client, headers, body):
+    response = client.put('/api/settings/defer-restarts', json=body, headers=headers)
+    assert response.status_code == 400
+
+
+def test_hook_change_on_updated_instance_forces_restart(
+    client, app, headers, running_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    instance_dir = tmp_path / 'configs' / running_instance.host_name / str(running_instance.id)
+    (instance_dir / 'user-hooks').mkdir(parents=True)
+    (instance_dir / 'user-hooks' / 'a.so').write_bytes(b'\x7fELF')
+    with app.app_context():
+        db.session.get(QLInstance, running_instance.id).status = InstanceStatus.UPDATED
+        db.session.commit()
+
+    enqueue = _put_config(client, headers, running_instance.id, {
+        'enabled_hooks': ['a.so'],
+        'restart': False,
+    })
+
+    assert enqueue.call_args.kwargs['restart'] is True
+    with app.app_context():
+        assert list_pending_changes(running_instance.id) == []
+
+
+def test_save_without_restart_records_lan_rate_change(
+    client, app, headers, running_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'configs' / running_instance.host_name / str(running_instance.id)).mkdir(parents=True)
+    with app.app_context():
+        db.session.get(QLInstance, running_instance.id).host.os_type = 'debian'
+        db.session.commit()
+
+    _put_config(client, headers, running_instance.id, {
+        'lan_rate_enabled': True,
+        'restart': False,
+    })
+
+    with app.app_context():
+        [entry] = list_pending_changes(running_instance.id)
+    assert {'field': 'lan_rate_enabled', 'before': 'off', 'after': 'on'} in entry['settings']

@@ -19,6 +19,8 @@ const CHANGE_CLASS = {
 const SETTING_LABEL = {
   hostname: 'Server hostname',
   qlx_plugins: 'Enabled plugins',
+  ld_preload_hooks: 'Enabled hooks',
+  lan_rate_enabled: '99k LAN rate',
   workshop_item: 'Workshop item',
 };
 

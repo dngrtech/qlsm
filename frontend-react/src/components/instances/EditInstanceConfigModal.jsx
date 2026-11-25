@@ -588,7 +588,9 @@ function EditInstanceConfigModal({
       || hookEnabledOrder.some((filename, index) => initialHookEnabledOrder[index] !== filename),
     [hookDiskChanged, hookEnabledOrder, initialHookEnabledOrder],
   );
-  const hooksForceRestart = hooksDirty && instanceStatus === 'running';
+  // UPDATED is running too (on older files): a save without a restart would
+  // leave the previous hooks loaded.
+  const hooksForceRestart = hooksDirty && ['running', 'updated'].includes(instanceStatus);
   const hooksKeepStopped = hooksDirty && instanceStatus === 'stopped' && !lanRateChanged;
   const restartForced = lanRateChanged || hooksForceRestart || hooksKeepStopped;
 

@@ -1360,7 +1360,9 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                 and bool(data.get('lan_rate_enabled')) != original_lan_rate_enabled
             )
             if hooks_changed:
-                if original_status == InstanceStatus.RUNNING:
+                # UPDATED still runs (on older files): without a restart the
+                # previous hooks stay loaded.
+                if original_status in (InstanceStatus.RUNNING, InstanceStatus.UPDATED):
                     restart = True
                 elif original_status == InstanceStatus.STOPPED and not lan_rate_changed:
                     restart = False
@@ -1377,6 +1379,18 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                         'field': 'qlx_plugins',
                         'before': original_qlx_plugins,
                         'after': update_kwargs['qlx_plugins'],
+                    })
+                if hooks_changed:
+                    setting_changes.append({
+                        'field': 'ld_preload_hooks',
+                        'before': original_ld_preload_hooks,
+                        'after': update_kwargs.get('ld_preload_hooks'),
+                    })
+                if lan_rate_changed:
+                    setting_changes.append({
+                        'field': 'lan_rate_enabled',
+                        'before': 'on' if original_lan_rate_enabled else 'off',
+                        'after': 'on' if data.get('lan_rate_enabled') else 'off',
                     })
                 record_pending_change(
                     instance.id,

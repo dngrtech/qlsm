@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogBackdrop } from '@headlessui/react';
 import { PackageCheck, X, Loader2, AlertTriangle } from 'lucide-react';
 import { getDeferRestartsSetting } from '../../services/api';
@@ -13,22 +13,35 @@ function CheckForUpdatesModal({ isOpen, onClose, onSubmit, host, isChecking, che
     const [selectedFiles, setSelectedFiles] = useState({}); // { [instanceId]: Set<filename> }
     const [restartInstances, setRestartInstances] = useState({}); // { [instanceId]: bool }
     // Settings > Defer restarts: leave "restart to apply" unticked by default.
-    const [deferRestarts, setDeferRestarts] = useState(false);
+    // null until the setting has loaded; the defaults wait for it.
+    const [deferRestarts, setDeferRestarts] = useState(null);
+    // The check result the selections were initialised from: they are set
+    // once per check, never again when something else re-renders the modal,
+    // so the operator's unticks survive.
+    const initialisedFor = useRef(null);
 
     useEffect(() => {
-        if (!isOpen) return undefined;
+        if (!isOpen) {
+            initialisedFor.current = null;
+            return undefined;
+        }
         let cancelled = false;
+        setDeferRestarts(null);
         getDeferRestartsSetting()
             .then((data) => { if (!cancelled) setDeferRestarts(Boolean(data?.enabled)); })
-            .catch(() => {});
+            .catch(() => { if (!cancelled) setDeferRestarts(false); });
         return () => { cancelled = true; };
     }, [isOpen]);
 
+    const settingLoaded = deferRestarts !== null;
+
     // Default the common pool to selected (when it has changes) and each
-    // instance's stale files to pre-ticked once a check comes back. The
-    // per-instance diff only reports "modified" files.
+    // instance's stale files to pre-ticked once a check comes back and the
+    // restart setting is known. The per-instance diff only reports
+    // "modified" files.
     useEffect(() => {
-        if (!checkResult) return;
+        if (!checkResult || !settingLoaded || initialisedFor.current === checkResult) return;
+        initialisedFor.current = checkResult;
         setUpdateCommonPool((checkResult.common_pool_changes || []).length > 0 && !checkResult.common_pool_error);
         const files = {};
         const restarts = {};
@@ -41,9 +54,10 @@ function CheckForUpdatesModal({ isOpen, onClose, onSubmit, host, isChecking, che
         });
         setSelectedFiles(files);
         setRestartInstances(restarts);
-    }, [checkResult, deferRestarts]);
+    }, [checkResult, settingLoaded, deferRestarts]);
 
     const handleClose = () => {
+        initialisedFor.current = null;
         setUpdateCommonPool(false);
         setSelectedFiles({});
         setRestartInstances({});
@@ -64,6 +78,7 @@ function CheckForUpdatesModal({ isOpen, onClose, onSubmit, host, isChecking, che
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (!settingLoaded) return;
         const instances = {};
         Object.entries(selectedFiles).forEach(([id, set]) => {
             if (set.size > 0) instances[id] = Array.from(set);
@@ -190,7 +205,7 @@ function CheckForUpdatesModal({ isOpen, onClose, onSubmit, host, isChecking, che
                                         <button type="button" onClick={handleClose} className="btn btn-secondary">
                                             Cancel
                                         </button>
-                                        <button type="submit" className="btn btn-primary" disabled={isChecking || !hasAnySelection}>
+                                        <button type="submit" className="btn btn-primary" disabled={isChecking || !settingLoaded || !hasAnySelection}>
                                             Update Selected
                                         </button>
                                     </div>

@@ -92,7 +92,9 @@ def get_defer_restarts_setting():
 @jwt_required()
 def update_defer_restarts_setting():
     """Turn the deferred-restart default on or off."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': {'message': 'Request body must be a JSON object.'}}), 400
     enabled = data.get('enabled')
     if not isinstance(enabled, bool):
         return jsonify({'error': {'message': 'enabled must be a boolean.'}}), 400

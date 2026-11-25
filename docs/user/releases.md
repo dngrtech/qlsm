@@ -6,6 +6,7 @@ QLSM uses `v<major>.<minor>.<patch>` tags. Every merged pull request is listed a
 
 | Version | Date | PR | Changes |
 | --- | --- | --- | --- |
+| `v1.60.0` | 2026-11-25 | [#278](https://github.com/dngrtech/qlsm/pull/278) | Saving a config or updating plugins without a restart now records what changed: click the **Updated** badge to review the pending files and settings, then restart. A new **Defer restarts** setting makes **Restart after saving** and **Restart to apply** start off by default; hook and 99k LAN rate changes still restart. |
 | `v1.59.0` | 2026-11-20 | [#281](https://github.com/dngrtech/qlsm/pull/281) | Custom runtime hosts can now be updated to another approved release, or rolled back, from the host. Removing or disabling an addon that a host's runtime depends on is refused, and backups now include add-on settings. |
 | `v1.58.0` | 2026-11-17 | [#276](https://github.com/dngrtech/qlsm/pull/276) | New standalone hosts can use a **Custom** runtime supplied by an enabled addon. QLSM pins the selected build on the host and uses the provider's plugin API to choose compatible presets and plugins. |
 | `v1.57.1` | 2026-11-11 | [#275](https://github.com/dngrtech/qlsm/pull/275) | Fixed self-host SSH failing on installs made with `git clone`, where `~/.qlsm-ssh` ended up owned by root. Existing installs are repaired on the next `docker compose up`. |

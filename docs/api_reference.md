@@ -1578,7 +1578,7 @@ qlsm's own process, not the servers it manages. Used to activate addons: they re
 | `/settings/vultr-key` | GET | Get the configured Vultr API key |
 | `/settings/vultr-key` | PUT | Set (or clear) the Vultr API key |
 | `/settings/defer-restarts` | GET | `{"enabled": bool}`: whether saves and plugin updates default to no restart (default `false`) |
-| `/settings/defer-restarts` | PUT | Set it: body `{"enabled": bool}` |
+| `/settings/defer-restarts` | PUT | Set it: body `{"enabled": bool}`; `400` if the body is not a JSON object or `enabled` is not a boolean |
 | `/settings/backup/export` | POST | Export the full instance state as a downloadable `.qlsmbak` archive |
 | `/settings/backup/import` | POST | Wipe and restore the full instance state from an uploaded `.qlsmbak` archive |
 
