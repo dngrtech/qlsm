@@ -127,7 +127,10 @@ def test_apply_with_matching_hash_queues_the_save(client, headers, setup):
 def test_apply_with_stale_hash_is_409(client, headers, setup):
     instance, preset = setup
     before = _draft_ids()
-    with patch('ui.routes.instance_routes.enqueue_task') as enqueue:
+    # The hash is compared under the instance lock, on the re-read row.
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.release_lock'), \
+         patch('ui.routes.instance_routes.enqueue_task') as enqueue:
         response = _apply(client, headers, instance, preset, 'stale')
     assert response.status_code == 409
     assert response.get_json()['error']['message'] == \
@@ -203,6 +206,10 @@ def test_unknown_preset_is_404(client, headers, setup):
 
 
 @pytest.mark.parametrize('route,body', [
+    ('preset-preview', None),
+    ('apply-preset', None),
+    ('preset-preview', [1]),
+    ('apply-preset', 'x'),
     ('preset-preview', {}),
     ('preset-preview', {'preset_id': 'x'}),
     ('preset-preview', {'preset_id': True}),
@@ -271,3 +278,89 @@ def test_deferred_apply_lists_its_change_only_once_synced(client, headers, setup
         db.session.commit()
     [entry] = client.get(url, headers=headers).get_json()['data']['entries']
     assert any(f['path'] == 'server.cfg' for f in entry['files'])
+
+
+def _locked_apply(client, headers, instance, preset, preview_hash, **extra):
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.release_lock'), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')) as enqueue:
+        response = _apply(client, headers, instance, preset, preview_hash, **extra)
+    return response, enqueue
+
+
+def test_apply_refuses_when_the_server_changed_after_the_preview(client, headers, setup):
+    """Another operator saved the server between preview and apply: the
+    apply must not overwrite it."""
+    instance, preset = setup
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    cfg = os.path.join('configs', instance.host.name, str(instance.id), 'server.cfg')
+    with open(cfg, 'a', encoding='utf-8') as f:
+        f.write('set g_motd "edited by someone else"\n')
+
+    response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=False)
+    assert response.status_code == 409, response.get_json()
+    enqueue.assert_not_called()
+
+
+def test_apply_never_starts_a_stopped_server(client, headers, setup):
+    from ui.models import InstanceStatus, QLInstance
+
+    instance, preset = setup
+    with client.application.app_context():
+        db.session.get(QLInstance, instance.id).status = InstanceStatus.STOPPED
+        db.session.commit()
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+    response, enqueue = _locked_apply(client, headers, instance, preset, preview_hash, restart=True)
+    assert response.status_code == 202, response.get_json()
+    assert enqueue.call_args.kwargs['restart'] is False
+
+
+def test_apply_reads_the_status_again_under_the_lock(client, headers, setup):
+    """A stop that finished while the apply built its target (seconds: SSH
+    admin read, draft copy) is what the save sees, not the earlier read."""
+    from ui.models import InstanceStatus, QLInstance
+
+    instance, preset = setup
+    with client.application.app_context():
+        db.session.get(QLInstance, instance.id).status = InstanceStatus.RUNNING
+        db.session.commit()
+    preview_hash = _preview(client, headers, instance, preset).get_json()['data']['preview_hash']
+
+    def _stop_meanwhile(*args, **kwargs):
+        import sqlalchemy
+        with db.engine.begin() as conn:
+            conn.execute(sqlalchemy.text("UPDATE ql_instance SET status = 'STOPPED' WHERE id = :id"),
+                         {'id': instance.id})
+        return True
+
+    with patch('ui.routes.instance_routes.acquire_lock', side_effect=_stop_meanwhile), \
+         patch('ui.routes.instance_routes.release_lock'), \
+         patch('ui.routes.instance_routes.enqueue_task', return_value=MagicMock(id='job-1')) as enqueue:
+        response = _apply(client, headers, instance, preset, preview_hash, restart=True)
+    assert response.status_code == 202, response.get_json()
+    assert enqueue.call_args.kwargs['previous_status'] == 'stopped'
+    assert enqueue.call_args.kwargs['restart'] is False
+
+
+def test_preview_maps_an_unavailable_runtime_to_409(client, headers, setup):
+    from ui.custom_runtime import RuntimeUnavailable
+
+    instance, preset = setup
+    with patch('ui.preset_apply.plugin_api_for_host', side_effect=RuntimeUnavailable('provider gone')):
+        response = _preview(client, headers, instance, preset)
+    assert response.status_code == 409
+    assert 'provider gone' in response.get_json()['error']['message']
+
+
+def test_preview_returns_the_whole_resulting_admin_list(client, headers, env):  # noqa: F811
+    from ui import preset_apply
+
+    host = _host()
+    instance = _instance(host, server_cfg='')
+    preset = _preset(env, admins=[{'steam_id64': '76561198000000001', 'level': 5}, {'steam_id64': '76561198000000002', 'level': 3}])
+    current = [{'steam_id64': '76561198000000002', 'level': 3}, {'steam_id64': '76561198000000003', 'level': 4}]
+    with patch.object(preset_apply, 'read_live_admins', return_value=(current, {}, None)):
+        data = _preview(client, headers, instance, preset).get_json()['data']
+    assert data['admins']['before'] == current
+    assert sorted(data['admins']['after'], key=lambda e: e['steam_id64']) == [
+        {'steam_id64': '76561198000000001', 'level': 5}, {'steam_id64': '76561198000000002', 'level': 3}]

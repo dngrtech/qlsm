@@ -250,7 +250,7 @@ def dispatch(hook, scope_id=0, *args, **kwargs):
 # operator typed into an add-instance tab, a password field included). An
 # exception message or traceback can echo them, so these log the exception
 # type only.
-REDACTED_ERROR_HOOKS = frozenset({'backup.export', 'instance.created'})
+REDACTED_ERROR_HOOKS = frozenset({'backup.export', 'instance.created', 'preset.keep_cvars'})
 
 
 def _log_addon_failure(addon_id, hook, what, exc, with_traceback=False):
@@ -338,7 +338,7 @@ def dispatch_each(hook, scope_id, args_for, on_error=None, on_addon_done=None):
     return results
 
 
-def dispatch_by_addon(hook, scope_id, *args):
+def dispatch_by_addon(hook, scope_id, *args, on_error=None):
     """dispatch_each() for a caller that needs to know which addon said what.
 
     Returns `(addon_id, value)` pairs in alphabetical addon order, one per
@@ -347,7 +347,7 @@ def dispatch_by_addon(hook, scope_id, *args):
     logging of a raising handler (skipped, never propagated), same
     slow-handler warning: both go through _handler_results().
     """
-    return list(_handler_results(hook, scope_id, lambda addon_id: (args, {})))
+    return list(_handler_results(hook, scope_id, lambda addon_id: (args, {}), on_error))
 
 
 def cleanup_scope(scope, scope_id, commit=False):

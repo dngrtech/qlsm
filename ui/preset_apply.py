@@ -197,6 +197,25 @@ def qlx_plugin_names(checked_paths, scripts_dir, runtime):
     return names
 
 
+def apply_admin_changes(entries, changes):
+    """applyAdminChanges in EditInstanceConfigModal.jsx: `changes` (level 0 =
+    revoke) applied to `entries`; returns the resulting list."""
+    levels = {c['steam_id64']: int(c['level']) for c in changes or []}
+    result = []
+    for entry in entries or []:
+        steam_id = entry.get('steam_id64')
+        if levels.get(steam_id) == 0:
+            continue
+        if steam_id in levels:
+            entry = {**entry, 'level': levels[steam_id]}
+        result.append(entry)
+    present = {e.get('steam_id64') for e in result}
+    for steam_id, level in levels.items():
+        if level != 0 and steam_id not in present:
+            result.append({'steam_id64': steam_id, 'level': level})
+    return result
+
+
 def diff_admin_lists(before, after):
     """diffAdminLists in utils/adminChanges.js: changed or added admins with
     their new level, removed ones with level 0."""
@@ -349,6 +368,15 @@ def build_preset_target(instance, preset, accepted_replacements, keep_cvars):
         changes = diff_admin_lists(current or [], preset_admins)
         if changes:
             payload['admin_changes'] = changes
+        admins = {
+            # The server's list as read here (None when unreadable) and the
+            # list the load leaves, so the editor can show and save the
+            # whole result, not just the changes, even before its own read.
+            'before': current if current is not None else None,
+            'after': apply_admin_changes(current or [], changes),
+        }
+    else:
+        admins = None
     if preset_payload.get('lan_rate_enabled') is not None:
         wanted = bool(preset_payload['lan_rate_enabled'])
         if would_enable_unsupported_lan_rate(
@@ -377,6 +405,7 @@ def build_preset_target(instance, preset, accepted_replacements, keep_cvars):
 
     return {
         'payload': payload,
+        'admins': admins,
         'compatibility': compatibility,
         'kept_cvars': kept,
         'keep_cvars': keep,
@@ -488,6 +517,30 @@ def diff_preset_target(instance, target):
         'lan_rate': lan_rate,
         'unchanged': unchanged,
     }
+
+
+def instance_state_hash(instance):
+    """sha256 of what a preset apply would overwrite on this instance: its
+    config directory (every file's content) and the saved settings the
+    apply changes. A change by someone else between preview and apply
+    makes the apply refuse (409) instead of overwriting it. The status is
+    left out: the runtime reconciliation flips it on its own."""
+    state = {
+        'files': {rel: entry['sha256'] for rel, entry in snapshot_dir(_instance_config_dir(instance)).items()},
+        'hostname': instance.hostname,
+        'qlx_plugins': instance.qlx_plugins,
+        'ld_preload_hooks': instance.ld_preload_hooks,
+        'lan_rate_enabled': bool(instance.lan_rate_enabled),
+    }
+    return hashlib.sha256(
+        json.dumps(state, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
+
+
+def preview_hash(target, instance):
+    """The hash a preview hands out and an apply must match: the target and
+    the instance state it was built against."""
+    return hashlib.sha256(
+        f'{target_hash(target)}:{instance_state_hash(instance)}'.encode('utf-8')).hexdigest()
 
 
 def target_hash(target):

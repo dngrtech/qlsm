@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import hashlib
 import uuid
 from flask import Blueprint, request, current_app, jsonify
 import sqlalchemy
@@ -30,7 +31,10 @@ from ui.task_lock import acquire_lock, release_lock
 from ui.pending_changes import (
     SOURCE_CONFIG_SAVE, diff_snapshots, list_pending_changes, record_pending_change, snapshot_dir,
 )
-from ui.preset_apply import PresetApplyError, build_preset_target, diff_preset_target, target_hash
+from ui.preset_apply import (
+    PresetApplyError, build_preset_target, diff_preset_target, instance_state_hash, preview_hash,
+    target_hash,
+)
 from ui.preset_keep_cvars import collect_keep_cvars
 from ui.routes.preset_api_routes import read_preset_payload
 from ui.database import get_preset
@@ -1226,7 +1230,7 @@ def get_instance_pending_changes_api(instance_id):
     }})
 
 
-def save_instance_config(instance, data):
+def save_instance_config(instance, data, precondition=None, keep_stopped=False):
     """Validate and apply a config save (PUT body already parsed) to an instance.
 
     Returns a (response, status) tuple. Needs an app/request context.
@@ -1299,12 +1303,6 @@ def save_instance_config(instance, data):
         if not _draft_exists(draft_id):
             return jsonify({"error": {"message": "Draft not found. It may have expired."}}), 400
 
-    original_status = instance.status
-    original_ld_preload_hooks = instance.ld_preload_hooks or None
-    original_lan_rate_enabled = instance.lan_rate_enabled
-    original_hostname = instance.hostname
-    original_qlx_plugins = instance.qlx_plugins
-
     update_kwargs = dict(status=InstanceStatus.CONFIGURING)
     update_kwargs.update(metadata_update_kwargs)
     if 'lan_rate_enabled' in data:
@@ -1317,6 +1315,20 @@ def save_instance_config(instance, data):
     status_committed = False
 
     try:
+        # Read the row again under the lock: the caller may have loaded it
+        # seconds ago (a preset apply reads the admins over SSH first), and
+        # an operation that finished meanwhile must not be undone.
+        db.session.refresh(instance)
+        original_status = instance.status
+        original_ld_preload_hooks = instance.ld_preload_hooks or None
+        original_lan_rate_enabled = instance.lan_rate_enabled
+        original_hostname = instance.hostname
+        original_qlx_plugins = instance.qlx_plugins
+        if precondition is not None:
+            check, message = precondition
+            if not check(instance):
+                return jsonify({"error": {"message": message}}), 409
+
         checked_plugins = data.get('checked_plugins')
         if checked_plugins is not None:
             if (
@@ -1428,6 +1440,8 @@ def save_instance_config(instance, data):
             return jsonify({"error": {"message": f"An instance with the name '{new_name}' already exists."}}), 409
 
         restart = data.get('restart', True)
+        if keep_stopped and original_status == InstanceStatus.STOPPED:
+            restart = False
         lan_rate_changed = (
             'lan_rate_enabled' in data
             and bool(data.get('lan_rate_enabled')) != original_lan_rate_enabled
@@ -1620,6 +1634,8 @@ def _build_target(instance, preset, params):
             instance, preset, params['accepted_replacements'], params['keep_cvars']), None
     except PresetApplyError as e:
         return None, (jsonify({"error": {"message": e.message}}), e.status)
+    except RuntimeUnavailable as e:
+        return None, (jsonify({"error": {"message": str(e)}}), 409)
 
 
 @instance_api_bp.route('/<int:instance_id>/preset-keep-cvars', methods=['GET'], endpoint='get_instance_preset_keep_cvars_api')
@@ -1651,6 +1667,8 @@ def preview_instance_preset_api(instance_id):
     editor's Save, otherwise it is deleted before returning.
     """
     data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _bad_request("Request body must be a JSON object")
     instance, preset, params, error = _preset_request(instance_id, data)
     if error:
         return error
@@ -1663,7 +1681,7 @@ def preview_instance_preset_api(instance_id):
         return error
     try:
         diff = diff_preset_target(instance, target)
-        preview_hash = target_hash(target)
+        hash_value = preview_hash(target, instance)
         payload = dict(target['payload'])
     except Exception:
         _drop_draft(target)
@@ -1677,8 +1695,9 @@ def preview_instance_preset_api(instance_id):
         "keep_cvars": target['keep_cvars'],
         "kept_cvars": target['kept_cvars'],
         "diff": diff,
-        "preview_hash": preview_hash,
+        "preview_hash": hash_value,
         "target": payload,
+        "admins": target.get('admins'),
     }})
 
 
@@ -1691,6 +1710,8 @@ def apply_instance_preset_api(instance_id):
     `preview_hash` the preview returned.
     """
     data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _bad_request("Request body must be a JSON object")
     instance, preset, params, error = _preset_request(instance_id, data)
     if error:
         return error
@@ -1708,10 +1729,25 @@ def apply_instance_preset_api(instance_id):
         if target['needs_decision']:
             _drop_draft(target)
             return jsonify({"error": {"message": "Plugin compatibility needs a decision"}}), 422
-        if target_hash(target) != preview_hash:
-            _drop_draft(target)
-            return jsonify({"error": {"message": "Preset or server changed since the preview. Preview again."}}), 409
-        response, status = save_instance_config(instance, {**target['payload'], 'restart': restart})
+        expected = data.get('preview_hash')
+        target_part = target_hash(target)
+
+        def _unchanged_since_preview(locked_instance):
+            # Under the instance lock, on the re-read row: nothing another
+            # operator saved since the preview may be overwritten.
+            return hashlib.sha256(
+                f'{target_part}:{instance_state_hash(locked_instance)}'.encode('utf-8')
+            ).hexdigest() == expected
+
+        response, status = save_instance_config(
+            instance, {**target['payload'], 'restart': restart},
+            precondition=(
+                _unchanged_since_preview,
+                "Preset or server changed since the preview. Preview again.",
+            ),
+            # The preset apply never starts a stopped server.
+            keep_stopped=True,
+        )
     except Exception:
         _drop_draft(target)
         raise

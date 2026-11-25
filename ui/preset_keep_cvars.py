@@ -29,20 +29,25 @@ def _launch_arg_cvars(instance):
     try:
         args = _build_qlds_args_string(instance)
     except Exception as e:
-        log.warning('keep_cvars: launch args of instance %s skipped: %s',
-                    getattr(instance, 'id', None), e)
+        log.warning('keep_cvars: launch args of instance %s skipped (%s)',
+                    getattr(instance, 'id', None), type(e).__name__)
         return []
     return _SET_RE.findall(args or '')
 
 
 def _addon_cvars(instance):
     try:
+        from ui import db
         from ui.addons import dispatch_by_addon
 
-        pairs = dispatch_by_addon('preset.keep_cvars', instance.id, instance)
+        # A raising handler can leave the session broken; roll it back like
+        # the other dispatch_each callers so the next addon (and the request)
+        # can still use it.
+        pairs = dispatch_by_addon('preset.keep_cvars', instance.id, instance,
+                                  on_error=lambda addon_id, exc: db.session.rollback())
     except Exception as e:  # registry unavailable, e.g. outside an app context
-        log.warning('keep_cvars: addon hook skipped for instance %s: %s',
-                    getattr(instance, 'id', None), e)
+        log.warning('keep_cvars: addon hook skipped for instance %s (%s)',
+                    getattr(instance, 'id', None), type(e).__name__)
         return []
     found = []
     for addon_id, names in pairs:
