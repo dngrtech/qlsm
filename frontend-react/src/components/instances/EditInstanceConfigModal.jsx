@@ -180,6 +180,12 @@ function EditInstanceConfigModal({
   const [presetDraftId, setPresetDraftId] = useState(null);
   // qlx_plugins names of a loaded preset, ticked once its draft's tree arrives.
   const [pendingPresetPlugins, setPendingPresetPlugins] = useState(null); // { draftId, names }
+  // One number per preset load; bumped by every new load, by closing the
+  // editor and by switching instance. A preview answering for an older
+  // number is dropped (its draft discarded), so the last load wins and
+  // nothing of instance A lands in instance B's editor.
+  const presetLoadSeqRef = useRef(0);
+  const [isLoadingPreset, setIsLoadingPreset] = useState(false);
   const [rawQlxPlugins, setRawQlxPlugins] = useState([]); // bare plugin names from instance
   const [droppedPluginCount, setDroppedPluginCount] = useState(0);
   const [pluginNoticeDismissed, setPluginNoticeDismissed] = useState(false);
@@ -405,6 +411,11 @@ function EditInstanceConfigModal({
       console.error('EditInstanceConfigModal: Hooks fetch error:', err);
     }
   }, [instanceId]);
+
+  useEffect(() => {
+    presetLoadSeqRef.current += 1;
+    setIsLoadingPreset(false);
+  }, [isOpen, instanceId]);
 
   useEffect(() => {
     if (isOpen && instanceId) {
@@ -664,7 +675,12 @@ function EditInstanceConfigModal({
   // Fill the form from a preset preview's target (a PUT .../config body the
   // server built: managed cvars blanked, the instance's hostname and per-server
   // cvars kept, factories filtered, LAN rate clamped, plugin names filtered).
-  const applyPresetTarget = useCallback(async (presetId, presetName, target) => {
+  const applyPresetTarget = useCallback(async (presetId, presetName, target, admins, seq) => {
+    const stale = () => seq !== presetLoadSeqRef.current;
+    if (stale()) {
+      if (target?.draft_id) discardDraft(target.draft_id).catch(() => {});
+      return;
+    }
     setPresetError(null);
     try {
       // A hostname the operator typed before loading stays (as it did before
@@ -689,6 +705,11 @@ function EditInstanceConfigModal({
           setPendingPresetPlugins(null);
           setCheckedPlugins(new Set());
         }
+      } else {
+        // A legacy preset keeps the instance's own plugins: back to its
+        // ticks, not the ones an earlier preset load left behind.
+        setPendingPresetPlugins(null);
+        if (pluginsSyncedRef.current) setCheckedPlugins(new Set(initialCheckedPlugins));
       }
       setLoadedPresetName(presetName);
       // No draft_id = a legacy preset: the server leaves scripts/ as they are,
@@ -700,8 +721,18 @@ function EditInstanceConfigModal({
       }
       // Absent admin_changes = the preset has no admin list (or it matches the
       // server's): leave the current list alone.
+      // The changes apply to the server's whole list: the editor's own read
+      // if it is in, else the one the preview made. Without either the
+      // load leaves the admins alone rather than save a partial list (which
+      // would revoke admins the preset keeps).
       if (Array.isArray(target.admin_changes)) {
-        setAdminEntries(applyAdminChanges(loadedAdminEntries, target.admin_changes));
+        const baseline = loadedAdminEntries ?? admins?.before ?? null;
+        if (baseline === null) {
+          showError("The server's admin list could not be read, so the preset's admins were not loaded.");
+        } else {
+          if (loadedAdminEntries === null) setLoadedAdminEntries(baseline);
+          setAdminEntries(applyAdminChanges(baseline, target.admin_changes));
+        }
       }
       // Absent = the preset pre-dates the setting; leave the toggle untouched.
       if (typeof target.lan_rate_enabled === 'boolean') {
@@ -710,11 +741,14 @@ function EditInstanceConfigModal({
       }
 
       // Refresh the factory tree to show the preset's available factories
+      let factoryTree = [];
       try {
-        setFactoryServerTree(await getFactoryTree({ preset: presetName }) || []);
+        factoryTree = await getFactoryTree({ preset: presetName }) || [];
       } catch {
-        setFactoryServerTree([]);
+        factoryTree = [];
       }
+      if (stale()) return;
+      setFactoryServerTree(factoryTree);
 
       if (!editedHostname) {
         setServerHostname(target.hostname || getServerHostname(configs['server.cfg']));
@@ -727,7 +761,7 @@ function EditInstanceConfigModal({
     } catch (err) {
       setPresetError(err.message || `Failed to load preset ${presetId}.`);
     }
-  }, [loadedAdminEntries, originalLanRateEnabled, originalServerHostname, resetConfigs, resetFactories, serverHostname, showSuccess]);
+  }, [initialCheckedPlugins, loadedAdminEntries, originalLanRateEnabled, originalServerHostname, resetConfigs, resetFactories, serverHostname, showError, showSuccess]);
 
   const previewPreset = useCallback((presetId, acceptedPaths) => previewPresetApply(instanceId, {
     preset_id: Number(presetId),
@@ -737,9 +771,15 @@ function EditInstanceConfigModal({
 
   const handleLoadPreset = useCallback(async (presetId) => {
     setPresetError(null);
+    const seq = ++presetLoadSeqRef.current;
+    setIsLoadingPreset(true);
     const presetName = presets.find((preset) => String(preset.id) === String(presetId))?.name || `#${presetId}`;
     try {
       const preview = await previewPreset(presetId);
+      if (seq !== presetLoadSeqRef.current) {
+        if (preview.target?.draft_id) discardDraft(preview.target.draft_id).catch(() => {});
+        return;
+      }
       if (preview.compatibility?.stripped?.length) {
         // The operator decides first; the re-preview with the answer makes
         // its own draft, so this one is not kept.
@@ -747,9 +787,12 @@ function EditInstanceConfigModal({
         setPendingPreset({ id: presetId, name: presetName, compatibility: preview.compatibility });
         return;
       }
-      await applyPresetTarget(presetId, presetName, preview.target);
+      await applyPresetTarget(presetId, presetName, preview.target, preview.admins, seq);
     } catch (err) {
+      if (seq !== presetLoadSeqRef.current) return;
       setPresetError(err?.error?.message || err?.message || `Failed to load preset ${presetId}.`);
+    } finally {
+      if (seq === presetLoadSeqRef.current) setIsLoadingPreset(false);
     }
   }, [applyPresetTarget, presets, previewPreset]);
 
@@ -760,11 +803,16 @@ function EditInstanceConfigModal({
     // What the operator ticked; the server adds what it swapped without
     // asking. A cancelled load calls nothing here, so the active preset's
     // draft (and the replacements accepted for it) stays untouched.
+    const seq = ++presetLoadSeqRef.current;
+    setIsLoadingPreset(true);
     try {
       const preview = await previewPreset(id, Array.from(tickedPaths || []));
-      await applyPresetTarget(id, name, preview.target);
+      await applyPresetTarget(id, name, preview.target, preview.admins, seq);
     } catch (err) {
+      if (seq !== presetLoadSeqRef.current) return;
       setPresetError(err?.error?.message || err?.message || `Failed to load preset ${id}.`);
+    } finally {
+      if (seq === presetLoadSeqRef.current) setIsLoadingPreset(false);
     }
   }, [applyPresetTarget, pendingPreset, previewPreset]);
 
@@ -911,6 +959,9 @@ function EditInstanceConfigModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (uploading) return;
+    // A loaded preset's plugin ticks are not resolved yet: saving now would
+    // send the previous ticks with the preset's scripts.
+    if (pendingPresetPlugins !== null) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -1423,7 +1474,7 @@ function EditInstanceConfigModal({
                               <button
                                 type="submit"
                                 form={CONFIG_FORM_ID}
-                                disabled={saving || loading || uploading}
+                                disabled={saving || loading || uploading || pendingPresetPlugins !== null}
                                 className="btn btn-primary"
                               >
                                 {saving ? (
@@ -1477,6 +1528,7 @@ function EditInstanceConfigModal({
         host={hostShape}
         presets={presets}
         isLoading={loadingPresets}
+        isLoadingPreset={isLoadingPreset}
         onLoadPreset={handleLoadPreset}
         onSavePreset={handleSavePreset}
         onOverwritePreset={handleOverwritePreset}

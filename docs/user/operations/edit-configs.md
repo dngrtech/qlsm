@@ -255,6 +255,10 @@ A hostname you typed into the **Hostname** field before loading is kept as well.
 
 A preset saved before QLSM recorded its plugin selection has no plugin list to load, so the server's plugins are left as they are.
 
+A preset with an admin list no longer replaces the server's admins: QLSM compares it with the list it reads from the server, and **Owner & Admins** then shows the server's admins with the preset's changes applied (added, re-levelled, and removed where the preset leaves someone out). Save writes only those changes. If the server's admin list cannot be read, the preset's admins are not loaded and you are told so; the rest of the preset still loads.
+
+While a preset is loading, **Load** is disabled; only the last load you started is applied, and a load still running when you close the editor is dropped. **Save Configuration** stays disabled until the preset's plugin list has been matched to its files.
+
 ## Factories
 
 The **Factories** tab controls factory files included in the deployment bundle.

@@ -1,5 +1,5 @@
 import React, { useImperativeHandle } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -624,6 +624,85 @@ describe('EditInstanceConfigModal preset saving', () => {
     await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
     expect(mocks.updateInstanceConfig.mock.calls[0][1].checked_plugins).toEqual(['balance']);
     expect(mocks.updateInstanceConfig.mock.calls[0][1].draft_id).toBe('draft-123');
+  });
+
+  it('a legacy preset after a plugin preset goes back to the instance\'s own ticks', async () => {
+    mocks.useDraftWorkspace.mockReturnValue({
+      ...baseDraftWorkspace,
+      tree: [
+        { type: 'file', name: 'balance.py', path: 'balance.py' },
+        { type: 'file', name: 'other.py', path: 'other.py' },
+      ],
+    });
+    mocks.previewPresetApply
+      .mockResolvedValueOnce(mockPresetPreview('plugin-preset', { checked_plugins: ['other'] }))
+      .mockResolvedValueOnce(mockPresetPreview('plugin-preset', { draft_id: undefined }));
+
+    render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1].checked_plugins).toEqual(['balance']);
+  });
+
+  it('keeps Save off until a loaded preset\'s plugin ticks are resolved', async () => {
+    // The preset draft's tree never arrives here: the ticks stay pending.
+    mocks.useDraftWorkspace.mockReturnValue({ ...baseDraftWorkspace, tree: [] });
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('plugin-preset', { checked_plugins: ['other'] }));
+
+    render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: /save configuration/i })).toBeDisabled();
+  });
+
+  it('the last preset load wins and a load for a closed editor lands nowhere', async () => {
+    let resolveFirst;
+    mocks.previewPresetApply
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce(mockPresetPreview('second', { hostname: 'Second Host', draft_id: 'draft-second', configs: { ...DEFAULT_TARGET_CONFIGS, 'server.cfg': 'set sv_hostname "Second Host"' } }));
+    mockPresetPreview('second');
+
+    const { rerender } = render(
+      <EditInstanceConfigModal isOpen={true} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(screen.getByLabelText(/server hostname/i)).toHaveValue('Second Host'));
+
+    await act(async () => {
+      resolveFirst(mockPresetPreview('second', { hostname: 'First Host', draft_id: 'draft-first', configs: { ...DEFAULT_TARGET_CONFIGS, 'server.cfg': 'set sv_hostname "First Host"' } }));
+    });
+    expect(screen.getByLabelText(/server hostname/i)).toHaveValue('Second Host');
+    expect(mocks.discardDraft).toHaveBeenCalledWith('draft-first');
+
+    // A load still running when the editor closes is dropped too.
+    let resolveClosed;
+    mocks.previewPresetApply.mockReturnValueOnce(new Promise((resolve) => { resolveClosed = resolve; }));
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    rerender(
+      <EditInstanceConfigModal isOpen={false} onClose={vi.fn()} instanceId={1} instanceName="Test123" onConfigSaved={vi.fn()} />
+    );
+    await act(async () => {
+      resolveClosed(mockPresetPreview('second', { hostname: 'Closed Host', draft_id: 'draft-closed', configs: { ...DEFAULT_TARGET_CONFIGS, 'server.cfg': 'set sv_hostname "Closed Host"' } }));
+    });
+    expect(mocks.discardDraft).toHaveBeenCalledWith('draft-closed');
   });
 
   it('keeps the instance\'s plugins when a legacy preset is loaded before the plugin tree arrives', async () => {
@@ -2039,7 +2118,7 @@ describe('EditInstanceConfigModal preset saving', () => {
       // The server list is empty, so the preview's changes are the preset's list.
       mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('admins-preset', {
         admin_changes: [{ steam_id64: '76561198087654321', level: 4 }],
-      }));
+      }, { admins: { before: [], after: [{ steam_id64: '76561198087654321', level: 4 }] } }));
       renderModal();
       await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
@@ -2074,6 +2153,46 @@ describe('EditInstanceConfigModal preset saving', () => {
       fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
       await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalled());
       expect(mocks.updateInstanceConfig.mock.calls[0][1].admin_changes).toEqual(adminChanges);
+    });
+
+    it('a preset loaded before the editor read the admins keeps the ones the preset keeps', async () => {
+      // Server: A=3, B=5 (as the preview read them). Preset: A=3, C=1. The
+      // editor's own read has not arrived; Save must revoke B only.
+      const before = [
+        { steam_id64: '76561198012345678', level: 3 },
+        { steam_id64: '76561198087654321', level: 5 },
+      ];
+      const adminChanges = [
+        { steam_id64: '76561198000000001', level: 1 },
+        { steam_id64: '76561198087654321', level: 0 },
+      ];
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview(
+        'admins-preset', { admin_changes: adminChanges }, { admins: { before, after: [] } },
+      ));
+      renderModal();
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(screen.getByText('seeded:76561198000000001:1')).toBeInTheDocument());
+      expect(screen.getByText('seeded:76561198012345678:3')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+      await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalled());
+      expect(mocks.updateInstanceConfig.mock.calls[0][1].admin_changes).toEqual(adminChanges);
+    });
+
+    it('a preset load with no readable admin list leaves the admins alone', async () => {
+      mocks.previewPresetApply.mockResolvedValue(mockPresetPreview(
+        'admins-preset', { admin_changes: [{ steam_id64: '76561198000000001', level: 1 }] },
+        { admins: { before: null, after: [] } },
+      ));
+      renderModal();
+      await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+      fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+      await waitFor(() => expect(mocks.showError).toHaveBeenCalledWith(
+        "The server's admin list could not be read, so the preset's admins were not loaded."));
+      expect(screen.queryByText(/seeded:/)).not.toBeInTheDocument();
     });
 
     it('a preset with no admin list leaves the current one alone', async () => {
