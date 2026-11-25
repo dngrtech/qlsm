@@ -372,3 +372,54 @@ def test_bulk_restart_releases_the_lock_when_enqueue_fails(file_db):
     assert release.call_args.args[:2] == ('instance', instance.id)
     assert instance.status == InstanceStatus.RUNNING
     assert 'could not queue a restart' in instance.logs
+
+
+def test_bulk_restart_fallback_does_not_overwrite_a_stop_committed_after_the_check(file_db):
+    """The busy-lock fallback checks the row, then writes. A stop that
+    commits STOPPED from another connection in between must survive: the
+    write only applies while status and logs are still what was checked."""
+    instance = _restart_instance_row()
+    instance.status = InstanceStatus.CONFIGURING
+    instance.logs = 'Updating Workshop item 1...'
+    db.session.commit()
+    instance_id = instance.id
+
+    def _checked_then_stopped(fresh):
+        ours = fresh.status == InstanceStatus.CONFIGURING
+        conn = sqlite3.connect(file_db)
+        conn.execute("UPDATE ql_instance SET status = 'STOPPED', logs = 'stop finished' WHERE id = ?",
+                     (instance_id,))
+        conn.commit()
+        conn.close()
+        return ours
+
+    with patch('ui.task_lock.acquire_lock', return_value=False), \
+            patch('ui.tasks.enqueue_task') as enqueue:
+        assert common.queue_instance_restart(
+            instance, 'queued', InstanceStatus.RUNNING, 'Workshop 1 updated',
+            still_ours=_checked_then_stopped) is False
+
+    enqueue.assert_not_called()
+    db.session.expire_all()
+    saved = db.session.get(QLInstance, instance_id)
+    assert saved.status == InstanceStatus.STOPPED
+    assert saved.logs == 'stop finished'
+
+
+def test_bulk_restart_fallback_restores_its_own_state_when_unchanged(file_db):
+    instance = _restart_instance_row()
+    instance.status = InstanceStatus.CONFIGURING
+    instance.logs = 'Updating Workshop item 1...'
+    db.session.commit()
+
+    with patch('ui.task_lock.acquire_lock', return_value=False), \
+            patch('ui.tasks.enqueue_task'):
+        common.queue_instance_restart(
+            instance, 'queued', InstanceStatus.RUNNING, 'Workshop 1 updated',
+            previous_logs='old log',
+            still_ours=lambda fresh: fresh.status == InstanceStatus.CONFIGURING)
+
+    db.session.expire_all()
+    saved = db.session.get(QLInstance, instance.id)
+    assert saved.status == InstanceStatus.RUNNING
+    assert 'restart not queued' in saved.logs and saved.logs.endswith('old log')

@@ -210,9 +210,35 @@ def queue_instance_restart(instance, queued_log, fallback_status, context, previ
         previous_logs = instance.logs or ''
     instance_id = instance.id
 
+    checked = {}
+
     def _ours():
         fresh = db.session.get(QLInstance, instance_id, populate_existing=True)
-        return fresh is not None and still_ours is not None and bool(still_ours(fresh))
+        if fresh is None or still_ours is None:
+            return False
+        checked['status'], checked['logs'] = fresh.status, fresh.logs
+        return bool(still_ours(fresh))
+
+    def _write_fallback_if_unchanged(logs):
+        """One conditional UPDATE: only while the row still has the status
+        and logs _ours() just checked. Without the lock another operation
+        (a stop) can commit between that check and this write; then no row
+        matches and its newer state is left intact."""
+        from sqlalchemy import update
+
+        log_matches = (QLInstance.logs.is_(None) if checked['logs'] is None
+                       else QLInstance.logs == checked['logs'])
+        result = db.session.execute(
+            update(QLInstance)
+            .where(QLInstance.id == instance_id)
+            .where(QLInstance.status == checked['status'])
+            .where(log_matches)
+            .values(status=fallback_status, logs=logs)
+            .execution_options(synchronize_session=False)
+        )
+        db.session.commit()
+        db.session.expire_all()
+        return result.rowcount == 1
 
     lock_token = str(uuid.uuid4())
     try:
@@ -222,12 +248,13 @@ def queue_instance_restart(instance, queued_log, fallback_status, context, previ
         locked = False
     if not locked:
         if _ours():
-            update_instance(
-                instance_id,
-                status=fallback_status,
-                logs=f"{context}: another operation holds this instance, restart not queued. "
-                     f"Restart it when that operation finishes.\n{previous_logs}",
+            written = _write_fallback_if_unchanged(
+                f"{context}: another operation holds this instance, restart not queued. "
+                f"Restart it when that operation finishes.\n{previous_logs}"
             )
+            if not written:
+                log.info("%s: instance %s changed after the check; restart not queued, "
+                         "instance left as it is", context, instance_id)
         else:
             log.info("%s: instance %s is busy and was changed by another operation; "
                      "restart not queued, instance left as it is", context, instance_id)
