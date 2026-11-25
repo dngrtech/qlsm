@@ -98,6 +98,13 @@ def _put_config(client, headers, instance_id, payload):
     return enqueue
 
 
+def _publish(app, instance_id):
+    from ui.pending_changes import publish_pending_changes
+    with app.app_context():
+        publish_pending_changes(instance_id)
+        db.session.commit()
+
+
 def test_save_without_restart_records_diff_and_accumulates(
     client, app, headers, running_instance, tmp_path, monkeypatch
 ):
@@ -115,6 +122,7 @@ def test_save_without_restart_records_diff_and_accumulates(
         'configs': _configs(**{'server.cfg': 'set g_gametype 4\n', 'extra.cfg': 'x\n'}),
         'restart': False,
     })
+    _publish(app, running_instance.id)  # what the sync job does once on the host
 
     response = client.get(f'/api/instances/{running_instance.id}/pending-changes', headers=headers)
     assert response.status_code == 200
@@ -247,22 +255,21 @@ def test_apply_config_clears_records_only_with_restart(monkeypatch, app, restart
     monkeypatch.setattr('ui.task_logic.access_permission_sync.write_and_report_admin_levels', MagicMock())
     clear = MagicMock()
     monkeypatch.setattr(ansible_instance_mgmt, 'clear_pending_changes', clear)
-    record = MagicMock()
-    monkeypatch.setattr(ansible_instance_mgmt, 'record_pending_change', record)
-    pending = {'source': 'plugin_update', 'files': [{'path': 'scripts/a.py'}]}
+    publish = MagicMock()
+    monkeypatch.setattr(ansible_instance_mgmt, 'publish_pending_changes', publish)
 
     try:
-        ansible_instance_mgmt.apply_instance_config_logic(12, restart=restart, pending_change=pending)
+        ansible_instance_mgmt.apply_instance_config_logic(12, restart=restart)
     finally:
         monkeypatch.undo()
         ctx.pop()
 
     assert clear.called is cleared
-    # A deferred sync records the caller's entry with the UPDATED commit.
+    # A deferred sync publishes the staged records with the UPDATED commit.
     if restart:
-        record.assert_not_called()
+        publish.assert_not_called()
     else:
-        record.assert_called_once_with(12, 'plugin_update', [{'path': 'scripts/a.py'}], [])
+        publish.assert_called_once_with(12)
         assert instance.status == InstanceStatus.UPDATED
 
 
@@ -347,12 +354,14 @@ def test_plugin_update_without_restart_records_and_syncs(app, tmp_path, monkeypa
         enqueue.assert_called_once()
         assert enqueue.call_args.kwargs['restart'] is False
 
-        # Nothing is recorded before the sync reached the host: the entry
-        # travels with the sync job and is committed with UPDATED.
+        # Staged, not shown before the sync reached the host; the sync job
+        # publishes it with UPDATED.
         assert list_pending_changes(running_instance.id) == []
-        pending = enqueue.call_args.kwargs['pending_change']
-        [change] = pending['files']
-        assert pending['source'] == 'plugin_update'
+        [row] = PendingInstanceChange.query.filter_by(instance_id=running_instance.id).all()
+        assert row.synced is False
+        [entry] = [row.to_dict()]
+        [change] = entry['files']
+        assert entry['source'] == 'plugin_update'
         assert change['path'] == 'scripts/sample_plugin.py'
         assert '+VERSION = 2' in change['diff']
 
@@ -487,5 +496,111 @@ def test_save_without_restart_records_lan_rate_change(
     })
 
     with app.app_context():
+        assert list_pending_changes(running_instance.id) == []  # staged until synced
+    _publish(app, running_instance.id)
+    with app.app_context():
         [entry] = list_pending_changes(running_instance.id)
     assert {'field': 'lan_rate_enabled', 'before': 'off', 'after': 'on'} in entry['settings']
+
+
+# --- a deferred save is published only once its files reach the host ------
+
+def _run_sync(app, monkeypatch, instance_id, rc):
+    """apply_instance_config_logic(restart=False) against the real database,
+    with the playbook answering `rc`."""
+    from ui.task_logic import ansible_instance_mgmt, service_runtime
+    from ui.task_logic.ansible_runner import SimpleAnsibleResult
+
+    with monkeypatch.context() as m:
+        m.setattr(ansible_instance_mgmt, 'get_current_job', MagicMock(return_value=MagicMock(id='job')))
+        m.setattr(ansible_instance_mgmt, '_prepare_instance_zmq', MagicMock())
+        m.setattr(ansible_instance_mgmt, 'ensure_instance_cpu_affinity', MagicMock(return_value=None))
+        m.setattr(ansible_instance_mgmt, '_build_qlds_args_string', MagicMock(return_value='args'))
+        m.setattr(ansible_instance_mgmt, '_build_ld_preload_paths', MagicMock(return_value=''))
+        m.setattr(ansible_instance_mgmt, 'with_self_host_network_extravars', lambda _i, extra: extra)
+        m.setattr(ansible_instance_mgmt, 'instance_runtime_extravars', MagicMock(return_value={}))
+        m.setattr(ansible_instance_mgmt, '_addon_contributions', MagicMock())
+        m.setattr(ansible_instance_mgmt, '_run_ansible_playbook',
+                  MagicMock(return_value=(SimpleAnsibleResult(rc, 'out', 'err'), None)))
+        m.setattr(service_runtime, 'probe_instance_invocation_id', MagicMock(return_value='b' * 32))
+        m.setattr('ui.task_logic.access_permission_sync.write_and_report_admin_levels', MagicMock())
+        with app.app_context():
+            ansible_instance_mgmt.apply_instance_config_logic(
+                instance_id, restart=False, previous_status='running',
+            )
+
+
+def _pending(client, headers, instance_id):
+    response = client.get(f'/api/instances/{instance_id}/pending-changes', headers=headers)
+    assert response.status_code == 200
+    return response.get_json()['data']['entries']
+
+
+def test_deferred_save_is_not_listed_when_the_sync_cannot_be_queued(
+    client, app, headers, running_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    instance_dir = tmp_path / 'configs' / running_instance.host_name / str(running_instance.id)
+    instance_dir.mkdir(parents=True)
+    (instance_dir / 'server.cfg').write_text('set g_gametype 1\n')
+
+    with patch('ui.routes.instance_routes.acquire_lock', return_value=True), \
+         patch('ui.routes.instance_routes.release_lock'), \
+         patch('ui.routes.instance_routes.enqueue_task', side_effect=RuntimeError('redis down')):
+        response = client.put(f'/api/instances/{running_instance.id}/config', headers=headers, json={
+            'configs': _configs(**{'server.cfg': 'set g_gametype 4\n'}), 'restart': False,
+        })
+    assert response.status_code == 500
+    assert _pending(client, headers, running_instance.id) == []
+
+
+def test_deferred_save_is_published_once_a_retried_sync_reaches_the_host(
+    client, app, headers, running_instance, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    instance_dir = tmp_path / 'configs' / running_instance.host_name / str(running_instance.id)
+    instance_dir.mkdir(parents=True)
+    (instance_dir / 'server.cfg').write_text('set g_gametype 1\n')
+    body = {'configs': _configs(**{'server.cfg': 'set g_gametype 4\n'}), 'restart': False}
+
+    _put_config(client, headers, running_instance.id, body)
+    _run_sync(app, monkeypatch, running_instance.id, rc=4)  # host unreachable
+    assert _pending(client, headers, running_instance.id) == []
+
+    # The operator saves again: the files are already staged, so this save
+    # changes nothing on the controller, but its sync is what gets them to
+    # the host.
+    _put_config(client, headers, running_instance.id, body)
+    _run_sync(app, monkeypatch, running_instance.id, rc=0)
+
+    [entry] = _pending(client, headers, running_instance.id)
+    files = {f['path']: f for f in entry['files']}
+    assert '+set g_gametype 4' in files['server.cfg']['diff']
+    with app.app_context():
+        assert db.session.get(QLInstance, running_instance.id).status == InstanceStatus.UPDATED
+
+
+def test_observed_restart_keeps_changes_not_yet_on_the_host(app, running_instance):
+    """A restart seen from outside loaded only what was synced; a staged
+    change whose sync has not run yet stays for that sync."""
+    from ui.task_logic.instance_runtime_reconciliation import reconcile_runtime_observations
+    from ui.task_logic.service_runtime import RuntimeObservation
+
+    with app.app_context():
+        instance = db.session.get(QLInstance, running_instance.id)
+        instance.status = InstanceStatus.UPDATED
+        instance.runtime_invocation_id = 'a' * 32
+        record_pending_change(instance.id, SOURCE_CONFIG_SAVE, [{'path': 'synced.cfg'}])
+        record_pending_change(instance.id, SOURCE_CONFIG_SAVE, [{'path': 'staged.cfg'}], synced=False)
+        db.session.commit()
+
+        observation = RuntimeObservation(
+            status={'map': 'campgrounds', 'players': [], 'updated': 1_786_320_010},
+            invocation_id='b' * 32,
+            active=True,
+            service_started_at=1_786_320_000,
+        )
+        reconcile_runtime_observations([instance], {'27960': observation})
+        rows = PendingInstanceChange.query.filter_by(instance_id=instance.id).all()
+        assert [r.to_dict()['files'][0]['path'] for r in rows] == ['staged.cfg']
+        assert rows[0].synced is False

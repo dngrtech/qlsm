@@ -1129,7 +1129,8 @@ def _read_instance_config(host_name, instance_id, filename):
 @jwt_required()
 def get_instance_pending_changes_api(instance_id):
     """Changes synced to the host without a restart, oldest first. Cleared
-    when the instance restarts."""
+    when the instance restarts. Changes still only staged on the controller
+    (their sync has not reached the host) are not listed."""
     instance = get_instance(instance_id)
     if not instance:
         return jsonify({"error": {"message": "Instance not found."}}), 404
@@ -1392,11 +1393,16 @@ def manage_instance_config_api(instance_id): # Renamed and combined GET/POST fro
                         'before': 'on' if original_lan_rate_enabled else 'off',
                         'after': 'on' if data.get('lan_rate_enabled') else 'off',
                     })
+                # Staged: shown only once the sync job below got the files
+                # to the host (it publishes it with UPDATED). If the job is
+                # never queued or fails, the record stays hidden until a
+                # later sync of this instance carries the same files.
                 record_pending_change(
                     instance.id,
                     SOURCE_CONFIG_SAVE,
                     diff_snapshots(files_before, snapshot_dir(instance_config_dir)),
                     setting_changes,
+                    synced=False,
                 )
                 db.session.commit()
 

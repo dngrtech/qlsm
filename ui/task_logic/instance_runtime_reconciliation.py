@@ -90,7 +90,8 @@ def _reconcile_observation(instance_id, observation):
         return True, False, False
 
     # The new invocation loaded every deferred change; drop their records.
-    clear_pending_changes(snapshot.id)
+    # Staged changes whose sync has not reached the host were not loaded.
+    clear_pending_changes(snapshot.id, synced_only=True)
     promoted = db.session.get(QLInstance, snapshot.id, populate_existing=True)
     if promoted is not None:
         append_log(promoted, RESTART_CONFIRMED_LOG)

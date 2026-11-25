@@ -810,7 +810,7 @@ Custom hosts include the pinned `runtime_provider_id`, `runtime_release_sha256` 
 
 ### Pending Changes (GET /instances/<id>/pending-changes)
 
-A save with `restart: false` on an instance that is not stopped (and that nothing forces to restart) records what it changed: the instance directory is snapshotted before the files are overwritten and diffed after. Plugin updates and workshop updates applied without a restart add records too. Records accumulate, oldest first, and are dropped once the instance actually restarts — a restart/start/deploy from QLSM, a config apply with restart, or the runtime reconciliation that promotes `UPDATED` to `RUNNING` after an external restart.
+A save with `restart: false` on an instance that is not stopped (and that nothing forces to restart) records what it changed: the instance directory is snapshotted before the files are overwritten and diffed after. Plugin updates and workshop updates applied without a restart add records too. A save's or plugin update's record is listed only once its sync job got the files to the host (it is published together with `UPDATED`); if the sync cannot be queued or fails, the record stays hidden and is published by the next sync of the instance. Records accumulate, oldest first, and are dropped once the instance actually restarts — a restart/start/deploy from QLSM, a config apply with restart, or the runtime reconciliation that promotes `UPDATED` to `RUNNING` after an external restart (a record not yet synced is kept by a start and by the reconciliation).
 
 ```json
 {

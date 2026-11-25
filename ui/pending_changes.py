@@ -5,6 +5,13 @@ leaves the running QLDS on the old ones (status UPDATED). This module records
 *what* changed so the operator can review it before restarting, and drops
 the record once a restart makes the files live.
 
+The diff is taken on the controller when the files are staged, before the
+sync job runs, so it is recorded then as *staged* (synced=False) and hidden.
+The sync job that gets the files to the host publishes every staged record
+of the instance in the same commit as UPDATED (publish_pending_changes). A
+failed or never-queued sync leaves them staged: the next sync of the same
+instance carries those files too, and publishes them.
+
 Records are computed on the controller from ``configs/<host>/<id>/``: a
 snapshot before the files are overwritten, another after, diffed here. Text
 files get a unified diff (capped), binaries and oversized files a hash only.
@@ -14,7 +21,7 @@ import hashlib
 import json
 import os
 
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
 from ui import db
 from ui.models import AppSetting, PendingInstanceChange
@@ -131,9 +138,9 @@ def diff_snapshots(before, after):
 
 # --- Records --------------------------------------------------------------
 
-def record_pending_change(instance_id, source, files, settings=None):
+def record_pending_change(instance_id, source, files, settings=None, synced=True):
     """Add one record if anything changed. Does not commit. Returns the row
-    or None."""
+    or None. `synced=False` stages it until publish_pending_changes()."""
     settings = settings or []
     if not files and not settings:
         return None
@@ -141,22 +148,41 @@ def record_pending_change(instance_id, source, files, settings=None):
         instance_id=instance_id,
         source=source,
         changes_json=json.dumps({'files': files, 'settings': settings}),
+        synced=synced,
     )
     db.session.add(row)
     return row
 
 
-def clear_pending_changes(instance_id):
-    """Drop every record for the instance (it was restarted). Does not commit."""
+def publish_pending_changes(instance_id):
+    """Mark the instance's staged records synced: their files just reached
+    the host. Does not commit."""
     db.session.execute(
-        delete(PendingInstanceChange).where(PendingInstanceChange.instance_id == instance_id)
+        update(PendingInstanceChange)
+        .where(PendingInstanceChange.instance_id == instance_id)
+        .where(PendingInstanceChange.synced.is_(False))
+        .values(synced=True)
     )
+
+
+def clear_pending_changes(instance_id, synced_only=False):
+    """Drop the instance's records (it was restarted). Does not commit.
+
+    A restart that syncs the instance's files first (restart, deploy, a
+    config apply with restart) loads staged changes too and drops all.
+    `synced_only` is for a restart that does not sync (an observed external
+    restart, start, a LAN rate or hooks run): staged files are not on the
+    host yet, so their records stay for the sync that carries them."""
+    stmt = delete(PendingInstanceChange).where(PendingInstanceChange.instance_id == instance_id)
+    if synced_only:
+        stmt = stmt.where(PendingInstanceChange.synced.is_(True))
+    db.session.execute(stmt)
 
 
 def list_pending_changes(instance_id):
     rows = (
         PendingInstanceChange.query
-        .filter_by(instance_id=instance_id)
+        .filter_by(instance_id=instance_id, synced=True)
         .order_by(PendingInstanceChange.created_at.asc(), PendingInstanceChange.id.asc())
         .all()
     )

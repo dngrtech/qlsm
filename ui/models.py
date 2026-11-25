@@ -363,6 +363,12 @@ class PendingInstanceChange(db.Model):
 
     `changes_json` holds {"files": [...], "settings": [...]} as built by
     ui/pending_changes.py.
+
+    `synced` is False while the change is only staged on the controller (a
+    config save or plugin update whose sync job has not reached the host
+    yet). Only synced rows are shown; the sync job that gets the files to
+    the host publishes the staged ones with UPDATED, a failed sync leaves
+    them staged for the next one.
     """
     __tablename__ = 'pending_instance_change'
 
@@ -371,6 +377,7 @@ class PendingInstanceChange(db.Model):
     source = db.Column(db.String(32), nullable=False)
     changes_json = db.Column(db.Text, nullable=False, default='{}', server_default='{}')
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    synced = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
     def to_dict(self):
         try:

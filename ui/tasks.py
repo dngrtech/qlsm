@@ -201,7 +201,7 @@ def start_instance(instance_id, lock_token=None):
 
 @rq.job(timeout=300)
 @with_app_context
-def apply_instance_config(instance_id, restart=True, reconcile_lan_rate_network=False, previous_status=None, admin_levels=None, lock_token=None, pending_change=None):
+def apply_instance_config(instance_id, restart=True, reconcile_lan_rate_network=False, previous_status=None, admin_levels=None, lock_token=None):
     """RQ task entry point for applying configuration to a QL instance."""
     try:
         return apply_instance_config_logic(
@@ -210,7 +210,6 @@ def apply_instance_config(instance_id, restart=True, reconcile_lan_rate_network=
             reconcile_lan_rate_network=reconcile_lan_rate_network,
             previous_status=previous_status,
             admin_levels=admin_levels,
-            pending_change=pending_change,
         )
     finally:
         if lock_token:
