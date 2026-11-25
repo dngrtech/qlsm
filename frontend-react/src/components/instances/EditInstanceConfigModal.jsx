@@ -483,7 +483,11 @@ function EditInstanceConfigModal({
         setInstanceStatus(null);
         setAdminEntries(null);
         setLoadedAdminEntries(null);
+        // Per-instance plugin state: another instance opened before must not
+        // count as this one's resolved ticks.
         pluginsSyncedRef.current = false;
+        instanceTicksResolvedRef.current = false;
+        presetPluginDraftIdsRef.current = new Set();
         setDroppedPluginCount(0);
         setPluginNoticeDismissed(false);
         setFactoryServerTree([]);

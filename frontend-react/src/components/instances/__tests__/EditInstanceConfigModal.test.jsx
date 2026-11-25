@@ -755,6 +755,33 @@ describe('EditInstanceConfigModal preset saving', () => {
     expect(mocks.updateInstanceConfig.mock.calls[0][1].checked_plugins).toEqual(['balance']);
   });
 
+  it('instance A\'s resolved ticks do not carry over to instance B (legacy preset before B\'s tree)', async () => {
+    // The maintainer's sequence: open A, its plugin tree loads, close; open
+    // B, load a legacy preset and Save before B's tree arrives. Save must not
+    // send checked_plugins: [] for B (that clears its enabled plugins).
+    let phase = 'a';
+    mocks.useDraftWorkspace.mockImplementation(() => (phase === 'a'
+      ? { ...baseDraftWorkspace, tree: [{ type: 'file', name: 'balance.py', path: 'balance.py' }] }
+      : { ...baseDraftWorkspace, draftId: 'draft-b', tree: [], loading: true }));
+    mocks.previewPresetApply.mockResolvedValue(mockPresetPreview('legacy-preset', { draft_id: undefined }));
+    const props = { onClose: vi.fn(), instanceName: 'Test123', onConfigSaved: vi.fn() };
+    const { rerender } = render(<EditInstanceConfigModal {...props} isOpen={true} instanceId={1} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+
+    rerender(<EditInstanceConfigModal {...props} isOpen={false} instanceId={1} />);
+    phase = 'b';
+    rerender(<EditInstanceConfigModal {...props} isOpen={true} instanceId={2} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /load preset/i })).toBeInTheDocument());
+    await waitFor(() => expect(mocks.getInstanceById).toHaveBeenCalledWith(2));
+    fireEvent.click(screen.getByRole('button', { name: /load preset/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm load preset/i }));
+    await waitFor(() => expect(mocks.showSuccess).toHaveBeenCalledWith('Preset "legacy-preset" loaded successfully.'));
+
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+    await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
+    expect(mocks.updateInstanceConfig.mock.calls[0][1]).not.toHaveProperty('checked_plugins');
+  });
+
   it('the last preset load wins and a load for a closed editor lands nowhere', async () => {
     let resolveFirst;
     mocks.previewPresetApply
