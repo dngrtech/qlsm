@@ -1942,6 +1942,8 @@ describe('EditInstanceConfigModal preset saving', () => {
       expect(mocks.discardDraft).toHaveBeenCalledWith('draft-asked');
       expect(mocks.draftAdapterExistingDraftIds.at(-1)).toBe('draft-accepted');
 
+      // Save waits for the preset's plugin ticks to resolve against its tree.
+      await waitFor(() => expect(screen.getByRole('button', { name: /save configuration/i })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
       await waitFor(() => expect(mocks.updateInstanceConfig).toHaveBeenCalledTimes(1));
       const payload = mocks.updateInstanceConfig.mock.calls[0][1];
