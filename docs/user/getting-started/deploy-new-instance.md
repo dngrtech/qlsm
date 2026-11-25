@@ -49,6 +49,8 @@ Reference: [Instance Actions Menu](../operations/instance-actions-menu.md)
 
 ## Main Tabs In Deploy Form
 
+Enabled addons can add tabs of their own after **Owner & Admins**, with options for the new instance that may depend on the selected host (they reload when you pick another host). You don't have to open them: their defaults are sent with the instance even when a tab stays unopened. **Create Instance** waits until such a tab has loaded the defaults for the selected host.
+
 Config editing details live here: [Edit Configs, Plugins, And Factories](../operations/edit-configs.md)
 
 The deploy form uses the same file manager as **Edit Config**. Before creating the instance you can add custom `.cfg` or `.txt` config files, create subfolders with `.ent` entity override files, stage plugin file changes, choose checked plugins, select the `.factories` files that should be deployed, and configure preset-provided LD_PRELOAD hooks.

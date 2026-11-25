@@ -414,6 +414,9 @@ def _validate_add_instance_tab(item, panels, errors):
     """
     if item.get('renders') == 'modal':
         _err(errors, 'ui.add_instance_tabs: "renders": "modal" is not available here')
+    label = item.get('label')
+    if label is not None and not (isinstance(label, str) and label.strip()):
+        _err(errors, 'ui.add_instance_tabs: "label" must be a non-empty string')
     if panels is None:
         return
     panel = panels.get(item['panel'])

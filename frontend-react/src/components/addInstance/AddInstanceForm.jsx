@@ -225,6 +225,33 @@ function AddInstanceForm({
   const addonTabs = useAddonMounts('add_instance_tabs');
   const [addonTabValues, setAddonTabValues] = useState({});
   const [addonTabErrors, setAddonTabErrors] = useState({});
+  // A tab still loading its prefill for the picked host blocks the submit,
+  // so stale values from the previous host can never be sent.
+  const [addonTabLoading, setAddonTabLoading] = useState({});
+  // Only the operator's own edits make the form dirty; prefills and
+  // defaults a tab publishes on its own (`{ pristine: true }`) do not.
+  const [addonTabsTouched, setAddonTabsTouched] = useState(false);
+  const addonTabsLoading = addonTabs.some((mount) => addonTabLoading[mount.key]);
+  // One stable callback pair per mount key: a tier-2 component may depend on
+  // ctx.addInstance.onChange in an effect that publishes its defaults.
+  const addonTabHandlersRef = useRef({});
+  const addonTabHandlers = useCallback((key) => {
+    if (!addonTabHandlersRef.current[key]) {
+      addonTabHandlersRef.current[key] = {
+        onChange: (values, options) => {
+          setAddonTabValues((prev) => ({ ...prev, [key]: values }));
+          if (!options?.pristine) setAddonTabsTouched(true);
+        },
+        onLoadingChange: (isLoading) => {
+          setAddonTabLoading((prev) => (
+            Boolean(prev[key]) === Boolean(isLoading) ? prev : { ...prev, [key]: Boolean(isLoading) }
+          ));
+        },
+      };
+    }
+    return addonTabHandlersRef.current[key];
+  }, []);
+  const mainTabRefs = useRef({});
   const initialPluginSeed = seedCheckedPlugins(initialSeed.checkedPlugins);
   const [checkedPlugins, setCheckedPlugins] = useState(initialPluginSeed.selectable);
   const [droppedPluginCount, setDroppedPluginCount] = useState(initialPluginSeed.dropped.length);
@@ -693,10 +720,12 @@ function AddInstanceForm({
       pluginsHaveChanges ||
       checkedPluginsChanged ||
       hooksChanged ||
+      addonTabsTouched ||
       adminEntries !== null;
     if (onDirtyStateChange) onDirtyStateChange(isDirty);
   }, [
     adminEntries,
+    addonTabsTouched,
     autoGeneratePasswords,
     checkedPlugins,
     configContents,
@@ -1098,6 +1127,12 @@ function AddInstanceForm({
     setActiveMainTab(tab);
   }, []);
 
+  // The tab row scrolls when it does not fit; keep the active tab in view,
+  // also when validation opens an addon tab at the far end.
+  useEffect(() => {
+    mainTabRefs.current[activeMainTab]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [activeMainTab]);
+
   // Hooks tab handlers (instance-less mode: toggle/reorder/remove-missing only).
   const availableHookNames = useMemo(
     () => new Set(availableHooks.map((hook) => hook.filename)),
@@ -1240,6 +1275,12 @@ function AddInstanceForm({
     }
     setPasswordErrors({});
 
+    if (addonTabsLoading) {
+      const mount = addonTabs.find((m) => addonTabLoading[m.key]);
+      setInternalFormError(`The ${mount?.label || 'addon'} tab is still loading its defaults for this host.`);
+      return;
+    }
+
     // One object per addon, merged across that addon's tabs. A declarative
     // tab is validated and coerced the same way a settings form is.
     const addonOptions = {};
@@ -1343,8 +1384,11 @@ function AddInstanceForm({
     [draftPreset, pluginDraftId],
   );
 
+  // noValidate: fields in hidden tabs (an addon's number field, say) must
+  // not let the browser block the submit with a bubble nobody can see;
+  // localHandleSubmit validates and opens the offending tab.
   return (
-    <form onSubmit={localHandleSubmit} className="flex flex-col flex-grow min-h-0 pt-4">
+    <form noValidate onSubmit={localHandleSubmit} className="flex flex-col flex-grow min-h-0 pt-4">
       <div className="flex-shrink-0 mb-6">
         <InstanceBasicInfoForm name={name} onNameChange={(e) => setName(e.target.value)} selectedHostId={selectedHostId} onHostChange={handleHostChange} hosts={initialData.hosts || []} port={port} onPortChange={setPort} availablePorts={availablePorts} loadingPorts={loadingPorts} redisDb={redisDb} onRedisDbChange={setRedisDb} redisDbOptions={redisDbOptions} hostname={hostname} onHostnameChange={(e) => { hostnameTypedRef.current = true; setHostname(e.target.value); }} />
         <InstanceOptionsRow
@@ -1393,7 +1437,7 @@ function AddInstanceForm({
         {/* Main tabs: Configuration Files | Scripts | Factories */}
         <div className="flex flex-col flex-grow min-h-0">
           {/* Tab bar container */}
-          <div className="flex flex-shrink-0 border border-[var(--surface-border)] bg-[var(--surface-elevated)] rounded-t-xl overflow-hidden">
+          <div className="flex flex-shrink-0 border border-[var(--surface-border)] bg-[var(--surface-elevated)] rounded-t-xl overflow-x-auto scrollbar-thin">
             {[
               { key: 'config', icon: Settings, label: 'Configuration Files' },
               { key: 'scripts', icon: Code2, label: 'Plugins' },
@@ -1410,9 +1454,10 @@ function AddInstanceForm({
             ].map((tab) => (
               <button
                 key={tab.key}
+                ref={(node) => { mainTabRefs.current[tab.key] = node; }}
                 type="button"
                 onClick={() => handleMainTabChange(tab.key)}
-                className={`flex items-center gap-2 px-6 py-3.5 text-[13px] font-display font-semibold tracking-wide uppercase border-b-2 border-r border-r-[var(--surface-border)] transition-all duration-200 ${activeMainTab === tab.key
+                className={`flex flex-shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 lg:px-6 lg:py-3.5 text-[12px] lg:text-[13px] font-display font-semibold tracking-wide uppercase border-b-2 border-r border-r-[var(--surface-border)] transition-all duration-200 ${activeMainTab === tab.key
                   ? 'border-b-[var(--accent-primary)] text-[var(--accent-primary)] bg-[var(--accent-primary)]/5'
                   : 'border-b-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-base)]/50'
                 }`}
@@ -1521,7 +1566,8 @@ function AddInstanceForm({
                   hostId={selectedHostId}
                   values={addonTabValues[mount.key]}
                   errors={addonTabErrors[mount.key]}
-                  onChange={(values) => setAddonTabValues((prev) => ({ ...prev, [mount.key]: values }))}
+                  onChange={addonTabHandlers(mount.key).onChange}
+                  onLoadingChange={addonTabHandlers(mount.key).onLoadingChange}
                 />
               </div>
             ))}
@@ -1578,7 +1624,7 @@ function AddInstanceForm({
           </button>
           <button
             type="submit"
-            disabled={isLoadingSubmit || serverCfgHasLintErrors || uploading}
+            disabled={isLoadingSubmit || serverCfgHasLintErrors || uploading || addonTabsLoading}
             className="btn btn-primary"
           >
             {isLoadingSubmit ? (

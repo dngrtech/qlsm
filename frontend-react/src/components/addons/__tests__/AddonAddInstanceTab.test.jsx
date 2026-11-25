@@ -30,14 +30,15 @@ const mount = (panel = PANEL) => ({
 });
 
 // The form owns the values; this harness plays the form.
-function Harness({ hostId, panel, onValues }) {
+function Harness({ hostId, panel, onValues, onLoadingChange }) {
   const [values, setValues] = useState(undefined);
   return (
     <AddonAddInstanceTab
       mount={mount(panel)}
       hostId={hostId}
       values={values}
-      onChange={(next) => { setValues(next); onValues(next); }}
+      onChange={(next, options) => { setValues(next); onValues(next, options); }}
+      onLoadingChange={onLoadingChange}
     />
   );
 }
@@ -48,7 +49,7 @@ describe('AddonAddInstanceTab', () => {
   it('waits for a host before calling the load route, using manifest defaults meanwhile', async () => {
     const onValues = vi.fn();
     render(<Harness hostId="" onValues={onValues} />);
-    await waitFor(() => expect(onValues).toHaveBeenCalledWith({ telemetry: false, server_id: '' }));
+    await waitFor(() => expect(onValues).toHaveBeenCalledWith({ telemetry: false, server_id: '' }, { pristine: true }));
     expect(addonRequest).not.toHaveBeenCalled();
   });
 
@@ -69,7 +70,7 @@ describe('AddonAddInstanceTab', () => {
     const onValues = vi.fn();
     render(<Harness hostId="4" onValues={onValues} />);
     expect(await screen.findByText(/hub down/)).toBeInTheDocument();
-    expect(onValues).toHaveBeenLastCalledWith({ telemetry: false, server_id: '' });
+    expect(onValues).toHaveBeenLastCalledWith({ telemetry: false, server_id: '' }, { pristine: true });
   });
 
   it('reports every edit to the form', async () => {
@@ -78,6 +79,25 @@ describe('AddonAddInstanceTab', () => {
     render(<Harness hostId="4" onValues={onValues} />);
     await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
     fireEvent.change(screen.getByLabelText('Server ID'), { target: { value: '9' } });
-    expect(onValues).toHaveBeenLastCalledWith({ telemetry: true, server_id: '9' });
+    expect(onValues).toHaveBeenLastCalledWith({ telemetry: true, server_id: '9' }, undefined);
+  });
+
+  it('drops the previous host values and reports loading until the new prefill is in', async () => {
+    let resolveSecond;
+    addonRequest
+      .mockResolvedValueOnce({ telemetry: true })
+      .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+    const onValues = vi.fn();
+    const onLoadingChange = vi.fn();
+    const { rerender } = render(<Harness hostId="4" onValues={onValues} onLoadingChange={onLoadingChange} />);
+    await waitFor(() => expect(onLoadingChange).toHaveBeenLastCalledWith(false));
+
+    rerender(<Harness hostId="5" onValues={onValues} onLoadingChange={onLoadingChange} />);
+    await waitFor(() => expect(onLoadingChange).toHaveBeenLastCalledWith(true));
+    expect(onValues).toHaveBeenLastCalledWith(undefined, { pristine: true });
+
+    resolveSecond({ telemetry: false });
+    await waitFor(() => expect(onLoadingChange).toHaveBeenLastCalledWith(false));
+    expect(onValues).toHaveBeenLastCalledWith({ telemetry: false, server_id: '' }, { pristine: true });
   });
 });

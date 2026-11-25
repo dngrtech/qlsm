@@ -18,9 +18,15 @@ import { initialValues, normalizeFields, resolveRoute } from './panelRoute';
  * what that host can do). It reloads whenever the host changes.
  *
  * A tier-2 component gets the same three things as `ctx.addInstance =
- * { hostId, values, onChange }`.
+ * { hostId, values, onChange }`. `onChange(values, { pristine: true })`
+ * publishes defaults without marking the form as edited; a plain
+ * `onChange(values)` is an operator edit.
+ *
+ * A declarative tab drops its values when the host changes and reports
+ * `onLoadingChange(true)` until the new host's prefill (or its fallback) is
+ * in, so the form cannot submit the previous host's values.
  */
-function AddonAddInstanceTab({ mount, hostId, values, errors, onChange }) {
+function AddonAddInstanceTab({ mount, hostId, values, errors, onChange, onLoadingChange }) {
   const { addon, entry, panel, scope } = mount;
   const fields = useMemo(() => normalizeFields(panel?.fields), [panel?.fields]);
   const [loading, setLoading] = useState(false);
@@ -31,27 +37,39 @@ function AddonAddInstanceTab({ mount, hostId, values, errors, onChange }) {
     if (entry?.component) return undefined;
     let cancelled = false;
     if (!panel?.load || !hostId) {
-      onChange(initialValues(fields, null));
+      onChange(initialValues(fields, null), { pristine: true });
       return undefined;
     }
+    // The previous host's values must not survive into this host's form.
+    onChange(undefined, { pristine: true });
     setLoading(true);
+    onLoadingChange?.(true);
     setLoadError(null);
     const route = resolveRoute(panel.load, { scope, scopeId: hostId, addonId: addon.id });
     addonRequest(addon.id, route.method, route.path)
-      .then((data) => { if (!cancelled) onChange(initialValues(fields, data)); })
+      .then((data) => { if (!cancelled) onChange(initialValues(fields, data), { pristine: true }); })
       .catch((err) => {
         if (cancelled) return;
         // The tab still works on the manifest defaults; say why they are
         // not this host's own.
-        onChange(initialValues(fields, null));
+        onChange(initialValues(fields, null), { pristine: true });
         setLoadError(err?.response?.data?.error?.message || 'Failed to load defaults');
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        onLoadingChange?.(false);
+      });
     return () => { cancelled = true; };
-    // onChange is a fresh closure on every parent render; the load depends
-    // only on which addon, which route and which host.
+    // onChange / onLoadingChange are stable per mount (AddInstanceForm keeps
+    // one pair per mount key); the load depends only on which addon, which
+    // route and which host.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addon.id, entry?.component, panel?.load, hostId, fields, scope, reloadToken]);
+
+  // Unmounting mid-load must not leave the form blocked.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => onLoadingChange?.(false), []);
 
   let body;
   if (entry?.component) {

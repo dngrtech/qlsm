@@ -685,3 +685,11 @@ def test_add_instance_tab_load_route_may_not_escape_the_addon():
         'add_instance_tabs': [{'id': 'new', 'panel': 'new'}],
     }))
     assert any('must stay inside the addon prefix' in e for e in errors)
+
+
+def test_add_instance_tab_label_must_be_a_non_empty_string():
+    for bad in ('', '   ', 42, {'en': 'New'}):
+        _, errors = validate_manifest(_minimal(ui={
+            'add_instance_tabs': [{'id': 'new', 'label': bad, 'component': 'AddTab.js'}],
+        }))
+        assert any('"label" must be a non-empty string' in e for e in errors), bad

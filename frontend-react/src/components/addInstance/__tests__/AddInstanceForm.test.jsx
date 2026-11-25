@@ -2403,6 +2403,65 @@ describe('AddInstanceForm draft lifecycle', () => {
       });
     });
 
+    it('lets the form submit past hidden fields (noValidate)', () => {
+      mocks.addonMounts = [statsHubMount()];
+      const { container } = renderForm(vi.fn());
+      expect(container.querySelector('form')).toHaveAttribute('novalidate');
+    });
+
+    it('keeps Create Instance off while a tab loads its host prefill', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      let resolveLoad;
+      mocks.addonRequest.mockReturnValue(new Promise((resolve) => { resolveLoad = resolve; }));
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderForm(onSubmit);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select Host 1' }));
+      await waitFor(() => expect(mocks.addonRequest).toHaveBeenCalled());
+      expect(screen.getByRole('button', { name: /create instance/i })).toBeDisabled();
+
+      await act(async () => { resolveLoad({ telemetry: true }); });
+      await waitFor(() => expect(screen.getByRole('button', { name: /create instance/i })).toBeEnabled());
+    });
+
+    it('counts only operator edits of an addon tab as unsaved changes', async () => {
+      mocks.addonMounts = [statsHubMount()];
+      mocks.addonRequest.mockResolvedValue({ telemetry: true });
+      const onDirty = vi.fn();
+      render(
+        <AddInstanceForm
+          initialData={{
+            hosts: [{ id: 1, name: 'deb-host', os_type: 'debian' }],
+            presets: [],
+            defaultConfigContents: {
+              'server.cfg': '', 'mappool.txt': '', 'access.txt': '', 'workshop.txt': '',
+            },
+          }}
+          initialHostId={1}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+          isLoadingSubmit={false}
+          formError={null}
+          onServerCfgLintStatusChange={vi.fn()}
+          onDirtyStateChange={onDirty}
+        />
+      );
+      await waitFor(() => expect(screen.getByLabelText('Send telemetry')).toBeChecked());
+      // The prefill leaves the form clean.
+      await waitFor(() => expect(onDirty).toHaveBeenLastCalledWith(false));
+
+      fireEvent.click(screen.getByLabelText('Send telemetry'));
+      await waitFor(() => expect(onDirty).toHaveBeenLastCalledWith(true));
+    });
+
+    it('lets the tab row scroll instead of clipping addon tabs', () => {
+      mocks.addonMounts = [statsHubMount()];
+      renderForm(vi.fn());
+      const tab = screen.getByRole('button', { name: /stats hub/i });
+      expect(tab.parentElement.className).toMatch(/overflow-x-auto/);
+      expect(tab.parentElement.className).not.toMatch(/overflow-hidden/);
+    });
+
     it('sends no addon_options when no addon contributes a tab', async () => {
       const onSubmit = vi.fn().mockResolvedValue(undefined);
       renderForm(onSubmit);

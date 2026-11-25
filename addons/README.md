@@ -305,6 +305,9 @@ apply and restart.
 - The panel must be a `form` and may not declare `submit`. Its optional
   `load` route prefills the fields; the scope is the host picked in the form,
   so `{host_id}` is available, and the tab reloads when the host changes.
+  Changing the host drops the tab's values, including the operator's edits,
+  and **Create Instance** stays off until the new host's prefill (or its
+  fallback) is in, so values loaded for one host never go out with another.
   Without a `load` route, or while no host is picked, the fields start from
   their manifest `default`s. A failed load falls back to those defaults and
   says so in the tab.
@@ -314,8 +317,15 @@ apply and restart.
   for an optional value).
 - A tier-2 `component` works too, with `ctx.addInstance = { hostId, values,
   onChange }`: the form holds the values, the component reports changes
-  through `onChange(nextValues)`. `"renders": "modal"` is not available here.
+  through `onChange(nextValues)`. An operator's edit makes the form dirty
+  (closing it asks first); defaults or a prefill the component publishes on
+  its own go through `onChange(nextValues, { pristine: true })` and do not.
+  `onChange` is stable for the tab's lifetime, so an effect may depend on it.
+  The component owns its own prefill: when `hostId` changes, publish the new
+  host's values. `"renders": "modal"` is not available here.
 - An addon with several tabs gets their values merged into one object.
+- `label` must be a non-empty string when given; without it the tab is
+  labelled with the addon's name.
 - Shown only while the addon is enabled globally, like every mount point but
   `settings_section`.
 

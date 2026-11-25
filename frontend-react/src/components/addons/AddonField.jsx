@@ -11,7 +11,9 @@ import FloatingListbox from '../common/FloatingListbox';
  */
 function AddonField({ field, value, error, disabled, onChange }) {
   const [revealed, setRevealed] = React.useState(false);
-  const inputId = `addon-field-${field.key}`;
+  // Unique per rendered field: hidden tabs stay mounted, and two panels (or
+  // two addons) can declare the same key.
+  const inputId = `addon-field-${React.useId()}-${field.key}`;
 
   const baseInputClass =
     'w-full rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
